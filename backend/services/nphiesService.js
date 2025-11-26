@@ -1,0 +1,235 @@
+/**
+ * NPHIES API Service
+ * Handles communication with NPHIES OBA test environment
+ * Reference: http://176.105.150.83/$process-message
+ */
+
+import axios from 'axios';
+import { randomUUID } from 'crypto';
+
+class NphiesService {
+  constructor() {
+    this.baseURL = process.env.NPHIES_BASE_URL || 'http://176.105.150.83';
+    this.timeout = parseInt(process.env.NPHIES_TIMEOUT || '60000');
+    this.retryAttempts = parseInt(process.env.NPHIES_RETRY_ATTEMPTS || '3');
+  }
+
+  /**
+   * Send eligibility request to NPHIES
+   */
+  async checkEligibility(requestBundle) {
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      try {
+        console.log(`[NPHIES] Sending eligibility request (attempt ${attempt}/${this.retryAttempts})`);
+        
+        const response = await axios.post(
+          `${this.baseURL}/$process-message`,
+          requestBundle,
+          {
+            headers: {
+              'Content-Type': 'application/fhir+json',
+              'Accept': 'application/fhir+json'
+            },
+            timeout: this.timeout,
+            validateStatus: (status) => status < 500 // Accept 4xx responses as valid
+          }
+        );
+
+        console.log(`[NPHIES] Response received: ${response.status}`);
+        
+        // Validate response
+        const validationResult = this.validateResponse(response.data);
+        if (!validationResult.valid) {
+          console.error('[NPHIES] Invalid response structure:', validationResult.errors);
+          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
+        }
+
+        return {
+          success: true,
+          status: response.status,
+          data: response.data
+        };
+
+      } catch (error) {
+        lastError = error;
+        console.error(`[NPHIES] Attempt ${attempt} failed:`, error.message);
+
+        // Don't retry on 4xx errors (client errors)
+        if (error.response && error.response.status >= 400 && error.response.status < 500) {
+          console.log('[NPHIES] Client error detected, not retrying');
+          break;
+        }
+
+        // Wait before retrying (exponential backoff)
+        if (attempt < this.retryAttempts) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
+          await this.sleep(waitTime);
+        }
+      }
+    }
+
+    // All attempts failed
+    return {
+      success: false,
+      error: this.formatError(lastError)
+    };
+  }
+
+  /**
+   * Validate FHIR response bundle structure
+   */
+  validateResponse(response) {
+    const errors = [];
+
+    if (!response) {
+      errors.push('Response is empty');
+      return { valid: false, errors };
+    }
+
+    if (response.resourceType !== 'Bundle') {
+      errors.push('Response is not a FHIR Bundle');
+      return { valid: false, errors };
+    }
+
+    if (response.type !== 'message') {
+      errors.push('Bundle type is not "message"');
+    }
+
+    if (!response.entry || !Array.isArray(response.entry)) {
+      errors.push('Bundle has no entries');
+      return { valid: false, errors };
+    }
+
+    // Check for MessageHeader (must be first)
+    const firstEntry = response.entry[0];
+    if (!firstEntry || firstEntry.resource?.resourceType !== 'MessageHeader') {
+      errors.push('First entry must be MessageHeader');
+    }
+
+    // Check for either CoverageEligibilityResponse or OperationOutcome
+    const hasEligibilityResponse = response.entry.some(
+      e => e.resource?.resourceType === 'CoverageEligibilityResponse'
+    );
+    const hasOperationOutcome = response.entry.some(
+      e => e.resource?.resourceType === 'OperationOutcome'
+    );
+
+    if (!hasEligibilityResponse && !hasOperationOutcome) {
+      errors.push('Bundle must contain CoverageEligibilityResponse or OperationOutcome');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Format error for consistent error handling
+   */
+  formatError(error) {
+    if (!error) {
+      return {
+        code: 'UNKNOWN_ERROR',
+        message: 'An unknown error occurred',
+        details: null
+      };
+    }
+
+    if (error.response) {
+      // HTTP error response
+      return {
+        code: `HTTP_${error.response.status}`,
+        message: error.response.statusText || 'HTTP Error',
+        details: error.response.data,
+        status: error.response.status
+      };
+    }
+
+    if (error.request) {
+      // Request was made but no response received
+      return {
+        code: 'NO_RESPONSE',
+        message: 'No response received from NPHIES',
+        details: error.message
+      };
+    }
+
+    // Other errors
+    return {
+      code: 'REQUEST_ERROR',
+      message: error.message || 'Request failed',
+      details: error.stack
+    };
+  }
+
+  /**
+   * Extract error details from OperationOutcome
+   */
+  extractOperationOutcomeErrors(operationOutcome) {
+    if (!operationOutcome || !operationOutcome.issue) {
+      return [];
+    }
+
+    return operationOutcome.issue.map(issue => ({
+      severity: issue.severity,
+      code: issue.code,
+      details: issue.details?.text || issue.diagnostics,
+      location: issue.location?.join(', ') || null
+    }));
+  }
+
+  /**
+   * Check if response indicates queued status
+   */
+  isQueuedResponse(responseBundle) {
+    const eligibilityResponse = responseBundle.entry?.find(
+      e => e.resource?.resourceType === 'CoverageEligibilityResponse'
+    )?.resource;
+
+    return eligibilityResponse?.outcome === 'queued';
+  }
+
+  /**
+   * Generate a unique request ID
+   */
+  generateRequestId() {
+    return randomUUID();
+  }
+
+  /**
+   * Sleep utility for retry delays
+   */
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Test connection to NPHIES
+   */
+  async testConnection() {
+    try {
+      const response = await axios.get(this.baseURL, {
+        timeout: 5000,
+        validateStatus: () => true // Accept any status
+      });
+
+      return {
+        success: true,
+        status: response.status,
+        message: 'Connection successful'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+}
+
+export default new NphiesService();
+

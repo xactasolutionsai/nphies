@@ -1,0 +1,199 @@
+/* Professional Dental Chart Styling using react-odontogram */
+
+/* Import library base styles inline */
+:root {
+  --dark-blue: #553781;
+  --base-blue: #7c3aed;
+  --light-blue: #c4b5fd;
+}
+
+.Odontogram svg {
+  color: var(--base-blue);
+  fill: none;
+  transition: all ease-in 125ms;
+}
+
+.Odontogram svg path:nth-of-type(2) {
+  opacity: 0;
+  transition: all ease-in 200ms;
+}
+
+.Odontogram g.selected path:nth-of-type(2) {
+  fill: var(--light-blue);
+  opacity: 1;
+}
+
+.Odontogram g.selected path:first-of-type {
+  transition: stroke 1s ease;
+}
+
+.Odontogram g.selected:hover path:first-of-type {
+  stroke: currentColor;
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-dasharray: 4 4;
+  stroke-dashoffset: 0;
+  transition: stroke 5s ease;
+  animation: dash-move 1s linear infinite;
+  animation-delay: 1s;
+  filter: drop-shadow(0 0 8px currentColor);
+  -webkit-filter: drop-shadow(0 0 8px currentColor);
+}
+
+@keyframes dash-move {
+  to {
+    stroke-dashoffset: 8;
+  }
+}
+
+.Odontogram g.selected {
+  transition: all 0.3s ease;
+  color: var(--dark-blue);
+}
+
+.Odontogram g.selected path {
+  stroke-width: 1.5;
+}
+
+g[class^="teeth-"]:hover path:nth-of-type(2) {
+  fill: var(--light-blue);
+  opacity: 1;
+}
+
+.dental-chart-wrapper {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+/* SVG Container */
+.dental-chart-container svg {
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  display: block;
+}
+
+/* Unselected teeth - Default state */
+.dental-chart-container [data-tooth] path,
+.dental-chart-container [data-tooth] circle,
+.dental-chart-container [data-tooth] rect {
+  fill: #f3f4f6;
+  stroke: #d1d5db;
+  stroke-width: 1.5px;
+  transition: all 0.2s ease-in-out;
+}
+
+/* Selected teeth - Purple theme */
+.dental-chart-container [data-selected="true"] path,
+.dental-chart-container [data-selected="true"] circle,
+.dental-chart-container [data-selected="true"] rect {
+  fill: #c4b5fd !important;
+  stroke: #553781 !important;
+  stroke-width: 2.5px !important;
+}
+
+/* Hover effect for interactive mode */
+.dental-chart-container:not([data-readonly]) [data-tooth]:hover path,
+.dental-chart-container:not([data-readonly]) [data-tooth]:hover circle,
+.dental-chart-container:not([data-readonly]) [data-tooth]:hover rect {
+  fill: #e9d5ff;
+  stroke: #7c3aed;
+  stroke-width: 2px;
+  cursor: pointer;
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+/* Active/clicking state */
+.dental-chart-container [data-tooth]:active path,
+.dental-chart-container [data-tooth]:active circle,
+.dental-chart-container [data-tooth]:active rect {
+  transform: scale(0.95);
+}
+
+/* Tooth numbers/labels styling */
+.dental-chart-container text {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  fill: #374151;
+  pointer-events: none;
+}
+
+.dental-chart-container [data-selected="true"] text {
+  fill: #553781 !important;
+  font-weight: 700;
+}
+
+/* Quadrant labels styling */
+.dental-chart-container .quadrant-label {
+  font-size: 11px;
+  font-weight: 500;
+  fill: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Responsive sizing */
+@media (max-width: 1024px) {
+  .dental-chart-wrapper {
+    max-width: 900px;
+  }
+  
+  .dental-chart-container svg {
+    max-width: 95%;
+  }
+}
+
+@media (max-width: 768px) {
+  .dental-chart-wrapper {
+    padding: 0.5rem;
+    max-width: 100%;
+  }
+  
+  .dental-chart-container svg {
+    max-width: 100%;
+  }
+  
+  .dental-chart-container text {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  .dental-chart-container svg {
+    max-width: 100%;
+    padding: 0.5rem;
+  }
+  
+  .dental-chart-container text {
+    font-size: 9px;
+  }
+}
+
+/* Smooth animations */
+.dental-chart-container [data-tooth] {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Focus states for accessibility */
+.dental-chart-container [data-tooth]:focus {
+  outline: 2px solid #553781;
+  outline-offset: 2px;
+}
+
+/* Read-only mode cursor */
+.dental-chart-container[data-readonly] [data-tooth] {
+  cursor: default;
+}
+
+/* Disable hover effects in read-only mode */
+.dental-chart-container[data-readonly] [data-tooth]:hover path,
+.dental-chart-container[data-readonly] [data-tooth]:hover circle,
+.dental-chart-container[data-readonly] [data-tooth]:hover rect {
+  transform: none;
+  stroke-width: 1.5px;
+}
+

@@ -1,0 +1,1575 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Shield, CheckCircle, XCircle, AlertCircle, Info, FileText, ChevronDown, ChevronUp, Baby, ArrowRightLeft, User, Building, CreditCard, Search, Calendar, Eye } from 'lucide-react';
+import DatePicker from 'react-datepicker';
+import Select from 'react-select';
+import 'react-datepicker/dist/react-datepicker.css';
+import api from '@/services/api';
+
+// Custom CSS for DatePicker to fix selected date visibility
+const datePickerStyles = `
+  .react-datepicker__day--selected,
+  .react-datepicker__day--keyboard-selected {
+    background-color: #553781 !important;
+    color: white !important;
+  }
+  .react-datepicker__day--selected:hover,
+  .react-datepicker__day--keyboard-selected:hover {
+    background-color: #452d6b !important;
+    color: white !important;
+  }
+  .react-datepicker__day:hover {
+    background-color: #f3f4f6 !important;
+  }
+  .react-datepicker__day--today {
+    font-weight: bold;
+    border: 1px solid #553781;
+  }
+  .react-datepicker-wrapper {
+    width: 100%;
+  }
+  .datepicker-wrapper {
+    position: relative;
+    width: 100%;
+  }
+  .datepicker-wrapper .datepicker-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .datepicker-wrapper input {
+    padding-left: 36px !important;
+  }
+`;
+
+// Select styles matching PatientInfoStep
+const selectStyles = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: '42px',
+    borderColor: '#e5e7eb',
+    borderRadius: '4px',
+    backgroundColor: state.isDisabled ? '#f3f4f6' : 'white',
+    paddingLeft: '0.25rem',
+    paddingRight: '0.25rem',
+    boxShadow: state.isFocused ? '0 0 0 2px rgba(85, 55, 129, 0.3)' : 'none',
+    borderWidth: '1px',
+    cursor: state.isDisabled ? 'not-allowed' : 'default',
+    '&:hover': {
+      borderColor: '#e5e7eb'
+    }
+  }),
+  option: (base, { isFocused, isSelected }) => ({
+    ...base,
+    backgroundColor: isSelected ? '#553781' : isFocused ? '#f3f4f6' : 'white',
+    color: isSelected ? 'white' : '#374151',
+    cursor: 'pointer',
+    padding: '8px 12px'
+  }),
+  menu: (base) => ({ 
+    ...base, 
+    zIndex: 9999,
+    position: 'absolute'
+  }),
+  menuPortal: (base) => ({ 
+    ...base, 
+    zIndex: 9999 
+  })
+};
+
+// Options for dropdowns
+const GENDER_OPTIONS = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' }
+];
+
+const IDENTIFIER_TYPE_OPTIONS = [
+  { value: 'national_id', label: 'National ID' },
+  { value: 'iqama', label: 'Iqama' },
+  { value: 'passport', label: 'Passport' }
+];
+
+const COVERAGE_TYPE_OPTIONS = [
+  { value: 'EHCPOL', label: 'Extended Healthcare (EHCPOL)' },
+  { value: 'PUBLICPOL', label: 'Public Policy (PUBLICPOL)' },
+  { value: 'DENTAL', label: 'Dental (DENTAL)' },
+  { value: 'MENTPOL', label: 'Mental Health (MENTPOL)' },
+  { value: 'DRUGPOL', label: 'Drug Coverage (DRUGPOL)' }
+];
+
+const RELATIONSHIP_OPTIONS = [
+  { value: 'self', label: 'Self' },
+  { value: 'spouse', label: 'Spouse' },
+  { value: 'child', label: 'Child' },
+  { value: 'parent', label: 'Parent' },
+  { value: 'other', label: 'Other' }
+];
+
+// Required field indicator component
+const RequiredFieldIndicator = () => (
+  <span className="text-red-500 ml-1">*</span>
+);
+
+export default function NphiesEligibility() {
+  // Input mode toggles
+  const [patientMode, setPatientMode] = useState('existing'); // 'existing' | 'manual'
+  const [insurerMode, setInsurerMode] = useState('existing'); // 'existing' | 'manual'
+  const [coverageMode, setCoverageMode] = useState('existing'); // 'existing' | 'manual' | 'discovery'
+
+  // Existing records data
+  const [patients, setPatients] = useState([]);
+  const [providers, setProviders] = useState([]);
+  const [insurers, setInsurers] = useState([]);
+  const [coverages, setCoverages] = useState([]);
+  
+  // Selected IDs for existing records
+  const [selectedPatient, setSelectedPatient] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState(null); // Auto-selected
+  const [selectedInsurer, setSelectedInsurer] = useState('');
+  const [selectedCoverage, setSelectedCoverage] = useState('');
+  
+  // Manual entry data for Patient
+  const [patientData, setPatientData] = useState({
+    name: '',
+    identifier: '',
+    identifierType: 'national_id',
+    gender: '',
+    birthDate: '',
+    phone: '',
+    email: ''
+  });
+
+  // Manual entry data for Insurer
+  const [insurerData, setInsurerData] = useState({
+    name: '',
+    nphiesId: ''
+  });
+
+  // Manual entry data for Coverage
+  const [coverageData, setCoverageData] = useState({
+    policyNumber: '',
+    memberId: '',
+    coverageType: 'EHCPOL',
+    planName: '',
+    relationship: 'self'
+  });
+
+  // Request options
+  const [selectedPurpose, setSelectedPurpose] = useState(['benefits', 'validation']);
+  const [servicedDate, setServicedDate] = useState(new Date());
+  
+  // NPHIES Extension flags
+  const [isNewborn, setIsNewborn] = useState(false);
+  const [isTransfer, setIsTransfer] = useState(false);
+  
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [showRawData, setShowRawData] = useState(false);
+  
+  // Preview state
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Date helpers
+  const parseDate = (dateString) => {
+    if (!dateString) return null;
+    return new Date(dateString);
+  };
+
+  const formatDate = (date) => {
+    if (!date) return '';
+    return date.toISOString().split('T')[0];
+  };
+
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  useEffect(() => {
+    if (selectedPatient && patientMode === 'existing') {
+      loadPatientCoverages(selectedPatient);
+    } else {
+      setCoverages([]);
+      setSelectedCoverage('');
+    }
+  }, [selectedPatient, patientMode]);
+
+  const loadInitialData = async () => {
+    try {
+      setLoadingData(true);
+      const [patientsRes, providersRes, insurersRes] = await Promise.all([
+        api.getPatients({ limit: 100 }),
+        api.getProviders({ limit: 100 }),
+        api.getInsurers({ limit: 100 })
+      ]);
+
+      setPatients(patientsRes.data || []);
+      setProviders(providersRes.data || []);
+      setInsurers(insurersRes.data || []);
+
+      // Auto-select first provider
+      if (providersRes.data && providersRes.data.length > 0) {
+        setSelectedProvider(providersRes.data[0]);
+      }
+    } catch (err) {
+      console.error('Error loading data:', err);
+      setError('Failed to load initial data');
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const loadPatientCoverages = async (patientId) => {
+    try {
+      const res = await api.getPatientCoverages(patientId);
+      setCoverages(res.data || []);
+      
+      // Auto-select first coverage if available
+      if (res.data && res.data.length > 0) {
+        setSelectedCoverage(res.data[0].coverage_id.toString());
+      }
+    } catch (err) {
+      console.error('Error loading coverages:', err);
+      setCoverages([]);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validate based on input modes
+    if (patientMode === 'existing' && !selectedPatient) {
+      setError('Please select a patient');
+      return;
+    }
+    if (patientMode === 'manual' && !patientData.identifier) {
+      setError('Please enter patient identifier');
+      return;
+    }
+
+    if (insurerMode === 'existing' && !selectedInsurer) {
+      setError('Please select an insurer');
+      return;
+    }
+    if (insurerMode === 'manual' && !insurerData.nphiesId) {
+      setError('Please enter insurer NPHIES ID');
+      return;
+    }
+
+    // Coverage validation (not required for discovery mode)
+    if (coverageMode === 'existing' && !selectedCoverage) {
+      setError('Please select a coverage');
+      return;
+    }
+    if (coverageMode === 'manual' && !coverageData.policyNumber) {
+      setError('Please enter policy number');
+      return;
+    }
+
+    if (selectedPurpose.length === 0) {
+      setError('Please select at least one purpose');
+      return;
+    }
+
+    if (!selectedProvider) {
+      setError('No provider configured. Please add a provider to the system.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      // Build request data based on input modes
+      const requestData = {
+        // Patient
+        ...(patientMode === 'existing' 
+          ? { patientId: selectedPatient }
+          : { patientData: { ...patientData, birthDate: patientData.birthDate } }
+        ),
+        // Insurer
+        ...(insurerMode === 'existing'
+          ? { insurerId: selectedInsurer }
+          : { insurerData }
+        ),
+        // Coverage (null for discovery mode)
+        ...(coverageMode === 'existing' && selectedCoverage
+          ? { coverageId: selectedCoverage }
+          : coverageMode === 'manual'
+          ? { coverageData }
+          : {} // Discovery mode - no coverage
+        ),
+        // Options
+        purpose: selectedPurpose,
+        servicedDate: formatDate(servicedDate),
+        isNewborn,
+        isTransfer
+      };
+
+      console.log('Submitting dynamic eligibility request:', requestData);
+      
+      // Use the dynamic endpoint
+      const response = await api.checkDynamicEligibility(requestData);
+      
+      console.log('Response received from NPHIES:', response);
+      setResult(response);
+      
+      if (!response.success) {
+        setError(response.error || 'Eligibility check failed');
+      }
+    } catch (err) {
+      console.error('Error checking eligibility:', err);
+      setError(err.message || 'Failed to check eligibility');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePurposeToggle = (purpose) => {
+    setSelectedPurpose(prev => {
+      if (prev.includes(purpose)) {
+        return prev.filter(p => p !== purpose);
+      } else {
+        return [...prev, purpose];
+      }
+    });
+  };
+
+  // Preview the FHIR bundle without sending to NPHIES
+  const handlePreview = async () => {
+    // Basic validation
+    if (patientMode === 'existing' && !selectedPatient) {
+      setError('Please select a patient');
+      return;
+    }
+    if (patientMode === 'manual' && !patientData.identifier) {
+      setError('Please enter patient identifier');
+      return;
+    }
+    if (insurerMode === 'existing' && !selectedInsurer) {
+      setError('Please select an insurer');
+      return;
+    }
+    if (insurerMode === 'manual' && !insurerData.nphiesId) {
+      setError('Please enter insurer NPHIES ID');
+      return;
+    }
+    if (coverageMode === 'existing' && !selectedCoverage) {
+      setError('Please select a coverage');
+      return;
+    }
+    if (coverageMode === 'manual' && !coverageData.policyNumber) {
+      setError('Please enter policy number');
+      return;
+    }
+    if (selectedPurpose.length === 0) {
+      setError('Please select at least one purpose');
+      return;
+    }
+
+    setPreviewLoading(true);
+    setError(null);
+
+    try {
+      const requestData = {
+        ...(patientMode === 'existing' 
+          ? { patientId: selectedPatient }
+          : { patientData: { ...patientData, birthDate: patientData.birthDate } }
+        ),
+        ...(insurerMode === 'existing'
+          ? { insurerId: selectedInsurer }
+          : { insurerData }
+        ),
+        ...(coverageMode === 'existing' && selectedCoverage
+          ? { coverageId: selectedCoverage }
+          : coverageMode === 'manual'
+          ? { coverageData }
+          : {}
+        ),
+        purpose: selectedPurpose,
+        servicedDate: formatDate(servicedDate),
+        isNewborn,
+        isTransfer
+      };
+
+      const response = await api.previewEligibilityRequest(requestData);
+      setPreviewData(response);
+      setShowPreview(true);
+    } catch (err) {
+      console.error('Error generating preview:', err);
+      setError(err.message || 'Failed to generate preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const clearForm = () => {
+    setPatientMode('existing');
+    setInsurerMode('existing');
+    setCoverageMode('existing');
+    setSelectedPatient('');
+    setSelectedInsurer('');
+    setSelectedCoverage('');
+    setPatientData({
+      name: '',
+      identifier: '',
+      identifierType: 'national_id',
+      gender: '',
+      birthDate: '',
+      phone: '',
+      email: ''
+    });
+    setInsurerData({ name: '', nphiesId: '' });
+    setCoverageData({
+      policyNumber: '',
+      memberId: '',
+      coverageType: 'EHCPOL',
+      planName: '',
+      relationship: 'self'
+    });
+    setSelectedPurpose(['benefits', 'validation']);
+    setServicedDate(new Date());
+    setIsNewborn(false);
+    setIsTransfer(false);
+    setResult(null);
+    setError(null);
+  };
+
+  // Get Site Eligibility display text
+  const getSiteEligibilityDisplay = (code) => {
+    const displays = {
+      'eligible': 'Patient is eligible for coverage at this site',
+      'not-eligible': 'Patient is not eligible for coverage at this site',
+      'not-in-network': 'Provider is not in the patient\'s network',
+      'plan-expired': 'Patient\'s plan has expired',
+      'coverage-suspended': 'Patient\'s coverage is suspended',
+      'benefit-exhausted': 'Patient\'s benefits have been exhausted'
+    };
+    return displays[code] || code;
+  };
+
+  // Get Site Eligibility badge color
+  const getSiteEligibilityColor = (code) => {
+    if (code === 'eligible') return 'bg-green-100 text-green-800 border-green-300';
+    return 'bg-red-100 text-red-800 border-red-300';
+  };
+
+  // Mode toggle button component
+  const ModeToggle = ({ mode, setMode, options, labels }) => (
+    <div className="flex space-x-1 bg-gray-100 rounded-lg p-1 mb-3">
+      {options.map((opt, idx) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => setMode(opt)}
+          className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
+            mode === opt
+              ? 'bg-white text-primary-purple shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          {labels[idx]}
+        </button>
+      ))}
+    </div>
+  );
+
+  // Convert patients to Select options
+  const patientOptions = patients.map(p => ({
+    value: p.patient_id,
+    label: `${p.name} - ${p.identifier || p.patient_id}`
+  }));
+
+  // Convert insurers to Select options
+  const insurerOptions = insurers.map(i => ({
+    value: i.insurer_id,
+    label: `${i.insurer_name || i.name}${i.nphies_id ? ` (${i.nphies_id})` : ''}`
+  }));
+
+  // Convert coverages to Select options
+  const coverageOptions = coverages.map(c => ({
+    value: c.coverage_id.toString(),
+    label: `${c.policy_number} - ${c.plan_name || c.coverage_type}${c.insurer_name ? ` (${c.insurer_name})` : ''}`
+  }));
+
+  if (loadingData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="relative">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary-purple/20"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-transparent border-t-primary-purple absolute top-0"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Inject custom DatePicker styles */}
+      <style>{datePickerStyles}</style>
+
+      {/* Header */}
+      <div className="relative">
+        <div className="relative bg-white rounded-2xl p-8 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900">
+                NPHIES Eligibility Check
+              </h1>
+              <p className="text-gray-600 mt-2 text-lg">
+                Verify patient insurance coverage with NPHIES platform
+              </p>
+              <div className="flex items-center space-x-4 mt-4">
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span>Connected to NPHIES</span>
+                </div>
+              </div>
+            </div>
+            <div className="hidden md:flex items-center space-x-3">
+              <div className="relative bg-white rounded-xl p-3 border border-gray-100">
+                <Shield className="h-8 w-8 text-primary-purple" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Eligibility Request Form</CardTitle>
+          <CardDescription>Fill in the details to check patient eligibility with NPHIES. You can select existing records or enter data manually.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* Provider Section - Auto-selected (Read-only) */}
+            <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
+              <div className="flex items-center space-x-2 mb-2">
+                <Building className="h-5 w-5 text-primary-purple" />
+                <label className="text-sm font-medium text-gray-700">Provider (Auto-selected)</label>
+              </div>
+              {selectedProvider ? (
+                <div className="bg-white rounded-lg p-3 border border-purple-100">
+                  <p className="font-semibold text-gray-900">
+                    {selectedProvider.provider_name || selectedProvider.name}
+                  </p>
+                  {selectedProvider.nphies_id && (
+                    <p className="text-sm text-gray-500 font-mono">NPHIES ID: {selectedProvider.nphies_id}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                  <p className="text-amber-800 font-medium">No provider configured</p>
+                  <p className="text-sm text-amber-600">Please add a provider to the system first</p>
+                </div>
+              )}
+            </div>
+
+            {/* Patient & Insurer - Side by Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* Patient Section */}
+              <div className="bg-white rounded-xl p-4 border border-gray-200">
+                <div className="flex items-center space-x-2 mb-2">
+                  <User className="h-5 w-5 text-blue-600" />
+                  <label className="text-sm font-medium text-gray-700">
+                    Patient <RequiredFieldIndicator />
+                  </label>
+                </div>
+                
+                <ModeToggle
+                  mode={patientMode}
+                  setMode={setPatientMode}
+                  options={['existing', 'manual']}
+                  labels={['Select Existing', 'Enter Manually']}
+                />
+
+                {patientMode === 'existing' ? (
+                  <Select
+                    value={patientOptions.find(opt => opt.value === selectedPatient)}
+                    onChange={(option) => setSelectedPatient(option?.value || '')}
+                    options={patientOptions}
+                    styles={selectStyles}
+                    placeholder="Search and select patient..."
+                    isClearable
+                    isSearchable
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                      <input
+                        type="text"
+                        value={patientData.name}
+                        onChange={(e) => setPatientData({...patientData, name: e.target.value})}
+                        className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholder="e.g. Ahmed Al-Rashid"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          ID Number <RequiredFieldIndicator />
+                        </label>
+                        <input
+                          type="text"
+                          value={patientData.identifier}
+                          onChange={(e) => setPatientData({...patientData, identifier: e.target.value})}
+                          className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                          placeholder="e.g. 1111100111"
+                          maxLength="10"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">ID Type</label>
+                        <Select
+                          value={IDENTIFIER_TYPE_OPTIONS.find(opt => opt.value === patientData.identifierType)}
+                          onChange={(option) => setPatientData({...patientData, identifierType: option?.value || 'national_id'})}
+                          options={IDENTIFIER_TYPE_OPTIONS}
+                          styles={selectStyles}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                        <Select
+                          value={GENDER_OPTIONS.find(opt => opt.value === patientData.gender)}
+                          onChange={(option) => setPatientData({...patientData, gender: option?.value || ''})}
+                          options={GENDER_OPTIONS}
+                          styles={selectStyles}
+                          placeholder="Select..."
+                          isClearable
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                        <div className="datepicker-wrapper">
+                          <DatePicker
+                            selected={parseDate(patientData.birthDate)}
+                            onChange={(date) => setPatientData({...patientData, birthDate: formatDate(date)})}
+                            dateFormat="yyyy-MM-dd"
+                            className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                            placeholderText="YYYY-MM-DD"
+                            showYearDropdown
+                            scrollableYearDropdown
+                            yearDropdownItemNumber={100}
+                            maxDate={new Date()}
+                          />
+                          <Calendar className="datepicker-icon h-4 w-4" />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                      <input
+                        type="tel"
+                        value={patientData.phone}
+                        onChange={(e) => setPatientData({...patientData, phone: e.target.value})}
+                        className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholder="+966 XX XXX XXXX"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Insurer Section */}
+              <div className="bg-white rounded-xl p-4 border border-gray-200">
+                <div className="flex items-center space-x-2 mb-2">
+                  <Building className="h-5 w-5 text-amber-600" />
+                  <label className="text-sm font-medium text-gray-700">
+                    Insurer <RequiredFieldIndicator />
+                  </label>
+                </div>
+                
+                <ModeToggle
+                  mode={insurerMode}
+                  setMode={setInsurerMode}
+                  options={['existing', 'manual']}
+                  labels={['Select Existing', 'Enter Manually']}
+                />
+
+                {insurerMode === 'existing' ? (
+                  <Select
+                    value={insurerOptions.find(opt => opt.value === selectedInsurer)}
+                    onChange={(option) => setSelectedInsurer(option?.value || '')}
+                    options={insurerOptions}
+                    styles={selectStyles}
+                    placeholder="Search and select insurer..."
+                    isClearable
+                    isSearchable
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Insurer Name</label>
+                      <input
+                        type="text"
+                        value={insurerData.name}
+                        onChange={(e) => setInsurerData({...insurerData, name: e.target.value})}
+                        className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholder="e.g. Tawuniya Insurance"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        NPHIES ID <RequiredFieldIndicator />
+                      </label>
+                      <input
+                        type="text"
+                        value={insurerData.nphiesId}
+                        onChange={(e) => setInsurerData({...insurerData, nphiesId: e.target.value})}
+                        className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholder="e.g. INS-001"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Coverage Section */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200">
+              <div className="flex items-center space-x-2 mb-2">
+                <CreditCard className="h-5 w-5 text-green-600" />
+                <label className="text-sm font-medium text-gray-700">
+                  Coverage/Policy {coverageMode !== 'discovery' && <RequiredFieldIndicator />}
+                </label>
+              </div>
+              
+              <ModeToggle
+                mode={coverageMode}
+                setMode={setCoverageMode}
+                options={['existing', 'manual', 'discovery']}
+                labels={['Select Existing', 'Enter Manually', 'Discovery Mode']}
+              />
+
+              {coverageMode === 'existing' ? (
+                <>
+                  <Select
+                    value={coverageOptions.find(opt => opt.value === selectedCoverage)}
+                    onChange={(option) => setSelectedCoverage(option?.value || '')}
+                    options={coverageOptions}
+                    styles={selectStyles}
+                    placeholder="Search and select coverage..."
+                    isClearable
+                    isSearchable
+                    isDisabled={patientMode !== 'existing' || !selectedPatient}
+                  />
+                  {patientMode !== 'existing' && (
+                    <p className="text-sm text-gray-500 mt-2">Select an existing patient first to choose their coverage</p>
+                  )}
+                  {patientMode === 'existing' && !selectedPatient && (
+                    <p className="text-sm text-gray-500 mt-2">Select a patient first</p>
+                  )}
+                  {patientMode === 'existing' && selectedPatient && coverages.length === 0 && (
+                    <p className="text-sm text-amber-600 mt-2">No coverage found for this patient. Try manual entry or discovery mode.</p>
+                  )}
+                </>
+              ) : coverageMode === 'manual' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Policy Number <RequiredFieldIndicator />
+                    </label>
+                    <input
+                      type="text"
+                      value={coverageData.policyNumber}
+                      onChange={(e) => setCoverageData({...coverageData, policyNumber: e.target.value})}
+                      className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                      placeholder="e.g. POL-2025-001234"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Member ID</label>
+                    <input
+                      type="text"
+                      value={coverageData.memberId}
+                      onChange={(e) => setCoverageData({...coverageData, memberId: e.target.value})}
+                      className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                      placeholder="e.g. MEM-00123456"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Coverage Type</label>
+                    <Select
+                      value={COVERAGE_TYPE_OPTIONS.find(opt => opt.value === coverageData.coverageType)}
+                      onChange={(option) => setCoverageData({...coverageData, coverageType: option?.value || 'EHCPOL'})}
+                      options={COVERAGE_TYPE_OPTIONS}
+                      styles={selectStyles}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Plan Name</label>
+                    <input
+                      type="text"
+                      value={coverageData.planName}
+                      onChange={(e) => setCoverageData({...coverageData, planName: e.target.value})}
+                      className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                      placeholder="e.g. Gold Plan"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Relationship</label>
+                    <Select
+                      value={RELATIONSHIP_OPTIONS.find(opt => opt.value === coverageData.relationship)}
+                      onChange={(option) => setCoverageData({...coverageData, relationship: option?.value || 'self'})}
+                      options={RELATIONSHIP_OPTIONS}
+                      styles={selectStyles}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <div className="flex items-start space-x-3">
+                    <Search className="h-5 w-5 text-blue-600 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-blue-900">Discovery Mode</p>
+                      <p className="text-sm text-blue-700">
+                        NPHIES will search for all active coverages for this patient. 
+                        No coverage information is required. Make sure "discovery" is selected as a purpose.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Service Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Service Date <RequiredFieldIndicator />
+              </label>
+              <div className="datepicker-wrapper max-w-xs">
+                <DatePicker
+                  selected={servicedDate}
+                  onChange={(date) => setServicedDate(date)}
+                  dateFormat="yyyy-MM-dd"
+                  className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                  placeholderText="Select service date"
+                />
+                <Calendar className="datepicker-icon h-4 w-4" />
+              </div>
+            </div>
+
+            {/* Purpose Checkboxes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Purpose <RequiredFieldIndicator />
+              </label>
+              <div className="flex flex-wrap gap-4">
+                {['discovery', 'benefits', 'validation'].map(purpose => (
+                  <label key={purpose} className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedPurpose.includes(purpose)}
+                      onChange={() => handlePurposeToggle(purpose)}
+                      className="w-5 h-5 text-primary-purple border-gray-300 rounded focus:ring-primary-purple"
+                    />
+                    <span className="text-gray-700 capitalize">{purpose}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-sm text-gray-500 mt-2">
+                {coverageMode === 'discovery' 
+                  ? 'Discovery mode enabled - include "discovery" purpose for best results'
+                  : 'Select at least one purpose for the eligibility check'
+                }
+              </p>
+            </div>
+
+            {/* NPHIES Extensions */}
+            <div className="bg-white rounded-xl p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                NPHIES Extensions
+              </label>
+              <div className="flex flex-wrap gap-6">
+                {/* Newborn Extension */}
+                <label className="flex items-center space-x-3 cursor-pointer bg-white px-4 py-3 rounded-lg border border-gray-200 hover:border-primary-purple transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={isNewborn}
+                    onChange={(e) => setIsNewborn(e.target.checked)}
+                    className="w-5 h-5 text-primary-purple border-gray-300 rounded focus:ring-primary-purple"
+                  />
+                  <Baby className="h-5 w-5 text-pink-500" />
+                  <div>
+                    <span className="text-gray-700 font-medium">Newborn</span>
+                    <p className="text-xs text-gray-500">Coverage is mother's policy</p>
+                  </div>
+                </label>
+                
+                {/* Transfer Extension */}
+                <label className="flex items-center space-x-3 cursor-pointer bg-white px-4 py-3 rounded-lg border border-gray-200 hover:border-primary-purple transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={isTransfer}
+                    onChange={(e) => setIsTransfer(e.target.checked)}
+                    className="w-5 h-5 text-primary-purple border-gray-300 rounded focus:ring-primary-purple"
+                  />
+                  <ArrowRightLeft className="h-5 w-5 text-blue-500" />
+                  <div>
+                    <span className="text-gray-700 font-medium">Transfer of Care</span>
+                    <p className="text-xs text-gray-500">Services transferred from another provider</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
+                <XCircle className="h-5 w-5 text-red-500 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-red-800">Error</p>
+                  <p className="text-red-700">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex justify-between">
+              <button
+                type="button"
+                onClick={clearForm}
+                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium"
+              >
+                Clear Form
+              </button>
+              <div className="flex space-x-3">
+                {/* Preview Button */}
+                <button
+                  type="button"
+                  onClick={handlePreview}
+                  disabled={previewLoading || selectedPurpose.length === 0 || !selectedProvider}
+                  className="px-6 py-3 bg-white border-2 border-primary-purple text-primary-purple rounded-xl hover:bg-purple-50 transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {previewLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-purple border-t-transparent"></div>
+                      <span>Building...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-5 w-5" />
+                      <span>Preview Request</span>
+                    </>
+                  )}
+                </button>
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={loading || selectedPurpose.length === 0 || !selectedProvider}
+                  className="px-8 py-3 bg-gradient-to-r from-primary-purple to-accent-purple text-white rounded-xl hover:opacity-90 transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                      <span>Checking...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="h-5 w-5" />
+                      <span>Check Eligibility</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Preview Modal/Section */}
+      {showPreview && previewData && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Eye className="h-6 w-6 text-blue-600 mr-2" />
+                <span className="text-blue-900">FHIR Request Preview</span>
+              </div>
+              <button
+                onClick={() => setShowPreview(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </CardTitle>
+            <CardDescription>
+              This is a preview of the FHIR bundle that will be sent to NPHIES. No request has been sent yet.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Entities Summary */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200">
+              <h3 className="font-semibold text-gray-800 mb-3">Request Summary</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500">Patient</p>
+                  <p className="font-medium">{previewData.entities?.patient?.name || 'N/A'}</p>
+                  <p className="text-xs text-gray-400">{previewData.entities?.patient?.identifier}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Provider</p>
+                  <p className="font-medium">{previewData.entities?.provider?.name || 'N/A'}</p>
+                  <p className="text-xs text-gray-400 font-mono">{previewData.entities?.provider?.nphiesId}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Insurer</p>
+                  <p className="font-medium">{previewData.entities?.insurer?.name || 'N/A'}</p>
+                  <p className="text-xs text-gray-400 font-mono">{previewData.entities?.insurer?.nphiesId}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Coverage</p>
+                  {previewData.isDiscoveryMode ? (
+                    <p className="font-medium text-blue-600">Discovery Mode</p>
+                  ) : (
+                    <>
+                      <p className="font-medium">{previewData.entities?.coverage?.policyNumber || 'N/A'}</p>
+                      <p className="text-xs text-gray-400">{previewData.entities?.coverage?.type}</p>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="px-2 py-1 bg-gray-100 rounded">Purpose: {previewData.options?.purpose?.join(', ')}</span>
+                  <span className="px-2 py-1 bg-gray-100 rounded">Date: {previewData.options?.servicedDate}</span>
+                  {previewData.options?.isNewborn && <span className="px-2 py-1 bg-pink-100 text-pink-700 rounded">Newborn</span>}
+                  {previewData.options?.isTransfer && <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">Transfer</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* FHIR Bundle */}
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
+                <FileText className="h-4 w-4 mr-2" />
+                FHIR Bundle (JSON)
+              </h3>
+              <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs max-h-[500px] overflow-y-auto">
+                {JSON.stringify(previewData.fhirBundle, null, 2)}
+              </pre>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(previewData.fhirBundle, null, 2));
+                  alert('FHIR Bundle copied to clipboard!');
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+              >
+                Copy JSON
+              </button>
+              <button
+                onClick={() => setShowPreview(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                Close Preview
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Results */}
+      {result && (
+        <Card className={result.success ? 'border-green-200 bg-green-50/50' : 'border-amber-200 bg-amber-50/50'}>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center">
+                {result.success ? (
+                  <>
+                    <CheckCircle className="h-6 w-6 text-green-600 mr-2" />
+                    <span className="text-green-900">Eligibility Verified Successfully</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="h-6 w-6 text-amber-600 mr-2" />
+                    <span className="text-amber-900">Eligibility Check Returned Errors</span>
+                  </>
+                )}
+              </div>
+              <Badge 
+                variant={result.outcome === 'complete' ? 'default' : 'secondary'}
+                className={result.outcome === 'error' ? 'bg-amber-100 text-amber-800 border-amber-300' : ''}
+              >
+                {result.outcome?.toUpperCase()}
+              </Badge>
+            </CardTitle>
+            <CardDescription className="flex items-center justify-between mt-2">
+              <span>
+                {result.success 
+                  ? 'Eligibility verification completed successfully' 
+                  : 'Response received but contains validation errors'}
+              </span>
+              {result.nphiesResponseId && (
+                <span className="text-xs font-mono bg-white px-2 py-1 rounded border">
+                  ID: {result.nphiesResponseId}
+                </span>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Site Eligibility Banner */}
+            {result.siteEligibility && (
+              <div className={`rounded-xl p-4 border ${getSiteEligibilityColor(result.siteEligibility.code)}`}>
+                <div className="flex items-center space-x-3">
+                  {result.siteEligibility.code === 'eligible' ? (
+                    <CheckCircle className="h-6 w-6" />
+                  ) : (
+                    <XCircle className="h-6 w-6" />
+                  )}
+                  <div>
+                    <p className="font-semibold">Site Eligibility: {result.siteEligibility.code?.toUpperCase()}</p>
+                    <p className="text-sm">{result.siteEligibility.display || getSiteEligibilityDisplay(result.siteEligibility.code)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* NPHIES Generated Warning */}
+            {result.isNphiesGenerated && (
+              <div className="bg-amber-50 border-l-4 border-amber-500 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-amber-900">NPHIES Generated Response</p>
+                    <p className="text-sm text-amber-800">
+                      This response was generated by NPHIES due to a timeout or delivery issue. 
+                      The request may not have reached the insurer.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Response Summary */}
+            <div className="bg-white rounded-xl p-6 border border-gray-200">
+              <h3 className="text-lg font-semibold mb-4 flex items-center">
+                <Info className="h-5 w-5 text-primary-purple mr-2" />
+                Response Summary
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Outcome</p>
+                  <Badge variant={result.outcome === 'complete' ? 'default' : 'destructive'} className="mt-1">
+                    {result.outcome?.toUpperCase()}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Response Code</p>
+                  <p className="text-lg font-semibold">{result.responseCode || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Response ID</p>
+                  <p className="text-sm font-mono text-gray-700">{result.nphiesResponseId || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Coverage Status</p>
+                  <p className="text-lg font-semibold">
+                    {result.inforce ? (
+                      <span className="text-green-600">✓ In Force</span>
+                    ) : (
+                      <span className="text-red-600">✗ Not In Force</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              {/* Disposition */}
+              {result.disposition && (
+                <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-800 font-medium">
+                    <span className="text-green-600 mr-2">✓</span>
+                    {result.disposition}
+                  </p>
+                </div>
+              )}
+              {/* Site Eligibility */}
+              {result.siteEligibility && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-600 font-medium mb-1">Site Eligibility</p>
+                  <p className="text-blue-800">
+                    <Badge variant={result.siteEligibility.code === 'eligible' ? 'default' : 'destructive'}>
+                      {result.siteEligibility.code?.toUpperCase()}
+                    </Badge>
+                    <span className="ml-2 text-sm">{result.siteEligibility.display}</span>
+                  </p>
+                </div>
+              )}
+              {/* Serviced Period */}
+              {result.servicedPeriod && (
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Service Period Start</p>
+                    <p className="font-semibold">{result.servicedPeriod.start}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Service Period End</p>
+                    <p className="font-semibold">{result.servicedPeriod.end}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Patient Information */}
+            {result.patient && (
+              <div className="bg-white rounded-xl p-6 border border-gray-200">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <Shield className="h-5 w-5 text-blue-600 mr-2" />
+                  Patient Information
+                  {result.patient.active && (
+                    <Badge variant="default" className="ml-2 text-xs bg-green-500">Active</Badge>
+                  )}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Full Name</p>
+                    <p className="text-lg font-semibold">{result.patient.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Identifier</p>
+                    <p className="text-lg font-semibold">{result.patient.identifier || 'N/A'}</p>
+                    {result.patient.identifierType && (
+                      <p className="text-sm text-gray-500">{result.patient.identifierType}</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Birth Date</p>
+                    <p className="text-lg font-semibold">{result.patient.birthDate || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Gender</p>
+                    <p className="text-lg font-semibold capitalize">{result.patient.gender || 'N/A'}</p>
+                  </div>
+                  {result.patient.phone && (
+                    <div>
+                      <p className="text-sm text-gray-600">Phone</p>
+                      <p className="text-lg font-semibold">{result.patient.phone}</p>
+                    </div>
+                  )}
+                  {result.patient.occupation && (
+                    <div>
+                      <p className="text-sm text-gray-600">Occupation</p>
+                      <p className="text-lg font-semibold capitalize">{result.patient.occupation}</p>
+                    </div>
+                  )}
+                  {result.patient.maritalStatus && (
+                    <div>
+                      <p className="text-sm text-gray-600">Marital Status</p>
+                      <p className="text-lg font-semibold">
+                        {result.patient.maritalStatus === 'M' ? 'Married' : 
+                         result.patient.maritalStatus === 'S' ? 'Single' :
+                         result.patient.maritalStatus === 'D' ? 'Divorced' :
+                         result.patient.maritalStatus === 'W' ? 'Widowed' :
+                         result.patient.maritalStatus === 'U' ? 'Unknown' : result.patient.maritalStatus}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Coverage Information */}
+            {result.coverage && (
+              <div className="bg-white rounded-xl p-6 border border-gray-200">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <Shield className="h-5 w-5 text-green-600 mr-2" />
+                  Coverage Information
+                  <Badge variant={result.coverage.status === 'active' ? 'default' : 'secondary'} className="ml-2">
+                    {result.coverage.status?.toUpperCase() || 'N/A'}
+                  </Badge>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Member ID</p>
+                    <p className="text-lg font-semibold">{result.coverage.memberId || result.coverage.policyNumber || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Coverage Type</p>
+                    <p className="text-lg font-semibold">{result.coverage.type || 'N/A'}</p>
+                    {result.coverage.typeCode && (
+                      <p className="text-xs text-gray-500 font-mono">{result.coverage.typeCode}</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Relationship</p>
+                    <p className="text-lg font-semibold capitalize">{result.coverage.relationship || 'N/A'}</p>
+                  </div>
+                  {result.coverage.network && (
+                    <div>
+                      <p className="text-sm text-gray-600">Network</p>
+                      <p className="text-lg font-semibold">{result.coverage.network}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Coverage Classes */}
+                {result.coverage.classes && result.coverage.classes.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <p className="text-sm font-medium text-gray-700 mb-3">Coverage Classes</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {result.coverage.classes.map((cls, idx) => (
+                        <div key={idx} className="bg-gray-50 p-3 rounded-lg">
+                          <p className="text-xs text-gray-500 capitalize">{cls.type}</p>
+                          <p className="font-semibold">{cls.name || cls.value}</p>
+                          {cls.name && cls.value && cls.name !== cls.value && (
+                            <p className="text-xs text-gray-400">ID: {cls.value}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Dependent Info */}
+                {result.coverage.dependent && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Dependent Information</p>
+                    <p className="text-gray-800">{result.coverage.dependent}</p>
+                  </div>
+                )}
+
+                {/* Coverage Period */}
+                {(result.coverage.periodStart || result.coverage.periodEnd) && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <p className="text-sm font-medium text-gray-700 mb-3">Coverage Period</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-green-50 p-3 rounded-lg">
+                        <p className="text-xs text-green-600">Start Date</p>
+                        <p className="font-semibold text-green-800">{result.coverage.periodStart || 'N/A'}</p>
+                      </div>
+                      <div className="bg-red-50 p-3 rounded-lg">
+                        <p className="text-xs text-red-600">End Date</p>
+                        <p className="font-semibold text-red-800">{result.coverage.periodEnd || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cost to Beneficiary */}
+                {result.coverage.costToBeneficiary && result.coverage.costToBeneficiary.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <p className="text-sm font-medium text-gray-700 mb-3">Cost to Beneficiary</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {result.coverage.costToBeneficiary.map((cost, index) => (
+                        <div key={index} className="bg-amber-50 p-3 rounded-lg border border-amber-200">
+                          <p className="text-xs text-amber-600">{cost.typeDisplay || cost.type}</p>
+                          <p className="text-xl font-bold text-amber-800">
+                            {cost.value}{cost.unit === '%' ? '%' : ` ${cost.unit}`}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Provider & Insurer Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {result.provider && (
+                <div className="bg-white rounded-xl p-6 border border-gray-200">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center">
+                    <CheckCircle className="h-5 w-5 text-purple-600 mr-2" />
+                    Provider Details
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-600">Organization</p>
+                      <p className="text-lg font-semibold">{result.provider.name || 'N/A'}</p>
+                    </div>
+                    {result.provider.nphiesId && (
+                      <div>
+                        <p className="text-sm text-gray-600">NPHIES ID</p>
+                        <p className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">{result.provider.nphiesId}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {result.insurer && (
+                <div className="bg-white rounded-xl p-6 border border-gray-200">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center">
+                    <Shield className="h-5 w-5 text-amber-600 mr-2" />
+                    Insurer Details
+                    {result.insurer.active && (
+                      <Badge variant="default" className="ml-2 text-xs bg-green-500">Active</Badge>
+                    )}
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-600">Organization</p>
+                      <p className="text-lg font-semibold">{result.insurer.name || 'N/A'}</p>
+                    </div>
+                    {result.insurer.nphiesId && (
+                      <div>
+                        <p className="text-sm text-gray-600">NPHIES ID</p>
+                        <p className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">{result.insurer.nphiesId}</p>
+                      </div>
+                    )}
+                    {result.insurer.address && (
+                      <div>
+                        <p className="text-sm text-gray-600">Address</p>
+                        <p className="text-sm text-gray-700">{result.insurer.address}</p>
+                        {(result.insurer.city || result.insurer.country) && (
+                          <p className="text-sm text-gray-500">
+                            {[result.insurer.city, result.insurer.country].filter(Boolean).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Benefits */}
+            {result.benefits && result.benefits.length > 0 && (
+              <div className="bg-white rounded-xl p-6 border border-gray-200">
+                <h3 className="text-lg font-semibold mb-4 flex items-center justify-between">
+                  <span>Benefits Details ({result.benefits.length} items)</span>
+                  <Badge variant="outline">{result.benefits.filter(b => !b.excluded).length} Active</Badge>
+                </h3>
+                <div className="space-y-4">
+                  {result.benefits.map((benefit, index) => (
+                    <div key={index} className={`rounded-lg p-4 border ${benefit.excluded ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+                      {/* Benefit Header */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900">{benefit.category}</h4>
+                          {benefit.description && (
+                            <p className="text-sm text-gray-600 mt-1">{benefit.description}</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <Badge variant={benefit.networkCode === 'in' ? 'default' : 'secondary'} className="text-xs">
+                            {benefit.network}
+                          </Badge>
+                          {benefit.term && (
+                            <Badge variant="outline" className="text-xs">{benefit.term}</Badge>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Benefit Details */}
+                      {benefit.benefitDetails && benefit.benefitDetails.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {benefit.benefitDetails.map((detail, detailIndex) => (
+                            <div key={detailIndex} className={`p-2 rounded ${
+                              detail.type === 'benefit' ? 'bg-green-100' :
+                              detail.type === 'approval-limit' ? 'bg-blue-100' :
+                              detail.type?.includes('copay') ? 'bg-amber-100' :
+                              detail.type === 'room' ? 'bg-purple-100' : 'bg-gray-100'
+                            }`}>
+                              <p className="text-xs text-gray-600">{detail.typeDisplay}</p>
+                              <p className="font-semibold text-sm">{detail.allowedDisplay || 'N/A'}</p>
+                              {detail.usedDisplay && (
+                                <p className="text-xs text-gray-500">Used: {detail.usedDisplay}</p>
+                              )}
+                              {detail.remainingDisplay && (
+                                <p className="text-xs text-blue-600 font-medium">Left: {detail.remainingDisplay}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {benefit.excluded && (
+                        <Badge variant="destructive" className="mt-2">Excluded</Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Errors */}
+            {result.errors && result.errors.length > 0 && (
+              <div className="bg-red-50 rounded-xl p-6 border border-red-200">
+                <h3 className="text-lg font-semibold mb-4 text-red-900 flex items-center">
+                  <AlertCircle className="h-5 w-5 mr-2" />
+                  NPHIES Validation Errors ({result.errors.length})
+                </h3>
+                <div className="space-y-3">
+                  {result.errors.map((err, index) => (
+                    <div key={index} className="bg-white rounded-lg p-4 border-l-4 border-red-500">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <Badge variant="destructive" className="font-mono">
+                              {err.code}
+                            </Badge>
+                            <span className="text-sm text-gray-500">Error #{index + 1}</span>
+                          </div>
+                          <p className="text-red-700 font-medium mb-2">{err.message}</p>
+                          {err.location && (
+                            <div className="bg-white rounded px-3 py-2 mt-2">
+                              <p className="text-xs text-gray-600 mb-1">Location in Bundle:</p>
+                              <p className="text-sm font-mono text-gray-800">{err.location}</p>
+                            </div>
+                          )}
+                        </div>
+                        <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 ml-3" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Raw FHIR Data Toggle */}
+            <div className="bg-white rounded-xl p-4">
+              <button
+                type="button"
+                onClick={() => setShowRawData(!showRawData)}
+                className="w-full flex items-center justify-between text-left font-semibold text-gray-700 hover:text-primary-purple transition-colors"
+              >
+                <span className="flex items-center">
+                  <FileText className="h-5 w-5 mr-2" />
+                  Raw FHIR Request/Response
+                </span>
+                {showRawData ? <ChevronUp /> : <ChevronDown />}
+              </button>
+              
+              {showRawData && (
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2">Request Bundle</h4>
+                    <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs max-h-96">
+                      {JSON.stringify(result.raw?.request, null, 2)}
+                    </pre>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2">Response Bundle</h4>
+                    <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs max-h-96">
+                      {JSON.stringify(result.raw?.response, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+

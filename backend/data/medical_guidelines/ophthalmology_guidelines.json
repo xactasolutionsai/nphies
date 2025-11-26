@@ -1,0 +1,183 @@
+[
+  {
+    "content": "Refractive errors are the most common eye problems. Myopia (nearsightedness) is corrected with negative sphere values, while hyperopia (farsightedness) requires positive sphere values. Astigmatism is corrected using cylinder values and axis measurements.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Basic Refractive Error Correction",
+      "source": "Standard Ophthalmology Guidelines",
+      "tags": ["refraction", "myopia", "hyperopia", "astigmatism"]
+    }
+  },
+  {
+    "content": "For presbyopia in patients typically over 40 years of age, bifocal or progressive lenses are indicated. The ADD power usually ranges from +0.75 to +3.00 diopters depending on the patient's age and near vision requirements.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Presbyopia Management",
+      "source": "WHO Eye Care Guidelines",
+      "tags": ["presbyopia", "bifocal", "progressive", "age-related"]
+    }
+  },
+  {
+    "content": "Visual acuity testing is essential before prescribing corrective lenses. Standard notation includes distance vision (measured at 20 feet or 6 meters) and near vision (measured at 14-16 inches or 35-40 cm). Document both uncorrected and best-corrected visual acuity.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Visual Acuity Assessment",
+      "source": "Clinical Practice Guidelines",
+      "tags": ["visual acuity", "examination", "documentation"]
+    }
+  },
+  {
+    "content": "Intraocular pressure (IOP) measurement is crucial for detecting glaucoma. Normal IOP ranges from 10-21 mmHg. Patients with elevated IOP or suspicious optic nerve findings require further investigation including visual field testing and OCT imaging.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Glaucoma Screening",
+      "source": "Glaucoma Society Guidelines",
+      "tags": ["glaucoma", "IOP", "screening", "optic nerve"]
+    }
+  },
+  {
+    "content": "For patients with diabetes, annual comprehensive eye examinations are mandatory. Diabetic retinopathy is a leading cause of blindness. Early detection through fundus examination or retinal photography can prevent vision loss.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Diabetic Eye Disease Screening",
+      "source": "Diabetes Eye Care Guidelines",
+      "tags": ["diabetes", "retinopathy", "screening", "fundus examination"]
+    }
+  },
+  {
+    "content": "Cylinder axis notation ranges from 1 to 180 degrees. The axis indicates the meridian that has no cylindrical power. Accurate axis measurement is critical for astigmatism correction, with errors of more than 5 degrees potentially causing visual discomfort.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Astigmatism Axis Measurement",
+      "source": "Refractive Surgery Standards",
+      "tags": ["astigmatism", "axis", "cylinder", "measurement"]
+    }
+  },
+  {
+    "content": "Pupillary distance (PD) measurement is essential for proper lens centering. Average adult PD ranges from 54-68mm. Incorrect PD can cause eye strain, headaches, and reduced visual quality, especially in higher prescriptions.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Pupillary Distance Standards",
+      "source": "Optical Dispensing Guidelines",
+      "tags": ["PD", "lens fitting", "dispensing"]
+    }
+  },
+  {
+    "content": "Anti-reflective coating on lenses reduces glare and improves visual clarity, especially beneficial for night driving and computer use. High-index lenses are recommended for prescriptions exceeding ±4.00 diopters to reduce lens thickness and weight.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Lens Material and Coating Selection",
+      "source": "Optical Standards",
+      "tags": ["lens coating", "high-index", "materials"]
+    }
+  },
+  {
+    "content": "Children require different examination protocols. Amblyopia (lazy eye) screening should occur before age 6. Hyperopia is more common in children and may not require correction unless causing symptoms or affecting development.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Pediatric Vision Care",
+      "source": "Pediatric Ophthalmology Guidelines",
+      "tags": ["pediatric", "amblyopia", "children", "development"]
+    }
+  },
+  {
+    "content": "Contact lens prescriptions differ from spectacle prescriptions due to vertex distance. For powers exceeding ±4.00D, vertex distance compensation is necessary. Contact lens fit should be evaluated for corneal health, tear film quality, and lens movement.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Contact Lens Prescription Guidelines",
+      "source": "Contact Lens Society Standards",
+      "tags": ["contact lenses", "vertex distance", "fitting"]
+    }
+  },
+  {
+    "content": "Sudden vision changes, eye pain, flashes of light, or floaters require immediate examination to rule out retinal detachment, acute glaucoma, or other emergencies. Document onset, duration, and associated symptoms carefully.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Acute Eye Symptoms Assessment",
+      "source": "Emergency Eye Care Protocols",
+      "tags": ["emergency", "symptoms", "acute conditions"]
+    }
+  },
+  {
+    "content": "Photochromic lenses that darken in sunlight provide UV protection and reduce glare. UV protection is essential for preventing cataracts and macular degeneration. Recommend 100% UVA and UVB blocking for all patients.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "UV Protection and Photochromic Lenses",
+      "source": "Eye Protection Guidelines",
+      "tags": ["UV protection", "photochromic", "preventive care"]
+    }
+  },
+  {
+    "content": "Binocular vision assessment includes testing for eye alignment, convergence, and accommodation. Symptoms of binocular dysfunction include double vision, eye strain, and reading difficulties. Prism correction may be required for significant deviations.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Binocular Vision Evaluation",
+      "source": "Vision Therapy Standards",
+      "tags": ["binocular vision", "alignment", "prism", "convergence"]
+    }
+  },
+  {
+    "content": "For patients over 60, comprehensive examination should include dilated fundus examination to screen for age-related macular degeneration (AMD), cataracts, and retinal conditions. Document lens opacity, macular appearance, and peripheral retina status.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Geriatric Eye Examination",
+      "source": "Age-Related Eye Disease Guidelines",
+      "tags": ["geriatric", "AMD", "cataracts", "screening"]
+    }
+  },
+  {
+    "content": "Computer vision syndrome affects many office workers. Symptoms include eye strain, dry eyes, and headaches. Recommend the 20-20-20 rule: every 20 minutes, look at something 20 feet away for 20 seconds. Blue light filtering lenses may provide additional comfort.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Digital Eye Strain Management",
+      "source": "Occupational Vision Care",
+      "tags": ["computer vision", "digital eye strain", "blue light", "ergonomics"]
+    }
+  },
+  {
+    "content": "Anisometropia (significant difference in refractive error between eyes) greater than 2.00D may cause symptoms. Contact lenses or high-index lenses are often better tolerated than standard spectacles for significant anisometropia to minimize image size differences.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Anisometropia Management",
+      "source": "Binocular Vision Guidelines",
+      "tags": ["anisometropia", "prescription", "lens selection"]
+    }
+  },
+  {
+    "content": "Dry eye disease requires comprehensive evaluation including tear break-up time, Schirmer test, and meibomian gland assessment. Treatment may include artificial tears, lid hygiene, omega-3 supplements, or prescription medications depending on severity.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Dry Eye Diagnosis and Management",
+      "source": "Tear Film and Ocular Surface Society",
+      "tags": ["dry eye", "tears", "ocular surface"]
+    }
+  },
+  {
+    "content": "Sphere power in prescriptions indicates the degree of myopia (negative values) or hyperopia (positive values). Values are typically prescribed in 0.25D increments. Higher absolute values indicate stronger prescriptions requiring thicker or more specialized lenses.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Understanding Sphere Power",
+      "source": "Optical Prescription Standards",
+      "tags": ["sphere", "prescription notation", "refraction"]
+    }
+  },
+  {
+    "content": "Prism correction is prescribed for patients with eye alignment issues. Prism power is measured in prism diopters (Δ or PD). The base direction (up, down, in, or out) indicates where the prism base is oriented. Prism helps align images for patients with heterophoria or small tropias.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Prism Prescription Guidelines",
+      "source": "Strabismus and Binocular Vision Standards",
+      "tags": ["prism", "eye alignment", "binocular vision"]
+    }
+  },
+  {
+    "content": "Safety glasses with polycarbonate lenses are essential for occupational hazards. Polycarbonate provides impact resistance and UV protection. Side shields are recommended for high-risk environments. Regular safety glasses should meet ANSI Z87.1 standards.",
+    "category": "ophthalmology",
+    "metadata": {
+      "title": "Occupational Eye Protection",
+      "source": "Industrial Safety Standards",
+      "tags": ["safety glasses", "occupational health", "protection"]
+    }
+  }
+]
+

@@ -1,0 +1,352 @@
+{
+  "name": "nafes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "check",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1120,
+        256
+      ],
+      "id": "7b2ae3ab-2fd4-4aab-81b4-6532cc3631d3",
+      "name": "Webhook",
+      "webhookId": "3317bc67-d963-4af4-ad1f-678d89b9b9a5"
+    },
+    {
+      "parameters": {
+        "model": "cniongolo/biomistral:latest",
+        "options": {
+          "temperature": 0,
+          "numCtx": 10000,
+          "format": "json"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        224
+      ],
+      "id": "d2d8a079-105d-4d77-935a-f80ee420b332",
+      "name": "Ollama Chat Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "OsiPTClKgjpu9tw6",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $('AI Agent (Diagnosis ↔ Scan)').item.json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        352,
+        16
+      ],
+      "id": "cdadfa8b-f3c0-4b00-912f-ff3b09f92a23",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Diagnosis: {{ $json.body.service.diagnosis }}\nLaterality (side): {{ $json.direction }}\nRequested Scan: {{ $json.body.service.description }} {{ $json.body.service.bodyPart }}\nRequested Scan Laterality (side): {{ $json.body.service.laterality }}",
+        "options": {
+          "systemMessage": "You are a clinical decision assistant.\n\nTASK: Check if a requested imaging scan is appropriate for a given diagnosis.\n\nOUTPUT FORMAT: Strictly return JSON with this exact structure:\n{\n  \"fit\": true/false,\n  \"diagnoses\": [ \"Diagnosis 1\", \"Diagnosis 2\" ]\n}\n\nRULES:\n- If the laterality (side) between diagnosis and scan does not match, set \"fit\"=false and provide 3 professional diagnoses relevant to the scan’s side and region.\n- If the scan fits the diagnosis: set \"fit\"=true and \"diagnoses\" must contain exactly 3 professional, properly phrased diagnostic terms that justify the scan.\n- If the scan does not fit: set \"fit\"=false and \"diagnoses\" must contain exactly 3 professional, properly phrased diagnostic terms that would justify this scan instead.\n- If the diagnosis is a systemic condition (e.g., diabetes, hypertension, flu) or otherwise unrelated to the anatomical region of the scan, always set \"fit\"=false and return 3 local, anatomically appropriate diagnoses that match the scan region and laterality.\n- If the diagnosis is on a certain part (eg.hand ,head) ensure scan part is the same otherwise set \"fit\"=false and \"diagnoses\" must contain exactly 3 professional, properly phrased diagnostic terms that would justify this scan instead.\n- Never include systemic diseases in the \"diagnoses\" list.\n- Output only valid JSON with the structure:\n  {\n    \"fit\": true/false,\n    \"diagnoses\": [ \"Diagnosis 1\", \"Diagnosis 2\", \"Diagnosis 3\" ]\n  }\n\n\n\n\n",
+          "maxIterations": 5
+        }
+      },
+      "id": "9f1653a3-8529-4d0a-81f7-99b011eb91b1",
+      "name": "AI Agent (Diagnosis ↔ Scan)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7838e94b-d9c8-433c-88c8-8c95f89718cb",
+              "leftValue": "={{ $json.direction }}",
+              "rightValue": "={{ $json.body.service.laterality }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "a005a9b6-12a0-4be8-abfb-504e4f1e915e",
+              "leftValue": "={{ $json.direction }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -688,
+        256
+      ],
+      "id": "d7ab283b-5fb2-4686-9594-909020341fb0",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Helper function to find the direction within a string.\nfunction findDirection(text) {\n  if (text === null || text === undefined) {\n    return \"\";\n  }\n  const lowerText = text.toLowerCase();\n  \n  if (lowerText.includes(\"left\")) {\n    return \"left\";\n  } else if (lowerText.includes(\"right\")) {\n    return \"right\";\n  } else {\n    return \"\"; // Return an empty string if neither is found\n  }\n}\n\n// Process each item in the input array.\nfor (const item of items) {\n  // Correctly access the data for the current item\n  const originalText = $input.first().json.body.service.diagnosis;\n  \n  // Call the function and assign the return value to a variable\n  const extractedDirection = findDirection(originalText);\n  \n  // Add the new \"direction\" property to the item's JSON data.\n  item.json.direction = extractedDirection;\n}\n\n// Return the modified items.\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        256
+      ],
+      "id": "933d3f6c-4385-4e83-b9e0-ece9d04ad426",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"fit\": false,\n  \"diagnoses\":  \"{{ $json.body.service.diagnosis }} {{ $json.body.service.laterality }}\"\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -96,
+        400
+      ],
+      "id": "c704040e-7ede-48f1-b12f-d59673f4ddd2",
+      "name": "Respond to Webhook1",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// This function removes \"left\" or \"right\" from the input string.\nfunction removeDirections(text) {\n  // Use a regular expression with a case-insensitive flag ('i') and\n  // a global flag ('g') to replace all occurrences.\n  // The \"\\\\b\" is a word boundary to ensure it only matches the whole words\n  // \"left\" or \"right\" and not parts of other words (e.g., \"rightly\").\n  return text.replace(/\\b(left|right)\\b/gi, '').trim();\n}\n\n// Process each item that is passed into the Code node.\nfor (const item of items) {\n  // Assuming the text you want to modify is in a field called 'text'.\n  // You can change 'text' to match the name of your field.\n  const originalText = $input.first().json.body.service.diagnosis;\n\n  // Call the function to clean the string.\n  const cleanedText = removeDirections(originalText);\n\n  // Overwrite the original 'text' field with the new, cleaned text.\n  // Or, you can create a new property like item.json.cleanedText = cleanedText;\n  item.json.text = cleanedText;\n}\n\n// Return the modified items to the next node in the workflow.\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -384,
+        400
+      ],
+      "id": "d1532133-fb88-4ac9-b3b7-79af7fb16958",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT prerequisites\nFROM medical_exams\nWHERE LOWER(exam_name) LIKE  LOWER('%{{ $('If').item.json.body.service.description }}%');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -96,
+        112
+      ],
+      "id": "596c7f25-0f75-46c7-9033-991dbe48a8f3",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "0FS9b2Fw7iHoiDU7",
+          "name": "Unnamed credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e3aafd04-d532-42c1-baa9-3f90e6129ce2",
+              "leftValue": "={{ $json.prerequisites }}",
+              "rightValue": "={{ $('If').item.json.body.service.previousTests }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        128,
+        112
+      ],
+      "id": "bbcf07c7-6466-4f77-9c5d-7d7ee6e1d5ab",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"fit\": false,\n  \"diagnoses\":  \"{{ $('Execute a SQL query').item.json.prerequisites }} is needed\"\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        352,
+        208
+      ],
+      "id": "0b1d6c67-5cf1-437a-8409-b9ad320bc327",
+      "name": "Respond to Webhook2",
+      "alwaysOutputData": false
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent (Diagnosis ↔ Scan)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Diagnosis ↔ Scan)": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "AI Agent (Diagnosis ↔ Scan)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4790f953-ec69-4a87-8c35-e9166cd7c4ff",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "53ed101763ec1d71def9ee42c5b4f175d03f2552fcc9457fdb6b8a730df31fa1"
+  },
+  "id": "MWTf3Fu3WruRynd1",
+  "tags": []
+}

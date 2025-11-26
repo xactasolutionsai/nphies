@@ -1,0 +1,162 @@
+/* Custom styles for react-datepicker */
+.react-datepicker-wrapper {
+  width: 100%;
+}
+
+.react-datepicker__input-container input {
+  width: 100%;
+  height: 38px;
+  padding: 0.5rem 0.75rem 0.5rem 2.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  background-color: white;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.react-datepicker__input-container input:focus {
+  outline: none;
+  border-color: #553781;
+  box-shadow: 0 0 0 1px #553781;
+}
+
+.react-datepicker__input-container input.border-red-500 {
+  border-color: #ef4444;
+}
+
+.react-datepicker__input-container input.border-red-500:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 1px #ef4444;
+}
+
+.react-datepicker {
+  font-family: inherit;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+  box-shadow: none;
+}
+
+.react-datepicker__header {
+  background-color: #553781;
+  border-bottom: none;
+  border-radius: 0.5rem 0.5rem 0 0;
+  padding-top: 0.75rem;
+}
+
+.react-datepicker__current-month {
+  color: white;
+  font-weight: 600;
+}
+
+.react-datepicker__day-name {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background-color: #553781;
+  border-radius: 0.25rem;
+}
+
+.react-datepicker__day:hover {
+  background-color: #9658C4;
+  border-radius: 0.25rem;
+  color: white;
+}
+
+.react-datepicker__navigation-icon::before {
+  border-color: white;
+}
+
+.react-datepicker__triangle {
+  border-bottom-color: #553781 !important;
+}
+
+.react-datepicker__triangle::before {
+  border-bottom-color: #e5e7eb !important;
+}
+
+/* Custom styles for react-select */
+.react-select-container {
+  font-size: 0.875rem;
+}
+
+.react-select-container .react-select__control {
+  min-height: 38px;
+  border-color: #d1d5db;
+  border-radius: 0.25rem;
+  box-shadow: none !important;
+}
+
+.react-select-container .react-select__control:hover {
+  border-color: #9ca3af;
+}
+
+.react-select-container .react-select__control--is-focused {
+  border-color: #553781 !important;
+  box-shadow: 0 0 0 1px #553781 !important;
+  outline: none !important;
+}
+
+.react-select-container .react-select__control--is-focused .react-select__value-container {
+  box-shadow: none !important;
+}
+
+.react-select-container .react-select__input-container {
+  margin: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.react-select-container .react-select__input-container input {
+  box-shadow: none !important;
+  outline: none !important;
+  border: none !important;
+}
+
+.react-select-container .react-select__value-container {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.react-select-container .react-select__option--is-selected {
+  background-color: #553781;
+}
+
+.react-select-container .react-select__option--is-focused:not(.react-select__option--is-selected) {
+  background-color: #f3f4f6;
+}
+
+/* Remove unwanted shadows and boxes from react-select menu */
+.react-select__menu {
+  background-color: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 0.25rem !important;
+  box-shadow: none !important;
+  margin-top: 4px !important;
+  z-index: 9999 !important;
+}
+
+.react-select__menu-portal {
+  z-index: 9999 !important;
+}
+
+.react-select__menu-list {
+  padding: 4px !important;
+  max-height: 200px !important;
+}
+
+/* Remove any unwanted background artifacts from menu wrapper */
+.react-select__menu > div {
+  background: transparent !important;
+}
+
+/* Ensure no unwanted pseudo-elements create shadows/boxes */
+.react-select__menu::before,
+.react-select__menu::after {
+  display: none !important;
+  content: none !important;
+}
+
