@@ -1,322 +1,2099 @@
 {
-    "resourceType": "Bundle",
-    "id": "111b94d5-8150-4edc-a15f-b7e59537369f",
-    "meta": {
-      "profile": [
-        "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
-      ]
-    },
-    "type": "message",
-    "timestamp": "2025-11-26T19:31:47.779Z",
-    "entry": [
-      {
-        "fullUrl": "urn:uuid:f2d83c93-7cfb-4ddb-8cb6-5f28b36ebb1d",
-        "resource": {
-          "resourceType": "MessageHeader",
-          "id": "f2d83c93-7cfb-4ddb-8cb6-5f28b36ebb1d",
-          "meta": {
-            "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
-            ]
-          },
-          "eventCoding": {
-            "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
-            "code": "eligibility-request"
-          },
-          "destination": [
-            {
-              "endpoint": "http://nphies.sa/license/payer-license/INS-FHIR",
-              "receiver": {
-                "type": "Organization",
-                "identifier": {
-                  "system": "http://nphies.sa/license/payer-license",
-                  "value": "INS-FHIR"
-                }
-              }
-            }
-          ],
-          "sender": {
-            "type": "Organization",
-            "identifier": {
-              "system": "http://nphies.sa/license/provider-license",
-              "value": "PR-FHIR"
-            }
-          },
-          "source": {
-            "endpoint": "http://provider.com"
-          },
-          "focus": [
-            {
-              "reference": "http://provider.com/CoverageEligibilityRequest/07779"
-            }
+  "resourceType": "Bundle",
+  "id": "75a24632-fd9c-4472-84f8-297cf8f55bf4",
+  "meta": {
+    "profile": [
+      "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
+    ]
+  },
+  "type": "message",
+  "timestamp": "2025-11-27T12:43:28.211+00:00",
+  "entry": [
+    {
+      "fullUrl": "http://pseudo-payer.com.sa/MessageHeader/ca903be2-3e9f-4596-8bc0-21fa54f00b34",
+      "resource": {
+        "resourceType": "MessageHeader",
+        "id": "ca903be2-3e9f-4596-8bc0-21fa54f00b34",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
           ]
-        }
-      },
-      {
-        "fullUrl": "http://provider.com/CoverageEligibilityRequest/07779",
-        "resource": {
-          "resourceType": "CoverageEligibilityRequest",
-          "id": "07779",
-          "meta": {
-            "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/eligibility-request|1.0.0"
-            ]
-          },
-          "identifier": [
-            {
-              "system": "http://provider.com/identifiers/coverageeligibilityrequest",
-              "value": "req_507778"
-            }
-          ],
-          "status": "active",
-          "priority": {
-            "coding": [
-              {
-                "system": "http://terminology.hl7.org/CodeSystem/processpriority",
-                "code": "normal"
+        },
+        "eventCoding": {
+          "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
+          "code": "eligibility-response"
+        },
+        "destination": [
+          {
+            "endpoint": "http://10.73.91.79/",
+            "receiver": {
+              "type": "Organization",
+              "identifier": {
+                "system": "http://nphies.sa/license/provider-license",
+                "value": "PR-FHIR"
               }
-            ]
-          },
-          "purpose": [
-            "discovery"
-          ],
-          "patient": {
-            "reference": "Patient/patient-preview-patient-id"
-          },
-          "servicedPeriod": {
-            "start": "2025-11-26",
-            "end": "2025-11-26"
-          },
-          "created": "2025-11-26",
-          "provider": {
-            "reference": "Organization/76c2734f-b436-49fe-a645-03669dc804ed"
-          },
-          "insurer": {
-            "reference": "Organization/preview-insurer-id"
-          },
-          "facility": {
-            "reference": "Location/61efe152-5375-4baa-b5cc-3d46fdee19c4"
+            }
           }
-        }
-      },
-      {
-        "fullUrl": "http://provider.com/Organization/76c2734f-b436-49fe-a645-03669dc804ed",
-        "resource": {
-          "resourceType": "Organization",
-          "id": "76c2734f-b436-49fe-a645-03669dc804ed",
-          "meta": {
-            "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
-            ]
-          },
-          "extension": [
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
-              "valueCodeableConcept": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                    "code": "1",
-                    "display": "Hospital"
-                  }
-                ]
-              }
-            }
-          ],
-          "identifier": [
-            {
-              "system": "http://nphies.sa/license/provider-license",
-              "value": "PR-FHIR"
-            }
-          ],
-          "active": true,
-          "type": [
-            {
+        ],
+        "sender": {
+          "type": "Organization",
+          "identifier": {
+            "system": "http://nphies.sa/license/payer-license",
+            "value": "INS-FHIR"
+          }
+        },
+        "source": {
+          "endpoint": "http://payer.com"
+        },
+        "response": {
+          "identifier": "99af498b-a810-4984-a886-e67517be47aa",
+          "code": "ok"
+        },
+        "focus": [
+          {
+            "reference": "http://pseudo-payer.com.sa/CoverageEligibilityResponse/07852"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "http://pseudo-payer.com.sa/CoverageEligibilityResponse/07852",
+      "resource": {
+        "resourceType": "CoverageEligibilityResponse",
+        "id": "07852",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/eligibility-response|1.0.0"
+          ]
+        },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-siteEligibility",
+            "valueCodeableConcept": {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-                  "code": "prov"
+                  "system": "http://nphies.sa/terminology/CodeSystem/siteEligibility",
+                  "code": "eligible"
                 }
               ]
             }
-          ],
-          "name": "King Faisal Specialist Hospital",
-          "address": [
-            {
-              "use": "work",
-              "text": "Riyadh Main Campus",
-              "line": [
-                "Riyadh Main Campus"
-              ],
-              "city": "Riyadh",
-              "country": "Saudi Arabia"
-            }
-          ]
-        }
-      },
-      {
-        "fullUrl": "http://provider.com/Patient/patient-preview-patient-id",
-        "resource": {
-          "resourceType": "Patient",
-          "id": "patient-preview-patient-id",
-          "meta": {
-            "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
-            ]
-          },
-          "extension": [
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
-              "valueCodeableConcept": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/occupation",
-                    "code": "business"
-                  }
-                ]
-              }
-            }
-          ],
-          "identifier": [
-            {
-              "extension": [
-                {
-                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
-                  "valueCodeableConcept": {
-                    "coding": [
-                      {
-                        "system": "urn:iso:std:iso:3166",
-                        "code": "SAU",
-                        "display": "Saudi Arabia"
-                      }
-                    ]
-                  }
-                }
-              ],
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                    "code": "PPN",
-                    "display": "Passport Number"
-                  }
-                ]
-              },
-              "system": "http://nphies.sa/identifier/passportnumber",
-              "value": "G12345678"
-            }
-          ],
-          "active": true,
-          "name": [
-            {
-              "use": "official",
-              "text": "Ahmad Khaled Abbas",
-              "family": "Abbas",
-              "given": [
-                "Ahmad",
-                "Khaled"
-              ]
-            }
-          ],
-          "telecom": [
-            {
-              "system": "phone",
-              "value": "+966512345691"
-            }
-          ],
-          "gender": "male",
-          "_gender": {
+          }
+        ],
+        "identifier": [
+          {
+            "system": "http://pseudo-payer.com.sa/coverageeligibilityresponse",
+            "value": "078f94f5-b918-4d26-972d-c3ea425f78b5"
+          }
+        ],
+        "status": "active",
+        "purpose": [
+          "benefits",
+          "validation"
+        ],
+        "patient": {
+          "reference": "http://provider.com/Patient/patient-c1871551-bb8f-4499-9822-7ca391b170dc"
+        },
+        "servicedPeriod": {
+          "start": "2025-11-27",
+          "end": "2025-11-27"
+        },
+        "created": "2025-11-27T12:43:28.212+00:00",
+        "request": {
+          "type": "CoverageEligibilityRequest",
+          "identifier": {
+            "system": "http://provider.com/identifiers/coverageeligibilityrequest",
+            "value": "req_407852"
+          }
+        },
+        "outcome": "complete",
+        "disposition": "Coverage is in-force",
+        "insurer": {
+          "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+        },
+        "insurance": [
+          {
             "extension": [
               {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-siteEligibility",
                 "valueCodeableConcept": {
                   "coding": [
                     {
-                      "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender",
-                      "code": "male"
+                      "system": "http://nphies.sa/terminology/CodeSystem/siteEligibility",
+                      "code": "eligible"
                     }
                   ]
                 }
               }
-            ]
-          },
-          "deceasedBoolean": false,
-          "address": []
-        }
-      },
-      {
-        "fullUrl": "http://provider.com/Organization/preview-insurer-id",
-        "resource": {
-          "resourceType": "Organization",
-          "id": "preview-insurer-id",
-          "meta": {
-            "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"
-            ]
-          },
-          "identifier": [
-            {
-              "use": "official",
-              "type": {
-                "coding": [
+            ],
+            "coverage": {
+              "reference": "http://provider.com/Coverage/coverage-702118af-058b-43f0-af52-7a14e50c554e"
+            },
+            "inforce": true,
+            "item": [
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "13"
+                    }
+                  ]
+                },
+                "name": "Health Benefit Plan Coverage",
+                "description": "Policy Maximum Annual Limit and Approval limit",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
                   {
-                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                    "code": "NII"
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 500000,
+                      "currency": "SAR"
+                    },
+                    "usedMoney": {
+                      "value": 200000,
+                      "currency": "SAR"
+                    }
+                  },
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "approval-limit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 5000,
+                      "currency": "SAR"
+                    }
                   }
                 ]
               },
-              "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
-            }
-          ],
-          "active": true,
-          "type": [
-            {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-                  "code": "ins",
-                  "display": "Insurance Company"
-                }
-              ]
-            }
-          ],
-          "name": "Saudi National Insurance",
-          "address": []
-        }
-      },
-      {
-        "fullUrl": "http://provider.com/Location/61efe152-5375-4baa-b5cc-3d46fdee19c4",
-        "resource": {
-          "resourceType": "Location",
-          "id": "61efe152-5375-4baa-b5cc-3d46fdee19c4",
-          "meta": {
-            "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0"
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "13"
+                    }
+                  ]
+                },
+                "name": "Health Benefit Plan Coverage",
+                "description": "Outpatient Treatment expenses-within minimum unified network",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "copay-percent"
+                        }
+                      ]
+                    },
+                    "allowedUnsignedInt": 20
+                  },
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "copay-maximum"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 75,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "13"
+                    }
+                  ]
+                },
+                "name": "Health Benefit Plan Coverage",
+                "description": "Outpatient Treatment expenses-for hospital out of the minimum unified network",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "out"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "copay-percent"
+                        }
+                      ]
+                    },
+                    "allowedUnsignedInt": 20
+                  },
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "copay-maximum"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 300,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "13"
+                    }
+                  ]
+                },
+                "name": "Health Benefit Plan Coverage",
+                "description": "Outpatient Treatment expenses-for other health care providers (Not Hospitals)",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "out"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "copay-percent"
+                        }
+                      ]
+                    },
+                    "allowedUnsignedInt": 20
+                  },
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "copay-maximum"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 100,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "3"
+                    }
+                  ]
+                },
+                "name": "Consultation",
+                "description": "Consultation-General Practitioner",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 50,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "3"
+                    }
+                  ]
+                },
+                "name": "Consultation",
+                "description": "Consultation-Specialist (Registerar Physician)",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 200,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "3"
+                    }
+                  ]
+                },
+                "name": "Consultation",
+                "description": "Consultation-Specialist (Senior Registrar Physician)",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 200,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "3"
+                    }
+                  ]
+                },
+                "name": "Consultation",
+                "description": "Consultation- Consultant",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 300,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "3"
+                    }
+                  ]
+                },
+                "name": "Consultation",
+                "description": "Consultation- Rare Medical Specialities",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 500,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "17"
+                    }
+                  ]
+                },
+                "name": "Hospital Room and Board",
+                "description": "daily room and board for a patient",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "room"
+                        }
+                      ]
+                    },
+                    "allowedString": "Shared Room"
+                  },
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 600,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "17"
+                    }
+                  ]
+                },
+                "name": "Hospital Room and Board",
+                "description": "Limit of daily room and board for a hospital sitter",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "day"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "room"
+                        }
+                      ]
+                    },
+                    "allowedString": "Shared Room"
+                  },
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 150,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "23"
+                    }
+                  ]
+                },
+                "name": "Maternity",
+                "description": "Pregnancy/Delivery Cost",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 15000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "26"
+                    }
+                  ]
+                },
+                "name": "Dental Coverage",
+                "description": "Cost of Dental Treatment",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 2000,
+                      "currency": "SAR"
+                    }
+                  },
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "approval-limit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 500,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "28"
+                    }
+                  ]
+                },
+                "name": "Vision Coverage",
+                "description": "Cost of Spectacles",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 400,
+                      "currency": "SAR"
+                    },
+                    "usedMoney": {
+                      "value": 100,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "24"
+                    }
+                  ]
+                },
+                "name": "Renal Dialysis",
+                "description": "Cost of Renal dialysis",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 100000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "29"
+                    }
+                  ]
+                },
+                "name": "Mental Health",
+                "description": "Cost of Acute & non Acute Psychological Disorders",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 15000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "19"
+                    }
+                  ]
+                },
+                "name": "Medically Related Transportation",
+                "description": "Corpse Repatriation to Home Country",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "lifetime"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 10000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "27"
+                    }
+                  ]
+                },
+                "name": "Hearing Coverage",
+                "description": "Cost of Hearing Aids",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 6000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "2"
+                    }
+                  ]
+                },
+                "name": "Surgical",
+                "description": "Cost of Acquired valvular heart disease",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 150000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "22"
+                    }
+                  ]
+                },
+                "name": "Donor Procedures",
+                "description": "Cost of organ harvesting procedures (donor)",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 50000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "1"
+                    }
+                  ]
+                },
+                "name": "Medical Care",
+                "description": "Cost of Alzheimer cases",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 15000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "1"
+                    }
+                  ]
+                },
+                "name": "Medical Care",
+                "description": "Cost of Autism cases",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 50000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "1"
+                    }
+                  ]
+                },
+                "name": "Medical Care",
+                "description": "Cost of Disability cases",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 100000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "25"
+                    }
+                  ]
+                },
+                "name": "Medical Coverage",
+                "description": "Cost of the early screening program for hearing disable and the program of criticalcongenital heart disease for all newborn",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 100000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "2"
+                    }
+                  ]
+                },
+                "name": "Surgical",
+                "description": "Cost of covering the operation of obesity surgery through the operation of gastric Sleeve only in the event of BMI more than (45)",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 20000,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "60"
+                    }
+                  ]
+                },
+                "name": "Advanced Obesity Medical Management",
+                "description": "Advanced Obesity Medical Management",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 500,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "57"
+                    }
+                  ]
+                },
+                "name": "OP Prescribed Invented Medicines - with generic alternative",
+                "description": "OP Prescribed Invented Medicines - with generic alternative",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 300,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "81"
+                    }
+                  ]
+                },
+                "name": "Life sustaining and interventions altering medical outcomes",
+                "description": "Life sustaining and interventions altering medical outcomes",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 300,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "71"
+                    }
+                  ]
+                },
+                "name": "Psychiatry coverage",
+                "description": "Psychiatry coverage",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 300,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "72"
+                    }
+                  ]
+                },
+                "name": "Renal transplant",
+                "description": "Renal transplant",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 300,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              },
+              {
+                "category": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/benefit-category",
+                      "code": "70"
+                    }
+                  ]
+                },
+                "name": "Pediatric vision coverage",
+                "description": "Pediatric vision coverage",
+                "network": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-network",
+                      "code": "in"
+                    }
+                  ]
+                },
+                "unit": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+                      "code": "individual"
+                    }
+                  ]
+                },
+                "term": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/benefit-term",
+                      "code": "annual"
+                    }
+                  ]
+                },
+                "benefit": [
+                  {
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://nphies.sa/terminology/CodeSystem/benefit-type",
+                          "code": "benefit"
+                        }
+                      ]
+                    },
+                    "allowedMoney": {
+                      "value": 300,
+                      "currency": "SAR"
+                    }
+                  }
+                ]
+              }
             ]
-          },
-          "identifier": [
-            {
-              "system": "http://nphies.sa/license/location-license",
-              "value": "GACH"
-            }
-          ],
-          "status": "active",
-          "name": "King Faisal Specialist Hospital",
-          "type": [
-            {
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "http://provider.com/Patient/patient-c1871551-bb8f-4499-9822-7ca391b170dc",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-c1871551-bb8f-4499-9822-7ca391b170dc",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
+          ]
+        },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
+            "valueCodeableConcept": {
               "coding": [
                 {
-                  "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
-                  "code": "GACH"
+                  "system": "http://nphies.sa/terminology/CodeSystem/occupation",
+                  "code": "business"
                 }
               ]
             }
-          ],
-          "managingOrganization": {
-            "reference": "Organization/76c2734f-b436-49fe-a645-03669dc804ed"
           }
+        ],
+        "identifier": [
+          {
+            "extension": [
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "urn:iso:std:iso:3166",
+                      "code": "SAU",
+                      "display": "Saudi Arabia"
+                    }
+                  ]
+                }
+              }
+            ],
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "MR",
+                  "display": "Medical Record Number"
+                }
+              ]
+            },
+            "system": "http://provider.com/identifier/mrn",
+            "value": "100123"
+          }
+        ],
+        "active": true,
+        "name": [
+          {
+            "use": "official",
+            "text": "Baby of Maria Rizwan",
+            "family": "Rizwan",
+            "given": [
+              "Baby",
+              "of",
+              "Maria"
+            ]
+          }
+        ],
+        "gender": "male",
+        "_gender": {
+          "extension": [
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender",
+                    "code": "male"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "birthDate": "2025-11-02",
+        "deceasedBoolean": false,
+        "maritalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+              "code": "U"
+            }
+          ]
         }
       }
-    ]
-  }
+    },
+    {
+      "fullUrl": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"
+          ]
+        },
+        "identifier": [
+          {
+            "use": "official",
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "NII"
+                }
+              ]
+            },
+            "system": "http://nphies.sa/license/payer-license",
+            "value": "INS-FHIR"
+          }
+        ],
+        "active": true,
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
+                "code": "ins",
+                "display": "Insurance Company"
+              }
+            ]
+          }
+        ],
+        "name": "Bupa Arabia Insurance Company",
+        "address": [
+          {
+            "use": "work",
+            "text": "Business Tower, Riyadh",
+            "line": [
+              "Business Tower, Riyadh"
+            ],
+            "city": "Riyadh",
+            "country": "Saudi Arabia"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "http://provider.com/Coverage/coverage-702118af-058b-43f0-af52-7a14e50c554e",
+      "resource": {
+        "resourceType": "Coverage",
+        "id": "coverage-702118af-058b-43f0-af52-7a14e50c554e",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://provider.com/identifiers/memberid",
+            "value": "0000000002"
+          }
+        ],
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
+              "code": "EHCPOL",
+              "display": "extended healthcare"
+            }
+          ]
+        },
+        "policyHolder": {
+          "reference": "http://provider.com/Patient/patient-c1871551-bb8f-4499-9822-7ca391b170dc"
+        },
+        "subscriber": {
+          "reference": "Patient/patient-c1871551-bb8f-4499-9822-7ca391b170dc"
+        },
+        "beneficiary": {
+          "reference": "Patient/patient-c1871551-bb8f-4499-9822-7ca391b170dc"
+        },
+        "dependent": "Sara IQVIA",
+        "relationship": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+              "code": "self",
+              "display": "Self"
+            }
+          ]
+        },
+        "period": {
+          "start": "2021-09-28",
+          "end": "2028-09-28"
+        },
+        "payor": [
+          {
+            "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+          }
+        ],
+        "class": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
+                  "code": "group"
+                }
+              ]
+            },
+            "value": "123456789",
+            "name": "Dream Team"
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
+                  "code": "plan"
+                }
+              ]
+            },
+            "value": "357159456",
+            "name": "Dream Team  #2"
+          }
+        ],
+        "network": "IQVIA/DHC",
+        "costToBeneficiary": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/coverage-copay-type",
+                  "code": "gpvisit"
+                }
+              ]
+            },
+            "valueMoney": {
+              "value": 10,
+              "currency": "SAR"
+            }
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/coverage-copay-type",
+                  "code": "spvisit"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "value": 9
+            }
+          }
+        ],
+        "subrogation": true
+      }
+    }
+  ]
+}

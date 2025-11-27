@@ -88,6 +88,12 @@ class NphiesMapper {
             display: 'National Identifier',
             system: 'http://nphies.sa/identifier/iqama'
           };
+        case 'mrn':
+          return {
+            code: 'MR',
+            display: 'Medical Record Number',
+            system: 'http://provider.com/identifier/mrn'
+          };
         case 'national_id':
         default:
           return {
@@ -245,16 +251,45 @@ class NphiesMapper {
     // Static NPHIES test ID for now (TODO: use database value in production)
     const nphiesId = 'PR-FHIR';
     const providerName = provider.provider_name || provider.providerName || provider.name || 'Provider Organization';
-    const providerType = provider.provider_type || provider.providerType || '1'; // Default to Hospital
+    const rawProviderType = provider.provider_type || provider.providerType || '1';
 
-    // Get provider type display text
+    // Convert text provider types to NPHIES numeric codes
+    // NPHIES ValueSet: http://nphies.sa/terminology/CodeSystem/provider-type
+    // Reference: https://portal.nphies.sa/ig/CodeSystem-provider-type.html
+    const getProviderTypeCode = (type) => {
+      const typeMap = {
+        // Text values -> NPHIES codes
+        'hospital': '1',
+        'polyclinic': '2',
+        'pharmacy': '3',
+        'optical': '4',
+        'optical_shop': '4',
+        'clinic': '5',
+        'dental': '5',
+        'dental_clinic': '5',
+        'vision': '5',
+        'vision_clinic': '5',
+        // Already numeric codes
+        '1': '1',
+        '2': '2',
+        '3': '3',
+        '4': '4',
+        '5': '5'
+      };
+      return typeMap[type?.toLowerCase()] || '1'; // Default to Hospital
+    };
+
+    const providerType = getProviderTypeCode(rawProviderType);
+
+    // Get provider type display text per NPHIES ValueSet
+    // Reference: https://portal.nphies.sa/ig/CodeSystem-provider-type.html
     const getProviderTypeDisplay = (code) => {
       const displays = {
         '1': 'Hospital',
-        '2': 'Clinic',
+        '2': 'Polyclinic',
         '3': 'Pharmacy',
-        '4': 'Laboratory',
-        '5': 'Dental'
+        '4': 'Optical Shop',
+        '5': 'Clinic'  // Used for Dental, Vision, Professional clinics
       };
       return displays[code] || 'Healthcare Provider';
     };
@@ -373,11 +408,48 @@ class NphiesMapper {
   }
 
   /**
+   * Build FHIR PolicyHolder Organization resource
+   * Following NPHIES specification: https://portal.nphies.sa/ig/StructureDefinition-policyholder-organization.html
+   * Example: Organization/13 in NPHIES eligibility example
+   */
+  buildPolicyHolderOrganization(policyHolder) {
+    // Support both DB format (snake_case) and raw format (camelCase)
+    const policyHolderId = policyHolder?.policy_holder_id || policyHolder?.policyHolderId || this.generateId();
+    const name = policyHolder?.name || 'Policy Holder Organization';
+    const identifier = policyHolder?.identifier || '5009';
+    const identifierSystem = policyHolder?.identifier_system || policyHolder?.identifierSystem || 'http://nphies.sa/identifiers/organization';
+    const isActive = policyHolder?.is_active !== undefined ? policyHolder.is_active : true;
+
+    return {
+      fullUrl: `http://provider.com/Organization/${policyHolderId}`,
+      resource: {
+        resourceType: 'Organization',
+        id: policyHolderId.toString(),
+        meta: {
+          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/policyholder-organization|1.0.0']
+        },
+        identifier: [
+          {
+            system: identifierSystem,
+            value: identifier
+          }
+        ],
+        active: isActive,
+        name: name
+      }
+    };
+  }
+
+  /**
    * Build FHIR Coverage resource
    * Following NPHIES specification: https://portal.nphies.sa/ig/StructureDefinition-coverage.html
    * Supports both DB format (snake_case) and raw format (camelCase)
+   * @param {Object} coverage - Coverage data
+   * @param {Object} patient - Patient data
+   * @param {Object} insurer - Insurer data  
+   * @param {Object} policyHolder - Optional PolicyHolder Organization data
    */
-  buildCoverageResource(coverage, patient, insurer) {
+  buildCoverageResource(coverage, patient, insurer, policyHolder = null) {
     const coverageId = `coverage-${(coverage.coverage_id || coverage.coverageId)?.toString() || this.generateId()}`;
     const patientId = `patient-${(patient.patient_id || patient.patientId)?.toString()}`;
     const insurerId = (insurer.insurer_id || insurer.insurerId)?.toString();
@@ -392,7 +464,7 @@ class NphiesMapper {
     const planName = coverage.plan_name || coverage.planName;
     const planValue = coverage.plan_value || coverage.planValue;
     const network = coverage.network;
-    const dependent = coverage.dependent;
+    const dependent = coverage.dependent || coverage.dependent_number;
     const relationship = coverage.relationship || 'self';
 
     // Get display text for coverage type
@@ -406,6 +478,17 @@ class NphiesMapper {
       };
       return displays[code] || code;
     };
+
+    // Determine policyHolder reference
+    // Per NPHIES example: policyHolder should be Organization (employer), not Patient
+    let policyHolderRef;
+    if (policyHolder) {
+      const policyHolderId = policyHolder.policy_holder_id || policyHolder.policyHolderId;
+      policyHolderRef = { reference: `Organization/${policyHolderId}` };
+    } else {
+      // Fallback to Patient reference if no policyHolder organization
+      policyHolderRef = { reference: `Patient/${patientId}` };
+    }
 
     return {
       fullUrl: `http://provider.com/Coverage/${coverageId}`,
@@ -431,11 +514,8 @@ class NphiesMapper {
             }
           ]
         },
-        // policyHolder is REQUIRED by NPHIES for benefits/validation
-        // Reference the patient as policyHolder when relationship is 'self'
-        policyHolder: {
-          reference: `Patient/${patientId}`
-        },
+        // policyHolder is REQUIRED by NPHIES - Organization (employer) or Patient
+        policyHolder: policyHolderRef,
         subscriber: {
           reference: `Patient/${patientId}`
         },
@@ -693,10 +773,10 @@ class NphiesMapper {
    * Following NPHIES specification: https://portal.nphies.sa/ig/usecase-eligibility.html
    * Example: https://portal.nphies.sa/ig/Bundle-4350490e-98f0-4c23-9e7d-4cd2c7011959.html
    * Supports discovery mode where coverage is optional
-   * @param {Object} data - Contains patient, provider, insurer, coverage (optional), purpose, servicedDate, isNewborn, isTransfer
+   * @param {Object} data - Contains patient, provider, insurer, coverage (optional), policyHolder (optional), purpose, servicedDate, isNewborn, isTransfer
    */
   buildEligibilityRequestBundle(data) {
-    const { patient, provider, insurer, coverage, purpose, servicedDate, isNewborn, isTransfer } = data;
+    const { patient, provider, insurer, coverage, policyHolder, purpose, servicedDate, isNewborn, isTransfer } = data;
 
     // Build individual resources first to get their fullUrls
     const patientResource = this.buildPatientResource(patient);
@@ -704,8 +784,12 @@ class NphiesMapper {
     const insurerResource = this.buildPayerOrganization(insurer);
     const locationResource = this.buildLocationResource(provider);
     
+    // Build PolicyHolder Organization if provided (employer/company that holds the policy)
+    const policyHolderResource = policyHolder ? this.buildPolicyHolderOrganization(policyHolder) : null;
+    
     // Coverage is optional for discovery mode
-    const coverageResource = coverage ? this.buildCoverageResource(coverage, patient, insurer) : null;
+    // Pass policyHolder to buildCoverageResource for proper reference
+    const coverageResource = coverage ? this.buildCoverageResource(coverage, patient, insurer, policyHolder) : null;
     
     // Pass locationId to eligibility request for facility reference
     const eligibilityRequest = this.buildCoverageEligibilityRequest(
@@ -736,10 +820,11 @@ class NphiesMapper {
     // 1. MessageHeader
     // 2. CoverageEligibilityRequest
     // 3. Coverage (if not discovery mode)
-    // 4. Provider Organization
-    // 5. Patient
-    // 6. Insurer Organization
-    // 7. Location
+    // 4. PolicyHolder Organization (if provided)
+    // 5. Provider Organization
+    // 6. Patient
+    // 7. Insurer Organization
+    // 8. Location
     const entries = [
       messageHeader,
       eligibilityRequest
@@ -748,6 +833,11 @@ class NphiesMapper {
     // Add coverage only if provided (not in discovery mode)
     if (coverageResource) {
       entries.push(coverageResource);
+    }
+
+    // Add PolicyHolder Organization if provided
+    if (policyHolderResource) {
+      entries.push(policyHolderResource);
     }
     
     // Add remaining resources in NPHIES order
@@ -843,17 +933,26 @@ class NphiesMapper {
         responseCode: messageHeader?.response?.code,
         isNphiesGenerated,
         siteEligibility,
+        purpose: eligibilityResponse.purpose,
+        responseStatus: eligibilityResponse.status,
         benefits,
         patient: patient ? {
           name: patient.name?.[0]?.text,
           identifier: patient.identifier?.[0]?.value,
           identifierType: patient.identifier?.[0]?.type?.coding?.[0]?.display,
+          identifierCountry: patient.identifier?.[0]?.extension?.find(
+            e => e.url?.includes('extension-identifier-country')
+          )?.valueCodeableConcept?.coding?.[0]?.display ||
+          patient.identifier?.[0]?.extension?.find(
+            e => e.url?.includes('extension-identifier-country')
+          )?.valueCodeableConcept?.coding?.[0]?.code,
           gender: patient.gender,
           birthDate: patient.birthDate,
           phone: patient.telecom?.find(t => t.system === 'phone')?.value,
           occupation: patient.extension?.find(e => e.url?.includes('extension-occupation'))?.valueCodeableConcept?.coding?.[0]?.code,
           maritalStatus: patient.maritalStatus?.coding?.[0]?.code,
-          active: patient.active
+          active: patient.active,
+          deceased: patient.deceasedBoolean
         } : null,
         coverage: coverage ? {
           policyNumber: coverage.identifier?.[0]?.value,

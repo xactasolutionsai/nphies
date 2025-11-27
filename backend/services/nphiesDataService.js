@@ -28,7 +28,8 @@ class NphiesDataService {
       city,
       country = 'SAU',
       maritalStatus,
-      nphiesPatientId
+      nphiesPatientId,
+      isNewborn = false
     } = patientData;
 
     if (!identifier) {
@@ -55,8 +56,9 @@ class NphiesDataService {
           city = COALESCE($8, city),
           country = COALESCE($9, country),
           marital_status = COALESCE($10, marital_status),
+          is_newborn = COALESCE($11, is_newborn),
           updated_at = NOW()
-        WHERE identifier = $11
+        WHERE identifier = $12
         RETURNING *
       `;
       
@@ -71,6 +73,7 @@ class NphiesDataService {
         city,
         country,
         maritalStatus,
+        isNewborn,
         identifier
       ]);
       
@@ -81,8 +84,8 @@ class NphiesDataService {
       const insertQuery = `
         INSERT INTO patients (
           name, identifier, identifier_type, gender, birth_date,
-          phone, email, address, city, country, marital_status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          phone, email, address, city, country, marital_status, is_newborn
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
       `;
       
@@ -97,10 +100,11 @@ class NphiesDataService {
         address,
         city,
         country,
-        maritalStatus
+        maritalStatus,
+        isNewborn
       ]);
       
-      console.log(`[NPHIES Data] Created new patient: ${identifier}`);
+      console.log(`[NPHIES Data] Created new patient: ${identifier} (newborn: ${isNewborn})`);
       return result.rows[0];
     }
   }
@@ -175,6 +179,84 @@ class NphiesDataService {
       ]);
       
       console.log(`[NPHIES Data] Created new insurer: ${nphiesId}`);
+      return result.rows[0];
+    }
+  }
+
+  /**
+   * UPSERT provider - Create if not exists, update if exists
+   * Matches by nphies_id
+   * @param {Object} providerData - Provider data from form
+   * @returns {Object} The upserted provider record
+   */
+  async upsertProvider(providerData) {
+    const {
+      name,
+      nphiesId,
+      locationLicense = 'GACH',
+      providerType = '1',
+      phone,
+      email,
+      address
+    } = providerData;
+
+    if (!nphiesId) {
+      throw new Error('Provider NPHIES ID is required');
+    }
+
+    // Check if provider exists by nphies_id
+    const existingProvider = await query(
+      'SELECT * FROM providers WHERE nphies_id = $1',
+      [nphiesId]
+    );
+
+    if (existingProvider.rows.length > 0) {
+      // Update existing provider
+      const updateQuery = `
+        UPDATE providers SET
+          provider_name = COALESCE($1, provider_name),
+          location_license = COALESCE($2, location_license),
+          provider_type = COALESCE($3, provider_type),
+          phone = COALESCE($4, phone),
+          email = COALESCE($5, email),
+          address = COALESCE($6, address),
+          updated_at = NOW()
+        WHERE nphies_id = $7
+        RETURNING *
+      `;
+      
+      const result = await query(updateQuery, [
+        name,
+        locationLicense,
+        providerType,
+        phone,
+        email,
+        address,
+        nphiesId
+      ]);
+      
+      console.log(`[NPHIES Data] Updated provider: ${nphiesId}`);
+      return result.rows[0];
+    } else {
+      // Insert new provider
+      const insertQuery = `
+        INSERT INTO providers (
+          provider_name, nphies_id, location_license, provider_type, phone, email, address
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `;
+      
+      const result = await query(insertQuery, [
+        name || 'Unknown Provider',
+        nphiesId,
+        locationLicense,
+        providerType,
+        phone,
+        email,
+        address
+      ]);
+      
+      console.log(`[NPHIES Data] Created new provider: ${nphiesId}`);
       return result.rows[0];
     }
   }
@@ -358,9 +440,13 @@ class NphiesDataService {
     const email = patientResource.telecom?.find(t => t.system === 'email');
     const address = patientResource.address?.[0];
 
-    // Determine identifier type from system
+    // Determine identifier type from system or type code
     let identifierType = 'national_id';
-    if (identifier?.system?.includes('passport')) {
+    const typeCode = identifier?.type?.coding?.[0]?.code;
+    
+    if (typeCode === 'MR' || identifier?.system?.includes('mrn')) {
+      identifierType = 'mrn';
+    } else if (typeCode === 'PPN' || identifier?.system?.includes('passport')) {
       identifierType = 'passport';
     } else if (identifier?.system?.includes('iqama')) {
       identifierType = 'iqama';

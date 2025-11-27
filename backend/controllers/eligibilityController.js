@@ -533,6 +533,9 @@ class EligibilityController extends BaseController {
         // Patient - either ID or manual data
         patientId,
         patientData,
+        // Provider - either ID or manual data
+        providerId,
+        providerData,
         // Insurer - either ID or manual data
         insurerId,
         insurerData,
@@ -573,9 +576,10 @@ class EligibilityController extends BaseController {
           gender: patientData.gender,
           birthDate: patientData.birthDate,
           phone: patientData.phone,
-          email: patientData.email
+          email: patientData.email,
+          isNewborn: isNewborn
         });
-        console.log(`[NPHIES Dynamic] Upserted patient: ${patient.name}`);
+        console.log(`[NPHIES Dynamic] Upserted patient: ${patient.name} (newborn: ${isNewborn})`);
       } else {
         return res.status(400).json({
           success: false,
@@ -613,15 +617,34 @@ class EligibilityController extends BaseController {
         });
       }
 
-      // --- 3. Resolve Provider (Auto-select) ---
+      // --- 3. Resolve Provider ---
       let provider;
-      try {
-        provider = await nphiesDataService.getDefaultProvider();
-        console.log(`[NPHIES Dynamic] Auto-selected provider: ${provider.provider_name}`);
-      } catch (error) {
+      if (providerId) {
+        // Fetch existing provider
+        const providerResult = await query(
+          'SELECT * FROM providers WHERE provider_id = $1',
+          [providerId]
+        );
+        if (providerResult.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Provider not found' });
+        }
+        provider = providerResult.rows[0];
+        console.log(`[NPHIES Dynamic] Using existing provider: ${provider.provider_name}`);
+      } else if (providerData) {
+        // UPSERT provider from form data
+        if (!providerData.nphiesId) {
+          return res.status(400).json({ success: false, error: 'Provider NPHIES ID is required' });
+        }
+        provider = await nphiesDataService.upsertProvider({
+          name: providerData.name,
+          nphiesId: providerData.nphiesId,
+          locationLicense: providerData.locationLicense || 'GACH'
+        });
+        console.log(`[NPHIES Dynamic] Upserted provider: ${provider.provider_name}`);
+      } else {
         return res.status(400).json({
           success: false,
-          error: 'No provider configured. Please add a provider to the database.'
+          error: 'Either providerId or providerData must be provided'
         });
       }
 
@@ -815,6 +838,8 @@ class EligibilityController extends BaseController {
       const {
         patientId,
         patientData,
+        providerId,
+        providerData,
         insurerId,
         insurerData,
         coverageId,
@@ -881,20 +906,29 @@ class EligibilityController extends BaseController {
         });
       }
 
-      // --- 3. Resolve Provider (Auto-select) ---
+      // --- 3. Resolve Provider ---
       let provider;
-      try {
-        provider = await nphiesDataService.getDefaultProvider();
-        if (!provider) {
-          return res.status(404).json({
-            success: false,
-            error: 'No provider configured in the system'
-          });
+      if (providerId) {
+        const providerResult = await query(
+          'SELECT * FROM providers WHERE provider_id = $1',
+          [providerId]
+        );
+        if (providerResult.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Provider not found' });
         }
-      } catch (err) {
-        return res.status(404).json({
+        provider = providerResult.rows[0];
+      } else if (providerData) {
+        // For preview, just use the data as-is without saving
+        provider = {
+          provider_id: 'preview-provider-id',
+          provider_name: providerData.name || 'Preview Provider',
+          nphies_id: providerData.nphiesId,
+          location_license: providerData.locationLicense || 'GACH'
+        };
+      } else {
+        return res.status(400).json({
           success: false,
-          error: 'Failed to get default provider'
+          error: 'Either providerId or providerData must be provided'
         });
       }
 

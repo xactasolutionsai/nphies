@@ -1,338 +1,337 @@
 {
-    "resourceType": "Bundle",
-    "id": "4350490e-98f0-4c23-9e7d-4cd2c7011959",
-    "meta": {
-      "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"]
-    },
-    "type": "message",
-    "timestamp": "2023-07-15T14:56:49.034+03:00",
-    "entry": [{
-      "fullUrl": "urn:uuid:c19c71dc-cfad-4401-b5b0-c0f20e8f1959",
-      "resource": {
-        "resourceType": "MessageHeader",
-        "id": "c19c71dc-cfad-4401-b5b0-c0f20e8f1959",
-        "meta": {
-          "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"]
-        },
-        "eventCoding": {
-          "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
-          "code": "eligibility-request"
-        },
-        "destination": [{
-          "endpoint": "http://nphies.sa/license/payer-license/INS-FHIR",
-          "receiver": {
-            "type": "Organization",
-            "identifier": {
-              "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
-            }
-          }
-        }],
-        "sender": {
+  "resourceType": "Bundle",
+  "id": "4350490e-98f0-4c23-9e7d-4cd2c7011959",
+  "meta": {
+    "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"]
+  },
+  "type": "message",
+  "timestamp": "2023-07-15T14:56:49.034+03:00",
+  "entry": [{
+    "fullUrl": "urn:uuid:c19c71dc-cfad-4401-b5b0-c0f20e8f1959",
+    "resource": {
+      "resourceType": "MessageHeader",
+      "id": "c19c71dc-cfad-4401-b5b0-c0f20e8f1959",
+      "meta": {
+        "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"]
+      },
+      "eventCoding": {
+        "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
+        "code": "eligibility-request"
+      },
+      "destination": [{
+        "endpoint": "http://nphies.sa/license/payer-license/INS-FHIR",
+        "receiver": {
           "type": "Organization",
           "identifier": {
-            "system": "http://nphies.sa/license/provider-license",
-            "value": "PR-FHIR"
+            "system": "http://nphies.sa/license/payer-license",
+            "value": "INS-FHIR"
           }
-        },
-        "source": {
-          "endpoint": "http://saudigeneralhospital.com.sa"
-        },
-        "focus": [{
-          "reference": "http://saudigeneralhospital.com.sa/CoverageEligibilityRequest/19596"
-        }]
-      }
-    },
-    {
-      "fullUrl": "http://saudigeneralhospital.com.sa/CoverageEligibilityRequest/19596",
-      "resource": {
-        "resourceType": "CoverageEligibilityRequest",
-        "id": "19596",
-        "meta": {
-          "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/eligibility-request|1.0.0"]
-        },
-        "identifier": [{
-          "system": "http://saudigeneralhospital.com.sa/identifiers/coverageeligibilityrequest",
-          "value": "req_161959"
-        }],
-        "status": "active",
-        "priority": {
-          "coding": [{
-            "system": "http://terminology.hl7.org/CodeSystem/processpriority",
-            "code": "normal"
-          }]
-        },
-        "purpose": ["validation", "benefits"],
-        "patient": {
-          "reference": "Patient/123454186"
-        },
-        "servicedPeriod": {
-          "start": "2023-07-15",
-          "end": "2023-07-16"
-        },
-        "created": "2023-07-15",
-        "provider": {
-          "reference": "Organization/b1b3432921324f97af3be9fd0b1a14ae"
-        },
-        "insurer": {
-          "reference": "Organization/bff3aa1fbd3648619ac082357bf135db"
-        },
-        "facility": {
-          "reference": "Location/2be1133308ed422a9923931c5a475f63"
-        },
-        "insurance": [{
-          "coverage": {
-            "reference": "Coverage/1333"
-          }
-        }]
-      }
-    },
-    {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Coverage/1333",
-      "resource": {
-        "resourceType": "Coverage",
-        "id": "1333",
-        "meta": {
-          "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"]
-        },
-        "identifier": [{
-          "system": "http://sni.com.sa/identifiers/memberid",
-          "value": "0000000001"
-        }],
-        "status": "active",
-        "type": {
-          "coding": [{
-            "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
-            "code": "EHCPOL",
-            "display": "extended healthcare"
-          }]
-        },
-        "policyHolder": {
-          "reference": "Organization/13"
-        },
-        "subscriber": {
-          "reference": "Patient/123454186"
-        },
-        "beneficiary": {
-          "reference": "Patient/123454186"
-        },
-        "dependent": "01",
-        "relationship": {
-          "coding": [{
-            "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
-            "code": "self",
-            "display": "Self"
-          }]
-        },
-        "payor": [{
-          "reference": "Organization/bff3aa1fbd3648619ac082357bf135db"
-        }],
-        "class": [{
-          "type": {
-            "coding": [{
-              "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-              "code": "plan"
-            }]
-          },
-          "value": "CB135",
-          "name": "Insurance Plan A"
-        }],
-        "network": "Golden C"
-      }
-    },
-    {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/13",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "13",
-        "meta": {
-          "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/policyholder-organization|1.0.0"]
-        },
-        "identifier": [{
-          "system": "http://nphies.sa/identifiers/organization",
-          "value": "5009"
-        }],
-        "active": true,
-        "name": "Policy Holder Organization"
-      }
-    },
-    {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/b1b3432921324f97af3be9fd0b1a14ae",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "b1b3432921324f97af3be9fd0b1a14ae",
-        "meta": {
-          "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"]
-        },
-        "extension": [{
-          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
-          "valueCodeableConcept": {
-            "coding": [{
-              "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-              "code": "1",
-              "display": "Hospital"
-            }]
-          }
-        }],
-        "identifier": [{
+        }
+      }],
+      "sender": {
+        "type": "Organization",
+        "identifier": {
           "system": "http://nphies.sa/license/provider-license",
           "value": "PR-FHIR"
-        }],
-        "active": true,
-        "type": [{
-          "coding": [{
-            "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-            "code": "prov"
-          }]
-        }],
-        "name": "Saudi General Hospital",
-        "address": [{
-          "use": "work",
-          "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
-          "line": ["Salamah Street, Building 25, Suite 2", "Al Malga District"],
-          "city": "Riyadh",
-          "country": "Saudi Arabia"
+        }
+      },
+      "source": {
+        "endpoint": "http://saudigeneralhospital.com.sa"
+      },
+      "focus": [{
+        "reference": "http://saudigeneralhospital.com.sa/CoverageEligibilityRequest/19596"
+      }]
+    }
+  },
+  {
+    "fullUrl": "http://saudigeneralhospital.com.sa/CoverageEligibilityRequest/19596",
+    "resource": {
+      "resourceType": "CoverageEligibilityRequest",
+      "id": "19596",
+      "meta": {
+        "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/eligibility-request|1.0.0"]
+      },
+      "identifier": [{
+        "system": "http://saudigeneralhospital.com.sa/identifiers/coverageeligibilityrequest",
+        "value": "req_161959"
+      }],
+      "status": "active",
+      "priority": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/processpriority",
+          "code": "normal"
         }]
-      }
-    },
-    {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Patient/123454186",
-      "resource": {
-        "resourceType": "Patient",
-        "id": "123454186",
-        "meta": {
-          "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"]
+      },
+      "purpose": ["discovery"],
+      "patient": {
+        "reference": "Patient/123454186"
+      },
+      "servicedPeriod": {
+        "start": "2023-07-15",
+        "end": "2023-07-16"
+      },
+      "created": "2023-07-15",
+      "provider": {
+        "reference": "Organization/b1b3432921324f97af3be9fd0b1a14ae"
+      },
+      "insurer": {
+        "reference": "Organization/bff3aa1fbd3648619ac082357bf135db"
+      },
+      "facility": {
+        "reference": "Location/2be1133308ed422a9923931c5a475f63"
+      },
+      "insurance": [{
+        "coverage": {
+          "reference": "Coverage/1333"
+        }
+      }]
+    }
+  },
+  {
+    "fullUrl": "http://saudigeneralhospital.com.sa/Coverage/1333",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "1333",
+      "meta": {
+        "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"]
+      },
+      "identifier": [{
+        "system": "http://sni.com.sa/identifiers/memberid",
+        "value": "0000000001"
+      }],
+      "status": "active",
+      "type": {
+        "coding": [{
+          "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
+          "code": "EHCPOL",
+          "display": "extended healthcare"
+        }]
+      },
+      "policyHolder": {
+        "reference": "Organization/13"
+      },
+      "subscriber": {
+        "reference": "Patient/123454186"
+      },
+      "beneficiary": {
+        "reference": "Patient/123454186"
+      },
+      "dependent": "01",
+      "relationship": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self",
+          "display": "Self"
+        }]
+      },
+      "payor": [{
+        "reference": "Organization/bff3aa1fbd3648619ac082357bf135db"
+      }],
+      "class": [{
+        "type": {
+          "coding": [{
+            "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
+            "code": "plan"
+          }]
         },
+        "value": "CB135",
+        "name": "Insurance Plan A"
+      }],
+      "network": "Golden C"
+    }
+  },
+  {
+    "fullUrl": "http://saudigeneralhospital.com.sa/Organization/13",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "13",
+      "meta": {
+        "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/policyholder-organization|1.0.0"]
+      },
+      "identifier": [{
+        "system": "http://nphies.sa/identifiers/organization",
+        "value": "5009"
+      }],
+      "active": true,
+      "name": "Policy Holder Organization"
+    }
+  },
+  {
+    "fullUrl": "http://saudigeneralhospital.com.sa/Organization/b1b3432921324f97af3be9fd0b1a14ae",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "b1b3432921324f97af3be9fd0b1a14ae",
+      "meta": {
+        "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"]
+      },
+      "extension": [{
+        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
+        "valueCodeableConcept": {
+          "coding": [{
+            "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
+            "code": "1",
+            "display": "Hospital"
+          }]
+        }
+      }],
+      "identifier": [{
+        "system": "http://nphies.sa/license/provider-license",
+        "value": "PR-FHIR"
+      }],
+      "active": true,
+      "type": [{
+        "coding": [{
+          "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
+          "code": "prov"
+        }]
+      }],
+      "name": "Saudi General Hospital",
+      "address": [{
+        "use": "work",
+        "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
+        "line": ["Salamah Street, Building 25, Suite 2", "Al Malga District"],
+        "city": "Riyadh",
+        "country": "Saudi Arabia"
+      }]
+    }
+  },
+  {
+    "fullUrl": "http://saudigeneralhospital.com.sa/Patient/123454186",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "123454186",
+      "meta": {
+        "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"]
+      },
+      "extension": [{
+        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
+        "valueCodeableConcept": {
+          "coding": [{
+            "system": "http://nphies.sa/terminology/CodeSystem/occupation",
+            "code": "business"
+          }]
+        }
+      }],
+      "identifier": [{
         "extension": [{
-          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
           "valueCodeableConcept": {
             "coding": [{
-              "system": "http://nphies.sa/terminology/CodeSystem/occupation",
-              "code": "business"
+              "system": "urn:iso:std:iso:3166",
+              "code": "SAU",
+              "display": "Saudi Arabia"
             }]
           }
         }],
-        "identifier": [{
-          "extension": [{
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
-            "valueCodeableConcept": {
-              "coding": [{
-                "system": "urn:iso:std:iso:3166",
-                "code": "SAU",
-                "display": "Saudi Arabia"
-              }]
-            }
-          }],
-          "type": {
-            "coding": [{
-              "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-              "code": "PPN",
-              "display": "Passport Number"
-            }]
-          },
-          "system": "http://nphies.sa/identifier/passportnumber",
-          "value": "G12345678"
-        }],
-        "active": true,
-        "name": [{
-          "use": "official",
-          "text": "Ahmad Khaled Abbas",
-          "family": "Ahmad",
-          "given": ["Khaled", "Abbas"]
-        }],
-        "telecom": [{
-          "system": "phone",
-          "value": "+966512345691"
-        }],
-        "gender": "male",
-        "_gender": {
-          "extension": [{
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
-            "valueCodeableConcept": {
-              "coding": [{
-                "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender",
-                "code": "male"
-              }]
-            }
+        "type": {
+          "coding": [{
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "PPN",
+            "display": "Passport Number"
           }]
         },
-        "birthDate": "1984-12-25",
-        "deceasedBoolean": false,
-        "address": [{
-          "use": "home",
-          "text": "Salamah Street, Building 25, Suite 2, Saudi Arabia",
-          "line": ["Salamah Street, Building 25, Suite 2", "Al Malga District"],
-          "city": "Riyadh",
-          "country": "Saudi Arabia"
-        }],
-        "maritalStatus": {
-          "coding": [{
-            "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
-            "code": "M"
-          }]
-        }
-      }
-    },
-    {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/bff3aa1fbd3648619ac082357bf135db",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "bff3aa1fbd3648619ac082357bf135db",
-        "meta": {
-          "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"]
-        },
-        "identifier": [{
-          "use": "official",
-          "type": {
+        "system": "http://nphies.sa/identifier/passportnumber",
+        "value": "G12345678"
+      }],
+      "active": true,
+      "name": [{
+        "use": "official",
+        "text": "Ahmad Khaled Abbas",
+        "family": "Ahmad",
+        "given": ["Khaled", "Abbas"]
+      }],
+      "telecom": [{
+        "system": "phone",
+        "value": "+966512345691"
+      }],
+      "gender": "male",
+      "_gender": {
+        "extension": [{
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
+          "valueCodeableConcept": {
             "coding": [{
-              "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-              "code": "NII"
+              "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender",
+              "code": "male"
             }]
-          },
-          "system": "http://nphies.sa/license/payer-license",
-          "value": "INS-FHIR"
-        }],
-        "active": true,
-        "type": [{
-          "coding": [{
-            "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-            "code": "ins"
-          }]
-        }],
-        "name": "Saudi National Insurance",
-        "address": [{
-          "use": "work",
-          "text": "Olaya Street, Building 70, Riyadh Saudi Arabia",
-          "line": ["Olaya Street, Building 70", "Al Olaya District"],
-          "city": "Riyadh",
-          "country": "Saudi Arabia"
+          }
+        }]
+      },
+      "birthDate": "1984-12-25",
+      "deceasedBoolean": false,
+      "address": [{
+        "use": "home",
+        "text": "Salamah Street, Building 25, Suite 2, Saudi Arabia",
+        "line": ["Salamah Street, Building 25, Suite 2", "Al Malga District"],
+        "city": "Riyadh",
+        "country": "Saudi Arabia"
+      }],
+      "maritalStatus": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+          "code": "M"
         }]
       }
-    },
-    {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Location/2be1133308ed422a9923931c5a475f63",
-      "resource": {
-        "resourceType": "Location",
-        "id": "2be1133308ed422a9923931c5a475f63",
-        "meta": {
-          "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0"]
-        },
-        "identifier": [{
-          "system": "http://nphies.sa/license/location-license",
-          "value": "GACH"
-        }],
-        "status": "active",
-        "name": "Saudi General Hospital",
-        "type": [{
+    }
+  },
+  {
+    "fullUrl": "http://saudigeneralhospital.com.sa/Organization/bff3aa1fbd3648619ac082357bf135db",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "bff3aa1fbd3648619ac082357bf135db",
+      "meta": {
+        "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"]
+      },
+      "identifier": [{
+        "use": "official",
+        "type": {
           "coding": [{
-            "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
-            "code": "GACH"
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "NII"
           }]
-        }],
-        "managingOrganization": {
-          "reference": "Organization/b1b3432921324f97af3be9fd0b1a14ae"
-        }
+        },
+        "system": "http://nphies.sa/license/payer-license",
+        "value": "INS-FHIR"
+      }],
+      "active": true,
+      "type": [{
+        "coding": [{
+          "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
+          "code": "ins"
+        }]
+      }],
+      "name": "Saudi National Insurance",
+      "address": [{
+        "use": "work",
+        "text": "Olaya Street, Building 70, Riyadh Saudi Arabia",
+        "line": ["Olaya Street, Building 70", "Al Olaya District"],
+        "city": "Riyadh",
+        "country": "Saudi Arabia"
+      }]
+    }
+  },
+  {
+    "fullUrl": "http://saudigeneralhospital.com.sa/Location/2be1133308ed422a9923931c5a475f63",
+    "resource": {
+      "resourceType": "Location",
+      "id": "2be1133308ed422a9923931c5a475f63",
+      "meta": {
+        "profile": ["http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0"]
+      },
+      "identifier": [{
+        "system": "http://nphies.sa/license/location-license",
+        "value": "GACH"
+      }],
+      "status": "active",
+      "name": "Saudi General Hospital",
+      "type": [{
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+          "code": "GACH"
+        }]
+      }],
+      "managingOrganization": {
+        "reference": "Organization/b1b3432921324f97af3be9fd0b1a14ae"
       }
-    }]
-  }
-  
+    }
+  }]
+}

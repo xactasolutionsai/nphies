@@ -91,7 +91,8 @@ const GENDER_OPTIONS = [
 const IDENTIFIER_TYPE_OPTIONS = [
   { value: 'national_id', label: 'National ID' },
   { value: 'iqama', label: 'Iqama' },
-  { value: 'passport', label: 'Passport' }
+  { value: 'passport', label: 'Passport' },
+  { value: 'mrn', label: 'Medical Record Number (MRN)' }
 ];
 
 const COVERAGE_TYPE_OPTIONS = [
@@ -118,6 +119,7 @@ const RequiredFieldIndicator = () => (
 export default function NphiesEligibility() {
   // Input mode toggles
   const [patientMode, setPatientMode] = useState('existing'); // 'existing' | 'manual'
+  const [providerMode, setProviderMode] = useState('existing'); // 'existing' | 'manual'
   const [insurerMode, setInsurerMode] = useState('existing'); // 'existing' | 'manual'
   const [coverageMode, setCoverageMode] = useState('existing'); // 'existing' | 'manual' | 'discovery'
 
@@ -129,7 +131,7 @@ export default function NphiesEligibility() {
   
   // Selected IDs for existing records
   const [selectedPatient, setSelectedPatient] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState(null); // Auto-selected
+  const [selectedProvider, setSelectedProvider] = useState('');
   const [selectedInsurer, setSelectedInsurer] = useState('');
   const [selectedCoverage, setSelectedCoverage] = useState('');
   
@@ -144,6 +146,13 @@ export default function NphiesEligibility() {
     email: ''
   });
 
+  // Manual entry data for Provider
+  const [providerData, setProviderData] = useState({
+    name: '',
+    nphiesId: '',
+    locationLicense: 'GACH'
+  });
+
   // Manual entry data for Insurer
   const [insurerData, setInsurerData] = useState({
     name: '',
@@ -156,7 +165,8 @@ export default function NphiesEligibility() {
     memberId: '',
     coverageType: 'EHCPOL',
     planName: '',
-    relationship: 'self'
+    relationship: 'self',
+    network: ''
   });
 
   // Request options
@@ -215,11 +225,6 @@ export default function NphiesEligibility() {
       setPatients(patientsRes.data || []);
       setProviders(providersRes.data || []);
       setInsurers(insurersRes.data || []);
-
-      // Auto-select first provider
-      if (providersRes.data && providersRes.data.length > 0) {
-        setSelectedProvider(providersRes.data[0]);
-      }
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Failed to load initial data');
@@ -265,6 +270,16 @@ export default function NphiesEligibility() {
       return;
     }
 
+    // Provider validation
+    if (providerMode === 'existing' && !selectedProvider) {
+      setError('Please select a provider');
+      return;
+    }
+    if (providerMode === 'manual' && !providerData.nphiesId) {
+      setError('Please enter provider NPHIES ID');
+      return;
+    }
+
     // Coverage validation (not required for discovery mode)
     if (coverageMode === 'existing' && !selectedCoverage) {
       setError('Please select a coverage');
@@ -280,11 +295,6 @@ export default function NphiesEligibility() {
       return;
     }
 
-    if (!selectedProvider) {
-      setError('No provider configured. Please add a provider to the system.');
-      return;
-    }
-
     setLoading(true);
     setError(null);
     setResult(null);
@@ -296,6 +306,11 @@ export default function NphiesEligibility() {
         ...(patientMode === 'existing' 
           ? { patientId: selectedPatient }
           : { patientData: { ...patientData, birthDate: patientData.birthDate } }
+        ),
+        // Provider
+        ...(providerMode === 'existing'
+          ? { providerId: selectedProvider }
+          : { providerData }
         ),
         // Insurer
         ...(insurerMode === 'existing'
@@ -350,10 +365,18 @@ export default function NphiesEligibility() {
     // Basic validation
     if (patientMode === 'existing' && !selectedPatient) {
       setError('Please select a patient');
-      return;
-    }
+            return;
+          }
     if (patientMode === 'manual' && !patientData.identifier) {
       setError('Please enter patient identifier');
+      return;
+    }
+    if (providerMode === 'existing' && !selectedProvider) {
+      setError('Please select a provider');
+      return;
+    }
+    if (providerMode === 'manual' && !providerData.nphiesId) {
+      setError('Please enter provider NPHIES ID');
       return;
     }
     if (insurerMode === 'existing' && !selectedInsurer) {
@@ -386,6 +409,10 @@ export default function NphiesEligibility() {
           ? { patientId: selectedPatient }
           : { patientData: { ...patientData, birthDate: patientData.birthDate } }
         ),
+        ...(providerMode === 'existing'
+          ? { providerId: selectedProvider }
+          : { providerData }
+        ),
         ...(insurerMode === 'existing'
           ? { insurerId: selectedInsurer }
           : { insurerData }
@@ -415,9 +442,11 @@ export default function NphiesEligibility() {
 
   const clearForm = () => {
     setPatientMode('existing');
+    setProviderMode('existing');
     setInsurerMode('existing');
     setCoverageMode('existing');
     setSelectedPatient('');
+    setSelectedProvider('');
     setSelectedInsurer('');
     setSelectedCoverage('');
     setPatientData({
@@ -429,13 +458,15 @@ export default function NphiesEligibility() {
       phone: '',
       email: ''
     });
+    setProviderData({ name: '', nphiesId: '', locationLicense: 'GACH' });
     setInsurerData({ name: '', nphiesId: '' });
     setCoverageData({
       policyNumber: '',
       memberId: '',
       coverageType: 'EHCPOL',
       planName: '',
-      relationship: 'self'
+      relationship: 'self',
+      network: ''
     });
     setSelectedPurpose(['benefits', 'validation']);
     setServicedDate(new Date());
@@ -488,6 +519,12 @@ export default function NphiesEligibility() {
   const patientOptions = patients.map(p => ({
     value: p.patient_id,
     label: `${p.name} - ${p.identifier || p.patient_id}`
+  }));
+
+  // Convert providers to Select options
+  const providerOptions = providers.map(p => ({
+    value: p.provider_id,
+    label: `${p.provider_name || p.name}${p.nphies_id ? ` (${p.nphies_id})` : ''}`
   }));
 
   // Convert insurers to Select options
@@ -554,25 +591,68 @@ export default function NphiesEligibility() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             
-            {/* Provider Section - Auto-selected (Read-only) */}
+            {/* Provider Section */}
             <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
               <div className="flex items-center space-x-2 mb-2">
                 <Building className="h-5 w-5 text-primary-purple" />
-                <label className="text-sm font-medium text-gray-700">Provider (Auto-selected)</label>
+                <label className="text-sm font-medium text-gray-700">
+                  Provider <RequiredFieldIndicator />
+                </label>
               </div>
-              {selectedProvider ? (
-                <div className="bg-white rounded-lg p-3 border border-purple-100">
-                  <p className="font-semibold text-gray-900">
-                    {selectedProvider.provider_name || selectedProvider.name}
-                  </p>
-                  {selectedProvider.nphies_id && (
-                    <p className="text-sm text-gray-500 font-mono">NPHIES ID: {selectedProvider.nphies_id}</p>
-                  )}
-                </div>
+              
+              <ModeToggle
+                mode={providerMode}
+                setMode={setProviderMode}
+                options={['existing', 'manual']}
+                labels={['Select Existing', 'Enter Manually']}
+              />
+
+              {providerMode === 'existing' ? (
+                <Select
+                  value={providerOptions.find(opt => opt.value === selectedProvider)}
+                  onChange={(option) => setSelectedProvider(option?.value || '')}
+                  options={providerOptions}
+                  styles={selectStyles}
+                  placeholder="Search and select provider..."
+                  isClearable
+                  isSearchable
+                />
               ) : (
-                <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
-                  <p className="text-amber-800 font-medium">No provider configured</p>
-                  <p className="text-sm text-amber-600">Please add a provider to the system first</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Provider Name</label>
+                    <input
+                      type="text"
+                      value={providerData.name}
+                      onChange={(e) => setProviderData({...providerData, name: e.target.value})}
+                      className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                      placeholder="e.g. Saudi General Hospital"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        NPHIES ID <RequiredFieldIndicator />
+                      </label>
+                      <input
+                        type="text"
+                        value={providerData.nphiesId}
+                        onChange={(e) => setProviderData({...providerData, nphiesId: e.target.value})}
+                        className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholder="e.g. PR-FHIR"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Location License</label>
+                      <input
+                        type="text"
+                        value={providerData.locationLicense}
+                        onChange={(e) => setProviderData({...providerData, locationLicense: e.target.value})}
+                        className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholder="e.g. GACH"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -586,9 +666,9 @@ export default function NphiesEligibility() {
                   <User className="h-5 w-5 text-blue-600" />
                   <label className="text-sm font-medium text-gray-700">
                     Patient <RequiredFieldIndicator />
-                  </label>
-                </div>
-                
+                </label>
+              </div>
+
                 <ModeToggle
                   mode={patientMode}
                   setMode={setPatientMode}
@@ -608,7 +688,7 @@ export default function NphiesEligibility() {
                   />
                 ) : (
                   <div className="space-y-3">
-                    <div>
+              <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                       <input
                         type="text"
@@ -622,7 +702,7 @@ export default function NphiesEligibility() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           ID Number <RequiredFieldIndicator />
-                        </label>
+                </label>
                         <input
                           type="text"
                           value={patientData.identifier}
@@ -631,8 +711,8 @@ export default function NphiesEligibility() {
                           placeholder="e.g. 1111100111"
                           maxLength="10"
                         />
-                      </div>
-                      <div>
+              </div>
+              <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">ID Type</label>
                         <Select
                           value={IDENTIFIER_TYPE_OPTIONS.find(opt => opt.value === patientData.identifierType)}
@@ -692,9 +772,9 @@ export default function NphiesEligibility() {
                   <Building className="h-5 w-5 text-amber-600" />
                   <label className="text-sm font-medium text-gray-700">
                     Insurer <RequiredFieldIndicator />
-                  </label>
-                </div>
-                
+                </label>
+              </div>
+
                 <ModeToggle
                   mode={insurerMode}
                   setMode={setInsurerMode}
@@ -714,7 +794,7 @@ export default function NphiesEligibility() {
                   />
                 ) : (
                   <div className="space-y-3">
-                    <div>
+              <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Insurer Name</label>
                       <input
                         type="text"
@@ -727,7 +807,7 @@ export default function NphiesEligibility() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         NPHIES ID <RequiredFieldIndicator />
-                      </label>
+                </label>
                       <input
                         type="text"
                         value={insurerData.nphiesId}
@@ -831,6 +911,16 @@ export default function NphiesEligibility() {
                       styles={selectStyles}
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Network</label>
+                    <input
+                      type="text"
+                      value={coverageData.network}
+                      onChange={(e) => setCoverageData({...coverageData, network: e.target.value})}
+                      className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                      placeholder="e.g. Golden C"
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
@@ -845,14 +935,14 @@ export default function NphiesEligibility() {
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            {/* Service Date */}
-            <div>
+              {/* Service Date */}
+              <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Service Date <RequiredFieldIndicator />
-              </label>
+                </label>
               <div className="datepicker-wrapper max-w-xs">
                 <DatePicker
                   selected={servicedDate}
@@ -954,7 +1044,7 @@ export default function NphiesEligibility() {
                 <button
                   type="button"
                   onClick={handlePreview}
-                  disabled={previewLoading || selectedPurpose.length === 0 || !selectedProvider}
+                  disabled={previewLoading || selectedPurpose.length === 0}
                   className="px-6 py-3 bg-white border-2 border-primary-purple text-primary-purple rounded-xl hover:bg-purple-50 transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
                   {previewLoading ? (
@@ -972,21 +1062,21 @@ export default function NphiesEligibility() {
                 {/* Submit Button */}
                 <button
                   type="submit"
-                  disabled={loading || selectedPurpose.length === 0 || !selectedProvider}
+                  disabled={loading || selectedPurpose.length === 0}
                   className="px-8 py-3 bg-gradient-to-r from-primary-purple to-accent-purple text-white rounded-xl hover:opacity-90 transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                      <span>Checking...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="h-5 w-5" />
-                      <span>Check Eligibility</span>
-                    </>
-                  )}
-                </button>
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                    <span>Checking...</span>
+                  </>
+                ) : (
+                  <>
+                    <Shield className="h-5 w-5" />
+                    <span>Check Eligibility</span>
+                  </>
+                )}
+              </button>
               </div>
             </div>
           </form>
@@ -1213,6 +1303,19 @@ export default function NphiesEligibility() {
                   </p>
                 </div>
               )}
+              {/* Purpose */}
+              {result.purpose && result.purpose.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-gray-600 mb-2">Request Purpose</p>
+                  <div className="flex flex-wrap gap-2">
+                    {result.purpose.map((p, idx) => (
+                      <Badge key={idx} variant="outline" className="capitalize">
+                        {p}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               {/* Serviced Period */}
               {result.servicedPeriod && (
                 <div className="mt-4 grid grid-cols-2 gap-4">
@@ -1249,6 +1352,9 @@ export default function NphiesEligibility() {
                     {result.patient.identifierType && (
                       <p className="text-sm text-gray-500">{result.patient.identifierType}</p>
                     )}
+                    {result.patient.identifierCountry && (
+                      <p className="text-xs text-blue-600">Country: {result.patient.identifierCountry}</p>
+                    )}
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Birth Date</p>
@@ -1259,16 +1365,16 @@ export default function NphiesEligibility() {
                     <p className="text-lg font-semibold capitalize">{result.patient.gender || 'N/A'}</p>
                   </div>
                   {result.patient.phone && (
-                    <div>
-                      <p className="text-sm text-gray-600">Phone</p>
-                      <p className="text-lg font-semibold">{result.patient.phone}</p>
-                    </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Phone</p>
+                    <p className="text-lg font-semibold">{result.patient.phone}</p>
+                  </div>
                   )}
                   {result.patient.occupation && (
                     <div>
                       <p className="text-sm text-gray-600">Occupation</p>
                       <p className="text-lg font-semibold capitalize">{result.patient.occupation}</p>
-                    </div>
+                  </div>
                   )}
                   {result.patient.maritalStatus && (
                     <div>
@@ -1280,6 +1386,14 @@ export default function NphiesEligibility() {
                          result.patient.maritalStatus === 'W' ? 'Widowed' :
                          result.patient.maritalStatus === 'U' ? 'Unknown' : result.patient.maritalStatus}
                       </p>
+                    </div>
+                  )}
+                  {result.patient.deceased !== undefined && (
+                    <div>
+                      <p className="text-sm text-gray-600">Deceased Status</p>
+                      <Badge variant={result.patient.deceased ? 'destructive' : 'default'} className={result.patient.deceased ? '' : 'bg-green-500'}>
+                        {result.patient.deceased ? 'Yes' : 'No'}
+                      </Badge>
                     </div>
                   )}
                 </div>
@@ -1313,12 +1427,12 @@ export default function NphiesEligibility() {
                     <p className="text-lg font-semibold capitalize">{result.coverage.relationship || 'N/A'}</p>
                   </div>
                   {result.coverage.network && (
-                    <div>
-                      <p className="text-sm text-gray-600">Network</p>
-                      <p className="text-lg font-semibold">{result.coverage.network}</p>
-                    </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Network</p>
+                    <p className="text-lg font-semibold">{result.coverage.network}</p>
+                  </div>
                   )}
-                </div>
+                  </div>
 
                 {/* Coverage Classes */}
                 {result.coverage.classes && result.coverage.classes.length > 0 && (
@@ -1332,7 +1446,7 @@ export default function NphiesEligibility() {
                           {cls.name && cls.value && cls.name !== cls.value && (
                             <p className="text-xs text-gray-400">ID: {cls.value}</p>
                           )}
-                        </div>
+                </div>
                       ))}
                     </div>
                   </div>
@@ -1379,6 +1493,21 @@ export default function NphiesEligibility() {
                     </div>
                   </div>
                 )}
+
+                {/* Subrogation */}
+                {result.coverage.subrogation !== undefined && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-200">
+                      <div>
+                        <p className="text-sm font-medium text-blue-700">Subrogation Rights</p>
+                        <p className="text-xs text-blue-600">Insurer can recover costs from third parties</p>
+                      </div>
+                      <Badge variant={result.coverage.subrogation ? 'default' : 'secondary'} className={result.coverage.subrogation ? 'bg-blue-600' : ''}>
+                        {result.coverage.subrogation ? 'Yes' : 'No'}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1396,10 +1525,10 @@ export default function NphiesEligibility() {
                       <p className="text-lg font-semibold">{result.provider.name || 'N/A'}</p>
                     </div>
                     {result.provider.nphiesId && (
-                      <div>
+                    <div>
                         <p className="text-sm text-gray-600">NPHIES ID</p>
                         <p className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">{result.provider.nphiesId}</p>
-                      </div>
+                    </div>
                     )}
                   </div>
                 </div>
@@ -1420,21 +1549,21 @@ export default function NphiesEligibility() {
                       <p className="text-lg font-semibold">{result.insurer.name || 'N/A'}</p>
                     </div>
                     {result.insurer.nphiesId && (
-                      <div>
+                    <div>
                         <p className="text-sm text-gray-600">NPHIES ID</p>
                         <p className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">{result.insurer.nphiesId}</p>
-                      </div>
+                    </div>
                     )}
                     {result.insurer.address && (
-                      <div>
-                        <p className="text-sm text-gray-600">Address</p>
-                        <p className="text-sm text-gray-700">{result.insurer.address}</p>
+                    <div>
+                      <p className="text-sm text-gray-600">Address</p>
+                      <p className="text-sm text-gray-700">{result.insurer.address}</p>
                         {(result.insurer.city || result.insurer.country) && (
                           <p className="text-sm text-gray-500">
                             {[result.insurer.city, result.insurer.country].filter(Boolean).join(', ')}
                           </p>
                         )}
-                      </div>
+                    </div>
                     )}
                   </div>
                 </div>
@@ -1467,7 +1596,7 @@ export default function NphiesEligibility() {
                             <Badge variant="outline" className="text-xs">{benefit.term}</Badge>
                           )}
                         </div>
-                      </div>
+                        </div>
                       
                       {/* Benefit Details */}
                       {benefit.benefitDetails && benefit.benefitDetails.length > 0 && (
@@ -1487,9 +1616,9 @@ export default function NphiesEligibility() {
                               {detail.remainingDisplay && (
                                 <p className="text-xs text-blue-600 font-medium">Left: {detail.remainingDisplay}</p>
                               )}
-                            </div>
-                          ))}
                         </div>
+                          ))}
+                      </div>
                       )}
                       
                       {benefit.excluded && (
