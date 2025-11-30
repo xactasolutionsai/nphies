@@ -142,6 +142,39 @@ const SUPPORTING_INFO_CATEGORY_OPTIONS = [
   { value: 'related-claim', label: 'Related Claim' }
 ];
 
+// NPHIES Vital Signs Fields (per Claim-483069.json example)
+const VITAL_SIGNS_FIELDS = [
+  { key: 'systolic', category: 'vital-sign-systolic', label: 'Systolic BP', unit: 'mm[Hg]', unitLabel: 'mmHg', placeholder: '120' },
+  { key: 'diastolic', category: 'vital-sign-diastolic', label: 'Diastolic BP', unit: 'mm[Hg]', unitLabel: 'mmHg', placeholder: '80' },
+  { key: 'height', category: 'vital-sign-height', label: 'Height', unit: 'cm', unitLabel: 'cm', placeholder: '170' },
+  { key: 'weight', category: 'vital-sign-weight', label: 'Weight', unit: 'kg', unitLabel: 'kg', placeholder: '70' },
+  { key: 'pulse', category: 'pulse', label: 'Pulse Rate', unit: '/min', unitLabel: 'bpm', placeholder: '72' },
+  { key: 'temperature', category: 'temperature', label: 'Temperature', unit: 'Cel', unitLabel: '°C', placeholder: '37' },
+  { key: 'oxygen_saturation', category: 'oxygen-saturation', label: 'O2 Saturation', unit: '%', unitLabel: '%', placeholder: '98' },
+  { key: 'respiratory_rate', category: 'respiratory-rate', label: 'Respiratory Rate', unit: '/min', unitLabel: '/min', placeholder: '16' }
+];
+
+// NPHIES Clinical Text Fields
+const CLINICAL_TEXT_FIELDS = [
+  { key: 'patient_history', category: 'patient-history', label: 'Patient History', placeholder: 'Document any relevant patient history, allergies, chronic conditions...' },
+  { key: 'history_of_present_illness', category: 'history-of-present-illness', label: 'History of Present Illness', placeholder: 'Describe the current illness, symptoms, and timeline...' },
+  { key: 'physical_examination', category: 'physical-examination', label: 'Physical Examination', placeholder: 'Document physical examination findings...' },
+  { key: 'treatment_plan', category: 'treatment-plan', label: 'Treatment Plan', placeholder: 'Describe the proposed treatment plan...' }
+];
+
+// NPHIES Admission-specific Fields (for inpatient/daycase)
+const ADMISSION_FIELDS = [
+  { key: 'admission_weight', category: 'admission-weight', label: 'Admission Weight', unit: 'kg', unitLabel: 'kg', placeholder: '70' },
+  { key: 'estimated_length_of_stay', category: 'estimated-Length-of-Stay', label: 'Estimated Length of Stay', unit: 'd', unitLabel: 'days', placeholder: '3' }
+];
+
+// NPHIES Investigation Result Options
+const INVESTIGATION_RESULT_OPTIONS = [
+  { value: 'INP', label: 'Investigation(s) not performed' },
+  { value: 'NAD', label: 'No abnormality detected' },
+  { value: 'ABN', label: 'Abnormal results' }
+];
+
 // Helper functions
 const formatAmount = (amount, currency = 'SAR') => {
   if (amount == null || amount === '') return `0.00 ${currency}`;
@@ -229,7 +262,32 @@ export default function PriorAuthorizationForm() {
     items: [getInitialItemData(1)],
     supporting_info: [],
     diagnoses: [getInitialDiagnosisData(1)],
-    attachments: []
+    attachments: [],
+    // NPHIES Vital Signs & Clinical Data
+    vital_signs: {
+      systolic: '',
+      diastolic: '',
+      height: '',
+      weight: '',
+      pulse: '',
+      temperature: '',
+      oxygen_saturation: '',
+      respiratory_rate: '',
+      measurement_time: null
+    },
+    clinical_info: {
+      chief_complaint_code: '',
+      chief_complaint_display: '',
+      patient_history: '',
+      history_of_present_illness: '',
+      physical_examination: '',
+      treatment_plan: '',
+      investigation_result: ''
+    },
+    admission_info: {
+      admission_weight: '',
+      estimated_length_of_stay: ''
+    }
   });
 
   useEffect(() => {
@@ -260,12 +318,77 @@ export default function PriorAuthorizationForm() {
       const response = await api.getPriorAuthorization(id);
       const data = response.data;
       
+      // Parse existing supporting_info into structured fields
+      const supportingInfo = data.supporting_info || [];
+      const vitalSigns = {
+        systolic: '', diastolic: '', height: '', weight: '',
+        pulse: '', temperature: '', oxygen_saturation: '', respiratory_rate: '',
+        measurement_time: null
+      };
+      const clinicalInfo = {
+        chief_complaint_code: '', chief_complaint_display: '',
+        patient_history: '', history_of_present_illness: '',
+        physical_examination: '', treatment_plan: '',
+        investigation_result: ''
+      };
+      const admissionInfo = {
+        admission_weight: '', estimated_length_of_stay: ''
+      };
+      
+      // Track which supporting_info items are parsed into structured fields
+      const parsedCategories = new Set();
+      
+      supportingInfo.forEach(info => {
+        // Vital signs
+        const vitalField = VITAL_SIGNS_FIELDS.find(f => f.category === info.category);
+        if (vitalField && info.value_quantity != null) {
+          vitalSigns[vitalField.key] = String(info.value_quantity);
+          if (info.timing_period_start && !vitalSigns.measurement_time) {
+            vitalSigns.measurement_time = info.timing_period_start;
+          }
+          parsedCategories.add(info.category);
+        }
+        
+        // Clinical text fields
+        const clinicalField = CLINICAL_TEXT_FIELDS.find(f => f.category === info.category);
+        if (clinicalField && info.value_string) {
+          clinicalInfo[clinicalField.key] = info.value_string;
+          parsedCategories.add(info.category);
+        }
+        
+        // Chief complaint
+        if (info.category === 'chief-complaint' && info.code) {
+          clinicalInfo.chief_complaint_code = info.code;
+          clinicalInfo.chief_complaint_display = info.code_display || '';
+          parsedCategories.add(info.category);
+        }
+        
+        // Investigation result
+        if (info.category === 'investigation-result' && info.code) {
+          clinicalInfo.investigation_result = info.code;
+          parsedCategories.add(info.category);
+        }
+        
+        // Admission fields
+        const admissionField = ADMISSION_FIELDS.find(f => f.category === info.category);
+        if (admissionField && info.value_quantity != null) {
+          admissionInfo[admissionField.key] = String(info.value_quantity);
+          parsedCategories.add(info.category);
+        }
+      });
+      
+      // Filter out parsed items from supporting_info (keep only manual/other entries)
+      const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
+      
       setFormData({
         ...data,
         items: data.items?.length > 0 ? data.items : [getInitialItemData(1)],
         diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
-        supporting_info: data.supporting_info || [],
-        attachments: data.attachments || []
+        supporting_info: remainingSupportingInfo,
+        attachments: data.attachments || [],
+        vital_signs: vitalSigns,
+        clinical_info: clinicalInfo,
+        admission_info: admissionInfo
       });
     } catch (error) {
       console.error('Error loading prior authorization:', error);
@@ -361,6 +484,96 @@ export default function PriorAuthorizationForm() {
     }));
   };
 
+  // Handlers for structured vital signs, clinical info, and admission info
+  const handleVitalSignChange = (key, value) => {
+    setFormData(prev => ({
+      ...prev,
+      vital_signs: { ...prev.vital_signs, [key]: value }
+    }));
+  };
+
+  const handleClinicalInfoChange = (key, value) => {
+    setFormData(prev => ({
+      ...prev,
+      clinical_info: { ...prev.clinical_info, [key]: value }
+    }));
+  };
+
+  const handleAdmissionInfoChange = (key, value) => {
+    setFormData(prev => ({
+      ...prev,
+      admission_info: { ...prev.admission_info, [key]: value }
+    }));
+  };
+
+  // Build supporting info array from structured data (for save/preview)
+  const buildSupportingInfoArray = () => {
+    const supportingInfo = [...formData.supporting_info]; // Keep existing manual entries
+    let sequence = supportingInfo.length + 1;
+
+    // Add vital signs
+    VITAL_SIGNS_FIELDS.forEach(field => {
+      if (formData.vital_signs[field.key]) {
+        supportingInfo.push({
+          sequence: sequence++,
+          category: field.category,
+          value_quantity: parseFloat(formData.vital_signs[field.key]),
+          value_quantity_unit: field.unit,
+          timing_period_start: formData.vital_signs.measurement_time || formData.encounter_start || new Date().toISOString()
+        });
+      }
+    });
+
+    // Add chief complaint if provided
+    if (formData.clinical_info.chief_complaint_code) {
+      supportingInfo.push({
+        sequence: sequence++,
+        category: 'chief-complaint',
+        code: formData.clinical_info.chief_complaint_code,
+        code_system: 'http://snomed.info/sct',
+        code_display: formData.clinical_info.chief_complaint_display || ''
+      });
+    }
+
+    // Add clinical text fields
+    CLINICAL_TEXT_FIELDS.forEach(field => {
+      if (formData.clinical_info[field.key]) {
+        supportingInfo.push({
+          sequence: sequence++,
+          category: field.category,
+          value_string: formData.clinical_info[field.key]
+        });
+      }
+    });
+
+    // Add investigation result if provided
+    if (formData.clinical_info.investigation_result) {
+      supportingInfo.push({
+        sequence: sequence++,
+        category: 'investigation-result',
+        code: formData.clinical_info.investigation_result,
+        code_system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
+        code_display: INVESTIGATION_RESULT_OPTIONS.find(o => o.value === formData.clinical_info.investigation_result)?.label || ''
+      });
+    }
+
+    // Add admission fields (only for inpatient/daycase)
+    if (['inpatient', 'daycase'].includes(formData.encounter_class)) {
+      ADMISSION_FIELDS.forEach(field => {
+        if (formData.admission_info[field.key]) {
+          supportingInfo.push({
+            sequence: sequence++,
+            category: field.category,
+            value_quantity: parseFloat(formData.admission_info[field.key]),
+            value_quantity_unit: field.unit
+          });
+        }
+      });
+    }
+
+    return supportingInfo;
+  };
+
   // Pure function for display - doesn't set state
   const getCalculatedTotal = () => {
     return formData.items.reduce((sum, item) => sum + (parseFloat(item.net_amount) || 0), 0);
@@ -398,11 +611,17 @@ export default function PriorAuthorizationForm() {
         return;
       }
 
+      // Merge structured vital signs and clinical data into supporting_info
+      const dataToSave = {
+        ...formData,
+        supporting_info: buildSupportingInfoArray()
+      };
+
       let response;
       if (isEditMode) {
-        response = await api.updatePriorAuthorization(id, formData);
+        response = await api.updatePriorAuthorization(id, dataToSave);
       } else {
-        response = await api.createPriorAuthorization(formData);
+        response = await api.createPriorAuthorization(dataToSave);
       }
 
       alert(isEditMode ? 'Prior authorization updated successfully!' : 'Prior authorization created successfully!');
@@ -429,13 +648,19 @@ export default function PriorAuthorizationForm() {
         return;
       }
 
+      // Merge structured vital signs and clinical data into supporting_info
+      const dataToSave = {
+        ...formData,
+        supporting_info: buildSupportingInfoArray()
+      };
+
       // Save first
       let savedId = id;
       if (!isEditMode) {
-        const createResponse = await api.createPriorAuthorization(formData);
+        const createResponse = await api.createPriorAuthorization(dataToSave);
         savedId = createResponse.data.id;
       } else {
-        await api.updatePriorAuthorization(id, formData);
+        await api.updatePriorAuthorization(id, dataToSave);
       }
 
       // Then send to NPHIES
@@ -469,7 +694,13 @@ export default function PriorAuthorizationForm() {
         return;
       }
 
-      const response = await api.previewPriorAuthorizationBundle(formData);
+      // Merge structured vital signs and clinical data into supporting_info
+      const dataToPreview = {
+        ...formData,
+        supporting_info: buildSupportingInfoArray()
+      };
+
+      const response = await api.previewPriorAuthorizationBundle(dataToPreview);
       setPreviewData(response);
       setShowPreview(true);
     } catch (error) {
@@ -494,7 +725,13 @@ export default function PriorAuthorizationForm() {
         return;
       }
 
-      const response = await api.testSendPriorAuthorization(formData);
+      // Merge structured vital signs and clinical data into supporting_info
+      const dataToTest = {
+        ...formData,
+        supporting_info: buildSupportingInfoArray()
+      };
+
+      const response = await api.testSendPriorAuthorization(dataToTest);
       setPreviewData(response);
       setShowPreview(true);
     } catch (error) {
@@ -623,6 +860,9 @@ export default function PriorAuthorizationForm() {
         </TabButton>
         <TabButton active={activeTab === 'clinical'} onClick={() => setActiveTab('clinical')} icon={Stethoscope}>
           Clinical
+        </TabButton>
+        <TabButton active={activeTab === 'vitals'} onClick={() => setActiveTab('vitals')} icon={Activity}>
+          Vitals & Clinical
         </TabButton>
         <TabButton active={activeTab === 'items'} onClick={() => setActiveTab('items')} icon={Receipt}>
           Items
@@ -880,6 +1120,234 @@ export default function PriorAuthorizationForm() {
             ))}
           </CardContent>
         </Card>
+      )}
+
+      {/* Vitals & Clinical Tab */}
+      {activeTab === 'vitals' && (
+        <div className="space-y-6">
+          {/* Vital Signs Section */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-red-500" />
+                    Vital Signs
+                  </CardTitle>
+                  <CardDescription>Patient vital signs measured during the encounter</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm text-gray-500">Measurement Time:</Label>
+                  <div className="datepicker-wrapper w-52">
+                    <DatePicker
+                      selected={formData.vital_signs.measurement_time ? new Date(formData.vital_signs.measurement_time) : null}
+                      onChange={(date) => handleVitalSignChange('measurement_time', date ? date.toISOString() : null)}
+                      showTimeSelect
+                      dateFormat="yyyy-MM-dd HH:mm"
+                      className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                      placeholderText="Select time"
+                    />
+                    <Calendar className="datepicker-icon h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {VITAL_SIGNS_FIELDS.map((field) => (
+                  <div key={field.key} className="space-y-2">
+                    <Label htmlFor={field.key} className="text-sm font-medium">
+                      {field.label}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id={field.key}
+                        type="number"
+                        step="0.1"
+                        value={formData.vital_signs[field.key]}
+                        onChange={(e) => handleVitalSignChange(field.key, e.target.value)}
+                        placeholder={field.placeholder}
+                        className="pr-16"
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Badge variant="secondary" className="font-mono text-xs">
+                          {field.unitLabel}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Quick BMI calculation display */}
+              {formData.vital_signs.height && formData.vital_signs.weight && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <strong>Calculated BMI:</strong>{' '}
+                    {(parseFloat(formData.vital_signs.weight) / Math.pow(parseFloat(formData.vital_signs.height) / 100, 2)).toFixed(1)} kg/m²
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Clinical Information Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Stethoscope className="h-5 w-5 text-blue-500" />
+                Clinical Information
+              </CardTitle>
+              <CardDescription>Chief complaint, patient history, and clinical findings</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Chief Complaint Row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="chief_complaint_code">Chief Complaint Code (SNOMED)</Label>
+                  <Input
+                    id="chief_complaint_code"
+                    value={formData.clinical_info.chief_complaint_code}
+                    onChange={(e) => handleClinicalInfoChange('chief_complaint_code', e.target.value)}
+                    placeholder="e.g., 21522001"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="chief_complaint_display">Chief Complaint Description</Label>
+                  <Input
+                    id="chief_complaint_display"
+                    value={formData.clinical_info.chief_complaint_display}
+                    onChange={(e) => handleClinicalInfoChange('chief_complaint_display', e.target.value)}
+                    placeholder="e.g., Abdominal pain"
+                  />
+                </div>
+              </div>
+
+              {/* Clinical Text Fields */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {CLINICAL_TEXT_FIELDS.map((field) => (
+                  <div key={field.key} className="space-y-2">
+                    <Label htmlFor={field.key}>{field.label}</Label>
+                    <textarea
+                      id={field.key}
+                      value={formData.clinical_info[field.key]}
+                      onChange={(e) => handleClinicalInfoChange(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      rows={3}
+                      className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30 resize-none"
+                    />
+                    <p className="text-xs text-gray-400 text-right">
+                      {formData.clinical_info[field.key]?.length || 0} characters
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Investigation Result */}
+              <div className="space-y-2">
+                <Label>Investigation Result</Label>
+                <Select
+                  value={INVESTIGATION_RESULT_OPTIONS.find(opt => opt.value === formData.clinical_info.investigation_result)}
+                  onChange={(option) => handleClinicalInfoChange('investigation_result', option?.value || '')}
+                  options={INVESTIGATION_RESULT_OPTIONS}
+                  styles={selectStyles}
+                  placeholder="Select investigation result status..."
+                  isClearable
+                  menuPortalTarget={document.body}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Admission Information Section - Only for inpatient/daycase */}
+          {['inpatient', 'daycase'].includes(formData.encounter_class) && (
+            <Card className="border-amber-200 bg-amber-50/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building className="h-5 w-5 text-amber-600" />
+                  Admission Information
+                </CardTitle>
+                <CardDescription>
+                  Required for {formData.encounter_class === 'inpatient' ? 'inpatient' : 'day case'} encounters
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {ADMISSION_FIELDS.map((field) => (
+                    <div key={field.key} className="space-y-2">
+                      <Label htmlFor={field.key}>{field.label}</Label>
+                      <div className="relative">
+                        <Input
+                          id={field.key}
+                          type="number"
+                          step={field.key === 'estimated_length_of_stay' ? '1' : '0.1'}
+                          value={formData.admission_info[field.key]}
+                          onChange={(e) => handleAdmissionInfoChange(field.key, e.target.value)}
+                          placeholder={field.placeholder}
+                          className="pr-16"
+                        />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <Badge variant="secondary" className="font-mono text-xs">
+                            {field.unitLabel}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Non-admission hint */}
+          {!['inpatient', 'daycase'].includes(formData.encounter_class) && (
+            <div className="flex items-center gap-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <AlertCircle className="h-5 w-5 text-gray-400" />
+              <span className="text-sm text-gray-600">
+                Admission information fields are only shown for Inpatient or Day Case encounters. 
+                Current encounter type: <strong className="capitalize">{formData.encounter_class}</strong>
+              </span>
+            </div>
+          )}
+
+          {/* Summary of what will be submitted */}
+          <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                Data Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                <div className="bg-white rounded-lg p-2 border">
+                  <p className="text-gray-500 text-xs">Vital Signs</p>
+                  <p className="font-medium">
+                    {VITAL_SIGNS_FIELDS.filter(f => formData.vital_signs[f.key]).length} / {VITAL_SIGNS_FIELDS.length}
+                  </p>
+                </div>
+                <div className="bg-white rounded-lg p-2 border">
+                  <p className="text-gray-500 text-xs">Clinical Fields</p>
+                  <p className="font-medium">
+                    {CLINICAL_TEXT_FIELDS.filter(f => formData.clinical_info[f.key]).length} / {CLINICAL_TEXT_FIELDS.length}
+                  </p>
+                </div>
+                <div className="bg-white rounded-lg p-2 border">
+                  <p className="text-gray-500 text-xs">Chief Complaint</p>
+                  <p className="font-medium">
+                    {formData.clinical_info.chief_complaint_code ? 'Set' : 'Not set'}
+                  </p>
+                </div>
+                <div className="bg-white rounded-lg p-2 border">
+                  <p className="text-gray-500 text-xs">Investigation Result</p>
+                  <p className="font-medium">
+                    {formData.clinical_info.investigation_result || 'Not set'}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Items Tab */}
