@@ -264,13 +264,15 @@ class PriorAuthMapper {
     ];
 
     // Add diagnosis if present - using NPHIES-specific systems
+    // IB-00242: NPHIES requires ICD-10-AM (Australian Modification) code system
     if (priorAuth.diagnoses && priorAuth.diagnoses.length > 0) {
       claim.diagnosis = priorAuth.diagnoses.map((diag, idx) => ({
         sequence: diag.sequence || idx + 1,
         diagnosisCodeableConcept: {
           coding: [
             {
-              system: diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am',
+              // Always use ICD-10-AM as required by NPHIES
+              system: 'http://hl7.org/fhir/sid/icd-10-am',
               code: diag.diagnosis_code,
               display: diag.diagnosis_display
             }
@@ -1079,12 +1081,24 @@ class PriorAuthMapper {
     const providerId = bundleResourceIds.provider;
     const encounterClass = priorAuth.encounter_class || 'ambulatory';
 
+    // Generate encounter identifier - IC-00183: Encounter identifier is required
+    const encounterIdentifier = priorAuth.encounter_identifier || 
+                                priorAuth.request_number || 
+                                `ENC-${encounterId.substring(0, 8)}`;
+
     const encounter = {
       resourceType: 'Encounter',
       id: encounterId,
       meta: {
         profile: [this.getEncounterProfileUrl(encounterClass)]
       },
+      // IC-00183: Encounter identifier is required by NPHIES
+      identifier: [
+        {
+          system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/encounter`,
+          value: encounterIdentifier
+        }
+      ],
       status: 'planned',
       class: {
         system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
