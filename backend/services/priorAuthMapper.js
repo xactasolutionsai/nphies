@@ -81,16 +81,22 @@ class PriorAuthMapper {
   /**
    * Build FHIR Claim resource for Prior Authorization
    * Following NPHIES specification: https://portal.nphies.sa/ig/Claim-483069.json.html
+   * 
+   * CRITICAL: All references must match the fullUrl/id of resources in the bundle
+   * bundleResourceIds contains the exact IDs used in fullUrl for each resource type
    */
-  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner) {
-    const claimId = priorAuth.id || this.generateId();
-    const patientId = patient.patient_id || patient.patientId;
-    const providerId = provider.nphies_id || provider.provider_id || provider.providerId;
-    const insurerId = insurer.nphies_id || insurer.insurer_id || insurer.insurerId;
-    const coverageId = coverage?.coverage_id || coverage?.coverageId || this.generateId();
-    const encounterId = encounter?.id || `encounter-${claimId}`;
+  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds) {
+    const claimId = bundleResourceIds.claim;
+    
+    // Use the EXACT same IDs that will be used in the bundle's fullUrl
+    const patientRef = bundleResourceIds.patient;
+    const providerRef = bundleResourceIds.provider;
+    const insurerRef = bundleResourceIds.insurer;
+    const coverageRef = bundleResourceIds.coverage;
+    const encounterRef = bundleResourceIds.encounter;
+    const practitionerRef = bundleResourceIds.practitioner;
 
-    // Build provider identifier URL based on provider identifier
+    // Build provider identifier URL based on provider name
     const providerIdentifierSystem = provider.identifier_system || 
       `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
@@ -125,14 +131,14 @@ class PriorAuthMapper {
       },
       use: 'preauthorization',
       patient: {
-        reference: `Patient/${patientId}`
+        reference: `Patient/${patientRef}`
       },
       created: this.formatDateTime(priorAuth.request_date || new Date()),
       insurer: {
-        reference: `Organization/${insurerId}`
+        reference: `Organization/${insurerRef}`
       },
       provider: {
-        reference: `Organization/${providerId}`
+        reference: `Organization/${providerRef}`
       },
       priority: {
         coding: [
@@ -158,7 +164,7 @@ class PriorAuthMapper {
           sequence: 1,
           focal: true,
           coverage: {
-            reference: `Coverage/${coverageId}`
+            reference: `Coverage/${coverageRef}`
           }
         }
       ]
@@ -171,7 +177,7 @@ class PriorAuthMapper {
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
       valueReference: {
-        reference: `Encounter/${encounterId}`
+        reference: `Encounter/${encounterRef}`
       }
     });
 
@@ -235,39 +241,38 @@ class PriorAuthMapper {
       ];
     }
 
-    // Add CareTeam - required for most PA types
-    if (practitioner || priorAuth.practitioner) {
-      const pract = practitioner || priorAuth.practitioner;
-      claim.careTeam = [
-        {
-          sequence: 1,
-          provider: {
-            reference: `Practitioner/${pract.practitioner_id || pract.id || 1}`
-          },
-          role: {
-            coding: [
-              {
-                system: 'http://terminology.hl7.org/CodeSystem/claimcareteamrole',
-                code: 'primary'
-              }
-            ]
-          },
-          qualification: {
-            coding: [
-              {
-                system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
-                code: pract.practice_code || pract.specialty_code || '08.26'
-              }
-            ]
-          }
+    // CareTeam - REQUIRED per NPHIES spec (IC-00014 error if missing)
+    // Always include with at least a default practitioner
+    const pract = practitioner || priorAuth.practitioner || {};
+    claim.careTeam = [
+      {
+        sequence: 1,
+        provider: {
+          reference: `Practitioner/${practitionerRef}`
+        },
+        role: {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/claimcareteamrole',
+              code: 'primary'
+            }
+          ]
+        },
+        qualification: {
+          coding: [
+            {
+              system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
+              code: pract.practice_code || pract.specialty_code || '08.00'
+            }
+          ]
         }
-      ];
-    }
+      }
+    ];
 
     // Add diagnosis if present - using NPHIES-specific systems
     if (priorAuth.diagnoses && priorAuth.diagnoses.length > 0) {
-      claim.diagnosis = priorAuth.diagnoses.map(diag => ({
-        sequence: diag.sequence,
+      claim.diagnosis = priorAuth.diagnoses.map((diag, idx) => ({
+        sequence: diag.sequence || idx + 1,
         diagnosisCodeableConcept: {
           coding: [
             {
@@ -318,13 +323,18 @@ class PriorAuthMapper {
       );
     }
 
-    // Add total if present
-    if (priorAuth.total_amount) {
-      claim.total = {
-        value: parseFloat(priorAuth.total_amount),
-        currency: priorAuth.currency || 'SAR'
-      };
+    // Total - REQUIRED per NPHIES spec (IC-00062 error if missing)
+    // Calculate from items if not provided
+    let totalAmount = priorAuth.total_amount;
+    if (!totalAmount && priorAuth.items && priorAuth.items.length > 0) {
+      totalAmount = priorAuth.items.reduce((sum, item) => {
+        return sum + parseFloat(item.net_amount || item.unit_price || 0);
+      }, 0);
     }
+    claim.total = {
+      value: parseFloat(totalAmount || 0),
+      currency: priorAuth.currency || 'SAR'
+    };
 
     return {
       fullUrl: `http://provider.com/Claim/${claimId}`,
@@ -725,75 +735,6 @@ class PriorAuthMapper {
   }
 
   /**
-   * Build FHIR Encounter resource for Prior Authorization
-   * Reference: https://portal.nphies.sa/ig/Encounter-10124.html
-   */
-  buildEncounterResource(priorAuth, patient, provider) {
-    const encounterId = priorAuth.encounter_id || priorAuth.id || this.generateId();
-    const patientId = patient.patient_id || patient.patientId;
-    const providerId = provider.nphies_id || provider.provider_id || provider.providerId;
-    const encounterClass = priorAuth.encounter_class || 'ambulatory';
-    
-    // Build provider identifier URL
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
-
-    const encounter = {
-      resourceType: 'Encounter',
-      id: encounterId,
-      meta: {
-        profile: [this.getEncounterProfileUrl(encounterClass)]
-      },
-      identifier: [
-        {
-          system: `${providerIdentifierSystem}/encounter`,
-          value: priorAuth.encounter_identifier || `ENC-${encounterId}`
-        }
-      ],
-      status: 'planned',
-      class: {
-        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-        code: this.getEncounterClassCode(encounterClass),
-        display: this.getEncounterClassDisplay(encounterClass)
-      },
-      subject: {
-        reference: `Patient/${patientId}`
-      },
-      serviceProvider: {
-        reference: `Organization/${providerId}`
-      }
-    };
-
-    // Add service type if specified
-    if (priorAuth.service_type) {
-      encounter.serviceType = {
-        coding: [
-          {
-            system: 'http://nphies.sa/terminology/CodeSystem/service-type',
-            code: priorAuth.service_type,
-            display: priorAuth.service_type_display
-          }
-        ]
-      };
-    }
-
-    // Add period
-    if (priorAuth.encounter_start) {
-      encounter.period = {
-        start: this.formatDateTime(priorAuth.encounter_start),
-        ...(priorAuth.encounter_end && {
-          end: this.formatDateTime(priorAuth.encounter_end)
-        })
-      };
-    }
-
-    return {
-      fullUrl: `http://provider.com/Encounter/${encounterId}`,
-      resource: encounter
-    };
-  }
-
-  /**
    * Get display text for encounter class
    */
   getEncounterClassDisplay(encounterClass) {
@@ -863,24 +804,58 @@ class PriorAuthMapper {
   /**
    * Build complete Prior Authorization Request Bundle
    * Following NPHIES specification: https://portal.nphies.sa/ig/usecase-prior-authorizations.html
+   * 
+   * CRITICAL: All resource IDs must be consistent between fullUrl and references
    */
   buildPriorAuthRequestBundle(data) {
     const { priorAuth, patient, provider, insurer, coverage, policyHolder, practitioner } = data;
 
-    // Build individual resources
-    const patientResource = nphiesMapper.buildPatientResource(patient);
-    const providerResource = nphiesMapper.buildProviderOrganization(provider);
-    const insurerResource = nphiesMapper.buildPayerOrganization(insurer);
-    const coverageResource = coverage ? nphiesMapper.buildCoverageResource(coverage, patient, insurer, policyHolder) : null;
-    const policyHolderResource = policyHolder ? nphiesMapper.buildPolicyHolderOrganization(policyHolder) : null;
+    // Generate consistent IDs for all resources FIRST
+    // These IDs will be used in both fullUrl and references
+    const bundleResourceIds = {
+      claim: this.generateId(),
+      patient: patient.patient_id || this.generateId(),
+      provider: provider.provider_id || this.generateId(),
+      insurer: insurer.insurer_id || this.generateId(),
+      coverage: coverage?.id || coverage?.coverage_id || this.generateId(),
+      encounter: this.generateId(),
+      practitioner: practitioner?.practitioner_id || this.generateId(),
+      policyHolder: policyHolder?.id || this.generateId()
+    };
+
+    // Build Patient resource with consistent ID
+    const patientResource = this.buildPatientResourceWithId(patient, bundleResourceIds.patient);
     
-    // Build Encounter
-    const encounterResource = this.buildEncounterResource(priorAuth, patient, provider);
+    // Build Provider Organization with consistent ID
+    const providerResource = this.buildProviderOrganizationWithId(provider, bundleResourceIds.provider);
     
-    // Build Practitioner if provided (needed for careTeam)
-    const practitionerResource = practitioner ? this.buildPractitionerResource(practitioner) : null;
+    // Build Insurer Organization with consistent ID
+    const insurerResource = this.buildInsurerOrganizationWithId(insurer, bundleResourceIds.insurer);
     
-    // Build Claim (main PA request resource) - pass encounter for reference
+    // Build Coverage resource with consistent ID (REQUIRED per RE-00169)
+    const coverageResource = this.buildCoverageResourceWithId(
+      coverage, 
+      patient, 
+      insurer, 
+      policyHolder,
+      bundleResourceIds
+    );
+    
+    // Build Encounter with consistent ID
+    const encounterResource = this.buildEncounterResourceWithId(
+      priorAuth, 
+      patient, 
+      provider,
+      bundleResourceIds
+    );
+    
+    // Build Practitioner resource (REQUIRED for careTeam per IC-00014)
+    const practitionerResource = this.buildPractitionerResourceWithId(
+      practitioner || { name: 'Default Practitioner', specialty_code: '08.00' },
+      bundleResourceIds.practitioner
+    );
+    
+    // Build Claim (main PA request resource) with all consistent IDs
     const claimResource = this.buildClaimResource(
       priorAuth, 
       patient, 
@@ -888,7 +863,8 @@ class PriorAuthMapper {
       insurer, 
       coverage, 
       encounterResource.resource,
-      practitioner
+      practitioner,
+      bundleResourceIds
     );
     
     // Build MessageHeader (must be first)
@@ -903,34 +879,17 @@ class PriorAuthMapper {
     }
 
     // Assemble bundle with MessageHeader first per NPHIES specification
-    // Order: MessageHeader, Claim, Encounter, Coverage, Practitioner, Organizations, Patient, Binary
+    // Order matters: MessageHeader, Claim, then all referenced resources
     const entries = [
       messageHeader,
       claimResource,
-      encounterResource
-    ];
-
-    // Add coverage if provided
-    if (coverageResource) {
-      entries.push(coverageResource);
-    }
-
-    // Add practitioner if provided
-    if (practitionerResource) {
-      entries.push(practitionerResource);
-    }
-
-    // Add policy holder if provided
-    if (policyHolderResource) {
-      entries.push(policyHolderResource);
-    }
-
-    // Add remaining resources
-    entries.push(
+      encounterResource,
+      coverageResource,
+      practitionerResource,
       providerResource,
-      patientResource,
-      insurerResource
-    );
+      insurerResource,
+      patientResource
+    ];
 
     // Add binary resources for attachments
     binaryResources.forEach(binary => entries.push(binary));
@@ -950,11 +909,183 @@ class PriorAuthMapper {
   }
 
   /**
-   * Build FHIR Practitioner resource
-   * Reference: https://portal.nphies.sa/ig/Practitioner-1.html
+   * Build Patient resource with specific ID for bundle consistency
    */
-  buildPractitionerResource(practitioner) {
-    const practitionerId = practitioner.practitioner_id || practitioner.id || this.generateId();
+  buildPatientResourceWithId(patient, patientId) {
+    // Use nphiesMapper but override the ID
+    const patientResource = nphiesMapper.buildPatientResource(patient);
+    patientResource.resource.id = patientId;
+    patientResource.fullUrl = `http://provider.com/Patient/${patientId}`;
+    return patientResource;
+  }
+
+  /**
+   * Build Provider Organization with specific ID for bundle consistency
+   */
+  buildProviderOrganizationWithId(provider, providerId) {
+    const providerResource = nphiesMapper.buildProviderOrganization(provider);
+    providerResource.resource.id = providerId;
+    providerResource.fullUrl = `http://provider.com/Organization/${providerId}`;
+    return providerResource;
+  }
+
+  /**
+   * Build Insurer Organization with specific ID for bundle consistency
+   */
+  buildInsurerOrganizationWithId(insurer, insurerId) {
+    const insurerResource = nphiesMapper.buildPayerOrganization(insurer);
+    insurerResource.resource.id = insurerId;
+    insurerResource.fullUrl = `http://provider.com/Organization/${insurerId}`;
+    return insurerResource;
+  }
+
+  /**
+   * Build Coverage resource with consistent IDs
+   * This is REQUIRED - RE-00169 error if missing or reference invalid
+   */
+  buildCoverageResourceWithId(coverage, patient, insurer, policyHolder, bundleResourceIds) {
+    const coverageId = bundleResourceIds.coverage;
+    const patientId = bundleResourceIds.patient;
+    const insurerId = bundleResourceIds.insurer;
+
+    // Build minimal required Coverage resource
+    const coverageResource = {
+      resourceType: 'Coverage',
+      id: coverageId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0']
+      },
+      identifier: [
+        {
+          system: 'http://payer.com/memberid',
+          value: coverage?.member_id || patient.identifier || `MEM-${Date.now()}`
+        }
+      ],
+      status: 'active',
+      type: {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/coverage-type',
+            code: coverage?.type || 'EHCPOL',
+            display: 'Extended healthcare'
+          }
+        ]
+      },
+      subscriber: {
+        reference: `Patient/${patientId}`
+      },
+      beneficiary: {
+        reference: `Patient/${patientId}`
+      },
+      relationship: {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/subscriber-relationship',
+            code: coverage?.relationship || 'self',
+            display: 'Self'
+          }
+        ]
+      },
+      payor: [
+        {
+          reference: `Organization/${insurerId}`
+        }
+      ]
+    };
+
+    // Add period if available
+    if (coverage?.period_start || coverage?.start_date) {
+      coverageResource.period = {
+        start: this.formatDate(coverage.period_start || coverage.start_date)
+      };
+      if (coverage?.period_end || coverage?.end_date) {
+        coverageResource.period.end = this.formatDate(coverage.period_end || coverage.end_date);
+      }
+    }
+
+    // Add class (network) if available
+    if (coverage?.network || coverage?.class_value) {
+      coverageResource.class = [
+        {
+          type: {
+            coding: [
+              {
+                system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
+                code: 'network'
+              }
+            ]
+          },
+          value: coverage.network || coverage.class_value || 'Standard'
+        }
+      ];
+    }
+
+    return {
+      fullUrl: `http://provider.com/Coverage/${coverageId}`,
+      resource: coverageResource
+    };
+  }
+
+  /**
+   * Build Encounter resource with consistent IDs
+   */
+  buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds) {
+    const encounterId = bundleResourceIds.encounter;
+    const patientId = bundleResourceIds.patient;
+    const providerId = bundleResourceIds.provider;
+    const encounterClass = priorAuth.encounter_class || 'ambulatory';
+
+    const encounter = {
+      resourceType: 'Encounter',
+      id: encounterId,
+      meta: {
+        profile: [this.getEncounterProfileUrl(encounterClass)]
+      },
+      status: 'planned',
+      class: {
+        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+        code: this.getEncounterClassCode(encounterClass),
+        display: this.getEncounterClassDisplay(encounterClass)
+      },
+      subject: {
+        reference: `Patient/${patientId}`
+      },
+      serviceProvider: {
+        reference: `Organization/${providerId}`
+      }
+    };
+
+    // Add service type if specified
+    if (priorAuth.service_type) {
+      encounter.serviceType = {
+        coding: [
+          {
+            system: 'http://nphies.sa/terminology/CodeSystem/service-type',
+            code: priorAuth.service_type
+          }
+        ]
+      };
+    }
+
+    // Add period - required for most encounter types
+    encounter.period = {
+      start: this.formatDateTime(priorAuth.encounter_start || new Date()),
+      ...(priorAuth.encounter_end && {
+        end: this.formatDateTime(priorAuth.encounter_end)
+      })
+    };
+
+    return {
+      fullUrl: `http://provider.com/Encounter/${encounterId}`,
+      resource: encounter
+    };
+  }
+
+  /**
+   * Build Practitioner resource with specific ID
+   */
+  buildPractitionerResourceWithId(practitioner, practitionerId) {
+    const pract = practitioner || {};
 
     return {
       fullUrl: `http://provider.com/Practitioner/${practitionerId}`,
@@ -966,38 +1097,37 @@ class PriorAuthMapper {
         },
         identifier: [
           {
-            system: 'http://nphies.sa/identifier/practitioner',
-            value: practitioner.license_number || practitioner.nphies_id || practitionerId
+            system: 'http://nphies.sa/license/practitioner-license',
+            value: pract.license_number || pract.nphies_id || `PRACT-${practitionerId.substring(0, 8)}`
           }
         ],
+        active: true,
         name: [
           {
             use: 'official',
-            text: practitioner.name || practitioner.full_name,
-            family: practitioner.family_name,
-            given: practitioner.given_name ? [practitioner.given_name] : undefined,
-            prefix: practitioner.prefix ? [practitioner.prefix] : undefined
+            text: pract.name || pract.full_name || 'Healthcare Provider',
+            family: pract.family_name || (pract.name ? pract.name.split(' ').pop() : 'Provider'),
+            given: pract.given_name ? [pract.given_name] : 
+                   (pract.name ? [pract.name.split(' ')[0]] : ['Healthcare'])
           }
         ],
-        ...(practitioner.gender && {
-          gender: practitioner.gender
-        }),
-        qualification: practitioner.specialty_code ? [
+        qualification: [
           {
             code: {
               coding: [
                 {
                   system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
-                  code: practitioner.specialty_code,
-                  display: practitioner.specialty_display
+                  code: pract.specialty_code || pract.practice_code || '08.00',
+                  display: pract.specialty_display || 'Healthcare Professional'
                 }
               ]
             }
           }
-        ] : undefined
+        ]
       }
     };
   }
+
 
   /**
    * Build Task resource for Cancel Request
