@@ -576,15 +576,16 @@ class PriorAuthorizationsController extends BaseController {
           WHERE id = $2
         `, [nphiesResponse.error?.message || 'NPHIES request failed', id]);
 
-        // Store error response
+        // Store error response (bundle_json cannot be null)
         await query(`
           INSERT INTO prior_authorization_responses 
-          (prior_auth_id, response_type, outcome, has_errors, errors)
-          VALUES ($1, $2, $3, $4, $5)
+          (prior_auth_id, response_type, outcome, bundle_json, has_errors, errors)
+          VALUES ($1, $2, $3, $4, $5, $6)
         `, [
           id,
           'initial',
           'error',
+          JSON.stringify(nphiesResponse.raw || {}),
           true,
           JSON.stringify([nphiesResponse.error])
         ]);
@@ -1017,6 +1018,163 @@ class PriorAuthorizationsController extends BaseController {
     } catch (error) {
       console.error('Error generating preview bundle:', error);
       res.status(500).json({ error: error.message || 'Failed to generate preview' });
+    }
+  }
+
+  /**
+   * Test send to NPHIES (validates bundle without saving to DB)
+   * This sends the bundle to NPHIES and returns the response for review
+   */
+  async testSendToNphies(req, res) {
+    try {
+      const formData = req.body;
+
+      // Validate required fields
+      if (!formData.patient_id) {
+        return res.status(400).json({ error: 'Patient is required' });
+      }
+      if (!formData.provider_id) {
+        return res.status(400).json({ error: 'Provider is required' });
+      }
+      if (!formData.insurer_id) {
+        return res.status(400).json({ error: 'Insurer is required' });
+      }
+
+      // Get patient, provider, insurer data
+      const patientResult = await query('SELECT * FROM patients WHERE patient_id = $1', [formData.patient_id]);
+      const providerResult = await query('SELECT * FROM providers WHERE provider_id = $1', [formData.provider_id]);
+      const insurerResult = await query('SELECT * FROM insurers WHERE insurer_id = $1', [formData.insurer_id]);
+
+      if (patientResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Patient not found' });
+      }
+      if (providerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Provider not found' });
+      }
+      if (insurerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Insurer not found' });
+      }
+
+      const patient = patientResult.rows[0];
+      const provider = providerResult.rows[0];
+      const insurer = insurerResult.rows[0];
+
+      // Create a mock priorAuth object from form data
+      const priorAuth = {
+        id: 'test',
+        request_number: `PREVIEW-${Date.now()}`,
+        auth_type: formData.auth_type || 'professional',
+        status: 'draft',
+        priority: formData.priority || 'normal',
+        encounter_class: formData.encounter_class,
+        encounter_start: formData.encounter_start,
+        encounter_end: formData.encounter_end,
+        total_amount: formData.total_amount,
+        currency: formData.currency || 'SAR',
+        items: formData.items || [],
+        diagnoses: formData.diagnoses || [],
+        supporting_info: formData.supporting_info || []
+      };
+
+      // Build FHIR bundle
+      const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
+        priorAuth,
+        patient,
+        provider,
+        insurer,
+        coverage: null,
+        policyHolder: null
+      });
+
+      // Send to NPHIES for validation
+      const nphiesResponse = await nphiesService.sendPriorAuth(bundle);
+
+      // Parse errors from NPHIES response
+      let errors = [];
+      let outcome = 'complete';
+      let nphiesResponseId = null;
+
+      if (nphiesResponse?.data) {
+        const responseBundle = nphiesResponse.data;
+        
+        // Find ClaimResponse in the bundle
+        const claimResponseEntry = responseBundle.entry?.find(
+          e => e.resource?.resourceType === 'ClaimResponse'
+        );
+        
+        if (claimResponseEntry?.resource) {
+          const claimResponse = claimResponseEntry.resource;
+          outcome = claimResponse.outcome || 'complete';
+          nphiesResponseId = claimResponse.identifier?.[0]?.value;
+          
+          // Extract errors from ClaimResponse
+          if (claimResponse.error && claimResponse.error.length > 0) {
+            errors = claimResponse.error.map(err => {
+              const coding = err.code?.coding?.[0] || {};
+              const locationExt = coding.extension?.find(
+                ext => ext.url?.includes('extension-error-expression')
+              );
+              
+              return {
+                code: coding.code || 'UNKNOWN',
+                message: coding.display || 'Unknown error',
+                location: locationExt?.valueString || null,
+                system: coding.system
+              };
+            });
+          }
+        }
+        
+        // Check for NPHIES generated tag
+        const messageHeader = responseBundle.entry?.find(
+          e => e.resource?.resourceType === 'MessageHeader'
+        );
+        const isNphiesGenerated = messageHeader?.resource?.meta?.tag?.some(
+          t => t.code === 'NPHIES generated'
+        );
+
+        return res.json({
+          success: errors.length === 0,
+          outcome,
+          nphiesResponseId,
+          isNphiesGenerated,
+          errors,
+          entities: {
+            patient: { name: patient.name, identifier: patient.identifier },
+            provider: { name: provider.provider_name, nphiesId: provider.nphies_id },
+            insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id }
+          },
+          data: responseBundle,
+          requestBundle: bundle
+        });
+      } else {
+        // NPHIES error
+        return res.json({
+          success: false,
+          outcome: 'error',
+          errors: [{
+            code: nphiesResponse.error?.code || 'NPHIES_ERROR',
+            message: nphiesResponse.error?.message || 'Failed to communicate with NPHIES'
+          }],
+          entities: {
+            patient: { name: patient.name, identifier: patient.identifier },
+            provider: { name: provider.provider_name, nphiesId: provider.nphies_id },
+            insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id }
+          },
+          data: nphiesResponse.raw,
+          requestBundle: bundle
+        });
+      }
+    } catch (error) {
+      console.error('Error testing NPHIES send:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message || 'Failed to test send to NPHIES',
+        errors: [{
+          code: 'INTERNAL_ERROR',
+          message: error.message || 'An unexpected error occurred'
+        }]
+      });
     }
   }
 

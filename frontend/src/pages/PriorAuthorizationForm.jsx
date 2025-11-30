@@ -196,6 +196,7 @@ export default function PriorAuthorizationForm() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [testSending, setTestSending] = useState(false);
   const [errors, setErrors] = useState([]);
   const [activeTab, setActiveTab] = useState('basic');
   
@@ -480,9 +481,48 @@ export default function PriorAuthorizationForm() {
     }
   };
 
+  // Test send to NPHIES (validates without saving to DB)
+  const handleTestSend = async () => {
+    try {
+      setTestSending(true);
+      setErrors([]);
+
+      const validation = validateForm();
+      if (!validation.valid) {
+        setErrors(validation.errors);
+        alert('Please fix the validation errors before testing.');
+        return;
+      }
+
+      const response = await api.testSendPriorAuthorization(formData);
+      setPreviewData(response);
+      setShowPreview(true);
+    } catch (error) {
+      console.error('Error testing NPHIES send:', error);
+      const errorMsg = error.response?.data?.error || error.message;
+      setPreviewData({
+        success: false,
+        outcome: 'error',
+        errors: [{
+          code: 'REQUEST_ERROR',
+          message: errorMsg
+        }],
+        entities: {
+          patient: { name: patients.find(p => p.patient_id === formData.patient_id)?.name || 'N/A' },
+          provider: { name: providers.find(p => p.provider_id === formData.provider_id)?.provider_name || 'N/A' },
+          insurer: { name: insurers.find(i => i.insurer_id === formData.insurer_id)?.insurer_name || 'N/A' }
+        }
+      });
+      setShowPreview(true);
+    } finally {
+      setTestSending(false);
+    }
+  };
+
   const handleCopyJson = () => {
-    if (previewData?.fhirBundle) {
-      navigator.clipboard.writeText(JSON.stringify(previewData.fhirBundle, null, 2));
+    const bundleData = previewData?.data || previewData?.fhirBundle;
+    if (bundleData) {
+      navigator.clipboard.writeText(JSON.stringify(bundleData, null, 2));
       alert('FHIR Bundle copied to clipboard!');
     }
   };
@@ -525,18 +565,27 @@ export default function PriorAuthorizationForm() {
           <Button 
             variant="outline" 
             onClick={handlePreview} 
-            disabled={previewLoading || saving || sending}
+            disabled={previewLoading || testSending || saving || sending}
           >
             <Eye className="h-4 w-4 mr-2" />
             {previewLoading ? 'Building...' : 'Preview JSON'}
           </Button>
-          <Button onClick={handleSave} disabled={saving || sending || previewLoading}>
+          <Button 
+            variant="outline"
+            onClick={handleTestSend} 
+            disabled={testSending || previewLoading || saving || sending}
+            className="border-amber-500 text-amber-600 hover:bg-amber-50"
+          >
+            <Shield className="h-4 w-4 mr-2" />
+            {testSending ? 'Testing...' : 'Test with NPHIES'}
+          </Button>
+          <Button onClick={handleSave} disabled={saving || sending || previewLoading || testSending}>
             <Save className="h-4 w-4 mr-2" />
             {saving ? 'Saving...' : 'Save Draft'}
           </Button>
           <Button 
             onClick={handleSaveAndSend} 
-            disabled={saving || sending || previewLoading}
+            disabled={saving || sending || previewLoading || testSending}
             className="bg-gradient-to-r from-blue-500 to-blue-600"
           >
             <Send className="h-4 w-4 mr-2" />
@@ -1117,26 +1166,90 @@ export default function PriorAuthorizationForm() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col m-4">
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 to-purple-50">
+            <div className={`flex items-center justify-between p-6 border-b ${
+              previewData.errors?.length > 0 
+                ? 'bg-gradient-to-r from-red-50 to-amber-50' 
+                : 'bg-gradient-to-r from-blue-50 to-purple-50'
+            }`}>
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Eye className="h-6 w-6 text-blue-600" />
+                <div className={`p-2 rounded-lg ${
+                  previewData.errors?.length > 0 ? 'bg-red-100' : 'bg-blue-100'
+                }`}>
+                  {previewData.errors?.length > 0 ? (
+                    <AlertCircle className="h-6 w-6 text-red-600" />
+                  ) : (
+                    <Eye className="h-6 w-6 text-blue-600" />
+                  )}
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">FHIR Request Preview</h2>
-                  <p className="text-sm text-gray-600">This is the bundle that will be sent to NPHIES</p>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {previewData.errors?.length > 0 ? 'NPHIES Validation Errors' : 'FHIR Request Preview'}
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    {previewData.errors?.length > 0 
+                      ? `${previewData.errors.length} validation error(s) returned from NPHIES`
+                      : 'This is the bundle that will be sent to NPHIES'}
+                  </p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowPreview(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <XCircle className="h-6 w-6 text-gray-500" />
-              </button>
+              <div className="flex items-center gap-2">
+                {previewData.outcome && (
+                  <Badge variant={previewData.outcome === 'error' ? 'destructive' : 'default'}>
+                    {previewData.outcome?.toUpperCase()}
+                  </Badge>
+                )}
+                <button
+                  onClick={() => setShowPreview(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <XCircle className="h-6 w-6 text-gray-500" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              
+              {/* NPHIES Errors Section */}
+              {previewData.errors && previewData.errors.length > 0 && (
+                <div className="bg-red-50 rounded-xl p-6 border border-red-200">
+                  <h3 className="text-lg font-semibold mb-4 text-red-900 flex items-center">
+                    <AlertCircle className="h-5 w-5 mr-2" />
+                    NPHIES Validation Errors ({previewData.errors.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {previewData.errors.map((err, index) => (
+                      <div key={index} className="bg-white rounded-lg p-4 border-l-4 border-red-500">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Badge variant="destructive" className="font-mono">
+                                {err.code}
+                              </Badge>
+                              <span className="text-sm text-gray-500">Error #{index + 1}</span>
+                            </div>
+                            <p className="text-red-700 font-medium mb-2">{err.message || err.display}</p>
+                            {err.location && (
+                              <div className="bg-gray-50 rounded px-3 py-2 mt-2">
+                                <p className="text-xs text-gray-600 mb-1">Location in Bundle:</p>
+                                <p className="text-sm font-mono text-gray-800">{err.location}</p>
+                              </div>
+                            )}
+                          </div>
+                          <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 ml-3" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <p className="text-sm text-amber-800">
+                      <strong>Tip:</strong> Review the errors above and update your request accordingly. 
+                      Common issues include missing required fields, invalid references, or incorrect data formats.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Entities Summary */}
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                 <h3 className="font-semibold text-gray-800 mb-3">Request Summary</h3>
@@ -1158,19 +1271,24 @@ export default function PriorAuthorizationForm() {
                   </div>
                   <div className="bg-white rounded-lg p-3 border">
                     <p className="text-gray-500 text-xs mb-1">Authorization Type</p>
-                    <p className="font-medium capitalize">{previewData.options?.authType || 'N/A'}</p>
+                    <p className="font-medium capitalize">{previewData.entities?.authType || formData.auth_type || 'N/A'}</p>
                     <p className="text-xs text-gray-400">
-                      {previewData.options?.itemsCount || 0} items, {previewData.options?.diagnosesCount || 0} diagnoses
+                      {previewData.entities?.itemsCount || formData.items?.length || 0} items
                     </p>
                   </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap gap-2">
                   <Badge variant="outline" className="capitalize">
-                    Priority: {previewData.options?.priority || 'normal'}
+                    Priority: {formData.priority || 'normal'}
                   </Badge>
-                  {previewData.options?.encounterClass && (
+                  {formData.encounter_class && (
                     <Badge variant="outline" className="capitalize">
-                      Encounter: {previewData.options?.encounterClass}
+                      Encounter: {formData.encounter_class}
+                    </Badge>
+                  )}
+                  {previewData.nphiesResponseId && (
+                    <Badge variant="secondary" className="font-mono text-xs">
+                      Response ID: {previewData.nphiesResponseId}
                     </Badge>
                   )}
                 </div>
@@ -1189,7 +1307,7 @@ export default function PriorAuthorizationForm() {
                   </Button>
                 </div>
                 <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs max-h-[400px] overflow-y-auto">
-                  {JSON.stringify(previewData.fhirBundle, null, 2)}
+                  {JSON.stringify(previewData.data || previewData.fhirBundle, null, 2)}
                 </pre>
               </div>
             </div>

@@ -397,6 +397,17 @@ class ApiService {
       body: JSON.stringify(formData)
     });
   }
+
+  /**
+   * Test send the FHIR bundle to NPHIES for validation (without saving to DB)
+   * @param {Object} formData - Form data for the prior authorization
+   */
+  async testSendPriorAuthorization(formData) {
+    return this.request('/prior-authorizations/test-send', {
+      method: 'POST',
+      body: JSON.stringify(formData)
+    });
+  }
 }
 
 export default new ApiService();
