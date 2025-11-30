@@ -27,6 +27,7 @@ import generalRequestsRoutes from './routes/generalRequests.js';
 import medicationSafetyRoutes from './routes/medicationSafety.js';
 import chatRoutes from './routes/chat.js';
 import nphiesCodesRoutes from './routes/nphiesCodes.js';
+import priorAuthorizationsRoutes from './routes/priorAuthorizations.js';
 
 // Load environment variables
 dotenv.config();
@@ -111,6 +112,7 @@ app.use('/api/general-requests', generalRequestsRoutes);
 app.use('/api/medication-safety', medicationSafetyRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/nphies-codes', nphiesCodesRoutes);
+app.use('/api/prior-authorizations', priorAuthorizationsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -139,6 +141,7 @@ app.get('/', (req, res) => {
       generalRequestValidate: '/api/general-request/validate',
       chat: '/api/chat',
       chatHealth: '/api/chat/health',
+      priorAuthorizations: '/api/prior-authorizations',
       health: '/health'
     }
   });

@@ -37,6 +37,7 @@ const requestsItems = [
 ];
 
 const requestsAndClaimsItems = [
+  { name: 'Prior Authorizations', href: '/prior-authorizations', icon: FileCheck },
   { name: 'Standard Approvals', href: '/standard-approvals', icon: FileText },
   { name: 'Dental Approvals', href: '/dental-approvals', icon: Stethoscope },
   { name: 'Eye Approvals', href: '/eye-approvals', icon: Eye },

@@ -351,6 +351,160 @@ export const validationSchemas = {
       type: Joi.string().max(100).allow(null, '').optional(),
       quantity: Joi.number().integer().min(0).allow(null, '').optional()
     })).optional()
+  }),
+
+  // Prior Authorization validation schema (NPHIES-compliant)
+  priorAuthorization: Joi.object({
+    request_number: Joi.string().max(50).allow(null, '').optional(),
+    auth_type: Joi.string().valid('institutional', 'professional', 'pharmacy', 'dental', 'vision').required(),
+    
+    // Foreign Keys (UUID format)
+    patient_id: Joi.string().uuid().allow(null, '').optional(),
+    provider_id: Joi.string().uuid().allow(null, '').optional(),
+    insurer_id: Joi.string().uuid().allow(null, '').optional(),
+    coverage_id: Joi.number().integer().allow(null).optional(),
+    practitioner_id: Joi.string().uuid().allow(null, '').optional(),
+    
+    // Status
+    status: Joi.string().valid('draft', 'pending', 'queued', 'approved', 'partial', 'denied', 'cancelled', 'error').allow(null, '').optional(),
+    outcome: Joi.string().valid('complete', 'partial', 'queued', 'error').allow(null, '').optional(),
+    disposition: Joi.string().allow(null, '').optional(),
+    
+    // NPHIES Fields
+    pre_auth_ref: Joi.string().max(100).allow(null, '').optional(),
+    nphies_request_id: Joi.string().max(100).allow(null, '').optional(),
+    nphies_response_id: Joi.string().max(100).allow(null, '').optional(),
+    is_nphies_generated: Joi.boolean().allow(null).optional(),
+    
+    // Encounter
+    encounter_class: Joi.string().valid('inpatient', 'outpatient', 'daycase', 'emergency', 'ambulatory', 'home', 'telemedicine').allow(null, '').optional(),
+    encounter_start: Joi.date().allow(null, '').optional(),
+    encounter_end: Joi.date().allow(null, '').optional(),
+    
+    // Workflow
+    is_update: Joi.boolean().allow(null).optional(),
+    related_auth_id: Joi.number().integer().allow(null).optional(),
+    is_transfer: Joi.boolean().allow(null).optional(),
+    transfer_provider_id: Joi.string().uuid().allow(null, '').optional(),
+    transfer_auth_number: Joi.string().max(100).allow(null, '').optional(),
+    transfer_period_start: Joi.date().allow(null, '').optional(),
+    transfer_period_end: Joi.date().allow(null, '').optional(),
+    is_cancelled: Joi.boolean().allow(null).optional(),
+    cancellation_reason: Joi.string().allow(null, '').optional(),
+    
+    // Eligibility Reference
+    eligibility_ref: Joi.string().max(100).allow(null, '').optional(),
+    eligibility_offline_date: Joi.date().allow(null, '').optional(),
+    
+    // Clinical
+    diagnosis_codes: Joi.string().allow(null, '').optional(),
+    primary_diagnosis: Joi.string().max(50).allow(null, '').optional(),
+    
+    // Priority
+    priority: Joi.string().valid('stat', 'normal', 'deferred').allow(null, '').optional(),
+    
+    // Financial
+    total_amount: Joi.number().precision(2).allow(null).optional(),
+    approved_amount: Joi.number().precision(2).allow(null).optional(),
+    currency: Joi.string().max(3).allow(null, '').optional(),
+    
+    // Pre-auth period
+    pre_auth_period_start: Joi.date().allow(null, '').optional(),
+    pre_auth_period_end: Joi.date().allow(null, '').optional(),
+    
+    // Nested arrays
+    items: Joi.array().items(Joi.object({
+      sequence: Joi.number().integer().min(1).required(),
+      product_or_service_code: Joi.string().max(50).required(),
+      product_or_service_system: Joi.string().max(255).allow(null, '').optional(),
+      product_or_service_display: Joi.string().max(255).allow(null, '').optional(),
+      tooth_number: Joi.string().max(10).allow(null, '').optional(),
+      tooth_surface: Joi.string().max(50).allow(null, '').optional(),
+      eye: Joi.string().valid('left', 'right', 'both').allow(null, '').optional(),
+      medication_code: Joi.string().max(50).allow(null, '').optional(),
+      medication_system: Joi.string().max(255).allow(null, '').optional(),
+      days_supply: Joi.number().integer().allow(null).optional(),
+      quantity: Joi.number().precision(2).allow(null).optional(),
+      unit_price: Joi.number().precision(2).allow(null).optional(),
+      net_amount: Joi.number().precision(2).allow(null).optional(),
+      currency: Joi.string().max(3).allow(null, '').optional(),
+      serviced_date: Joi.date().allow(null, '').optional(),
+      serviced_period_start: Joi.date().allow(null, '').optional(),
+      serviced_period_end: Joi.date().allow(null, '').optional(),
+      body_site_code: Joi.string().max(50).allow(null, '').optional(),
+      body_site_system: Joi.string().max(255).allow(null, '').optional(),
+      sub_site_code: Joi.string().max(50).allow(null, '').optional(),
+      description: Joi.string().allow(null, '').optional(),
+      notes: Joi.string().allow(null, '').optional()
+    })).optional(),
+    
+    supporting_info: Joi.array().items(Joi.object({
+      sequence: Joi.number().integer().min(1).required(),
+      category: Joi.string().max(50).required(),
+      category_system: Joi.string().max(255).allow(null, '').optional(),
+      code: Joi.string().max(50).allow(null, '').optional(),
+      code_system: Joi.string().max(255).allow(null, '').optional(),
+      code_display: Joi.string().max(255).allow(null, '').optional(),
+      value_string: Joi.string().allow(null, '').optional(),
+      value_quantity: Joi.number().precision(2).allow(null).optional(),
+      value_quantity_unit: Joi.string().max(50).allow(null, '').optional(),
+      value_boolean: Joi.boolean().allow(null).optional(),
+      value_date: Joi.date().allow(null, '').optional(),
+      value_period_start: Joi.date().allow(null, '').optional(),
+      value_period_end: Joi.date().allow(null, '').optional(),
+      value_reference: Joi.string().max(255).allow(null, '').optional(),
+      timing_date: Joi.date().allow(null, '').optional(),
+      timing_period_start: Joi.date().allow(null, '').optional(),
+      timing_period_end: Joi.date().allow(null, '').optional(),
+      reason_code: Joi.string().max(50).allow(null, '').optional(),
+      reason_system: Joi.string().max(255).allow(null, '').optional()
+    })).optional(),
+    
+    diagnoses: Joi.array().items(Joi.object({
+      sequence: Joi.number().integer().min(1).required(),
+      diagnosis_code: Joi.string().max(50).required(),
+      diagnosis_system: Joi.string().max(255).allow(null, '').optional(),
+      diagnosis_display: Joi.string().max(255).allow(null, '').optional(),
+      diagnosis_type: Joi.string().valid('principal', 'secondary', 'admitting', 'discharge').allow(null, '').optional(),
+      on_admission: Joi.boolean().allow(null).optional()
+    })).optional(),
+    
+    attachments: Joi.array().items(Joi.object({
+      file_name: Joi.string().max(255).required(),
+      content_type: Joi.string().max(100).required(),
+      file_size: Joi.number().integer().allow(null).optional(),
+      base64_content: Joi.string().required(),
+      title: Joi.string().max(255).allow(null, '').optional(),
+      description: Joi.string().allow(null, '').optional(),
+      category: Joi.string().max(50).allow(null, '').optional()
+    })).optional()
+  }),
+
+  // Prior Authorization Item validation schema
+  priorAuthorizationItem: Joi.object({
+    prior_auth_id: Joi.number().integer().required(),
+    sequence: Joi.number().integer().min(1).required(),
+    product_or_service_code: Joi.string().max(50).required(),
+    product_or_service_system: Joi.string().max(255).allow(null, '').optional(),
+    product_or_service_display: Joi.string().max(255).allow(null, '').optional(),
+    tooth_number: Joi.string().max(10).allow(null, '').optional(),
+    tooth_surface: Joi.string().max(50).allow(null, '').optional(),
+    eye: Joi.string().valid('left', 'right', 'both').allow(null, '').optional(),
+    medication_code: Joi.string().max(50).allow(null, '').optional(),
+    medication_system: Joi.string().max(255).allow(null, '').optional(),
+    days_supply: Joi.number().integer().allow(null).optional(),
+    quantity: Joi.number().precision(2).allow(null).optional(),
+    unit_price: Joi.number().precision(2).allow(null).optional(),
+    net_amount: Joi.number().precision(2).allow(null).optional(),
+    currency: Joi.string().max(3).allow(null, '').optional(),
+    serviced_date: Joi.date().allow(null, '').optional(),
+    serviced_period_start: Joi.date().allow(null, '').optional(),
+    serviced_period_end: Joi.date().allow(null, '').optional(),
+    body_site_code: Joi.string().max(50).allow(null, '').optional(),
+    body_site_system: Joi.string().max(255).allow(null, '').optional(),
+    sub_site_code: Joi.string().max(50).allow(null, '').optional(),
+    description: Joi.string().allow(null, '').optional(),
+    notes: Joi.string().allow(null, '').optional()
   })
 };
 

@@ -1,0 +1,1193 @@
+import { BaseController } from './baseController.js';
+import { query } from '../db.js';
+import { validationSchemas } from '../models/schema.js';
+import priorAuthMapper from '../services/priorAuthMapper.js';
+import nphiesService from '../services/nphiesService.js';
+
+class PriorAuthorizationsController extends BaseController {
+  constructor() {
+    super('prior_authorizations', validationSchemas.priorAuthorization);
+  }
+
+  /**
+   * Get all prior authorizations with joins and filtering
+   */
+  async getAll(req, res) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const offset = (page - 1) * limit;
+      const search = req.query.search || '';
+      const status = req.query.status || '';
+      const authType = req.query.auth_type || '';
+
+      // Build dynamic WHERE clause
+      let whereConditions = [];
+      let queryParams = [limit, offset];
+      let countParams = [];
+      let paramIndex = 3;
+
+      if (search) {
+        whereConditions.push(`(
+          pa.request_number ILIKE $${paramIndex} OR 
+          pa.pre_auth_ref ILIKE $${paramIndex} OR 
+          p.name ILIKE $${paramIndex} OR 
+          pr.provider_name ILIKE $${paramIndex} OR 
+          i.insurer_name ILIKE $${paramIndex}
+        )`);
+        queryParams.push(`%${search}%`);
+        countParams.push(`%${search}%`);
+        paramIndex++;
+      }
+
+      if (status) {
+        whereConditions.push(`pa.status = $${paramIndex}`);
+        queryParams.push(status);
+        countParams.push(status);
+        paramIndex++;
+      }
+
+      if (authType) {
+        whereConditions.push(`pa.auth_type = $${paramIndex}`);
+        queryParams.push(authType);
+        countParams.push(authType);
+        paramIndex++;
+      }
+
+      const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+
+      // Get total count
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM prior_authorizations pa
+        LEFT JOIN patients p ON pa.patient_id = p.patient_id
+        LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
+        LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+        ${whereClause}
+      `;
+      const countResult = await query(countQuery, countParams);
+      const total = parseInt(countResult.rows[0].total);
+
+      // Get paginated data with joins
+      const dataQuery = `
+        SELECT
+          pa.*,
+          p.name as patient_name,
+          p.identifier as patient_identifier,
+          pr.provider_name,
+          pr.nphies_id as provider_nphies_id,
+          i.insurer_name,
+          i.nphies_id as insurer_nphies_id,
+          (SELECT COUNT(*) FROM prior_authorization_items WHERE prior_auth_id = pa.id) as item_count
+        FROM prior_authorizations pa
+        LEFT JOIN patients p ON pa.patient_id = p.patient_id
+        LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
+        LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+        ${whereClause}
+        ORDER BY pa.created_at DESC 
+        LIMIT $1 OFFSET $2
+      `;
+      const result = await query(dataQuery, queryParams);
+
+      res.json({
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error getting prior authorizations:', error);
+      res.status(500).json({ error: 'Failed to fetch prior authorizations' });
+    }
+  }
+
+  /**
+   * Internal method to get full prior authorization by ID
+   */
+  async getByIdInternal(id) {
+    // Get main form data
+    const formQuery = `
+      SELECT
+        pa.*,
+        p.name as patient_name,
+        p.identifier as patient_identifier,
+        p.gender as patient_gender,
+        p.birth_date as patient_birth_date,
+        pr.provider_name,
+        pr.nphies_id as provider_nphies_id,
+        pr.provider_type,
+        i.insurer_name,
+        i.nphies_id as insurer_nphies_id
+      FROM prior_authorizations pa
+      LEFT JOIN patients p ON pa.patient_id = p.patient_id
+      LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
+      LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+      WHERE pa.id = $1
+    `;
+    const formResult = await query(formQuery, [id]);
+
+    if (formResult.rows.length === 0) {
+      return null;
+    }
+
+    const priorAuth = formResult.rows[0];
+
+    // Get items
+    const itemsQuery = `
+      SELECT * FROM prior_authorization_items
+      WHERE prior_auth_id = $1
+      ORDER BY sequence ASC
+    `;
+    const itemsResult = await query(itemsQuery, [id]);
+
+    // Get supporting info
+    const supportingInfoQuery = `
+      SELECT * FROM prior_authorization_supporting_info
+      WHERE prior_auth_id = $1
+      ORDER BY sequence ASC
+    `;
+    const supportingInfoResult = await query(supportingInfoQuery, [id]);
+
+    // Get attachments
+    const attachmentsQuery = `
+      SELECT id, prior_auth_id, supporting_info_id, file_name, content_type, 
+             file_size, title, description, category, binary_id, created_at
+      FROM prior_authorization_attachments
+      WHERE prior_auth_id = $1
+      ORDER BY created_at ASC
+    `;
+    const attachmentsResult = await query(attachmentsQuery, [id]);
+
+    // Get diagnoses
+    const diagnosesQuery = `
+      SELECT * FROM prior_authorization_diagnoses
+      WHERE prior_auth_id = $1
+      ORDER BY sequence ASC
+    `;
+    const diagnosesResult = await query(diagnosesQuery, [id]);
+
+    // Get responses
+    const responsesQuery = `
+      SELECT id, prior_auth_id, response_type, outcome, disposition, 
+             pre_auth_ref, has_errors, errors, is_nphies_generated, 
+             nphies_response_id, received_at
+      FROM prior_authorization_responses
+      WHERE prior_auth_id = $1
+      ORDER BY received_at DESC
+    `;
+    const responsesResult = await query(responsesQuery, [id]);
+
+    return {
+      ...priorAuth,
+      items: itemsResult.rows,
+      supporting_info: supportingInfoResult.rows,
+      attachments: attachmentsResult.rows,
+      diagnoses: diagnosesResult.rows,
+      responses: responsesResult.rows
+    };
+  }
+
+  /**
+   * Get prior authorization by ID with full details
+   */
+  async getById(req, res) {
+    try {
+      const { id } = req.params;
+      const priorAuth = await this.getByIdInternal(id);
+
+      if (!priorAuth) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      res.json({ data: priorAuth });
+    } catch (error) {
+      console.error('Error getting prior authorization by ID:', error);
+      res.status(500).json({ error: 'Failed to fetch prior authorization' });
+    }
+  }
+
+  /**
+   * Create new prior authorization with nested data
+   */
+  async create(req, res) {
+    try {
+      const { items, supporting_info, diagnoses, attachments, ...formData } = req.body;
+
+      // Clean up data
+      const cleanedData = this.cleanFormData(formData);
+
+      // Validate input
+      const { error, value } = this.validationSchema.validate(cleanedData, { abortEarly: false });
+      if (error) {
+        const errors = error.details.map(detail => ({
+          field: detail.path.join('.'),
+          message: detail.message
+        }));
+        return res.status(400).json({
+          error: 'Validation failed',
+          errors,
+          message: errors[0].message
+        });
+      }
+
+      // Generate request number if not provided
+      if (!value.request_number) {
+        value.request_number = `PA-${Date.now()}`;
+      }
+
+      // Set default status
+      if (!value.status) {
+        value.status = 'draft';
+      }
+
+      // Extract columns and values for main table
+      const columns = Object.keys(value).filter(key => 
+        !['items', 'supporting_info', 'diagnoses', 'attachments'].includes(key)
+      );
+      const values = columns.map(col => value[col]);
+
+      // Insert main record
+      const insertQuery = `
+        INSERT INTO prior_authorizations (${columns.join(', ')})
+        VALUES (${columns.map((_, i) => `$${i + 1}`).join(', ')})
+        RETURNING *
+      `;
+      const result = await query(insertQuery, values);
+      const priorAuthId = result.rows[0].id;
+
+      // Insert items
+      if (items && Array.isArray(items) && items.length > 0) {
+        await this.insertItems(priorAuthId, items);
+      }
+
+      // Insert supporting info
+      if (supporting_info && Array.isArray(supporting_info) && supporting_info.length > 0) {
+        await this.insertSupportingInfo(priorAuthId, supporting_info);
+      }
+
+      // Insert diagnoses
+      if (diagnoses && Array.isArray(diagnoses) && diagnoses.length > 0) {
+        await this.insertDiagnoses(priorAuthId, diagnoses);
+      }
+
+      // Insert attachments
+      if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+        await this.insertAttachments(priorAuthId, attachments);
+      }
+
+      // Get complete record
+      const completeData = await this.getByIdInternal(priorAuthId);
+
+      res.status(201).json({ data: completeData });
+    } catch (error) {
+      console.error('Error creating prior authorization:', error);
+      if (error.code === '23505') {
+        res.status(409).json({ error: 'Request number already exists' });
+      } else if (error.code === '23503') {
+        res.status(400).json({ error: 'Invalid reference (patient, provider, or insurer not found)' });
+      } else {
+        res.status(500).json({ error: error.message || 'Failed to create prior authorization' });
+      }
+    }
+  }
+
+  /**
+   * Update prior authorization
+   */
+  async update(req, res) {
+    try {
+      const { id } = req.params;
+      const { items, supporting_info, diagnoses, attachments, ...formData } = req.body;
+
+      // Check if exists
+      const existing = await this.getByIdInternal(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      // Only allow updates on draft or error status
+      if (!['draft', 'error'].includes(existing.status)) {
+        return res.status(400).json({ 
+          error: 'Cannot update prior authorization with status: ' + existing.status 
+        });
+      }
+
+      // Clean up data
+      const cleanedData = this.cleanFormData(formData);
+
+      // Validate input
+      const { error, value } = this.validationSchema.validate(cleanedData, { abortEarly: false });
+      if (error) {
+        const errors = error.details.map(detail => ({
+          field: detail.path.join('.'),
+          message: detail.message
+        }));
+        return res.status(400).json({
+          error: 'Validation failed',
+          errors,
+          message: errors[0].message
+        });
+      }
+
+      // Extract columns and values
+      const columns = Object.keys(value).filter(key => 
+        !['items', 'supporting_info', 'diagnoses', 'attachments'].includes(key)
+      );
+      const values = [...columns.map(col => value[col]), id];
+
+      // Update main record
+      const updateQuery = `
+        UPDATE prior_authorizations
+        SET ${columns.map((col, i) => `${col} = $${i + 1}`).join(', ')}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $${columns.length + 1}
+        RETURNING *
+      `;
+      await query(updateQuery, values);
+
+      // Delete and re-insert nested data
+      await query('DELETE FROM prior_authorization_items WHERE prior_auth_id = $1', [id]);
+      await query('DELETE FROM prior_authorization_supporting_info WHERE prior_auth_id = $1', [id]);
+      await query('DELETE FROM prior_authorization_diagnoses WHERE prior_auth_id = $1', [id]);
+      await query('DELETE FROM prior_authorization_attachments WHERE prior_auth_id = $1', [id]);
+
+      // Re-insert items
+      if (items && Array.isArray(items) && items.length > 0) {
+        await this.insertItems(id, items);
+      }
+
+      // Re-insert supporting info
+      if (supporting_info && Array.isArray(supporting_info) && supporting_info.length > 0) {
+        await this.insertSupportingInfo(id, supporting_info);
+      }
+
+      // Re-insert diagnoses
+      if (diagnoses && Array.isArray(diagnoses) && diagnoses.length > 0) {
+        await this.insertDiagnoses(id, diagnoses);
+      }
+
+      // Re-insert attachments
+      if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+        await this.insertAttachments(id, attachments);
+      }
+
+      // Get complete record
+      const completeData = await this.getByIdInternal(id);
+
+      res.json({ data: completeData });
+    } catch (error) {
+      console.error('Error updating prior authorization:', error);
+      res.status(500).json({ error: error.message || 'Failed to update prior authorization' });
+    }
+  }
+
+  /**
+   * Delete prior authorization
+   */
+  async delete(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Check if exists
+      const existing = await query('SELECT id, status FROM prior_authorizations WHERE id = $1', [id]);
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      // Only allow deletion of draft records
+      if (existing.rows[0].status !== 'draft') {
+        return res.status(400).json({ 
+          error: 'Can only delete draft prior authorizations' 
+        });
+      }
+
+      // Delete (cascade will handle related records)
+      await query('DELETE FROM prior_authorizations WHERE id = $1', [id]);
+
+      res.json({ message: 'Prior authorization deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting prior authorization:', error);
+      res.status(500).json({ error: 'Failed to delete prior authorization' });
+    }
+  }
+
+  /**
+   * Send prior authorization to NPHIES
+   */
+  async sendToNphies(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Get full prior authorization data
+      const priorAuth = await this.getByIdInternal(id);
+      if (!priorAuth) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      // Only send draft or error status
+      if (!['draft', 'error'].includes(priorAuth.status)) {
+        return res.status(400).json({ 
+          error: 'Can only send prior authorizations with draft or error status' 
+        });
+      }
+
+      // Get patient, provider, insurer data
+      const patientResult = await query('SELECT * FROM patients WHERE patient_id = $1', [priorAuth.patient_id]);
+      const providerResult = await query('SELECT * FROM providers WHERE provider_id = $1', [priorAuth.provider_id]);
+      const insurerResult = await query('SELECT * FROM insurers WHERE insurer_id = $1', [priorAuth.insurer_id]);
+
+      if (patientResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Patient not found' });
+      }
+      if (providerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Provider not found' });
+      }
+      if (insurerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Insurer not found' });
+      }
+
+      const patient = patientResult.rows[0];
+      const provider = providerResult.rows[0];
+      const insurer = insurerResult.rows[0];
+
+      // Build FHIR bundle
+      const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
+        priorAuth,
+        patient,
+        provider,
+        insurer,
+        coverage: null, // TODO: Add coverage support
+        policyHolder: null // TODO: Add policy holder support
+      });
+
+      // Generate request ID
+      const nphiesRequestId = `pa-req-${Date.now()}`;
+
+      // Update status to pending and store request bundle
+      await query(`
+        UPDATE prior_authorizations 
+        SET status = 'pending', 
+            nphies_request_id = $1, 
+            request_bundle = $2,
+            request_date = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+      `, [nphiesRequestId, JSON.stringify(bundle), id]);
+
+      // Send to NPHIES
+      const nphiesResponse = await nphiesService.checkEligibility(bundle);
+
+      if (nphiesResponse.success) {
+        // Validate response structure
+        const validation = priorAuthMapper.validatePriorAuthResponse(nphiesResponse.data);
+        if (!validation.valid) {
+          console.error('[PriorAuth] Invalid response structure:', validation.errors);
+        }
+
+        // Parse response
+        const parsedResponse = priorAuthMapper.parsePriorAuthResponse(nphiesResponse.data);
+
+        // Update prior authorization with response
+        const newStatus = parsedResponse.outcome === 'queued' ? 'queued' : 
+                         parsedResponse.success ? 'approved' : 
+                         parsedResponse.outcome === 'partial' ? 'partial' : 'denied';
+
+        await query(`
+          UPDATE prior_authorizations 
+          SET status = $1,
+              outcome = $2,
+              disposition = $3,
+              pre_auth_ref = $4,
+              nphies_response_id = $5,
+              is_nphies_generated = $6,
+              response_bundle = $7,
+              response_date = CURRENT_TIMESTAMP,
+              pre_auth_period_start = $8,
+              pre_auth_period_end = $9,
+              approved_amount = $10,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $11
+        `, [
+          newStatus,
+          parsedResponse.outcome,
+          parsedResponse.disposition,
+          parsedResponse.preAuthRef,
+          parsedResponse.nphiesResponseId,
+          parsedResponse.isNphiesGenerated,
+          JSON.stringify(nphiesResponse.data),
+          parsedResponse.preAuthPeriod?.start,
+          parsedResponse.preAuthPeriod?.end,
+          parsedResponse.itemResults?.[0]?.adjudication?.find(a => a.category === 'benefit')?.amount,
+          id
+        ]);
+
+        // Store response in history
+        await query(`
+          INSERT INTO prior_authorization_responses 
+          (prior_auth_id, response_type, outcome, disposition, pre_auth_ref, 
+           bundle_json, has_errors, errors, is_nphies_generated, nphies_response_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `, [
+          id,
+          'initial',
+          parsedResponse.outcome,
+          parsedResponse.disposition,
+          parsedResponse.preAuthRef,
+          JSON.stringify(nphiesResponse.data),
+          !parsedResponse.success,
+          parsedResponse.errors ? JSON.stringify(parsedResponse.errors) : null,
+          parsedResponse.isNphiesGenerated,
+          parsedResponse.nphiesResponseId
+        ]);
+
+        // Update item adjudication if present
+        if (parsedResponse.itemResults) {
+          for (const itemResult of parsedResponse.itemResults) {
+            const adjStatus = itemResult.adjudication?.find(a => a.category === 'eligible') ? 'approved' :
+                             itemResult.adjudication?.find(a => a.category === 'denied') ? 'denied' : 'pending';
+            const adjAmount = itemResult.adjudication?.find(a => a.category === 'benefit')?.amount;
+            
+            await query(`
+              UPDATE prior_authorization_items 
+              SET adjudication_status = $1, adjudication_amount = $2
+              WHERE prior_auth_id = $3 AND sequence = $4
+            `, [adjStatus, adjAmount, id, itemResult.itemSequence]);
+          }
+        }
+
+        // Get updated record
+        const updatedData = await this.getByIdInternal(id);
+
+        res.json({
+          success: true,
+          data: updatedData,
+          nphiesResponse: parsedResponse
+        });
+      } else {
+        // Handle NPHIES error
+        await query(`
+          UPDATE prior_authorizations 
+          SET status = 'error',
+              outcome = 'error',
+              disposition = $1,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $2
+        `, [nphiesResponse.error?.message || 'NPHIES request failed', id]);
+
+        // Store error response
+        await query(`
+          INSERT INTO prior_authorization_responses 
+          (prior_auth_id, response_type, outcome, has_errors, errors)
+          VALUES ($1, $2, $3, $4, $5)
+        `, [
+          id,
+          'initial',
+          'error',
+          true,
+          JSON.stringify([nphiesResponse.error])
+        ]);
+
+        res.status(502).json({
+          success: false,
+          error: nphiesResponse.error,
+          data: await this.getByIdInternal(id)
+        });
+      }
+    } catch (error) {
+      console.error('Error sending prior authorization to NPHIES:', error);
+      res.status(500).json({ error: error.message || 'Failed to send prior authorization' });
+    }
+  }
+
+  /**
+   * Submit update to existing authorization
+   */
+  async submitUpdate(req, res) {
+    try {
+      const { id } = req.params;
+      const { items, supporting_info, diagnoses, attachments } = req.body;
+
+      // Get existing prior authorization
+      const existing = await this.getByIdInternal(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      // Must have pre_auth_ref to update
+      if (!existing.pre_auth_ref) {
+        return res.status(400).json({ 
+          error: 'Cannot update: no prior authorization reference exists' 
+        });
+      }
+
+      // Create new prior authorization record for the update
+      const updateData = {
+        ...existing,
+        id: undefined,
+        request_number: `PA-UPD-${Date.now()}`,
+        status: 'draft',
+        is_update: true,
+        related_auth_id: id,
+        pre_auth_ref: existing.pre_auth_ref,
+        items: items || existing.items,
+        supporting_info: supporting_info || existing.supporting_info,
+        diagnoses: diagnoses || existing.diagnoses,
+        attachments: attachments || existing.attachments
+      };
+
+      // Create the update record
+      const columns = Object.keys(updateData).filter(key => 
+        !['items', 'supporting_info', 'diagnoses', 'attachments', 'responses', 
+          'patient_name', 'patient_identifier', 'patient_gender', 'patient_birth_date',
+          'provider_name', 'provider_nphies_id', 'provider_type',
+          'insurer_name', 'insurer_nphies_id', 'request_bundle', 'response_bundle'].includes(key) &&
+        updateData[key] !== undefined
+      );
+      const values = columns.map(col => updateData[col]);
+
+      const insertQuery = `
+        INSERT INTO prior_authorizations (${columns.join(', ')})
+        VALUES (${columns.map((_, i) => `$${i + 1}`).join(', ')})
+        RETURNING id
+      `;
+      const result = await query(insertQuery, values);
+      const newId = result.rows[0].id;
+
+      // Insert nested data
+      if (updateData.items && updateData.items.length > 0) {
+        await this.insertItems(newId, updateData.items);
+      }
+      if (updateData.supporting_info && updateData.supporting_info.length > 0) {
+        await this.insertSupportingInfo(newId, updateData.supporting_info);
+      }
+      if (updateData.diagnoses && updateData.diagnoses.length > 0) {
+        await this.insertDiagnoses(newId, updateData.diagnoses);
+      }
+      if (updateData.attachments && updateData.attachments.length > 0) {
+        await this.insertAttachments(newId, updateData.attachments);
+      }
+
+      const completeData = await this.getByIdInternal(newId);
+
+      res.status(201).json({ 
+        data: completeData,
+        message: 'Update request created. Use /send to submit to NPHIES.'
+      });
+    } catch (error) {
+      console.error('Error creating update request:', error);
+      res.status(500).json({ error: error.message || 'Failed to create update request' });
+    }
+  }
+
+  /**
+   * Cancel prior authorization
+   */
+  async cancel(req, res) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      // Get existing prior authorization
+      const existing = await this.getByIdInternal(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      // Must have pre_auth_ref to cancel
+      if (!existing.pre_auth_ref) {
+        return res.status(400).json({ 
+          error: 'Cannot cancel: no prior authorization reference exists' 
+        });
+      }
+
+      // Check if pre_auth_period has expired
+      if (existing.pre_auth_period_end) {
+        const periodEnd = new Date(existing.pre_auth_period_end);
+        if (periodEnd < new Date()) {
+          return res.status(400).json({ 
+            error: 'Cannot cancel: authorization period has expired' 
+          });
+        }
+      }
+
+      // Get provider and insurer data
+      const providerResult = await query('SELECT * FROM providers WHERE provider_id = $1', [existing.provider_id]);
+      const insurerResult = await query('SELECT * FROM insurers WHERE insurer_id = $1', [existing.insurer_id]);
+
+      if (providerResult.rows.length === 0 || insurerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Provider or insurer not found' });
+      }
+
+      const provider = providerResult.rows[0];
+      const insurer = insurerResult.rows[0];
+
+      // Build cancel request bundle
+      const cancelBundle = priorAuthMapper.buildCancelRequestBundle(existing, provider, insurer, reason);
+
+      // Send to NPHIES
+      const nphiesResponse = await nphiesService.checkEligibility(cancelBundle);
+
+      if (nphiesResponse.success) {
+        // Update status
+        await query(`
+          UPDATE prior_authorizations 
+          SET status = 'cancelled',
+              is_cancelled = true,
+              cancellation_reason = $1,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $2
+        `, [reason, id]);
+
+        // Store response
+        await query(`
+          INSERT INTO prior_authorization_responses 
+          (prior_auth_id, response_type, outcome, bundle_json)
+          VALUES ($1, $2, $3, $4)
+        `, [id, 'cancel', 'complete', JSON.stringify(nphiesResponse.data)]);
+
+        const updatedData = await this.getByIdInternal(id);
+
+        res.json({
+          success: true,
+          data: updatedData,
+          message: 'Prior authorization cancelled successfully'
+        });
+      } else {
+        res.status(502).json({
+          success: false,
+          error: nphiesResponse.error,
+          message: 'Failed to cancel prior authorization'
+        });
+      }
+    } catch (error) {
+      console.error('Error cancelling prior authorization:', error);
+      res.status(500).json({ error: error.message || 'Failed to cancel prior authorization' });
+    }
+  }
+
+  /**
+   * Transfer prior authorization to another provider
+   */
+  async transfer(req, res) {
+    try {
+      const { id } = req.params;
+      const { transfer_provider_id, reason } = req.body;
+
+      // Get existing prior authorization
+      const existing = await this.getByIdInternal(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      // Must have pre_auth_ref to transfer
+      if (!existing.pre_auth_ref) {
+        return res.status(400).json({ 
+          error: 'Cannot transfer: no prior authorization reference exists' 
+        });
+      }
+
+      // Create transfer request (similar to update but with transfer flag)
+      const transferData = {
+        ...existing,
+        id: undefined,
+        request_number: `PA-TRF-${Date.now()}`,
+        status: 'draft',
+        is_transfer: true,
+        is_update: true,
+        related_auth_id: id,
+        transfer_provider_id,
+        pre_auth_ref: existing.pre_auth_ref
+      };
+
+      // Create the transfer record
+      const columns = Object.keys(transferData).filter(key => 
+        !['items', 'supporting_info', 'diagnoses', 'attachments', 'responses',
+          'patient_name', 'patient_identifier', 'patient_gender', 'patient_birth_date',
+          'provider_name', 'provider_nphies_id', 'provider_type',
+          'insurer_name', 'insurer_nphies_id', 'request_bundle', 'response_bundle'].includes(key) &&
+        transferData[key] !== undefined
+      );
+      const values = columns.map(col => transferData[col]);
+
+      const insertQuery = `
+        INSERT INTO prior_authorizations (${columns.join(', ')})
+        VALUES (${columns.map((_, i) => `$${i + 1}`).join(', ')})
+        RETURNING id
+      `;
+      const result = await query(insertQuery, values);
+      const newId = result.rows[0].id;
+
+      // Copy nested data
+      if (existing.items && existing.items.length > 0) {
+        await this.insertItems(newId, existing.items);
+      }
+      if (existing.supporting_info && existing.supporting_info.length > 0) {
+        await this.insertSupportingInfo(newId, existing.supporting_info);
+      }
+      if (existing.diagnoses && existing.diagnoses.length > 0) {
+        await this.insertDiagnoses(newId, existing.diagnoses);
+      }
+
+      const completeData = await this.getByIdInternal(newId);
+
+      res.status(201).json({ 
+        data: completeData,
+        message: 'Transfer request created. Use /send to submit to NPHIES.'
+      });
+    } catch (error) {
+      console.error('Error creating transfer request:', error);
+      res.status(500).json({ error: error.message || 'Failed to create transfer request' });
+    }
+  }
+
+  /**
+   * Poll for response (for queued requests)
+   */
+  async poll(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Get existing prior authorization
+      const existing = await this.getByIdInternal(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      // Only poll for queued status
+      if (existing.status !== 'queued') {
+        return res.status(400).json({ 
+          error: 'Can only poll for queued prior authorizations',
+          currentStatus: existing.status
+        });
+      }
+
+      // TODO: Implement actual polling to NPHIES
+      // For now, return current status
+      res.json({
+        data: existing,
+        message: 'Polling not yet implemented - showing current status'
+      });
+    } catch (error) {
+      console.error('Error polling for response:', error);
+      res.status(500).json({ error: error.message || 'Failed to poll for response' });
+    }
+  }
+
+  /**
+   * Get FHIR bundle preview for saved PA
+   */
+  async getBundle(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Get full prior authorization data
+      const priorAuth = await this.getByIdInternal(id);
+      if (!priorAuth) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      // Get patient, provider, insurer data
+      const patientResult = await query('SELECT * FROM patients WHERE patient_id = $1', [priorAuth.patient_id]);
+      const providerResult = await query('SELECT * FROM providers WHERE provider_id = $1', [priorAuth.provider_id]);
+      const insurerResult = await query('SELECT * FROM insurers WHERE insurer_id = $1', [priorAuth.insurer_id]);
+
+      if (patientResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Patient not found' });
+      }
+      if (providerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Provider not found' });
+      }
+      if (insurerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Insurer not found' });
+      }
+
+      const patient = patientResult.rows[0];
+      const provider = providerResult.rows[0];
+      const insurer = insurerResult.rows[0];
+
+      // Build FHIR bundle
+      const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
+        priorAuth,
+        patient,
+        provider,
+        insurer,
+        coverage: null,
+        policyHolder: null
+      });
+
+      res.json({ data: bundle });
+    } catch (error) {
+      console.error('Error generating bundle:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate FHIR bundle' });
+    }
+  }
+
+  /**
+   * Preview FHIR bundle from form data (without saving)
+   */
+  async previewBundle(req, res) {
+    try {
+      const formData = req.body;
+
+      // Validate required fields
+      if (!formData.patient_id) {
+        return res.status(400).json({ error: 'Patient is required' });
+      }
+      if (!formData.provider_id) {
+        return res.status(400).json({ error: 'Provider is required' });
+      }
+      if (!formData.insurer_id) {
+        return res.status(400).json({ error: 'Insurer is required' });
+      }
+
+      // Get patient, provider, insurer data
+      const patientResult = await query('SELECT * FROM patients WHERE patient_id = $1', [formData.patient_id]);
+      const providerResult = await query('SELECT * FROM providers WHERE provider_id = $1', [formData.provider_id]);
+      const insurerResult = await query('SELECT * FROM insurers WHERE insurer_id = $1', [formData.insurer_id]);
+
+      if (patientResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Patient not found' });
+      }
+      if (providerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Provider not found' });
+      }
+      if (insurerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Insurer not found' });
+      }
+
+      const patient = patientResult.rows[0];
+      const provider = providerResult.rows[0];
+      const insurer = insurerResult.rows[0];
+
+      // Create a mock priorAuth object from form data
+      const priorAuth = {
+        id: 'preview',
+        request_number: `PREVIEW-${Date.now()}`,
+        auth_type: formData.auth_type || 'professional',
+        status: 'draft',
+        priority: formData.priority || 'normal',
+        encounter_class: formData.encounter_class,
+        encounter_start: formData.encounter_start,
+        encounter_end: formData.encounter_end,
+        total_amount: formData.total_amount,
+        currency: formData.currency || 'SAR',
+        items: formData.items || [],
+        diagnoses: formData.diagnoses || [],
+        supporting_info: formData.supporting_info || []
+      };
+
+      // Build FHIR bundle
+      const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
+        priorAuth,
+        patient,
+        provider,
+        insurer,
+        coverage: null,
+        policyHolder: null
+      });
+
+      // Return preview data with entities summary
+      res.json({
+        success: true,
+        entities: {
+          patient: {
+            name: patient.name,
+            identifier: patient.identifier
+          },
+          provider: {
+            name: provider.provider_name,
+            nphiesId: provider.nphies_id
+          },
+          insurer: {
+            name: insurer.insurer_name,
+            nphiesId: insurer.nphies_id
+          }
+        },
+        options: {
+          authType: formData.auth_type,
+          priority: formData.priority,
+          encounterClass: formData.encounter_class,
+          itemsCount: formData.items?.length || 0,
+          diagnosesCount: formData.diagnoses?.length || 0
+        },
+        fhirBundle: bundle
+      });
+    } catch (error) {
+      console.error('Error generating preview bundle:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate preview' });
+    }
+  }
+
+  // ============= Helper Methods =============
+
+  /**
+   * Clean form data (convert empty strings to null)
+   */
+  cleanFormData(formData) {
+    const cleanedData = { ...formData };
+    const dateFields = ['encounter_start', 'encounter_end', 'eligibility_offline_date',
+                        'pre_auth_period_start', 'pre_auth_period_end', 
+                        'transfer_period_start', 'transfer_period_end'];
+    const numberFields = ['coverage_id', 'related_auth_id', 'total_amount', 'approved_amount'];
+    
+    dateFields.forEach(field => {
+      if (cleanedData[field] === '' || cleanedData[field] === null) {
+        cleanedData[field] = null;
+      }
+    });
+    
+    numberFields.forEach(field => {
+      if (cleanedData[field] === '' || cleanedData[field] === null || cleanedData[field] === undefined) {
+        cleanedData[field] = null;
+      }
+    });
+
+    // Convert empty strings to null for UUID fields
+    ['patient_id', 'provider_id', 'insurer_id', 'practitioner_id', 'transfer_provider_id'].forEach(field => {
+      if (cleanedData[field] === '') cleanedData[field] = null;
+    });
+
+    // Convert empty strings to null for all other string fields
+    Object.keys(cleanedData).forEach(key => {
+      if (typeof cleanedData[key] === 'string' && cleanedData[key].trim() === '') {
+        cleanedData[key] = null;
+      }
+    });
+
+    return cleanedData;
+  }
+
+  /**
+   * Insert items
+   */
+  async insertItems(priorAuthId, items) {
+    for (const item of items) {
+      const itemQuery = `
+        INSERT INTO prior_authorization_items 
+        (prior_auth_id, sequence, product_or_service_code, product_or_service_system,
+         product_or_service_display, tooth_number, tooth_surface, eye,
+         medication_code, medication_system, days_supply, quantity, unit_price,
+         net_amount, currency, serviced_date, serviced_period_start, serviced_period_end,
+         body_site_code, body_site_system, sub_site_code, description, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+      `;
+      await query(itemQuery, [
+        priorAuthId,
+        item.sequence,
+        item.product_or_service_code,
+        item.product_or_service_system || null,
+        item.product_or_service_display || null,
+        item.tooth_number || null,
+        item.tooth_surface || null,
+        item.eye || null,
+        item.medication_code || null,
+        item.medication_system || null,
+        item.days_supply || null,
+        item.quantity || null,
+        item.unit_price || null,
+        item.net_amount || null,
+        item.currency || 'SAR',
+        item.serviced_date || null,
+        item.serviced_period_start || null,
+        item.serviced_period_end || null,
+        item.body_site_code || null,
+        item.body_site_system || null,
+        item.sub_site_code || null,
+        item.description || null,
+        item.notes || null
+      ]);
+    }
+  }
+
+  /**
+   * Insert supporting info
+   */
+  async insertSupportingInfo(priorAuthId, supportingInfo) {
+    for (const info of supportingInfo) {
+      const infoQuery = `
+        INSERT INTO prior_authorization_supporting_info 
+        (prior_auth_id, sequence, category, category_system, code, code_system,
+         code_display, value_string, value_quantity, value_quantity_unit,
+         value_boolean, value_date, value_period_start, value_period_end,
+         value_reference, timing_date, timing_period_start, timing_period_end,
+         reason_code, reason_system)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      `;
+      await query(infoQuery, [
+        priorAuthId,
+        info.sequence,
+        info.category,
+        info.category_system || null,
+        info.code || null,
+        info.code_system || null,
+        info.code_display || null,
+        info.value_string || null,
+        info.value_quantity || null,
+        info.value_quantity_unit || null,
+        info.value_boolean !== undefined ? info.value_boolean : null,
+        info.value_date || null,
+        info.value_period_start || null,
+        info.value_period_end || null,
+        info.value_reference || null,
+        info.timing_date || null,
+        info.timing_period_start || null,
+        info.timing_period_end || null,
+        info.reason_code || null,
+        info.reason_system || null
+      ]);
+    }
+  }
+
+  /**
+   * Insert diagnoses
+   */
+  async insertDiagnoses(priorAuthId, diagnoses) {
+    for (const diag of diagnoses) {
+      const diagQuery = `
+        INSERT INTO prior_authorization_diagnoses 
+        (prior_auth_id, sequence, diagnosis_code, diagnosis_system, diagnosis_display,
+         diagnosis_type, on_admission)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `;
+      await query(diagQuery, [
+        priorAuthId,
+        diag.sequence,
+        diag.diagnosis_code,
+        diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10',
+        diag.diagnosis_display || null,
+        diag.diagnosis_type || 'principal',
+        diag.on_admission !== undefined ? diag.on_admission : null
+      ]);
+    }
+  }
+
+  /**
+   * Insert attachments
+   */
+  async insertAttachments(priorAuthId, attachments) {
+    for (const att of attachments) {
+      const attQuery = `
+        INSERT INTO prior_authorization_attachments 
+        (prior_auth_id, file_name, content_type, file_size, base64_content,
+         title, description, category, binary_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `;
+      await query(attQuery, [
+        priorAuthId,
+        att.file_name,
+        att.content_type,
+        att.file_size || null,
+        att.base64_content,
+        att.title || null,
+        att.description || null,
+        att.category || null,
+        att.binary_id || `binary-${Date.now()}`
+      ]);
+    }
+  }
+}
+
+export default new PriorAuthorizationsController();
+

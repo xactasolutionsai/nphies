@@ -320,6 +320,83 @@ class ApiService {
   async getPatientCoverages(patientId) {
     return this.request(`/eligibility/patient/${patientId}/coverages`);
   }
+
+  // Prior Authorizations (NPHIES-compliant)
+  async getPriorAuthorizations(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/prior-authorizations${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getPriorAuthorization(id) {
+    return this.request(`/prior-authorizations/${id}`);
+  }
+
+  async createPriorAuthorization(data) {
+    return this.request('/prior-authorizations', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updatePriorAuthorization(id, data) {
+    return this.request(`/prior-authorizations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deletePriorAuthorization(id) {
+    return this.request(`/prior-authorizations/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Prior Authorization NPHIES Workflow Operations
+  async sendPriorAuthorizationToNphies(id) {
+    return this.request(`/prior-authorizations/${id}/send`, {
+      method: 'POST'
+    });
+  }
+
+  async submitPriorAuthorizationUpdate(id, data = {}) {
+    return this.request(`/prior-authorizations/${id}/update`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async cancelPriorAuthorization(id, reason) {
+    return this.request(`/prior-authorizations/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    });
+  }
+
+  async transferPriorAuthorization(id, transferProviderId, reason) {
+    return this.request(`/prior-authorizations/${id}/transfer`, {
+      method: 'POST',
+      body: JSON.stringify({ transfer_provider_id: transferProviderId, reason })
+    });
+  }
+
+  async pollPriorAuthorizationResponse(id) {
+    return this.request(`/prior-authorizations/${id}/poll`);
+  }
+
+  async getPriorAuthorizationBundle(id) {
+    return this.request(`/prior-authorizations/${id}/bundle`);
+  }
+
+  /**
+   * Preview the FHIR bundle that would be sent to NPHIES (without saving)
+   * @param {Object} formData - Form data for the prior authorization
+   */
+  async previewPriorAuthorizationBundle(formData) {
+    return this.request('/prior-authorizations/preview', {
+      method: 'POST',
+      body: JSON.stringify(formData)
+    });
+  }
 }
 
 export default new ApiService();

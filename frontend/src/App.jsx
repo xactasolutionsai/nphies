@@ -27,6 +27,9 @@ import EyeApprovalsForm from './pages/EyeApprovalsForm';
 import EyeApprovalsDetails from './pages/EyeApprovalsDetails';
 import MedicineSearch from './pages/MedicineSearch';
 import NphiesEligibility from './pages/NphiesEligibility';
+import PriorAuthorizations from './pages/PriorAuthorizations';
+import PriorAuthorizationForm from './pages/PriorAuthorizationForm';
+import PriorAuthorizationDetails from './pages/PriorAuthorizationDetails';
 import ChatAssistant from './components/chat/ChatAssistant';
 
 function App() {
@@ -64,6 +67,10 @@ function App() {
           <Route path="/eye-approvals/:id/edit" element={<EyeApprovalsForm />} />
           <Route path="/eye-approvals/:id" element={<EyeApprovalsDetails />} />
           <Route path="/medicines" element={<MedicineSearch />} />
+          <Route path="/prior-authorizations" element={<PriorAuthorizations />} />
+          <Route path="/prior-authorizations/new" element={<PriorAuthorizationForm />} />
+          <Route path="/prior-authorizations/:id" element={<PriorAuthorizationDetails />} />
+          <Route path="/prior-authorizations/:id/edit" element={<PriorAuthorizationForm />} />
         </Routes>
       </Layout>
       <ChatAssistant />
