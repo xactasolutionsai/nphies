@@ -80,14 +80,19 @@ class PriorAuthMapper {
 
   /**
    * Build FHIR Claim resource for Prior Authorization
-   * Following NPHIES specification
+   * Following NPHIES specification: https://portal.nphies.sa/ig/Claim-483069.json.html
    */
-  buildClaimResource(priorAuth, patient, provider, insurer, coverage) {
-    const claimId = `claim-${priorAuth.id || this.generateId()}`;
-    const patientId = `patient-${patient.patient_id || patient.patientId}`;
-    const providerId = provider.provider_id || provider.providerId;
-    const insurerId = insurer.insurer_id || insurer.insurerId;
-    const coverageId = `coverage-${coverage?.coverage_id || coverage?.coverageId || this.generateId()}`;
+  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner) {
+    const claimId = priorAuth.id || this.generateId();
+    const patientId = patient.patient_id || patient.patientId;
+    const providerId = provider.nphies_id || provider.provider_id || provider.providerId;
+    const insurerId = insurer.nphies_id || insurer.insurer_id || insurer.insurerId;
+    const coverageId = coverage?.coverage_id || coverage?.coverageId || this.generateId();
+    const encounterId = encounter?.id || `encounter-${claimId}`;
+
+    // Build provider identifier URL based on provider identifier
+    const providerIdentifierSystem = provider.identifier_system || 
+      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
     const claim = {
       resourceType: 'Claim',
@@ -97,8 +102,8 @@ class PriorAuthMapper {
       },
       identifier: [
         {
-          system: 'http://provider.com/identifiers/priorauth',
-          value: priorAuth.request_number || `PA-${Date.now()}`
+          system: `${providerIdentifierSystem}/authorization`,
+          value: priorAuth.request_number || `req_${Date.now()}`
         }
       ],
       status: 'active',
@@ -114,7 +119,7 @@ class PriorAuthMapper {
         coding: [
           {
             system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-            code: 'op' // outpatient by default, can be ip for inpatient
+            code: this.getClaimSubTypeCode(priorAuth.encounter_class || priorAuth.sub_type)
           }
         ]
       },
@@ -137,6 +142,17 @@ class PriorAuthMapper {
           }
         ]
       },
+      // Payee - required per NPHIES spec
+      payee: {
+        type: {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/payeetype',
+              code: 'provider'
+            }
+          ]
+        }
+      },
       insurance: [
         {
           sequence: 1,
@@ -148,8 +164,54 @@ class PriorAuthMapper {
       ]
     };
 
-    // Add extensions for update/transfer
+    // Build extensions array following NPHIES spec exactly
     const extensions = [];
+
+    // Encounter extension - REQUIRED for institutional
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
+      valueReference: {
+        reference: `Encounter/${encounterId}`
+      }
+    });
+
+    // Eligibility offline reference extension
+    if (priorAuth.eligibility_offline_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-reference',
+        valueString: priorAuth.eligibility_offline_ref
+      });
+    }
+
+    // Eligibility offline date extension
+    if (priorAuth.eligibility_offline_date) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-date',
+        valueDateTime: this.formatDate(priorAuth.eligibility_offline_date)
+      });
+    }
+
+    // Transfer extension
+    if (priorAuth.is_transfer) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transfer',
+        valueBoolean: true
+      });
+    }
+
+    // Online eligibility response reference
+    if (priorAuth.eligibility_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+        valueReference: {
+          reference: priorAuth.eligibility_ref
+        }
+      });
+    }
+
+    if (extensions.length > 0) {
+      claim.extension = extensions;
+    }
 
     // If this is an update, add the related reference
     if (priorAuth.is_update && priorAuth.pre_auth_ref) {
@@ -173,47 +235,43 @@ class PriorAuthMapper {
       ];
     }
 
-    // Transfer extension
-    if (priorAuth.is_transfer) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transfer',
-        valueBoolean: true
-      });
-    }
-
-    // Eligibility reference extension
-    if (priorAuth.eligibility_ref) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
-        valueReference: {
-          identifier: {
-            system: 'http://nphies.sa/identifiers/eligibility',
-            value: priorAuth.eligibility_ref
+    // Add CareTeam - required for most PA types
+    if (practitioner || priorAuth.practitioner) {
+      const pract = practitioner || priorAuth.practitioner;
+      claim.careTeam = [
+        {
+          sequence: 1,
+          provider: {
+            reference: `Practitioner/${pract.practitioner_id || pract.id || 1}`
+          },
+          role: {
+            coding: [
+              {
+                system: 'http://terminology.hl7.org/CodeSystem/claimcareteamrole',
+                code: 'primary'
+              }
+            ]
+          },
+          qualification: {
+            coding: [
+              {
+                system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
+                code: pract.practice_code || pract.specialty_code || '08.26'
+              }
+            ]
           }
         }
-      });
+      ];
     }
 
-    // Eligibility offline extension
-    if (priorAuth.eligibility_offline_date) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline',
-        valueDate: this.formatDate(priorAuth.eligibility_offline_date)
-      });
-    }
-
-    if (extensions.length > 0) {
-      claim.extension = extensions;
-    }
-
-    // Add diagnosis if present
+    // Add diagnosis if present - using NPHIES-specific systems
     if (priorAuth.diagnoses && priorAuth.diagnoses.length > 0) {
       claim.diagnosis = priorAuth.diagnoses.map(diag => ({
         sequence: diag.sequence,
         diagnosisCodeableConcept: {
           coding: [
             {
-              system: diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10',
+              system: diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am',
               code: diag.diagnosis_code,
               display: diag.diagnosis_display
             }
@@ -223,18 +281,19 @@ class PriorAuthMapper {
           {
             coding: [
               {
-                system: 'http://terminology.hl7.org/CodeSystem/ex-diagnosistype',
+                system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-type',
                 code: diag.diagnosis_type || 'principal'
               }
             ]
           }
         ],
-        ...(diag.on_admission !== null && {
+        ...(diag.on_admission !== undefined && diag.on_admission !== null && {
           onAdmission: {
             coding: [
               {
-                system: 'http://terminology.hl7.org/CodeSystem/ex-diagnosis-on-admission',
-                code: diag.on_admission ? 'y' : 'n'
+                system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-on-admission',
+                code: diag.on_admission ? 'y' : 'n',
+                display: diag.on_admission ? 'Yes' : 'No'
               }
             ]
           }
@@ -242,14 +301,21 @@ class PriorAuthMapper {
       }));
     }
 
-    // Add items
-    if (priorAuth.items && priorAuth.items.length > 0) {
-      claim.item = priorAuth.items.map(item => this.buildClaimItem(item, priorAuth.auth_type));
+    // Add supportingInfo first to get sequence numbers for items
+    let supportingInfoSequences = [];
+    if (priorAuth.supporting_info && priorAuth.supporting_info.length > 0) {
+      claim.supportingInfo = priorAuth.supporting_info.map((info, idx) => {
+        const seq = info.sequence || idx + 1;
+        supportingInfoSequences.push(seq);
+        return this.buildSupportingInfo({ ...info, sequence: seq });
+      });
     }
 
-    // Add supportingInfo
-    if (priorAuth.supporting_info && priorAuth.supporting_info.length > 0) {
-      claim.supportingInfo = priorAuth.supporting_info.map(info => this.buildSupportingInfo(info));
+    // Add items with proper sequence links
+    if (priorAuth.items && priorAuth.items.length > 0) {
+      claim.item = priorAuth.items.map((item, idx) => 
+        this.buildClaimItem(item, priorAuth.auth_type, idx + 1, supportingInfoSequences)
+      );
     }
 
     // Add total if present
@@ -267,6 +333,23 @@ class PriorAuthMapper {
   }
 
   /**
+   * Get claim subType code based on encounter class
+   * Per NPHIES spec: ip (inpatient), op (outpatient), etc.
+   */
+  getClaimSubTypeCode(encounterClass) {
+    const subTypes = {
+      'inpatient': 'ip',
+      'outpatient': 'op',
+      'daycase': 'op',
+      'emergency': 'emr',
+      'ambulatory': 'op',
+      'home': 'op',
+      'telemedicine': 'op'
+    };
+    return subTypes[encounterClass] || 'op';
+  }
+
+  /**
    * Get claim type code based on auth type
    */
   getClaimTypeCode(authType) {
@@ -281,11 +364,67 @@ class PriorAuthMapper {
   }
 
   /**
-   * Build a single claim item
+   * Build a single claim item with NPHIES-compliant extensions
+   * Reference: https://portal.nphies.sa/ig/Claim-483069.json.html
    */
-  buildClaimItem(item, authType) {
+  buildClaimItem(item, authType, itemIndex, supportingInfoSequences = []) {
+    const sequence = item.sequence || itemIndex;
+    
+    // Build item-level extensions per NPHIES spec
+    const itemExtensions = [];
+
+    // Package extension (required)
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package',
+      valueBoolean: item.is_package || false
+    });
+
+    // Patient share extension
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share',
+      valueMoney: {
+        value: parseFloat(item.patient_share || 0),
+        currency: item.currency || 'SAR'
+      }
+    });
+
+    // Payer share extension
+    const netAmount = parseFloat(item.net_amount || item.unit_price || 0);
+    const patientShare = parseFloat(item.patient_share || 0);
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share',
+      valueMoney: {
+        value: item.payer_share !== undefined ? parseFloat(item.payer_share) : (netAmount - patientShare),
+        currency: item.currency || 'SAR'
+      }
+    });
+
+    // Maternity extension
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity',
+      valueBoolean: item.is_maternity || false
+    });
+
+    // Tax extension
+    if (item.tax !== undefined && item.tax !== null) {
+      itemExtensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax',
+        valueMoney: {
+          value: parseFloat(item.tax || 0),
+          currency: item.currency || 'SAR'
+        }
+      });
+    }
+
     const claimItem = {
-      sequence: item.sequence,
+      extension: itemExtensions,
+      sequence: sequence,
+      // Link to careTeam (usually sequence 1 for primary provider)
+      careTeamSequence: [1],
+      // Link to diagnosis (usually sequence 1 for principal diagnosis)
+      diagnosisSequence: item.diagnosis_sequences || [1],
+      // Link to all supportingInfo entries
+      informationSequence: item.information_sequences || supportingInfoSequences,
       productOrService: {
         coding: [
           {
@@ -296,6 +435,14 @@ class PriorAuthMapper {
         ]
       }
     };
+
+    // Add serviced date (required for most items)
+    if (item.serviced_date) {
+      claimItem.servicedDate = this.formatDate(item.serviced_date);
+    } else {
+      // Default to today if not specified
+      claimItem.servicedDate = this.formatDate(new Date());
+    }
 
     // Add quantity
     if (item.quantity) {
@@ -317,16 +464,6 @@ class PriorAuthMapper {
       claimItem.net = {
         value: parseFloat(item.net_amount),
         currency: item.currency || 'SAR'
-      };
-    }
-
-    // Add serviced date/period for completed items (required for updates)
-    if (item.serviced_date) {
-      claimItem.servicedDate = this.formatDate(item.serviced_date);
-    } else if (item.serviced_period_start) {
-      claimItem.servicedPeriod = {
-        start: this.formatDate(item.serviced_period_start),
-        end: this.formatDate(item.serviced_period_end)
       };
     }
 
@@ -412,7 +549,8 @@ class PriorAuthMapper {
   }
 
   /**
-   * Build supportingInfo element
+   * Build supportingInfo element following NPHIES specification
+   * Reference: https://portal.nphies.sa/ig/Claim-483069.json.html
    */
   buildSupportingInfo(info) {
     const supportingInfo = {
@@ -427,12 +565,12 @@ class PriorAuthMapper {
       }
     };
 
-    // Add code if present
+    // Add code if present (e.g., chief-complaint, investigation-result)
     if (info.code) {
       supportingInfo.code = {
         coding: [
           {
-            system: info.code_system || 'http://nphies.sa/terminology/CodeSystem/supporting-info-code',
+            system: info.code_system || this.getSupportingInfoCodeSystem(info.category),
             code: info.code,
             display: info.code_display
           }
@@ -440,13 +578,26 @@ class PriorAuthMapper {
       };
     }
 
-    // Add value based on type
-    if (info.value_string) {
+    // Add timing period (required for vital signs per NPHIES spec)
+    if (info.timing_period_start || info.timing_start) {
+      supportingInfo.timingPeriod = {
+        start: this.formatDateTime(info.timing_period_start || info.timing_start),
+        end: this.formatDateTime(info.timing_period_end || info.timing_end || info.timing_period_start || info.timing_start)
+      };
+    } else if (info.timing_date) {
+      supportingInfo.timingDate = this.formatDate(info.timing_date);
+    }
+
+    // Add value based on type - using UCUM system for quantities per NPHIES spec
+    if (info.value_string !== undefined && info.value_string !== null) {
       supportingInfo.valueString = info.value_string;
     } else if (info.value_quantity !== null && info.value_quantity !== undefined) {
+      // Use proper UCUM codes for units
+      const ucumCode = this.getUCUMCode(info.value_quantity_unit || info.unit);
       supportingInfo.valueQuantity = {
         value: parseFloat(info.value_quantity),
-        unit: info.value_quantity_unit
+        system: 'http://unitsofmeasure.org',
+        code: ucumCode
       };
     } else if (info.value_boolean !== null && info.value_boolean !== undefined) {
       supportingInfo.valueBoolean = info.value_boolean;
@@ -454,22 +605,12 @@ class PriorAuthMapper {
       supportingInfo.valueDate = this.formatDate(info.value_date);
     } else if (info.value_period_start) {
       supportingInfo.valuePeriod = {
-        start: this.formatDate(info.value_period_start),
-        end: this.formatDate(info.value_period_end)
+        start: this.formatDateTime(info.value_period_start),
+        end: this.formatDateTime(info.value_period_end)
       };
     } else if (info.value_reference) {
       supportingInfo.valueReference = {
         reference: info.value_reference
-      };
-    }
-
-    // Add timing
-    if (info.timing_date) {
-      supportingInfo.timingDate = this.formatDate(info.timing_date);
-    } else if (info.timing_period_start) {
-      supportingInfo.timingPeriod = {
-        start: this.formatDate(info.timing_period_start),
-        end: this.formatDate(info.timing_period_end)
       };
     }
 
@@ -486,6 +627,84 @@ class PriorAuthMapper {
     }
 
     return supportingInfo;
+  }
+
+  /**
+   * Get the appropriate code system for supportingInfo based on category
+   */
+  getSupportingInfoCodeSystem(category) {
+    const systems = {
+      'chief-complaint': 'http://snomed.info/sct',
+      'investigation-result': 'http://nphies.sa/terminology/CodeSystem/investigation-result',
+      'onset': 'http://snomed.info/sct',
+      'hospitalized': 'http://snomed.info/sct'
+    };
+    return systems[category] || 'http://nphies.sa/terminology/CodeSystem/supporting-info-code';
+  }
+
+  /**
+   * Convert unit text to UCUM code
+   * Reference: http://unitsofmeasure.org
+   */
+  getUCUMCode(unit) {
+    if (!unit) return '';
+    
+    const ucumMap = {
+      // Blood pressure
+      'mmHg': 'mm[Hg]',
+      'mm[Hg]': 'mm[Hg]',
+      'mmhg': 'mm[Hg]',
+      
+      // Length/Height
+      'cm': 'cm',
+      'centimeter': 'cm',
+      'centimeters': 'cm',
+      'm': 'm',
+      'meter': 'm',
+      'meters': 'm',
+      
+      // Weight
+      'kg': 'kg',
+      'kilogram': 'kg',
+      'kilograms': 'kg',
+      'g': 'g',
+      'gram': 'g',
+      'grams': 'g',
+      
+      // Rate
+      '/min': '/min',
+      'per minute': '/min',
+      'bpm': '/min',
+      'beats per minute': '/min',
+      'breaths per minute': '/min',
+      
+      // Temperature
+      'Cel': 'Cel',
+      'celsius': 'Cel',
+      '°C': 'Cel',
+      'C': 'Cel',
+      
+      // Percentage
+      '%': '%',
+      'percent': '%',
+      
+      // Time
+      'd': 'd',
+      'day': 'd',
+      'days': 'd',
+      'h': 'h',
+      'hour': 'h',
+      'hours': 'h',
+      
+      // Volume
+      'mL': 'mL',
+      'ml': 'mL',
+      'milliliter': 'mL',
+      'L': 'L',
+      'liter': 'L'
+    };
+
+    return ucumMap[unit] || unit;
   }
 
   /**
@@ -507,42 +726,87 @@ class PriorAuthMapper {
 
   /**
    * Build FHIR Encounter resource for Prior Authorization
+   * Reference: https://portal.nphies.sa/ig/Encounter-10124.html
    */
   buildEncounterResource(priorAuth, patient, provider) {
-    const encounterId = `encounter-${priorAuth.id || this.generateId()}`;
-    const patientId = `patient-${patient.patient_id || patient.patientId}`;
-    const providerId = provider.provider_id || provider.providerId;
+    const encounterId = priorAuth.encounter_id || priorAuth.id || this.generateId();
+    const patientId = patient.patient_id || patient.patientId;
+    const providerId = provider.nphies_id || provider.provider_id || provider.providerId;
     const encounterClass = priorAuth.encounter_class || 'ambulatory';
+    
+    // Build provider identifier URL
+    const providerIdentifierSystem = provider.identifier_system || 
+      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+
+    const encounter = {
+      resourceType: 'Encounter',
+      id: encounterId,
+      meta: {
+        profile: [this.getEncounterProfileUrl(encounterClass)]
+      },
+      identifier: [
+        {
+          system: `${providerIdentifierSystem}/encounter`,
+          value: priorAuth.encounter_identifier || `ENC-${encounterId}`
+        }
+      ],
+      status: 'planned',
+      class: {
+        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+        code: this.getEncounterClassCode(encounterClass),
+        display: this.getEncounterClassDisplay(encounterClass)
+      },
+      subject: {
+        reference: `Patient/${patientId}`
+      },
+      serviceProvider: {
+        reference: `Organization/${providerId}`
+      }
+    };
+
+    // Add service type if specified
+    if (priorAuth.service_type) {
+      encounter.serviceType = {
+        coding: [
+          {
+            system: 'http://nphies.sa/terminology/CodeSystem/service-type',
+            code: priorAuth.service_type,
+            display: priorAuth.service_type_display
+          }
+        ]
+      };
+    }
+
+    // Add period
+    if (priorAuth.encounter_start) {
+      encounter.period = {
+        start: this.formatDateTime(priorAuth.encounter_start),
+        ...(priorAuth.encounter_end && {
+          end: this.formatDateTime(priorAuth.encounter_end)
+        })
+      };
+    }
 
     return {
       fullUrl: `http://provider.com/Encounter/${encounterId}`,
-      resource: {
-        resourceType: 'Encounter',
-        id: encounterId,
-        meta: {
-          profile: [this.getEncounterProfileUrl(encounterClass)]
-        },
-        status: 'planned',
-        class: {
-          system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-          code: this.getEncounterClassCode(encounterClass)
-        },
-        subject: {
-          reference: `Patient/${patientId}`
-        },
-        serviceProvider: {
-          reference: `Organization/${providerId}`
-        },
-        ...(priorAuth.encounter_start && {
-          period: {
-            start: this.formatDateTime(priorAuth.encounter_start),
-            ...(priorAuth.encounter_end && {
-              end: this.formatDateTime(priorAuth.encounter_end)
-            })
-          }
-        })
-      }
+      resource: encounter
     };
+  }
+
+  /**
+   * Get display text for encounter class
+   */
+  getEncounterClassDisplay(encounterClass) {
+    const displays = {
+      'ambulatory': 'ambulatory',
+      'outpatient': 'ambulatory',
+      'emergency': 'emergency',
+      'home': 'home health',
+      'inpatient': 'inpatient encounter',
+      'daycase': 'short stay',
+      'telemedicine': 'virtual'
+    };
+    return displays[encounterClass] || 'ambulatory';
   }
 
   /**
@@ -613,8 +877,19 @@ class PriorAuthMapper {
     // Build Encounter
     const encounterResource = this.buildEncounterResource(priorAuth, patient, provider);
     
-    // Build Claim (main PA request resource)
-    const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage);
+    // Build Practitioner if provided (needed for careTeam)
+    const practitionerResource = practitioner ? this.buildPractitionerResource(practitioner) : null;
+    
+    // Build Claim (main PA request resource) - pass encounter for reference
+    const claimResource = this.buildClaimResource(
+      priorAuth, 
+      patient, 
+      provider, 
+      insurer, 
+      coverage, 
+      encounterResource.resource,
+      practitioner
+    );
     
     // Build MessageHeader (must be first)
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
@@ -628,6 +903,7 @@ class PriorAuthMapper {
     }
 
     // Assemble bundle with MessageHeader first per NPHIES specification
+    // Order: MessageHeader, Claim, Encounter, Coverage, Practitioner, Organizations, Patient, Binary
     const entries = [
       messageHeader,
       claimResource,
@@ -637,6 +913,11 @@ class PriorAuthMapper {
     // Add coverage if provided
     if (coverageResource) {
       entries.push(coverageResource);
+    }
+
+    // Add practitioner if provided
+    if (practitionerResource) {
+      entries.push(practitionerResource);
     }
 
     // Add policy holder if provided
@@ -666,6 +947,56 @@ class PriorAuthMapper {
     };
 
     return bundle;
+  }
+
+  /**
+   * Build FHIR Practitioner resource
+   * Reference: https://portal.nphies.sa/ig/Practitioner-1.html
+   */
+  buildPractitionerResource(practitioner) {
+    const practitionerId = practitioner.practitioner_id || practitioner.id || this.generateId();
+
+    return {
+      fullUrl: `http://provider.com/Practitioner/${practitionerId}`,
+      resource: {
+        resourceType: 'Practitioner',
+        id: practitionerId,
+        meta: {
+          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0']
+        },
+        identifier: [
+          {
+            system: 'http://nphies.sa/identifier/practitioner',
+            value: practitioner.license_number || practitioner.nphies_id || practitionerId
+          }
+        ],
+        name: [
+          {
+            use: 'official',
+            text: practitioner.name || practitioner.full_name,
+            family: practitioner.family_name,
+            given: practitioner.given_name ? [practitioner.given_name] : undefined,
+            prefix: practitioner.prefix ? [practitioner.prefix] : undefined
+          }
+        ],
+        ...(practitioner.gender && {
+          gender: practitioner.gender
+        }),
+        qualification: practitioner.specialty_code ? [
+          {
+            code: {
+              coding: [
+                {
+                  system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
+                  code: practitioner.specialty_code,
+                  display: practitioner.specialty_display
+                }
+              ]
+            }
+          }
+        ] : undefined
+      }
+    };
   }
 
   /**
