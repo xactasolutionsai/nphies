@@ -1081,24 +1081,12 @@ class PriorAuthMapper {
     const providerId = bundleResourceIds.provider;
     const encounterClass = priorAuth.encounter_class || 'ambulatory';
 
-    // Generate encounter identifier - IC-00183: Encounter identifier is required
-    const encounterIdentifier = priorAuth.encounter_identifier || 
-                                priorAuth.request_number || 
-                                `ENC-${encounterId.substring(0, 8)}`;
-
     const encounter = {
       resourceType: 'Encounter',
       id: encounterId,
       meta: {
         profile: [this.getEncounterProfileUrl(encounterClass)]
       },
-      // IC-00183: Encounter identifier is required by NPHIES
-      identifier: [
-        {
-          system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/encounter`,
-          value: encounterIdentifier
-        }
-      ],
       status: 'planned',
       class: {
         system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
