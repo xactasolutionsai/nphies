@@ -1099,6 +1099,8 @@ class PriorAuthMapper {
 
   /**
    * Build Encounter resource with consistent IDs
+   * CRITICAL: Element order MUST follow FHIR R4 spec for NPHIES validation
+   * Order: identifier, status, class, serviceType, subject, period, hospitalization, serviceProvider
    */
   buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds) {
     const encounterId = bundleResourceIds.encounter;
@@ -1115,6 +1117,8 @@ class PriorAuthMapper {
                                 priorAuth.request_number || 
                                 `ENC-${encounterId.substring(0, 8)}`;
 
+    // Build Encounter with FHIR R4 element order:
+    // resourceType, id, meta, identifier, status, class, serviceType, subject, period, hospitalization, serviceProvider
     const encounter = {
       resourceType: 'Encounter',
       id: encounterId,
@@ -1133,16 +1137,11 @@ class PriorAuthMapper {
         system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
         code: this.getEncounterClassCode(encounterClass),
         display: this.getEncounterClassDisplay(encounterClass)
-      },
-      subject: {
-        reference: `Patient/${patientId}`
-      },
-      serviceProvider: {
-        reference: `Organization/${providerId}`
       }
     };
 
-    // Add serviceType - REQUIRED for SS/IMP encounters per NPHIES encounter-auth-SS profile
+    // serviceType - MUST come BEFORE subject per FHIR R4 order
+    // REQUIRED for SS/IMP encounters per NPHIES encounter-auth-SS profile
     if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type) {
       encounter.serviceType = {
         coding: [
@@ -1155,7 +1154,12 @@ class PriorAuthMapper {
       };
     }
 
-    // Add period - required for most encounter types
+    // subject - comes after serviceType
+    encounter.subject = {
+      reference: `Patient/${patientId}`
+    };
+
+    // period - comes after subject
     encounter.period = {
       start: this.formatDateTime(priorAuth.encounter_start || new Date()),
       ...(priorAuth.encounter_end && {
@@ -1163,7 +1167,7 @@ class PriorAuthMapper {
       })
     };
 
-    // Add hospitalization - REQUIRED for SS/IMP encounters per NPHIES profile
+    // hospitalization - REQUIRED for SS/IMP encounters per NPHIES profile
     // Reference: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7383.json.html
     if (['daycase', 'inpatient'].includes(encounterClass)) {
       encounter.hospitalization = {
@@ -1192,6 +1196,11 @@ class PriorAuthMapper {
         }
       };
     }
+
+    // serviceProvider - MUST be LAST per FHIR R4 order
+    encounter.serviceProvider = {
+      reference: `Organization/${providerId}`
+    };
 
     return {
       fullUrl: `http://provider.com/Encounter/${encounterId}`,
