@@ -50,10 +50,27 @@ class PriorAuthMapper {
    * Reference: https://portal.nphies.sa/ig/
    * NOTE: NPHIES requires standard encounter profile, not encounter-auth-* profiles
    */
+  /**
+   * Get the NPHIES Encounter profile URL for Authorization based on encounter class
+   * Reference: https://portal.nphies.sa/ig/
+   * - encounter-auth-AMB for Ambulatory
+   * - encounter-auth-EMER for Emergency
+   * - encounter-auth-HH for Home Healthcare
+   * - encounter-auth-IMP for In-Patient
+   * - encounter-auth-SS for Day Case (Short Stay)
+   * - encounter-auth-VR for Telemedicine (Virtual)
+   */
   getEncounterProfileUrl(encounterClass) {
-    // NPHIES requires the standard encounter profile for all encounter types
-    // RE-00170: Referenced SHALL point to a valid profile
-    return 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0';
+    const profiles = {
+      'ambulatory': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0',
+      'outpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0',
+      'emergency': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-EMER|1.0.0',
+      'home': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-HH|1.0.0',
+      'inpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-IMP|1.0.0',
+      'daycase': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-SS|1.0.0',
+      'telemedicine': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-VR|1.0.0'
+    };
+    return profiles[encounterClass] || profiles['ambulatory'];
   }
 
   /**
@@ -1080,6 +1097,11 @@ class PriorAuthMapper {
     const patientId = bundleResourceIds.patient;
     const providerId = bundleResourceIds.provider;
     const encounterClass = priorAuth.encounter_class || 'ambulatory';
+    
+    // IC-00183: Encounter identifier is required by NPHIES
+    const encounterIdentifier = priorAuth.encounter_identifier || 
+                                priorAuth.request_number || 
+                                `ENC-${encounterId.substring(0, 8)}`;
 
     const encounter = {
       resourceType: 'Encounter',
@@ -1087,6 +1109,13 @@ class PriorAuthMapper {
       meta: {
         profile: [this.getEncounterProfileUrl(encounterClass)]
       },
+      // IC-00183: Encounter identifier is required
+      identifier: [
+        {
+          system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/encounter`,
+          value: encounterIdentifier
+        }
+      ],
       status: 'planned',
       class: {
         system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',

@@ -380,6 +380,8 @@ export const validationSchemas = {
     encounter_class: Joi.string().valid('inpatient', 'outpatient', 'daycase', 'emergency', 'ambulatory', 'home', 'telemedicine').allow(null, '').optional(),
     encounter_start: Joi.date().allow(null, '').optional(),
     encounter_end: Joi.date().allow(null, '').optional(),
+    encounter_identifier: Joi.string().max(255).allow(null, '').optional(),
+    service_type: Joi.string().max(100).allow(null, '').optional(),
     
     // Workflow
     is_update: Joi.boolean().allow(null).optional(),
