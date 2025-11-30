@@ -940,6 +940,13 @@ class PriorAuthMapper {
     const providerResource = nphiesMapper.buildProviderOrganization(provider);
     providerResource.resource.id = providerId;
     providerResource.fullUrl = `http://provider.com/Organization/${providerId}`;
+    
+    // FIX: Override identifier to use actual provider nphies_id
+    // This ensures Organization identifier matches MessageHeader sender
+    if (provider.nphies_id && providerResource.resource.identifier?.[0]) {
+      providerResource.resource.identifier[0].value = provider.nphies_id;
+    }
+    
     return providerResource;
   }
 
