@@ -1097,7 +1097,7 @@ class PriorAuthMapper {
     const patientId = bundleResourceIds.patient;
     const providerId = bundleResourceIds.provider;
     const encounterClass = priorAuth.encounter_class || 'ambulatory';
-    
+  
     // IC-00183: Encounter identifier is required by NPHIES
     const encounterIdentifier = priorAuth.encounter_identifier || 
                                 priorAuth.request_number || 
@@ -1130,13 +1130,14 @@ class PriorAuthMapper {
       }
     };
 
-    // Add service type if specified
-    if (priorAuth.service_type) {
+    // Add serviceType - REQUIRED for SS/IMP encounters per NPHIES encounter-auth-SS profile
+    if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type) {
       encounter.serviceType = {
         coding: [
           {
             system: 'http://nphies.sa/terminology/CodeSystem/service-type',
-            code: priorAuth.service_type
+            code: priorAuth.service_type || 'sub-acute-care',
+            display: this.getServiceTypeDisplay(priorAuth.service_type || 'sub-acute-care')
           }
         ]
       };
@@ -1150,10 +1151,89 @@ class PriorAuthMapper {
       })
     };
 
+    // Add hospitalization - REQUIRED for SS/IMP encounters per NPHIES profile
+    // Reference: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7383.json.html
+    if (['daycase', 'inpatient'].includes(encounterClass)) {
+      encounter.hospitalization = {
+        extension: [
+          {
+            url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-admissionSpecialty',
+            valueCodeableConcept: {
+              coding: [
+                {
+                  system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
+                  code: priorAuth.admission_specialty || '08.00',
+                  display: this.getPracticeCodeDisplay(priorAuth.admission_specialty || '08.00')
+                }
+              ]
+            }
+          }
+        ],
+        admitSource: {
+          coding: [
+            {
+              system: 'http://nphies.sa/terminology/CodeSystem/admit-source',
+              code: priorAuth.admit_source || 'WKIN',
+              display: this.getAdmitSourceDisplay(priorAuth.admit_source || 'WKIN')
+            }
+          ]
+        }
+      };
+    }
+
     return {
       fullUrl: `http://provider.com/Encounter/${encounterId}`,
       resource: encounter
     };
+  }
+
+  /**
+   * Get service type display name
+   */
+  getServiceTypeDisplay(code) {
+    const displays = {
+      'sub-acute-care': 'Sub-Acute Care',
+      'acute-care': 'Acute Care',
+      'chronic-care': 'Chronic Care',
+      'rehabilitation': 'Rehabilitation',
+      'palliative-care': 'Palliative Care',
+      'mental-health': 'Mental Health',
+      'dental': 'Dental',
+      'optical': 'Optical'
+    };
+    return displays[code] || code;
+  }
+
+  /**
+   * Get practice code display name
+   */
+  getPracticeCodeDisplay(code) {
+    const displays = {
+      '08.00': 'Internal Medicine Specialty',
+      '01.00': 'General Practice',
+      '02.00': 'Family Medicine',
+      '03.00': 'Emergency Medicine',
+      '04.00': 'Pediatrics',
+      '05.00': 'Obstetrics and Gynecology',
+      '06.00': 'Surgery',
+      '07.00': 'Orthopedics'
+    };
+    return displays[code] || 'Healthcare Professional';
+  }
+
+  /**
+   * Get admit source display name
+   */
+  getAdmitSourceDisplay(code) {
+    const displays = {
+      'WKIN': 'Walk-in',
+      'EMR': 'Emergency Room',
+      'TRANS': 'Transfer',
+      'REF': 'Referral',
+      'BIRTH': 'Birth',
+      'READM': 'Readmission'
+    };
+    return displays[code] || code;
   }
 
   /**
