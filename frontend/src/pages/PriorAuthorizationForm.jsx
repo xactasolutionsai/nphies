@@ -616,6 +616,10 @@ export default function PriorAuthorizationForm() {
         ...formData,
         supporting_info: buildSupportingInfoArray()
       };
+      // Remove structured fields (already merged into supporting_info)
+      delete dataToSave.vital_signs;
+      delete dataToSave.clinical_info;
+      delete dataToSave.admission_info;
 
       let response;
       if (isEditMode) {
@@ -653,6 +657,10 @@ export default function PriorAuthorizationForm() {
         ...formData,
         supporting_info: buildSupportingInfoArray()
       };
+      // Remove structured fields (already merged into supporting_info)
+      delete dataToSave.vital_signs;
+      delete dataToSave.clinical_info;
+      delete dataToSave.admission_info;
 
       // Save first
       let savedId = id;
@@ -699,6 +707,10 @@ export default function PriorAuthorizationForm() {
         ...formData,
         supporting_info: buildSupportingInfoArray()
       };
+      // Remove structured fields (already merged into supporting_info)
+      delete dataToPreview.vital_signs;
+      delete dataToPreview.clinical_info;
+      delete dataToPreview.admission_info;
 
       const response = await api.previewPriorAuthorizationBundle(dataToPreview);
       setPreviewData(response);
@@ -730,6 +742,10 @@ export default function PriorAuthorizationForm() {
         ...formData,
         supporting_info: buildSupportingInfoArray()
       };
+      // Remove structured fields (already merged into supporting_info)
+      delete dataToTest.vital_signs;
+      delete dataToTest.clinical_info;
+      delete dataToTest.admission_info;
 
       const response = await api.testSendPriorAuthorization(dataToTest);
       setPreviewData(response);

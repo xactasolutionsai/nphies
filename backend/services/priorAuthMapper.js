@@ -48,18 +48,12 @@ class PriorAuthMapper {
   /**
    * Get the NPHIES Encounter profile URL based on encounter class
    * Reference: https://portal.nphies.sa/ig/
+   * NOTE: NPHIES requires standard encounter profile, not encounter-auth-* profiles
    */
   getEncounterProfileUrl(encounterClass) {
-    const profiles = {
-      'ambulatory': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0',
-      'outpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0',
-      'emergency': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-EMER|1.0.0',
-      'home': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-HH|1.0.0',
-      'inpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-IMP|1.0.0',
-      'daycase': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-SS|1.0.0',
-      'telemedicine': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-VR|1.0.0'
-    };
-    return profiles[encounterClass] || profiles['ambulatory'];
+    // NPHIES requires the standard encounter profile for all encounter types
+    // RE-00170: Referenced SHALL point to a valid profile
+    return 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0';
   }
 
   /**
@@ -949,6 +943,7 @@ class PriorAuthMapper {
     const insurerId = bundleResourceIds.insurer;
 
     // Build minimal required Coverage resource
+    // Fixes: IB-00109 (Coverage.type), IC-01564 (policyHolder), IC-01571 (class)
     const coverageResource = {
       resourceType: 'Coverage',
       id: coverageId,
@@ -962,14 +957,19 @@ class PriorAuthMapper {
         }
       ],
       status: 'active',
+      // IB-00109: Coverage.type SHALL use NPHIES valueSet
       type: {
         coding: [
           {
-            system: 'http://terminology.hl7.org/CodeSystem/coverage-type',
-            code: coverage?.type || 'EHCPOL',
-            display: 'Extended healthcare'
+            system: 'http://nphies.sa/terminology/CodeSystem/coverage-type',
+            code: coverage?.coverage_type || coverage?.type || 'EHCPOL',
+            display: this.getCoverageTypeDisplay(coverage?.coverage_type || coverage?.type || 'EHCPOL')
           }
         ]
+      },
+      // IC-01564: policyHolder is REQUIRED
+      policyHolder: {
+        reference: `Patient/${policyHolder?.id || patientId}`
       },
       subscriber: {
         reference: `Patient/${patientId}`
@@ -982,13 +982,28 @@ class PriorAuthMapper {
           {
             system: 'http://terminology.hl7.org/CodeSystem/subscriber-relationship',
             code: coverage?.relationship || 'self',
-            display: 'Self'
+            display: this.getRelationshipDisplay(coverage?.relationship || 'self')
           }
         ]
       },
       payor: [
         {
           reference: `Organization/${insurerId}`
+        }
+      ],
+      // IC-01571: class is REQUIRED
+      class: [
+        {
+          type: {
+            coding: [
+              {
+                system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
+                code: 'plan'
+              }
+            ]
+          },
+          value: coverage?.plan_id || coverage?.class_value || 'default-plan',
+          name: coverage?.plan_name || coverage?.class_name || 'Insurance Plan'
         }
       ]
     };
@@ -1003,27 +1018,56 @@ class PriorAuthMapper {
       }
     }
 
-    // Add class (network) if available
-    if (coverage?.network || coverage?.class_value) {
-      coverageResource.class = [
-        {
-          type: {
-            coding: [
-              {
-                system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
-                code: 'network'
-              }
-            ]
-          },
-          value: coverage.network || coverage.class_value || 'Standard'
-        }
-      ];
+    // Add network class if available (in addition to required plan class)
+    if (coverage?.network) {
+      coverageResource.class.push({
+        type: {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
+              code: 'network'
+            }
+          ]
+        },
+        value: coverage.network,
+        name: coverage.network_name || 'Network'
+      });
     }
 
     return {
       fullUrl: `http://provider.com/Coverage/${coverageId}`,
       resource: coverageResource
     };
+  }
+
+  /**
+   * Get display text for coverage type codes
+   */
+  getCoverageTypeDisplay(code) {
+    const displays = {
+      'EHCPOL': 'Extended healthcare',
+      'PUBLICPOL': 'Public healthcare',
+      'DENTAL': 'Dental',
+      'VISION': 'Vision',
+      'MENTPRG': 'Mental health program'
+    };
+    return displays[code] || code;
+  }
+
+  /**
+   * Get display text for relationship codes
+   */
+  getRelationshipDisplay(code) {
+    const displays = {
+      'self': 'Self',
+      'spouse': 'Spouse',
+      'child': 'Child',
+      'parent': 'Parent',
+      'common': 'Common Law Spouse',
+      'other': 'Other',
+      'injured': 'Injured Party'
+    };
+    return displays[code] || code;
   }
 
   /**
@@ -1083,6 +1127,7 @@ class PriorAuthMapper {
 
   /**
    * Build Practitioner resource with specific ID
+   * Fix IC-01428: Practitioner.identifier[0].type is REQUIRED
    */
   buildPractitionerResourceWithId(practitioner, practitionerId) {
     const pract = practitioner || {};
@@ -1097,6 +1142,16 @@ class PriorAuthMapper {
         },
         identifier: [
           {
+            // IC-01428: type is REQUIRED per NPHIES profile
+            type: {
+              coding: [
+                {
+                  system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                  code: pract.identifier_type || 'MD',
+                  display: this.getPractitionerIdentifierTypeDisplay(pract.identifier_type || 'MD')
+                }
+              ]
+            },
             system: 'http://nphies.sa/license/practitioner-license',
             value: pract.license_number || pract.nphies_id || `PRACT-${practitionerId.substring(0, 8)}`
           }
@@ -1126,6 +1181,21 @@ class PriorAuthMapper {
         ]
       }
     };
+  }
+
+  /**
+   * Get display text for practitioner identifier type codes
+   */
+  getPractitionerIdentifierTypeDisplay(code) {
+    const displays = {
+      'MD': 'Medical License Number',
+      'NPI': 'National Provider Identifier',
+      'PRN': 'Provider Number',
+      'TAX': 'Tax ID Number',
+      'DN': 'Doctor Number',
+      'NIIP': 'National Insurance Payor Identifier'
+    };
+    return displays[code] || 'License Number';
   }
 
 
