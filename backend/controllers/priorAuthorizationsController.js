@@ -10,6 +10,48 @@ class PriorAuthorizationsController extends BaseController {
   }
 
   /**
+   * Get coverage data for a patient/insurer combination
+   * @param {string} patientId - Patient UUID
+   * @param {string} insurerId - Insurer UUID
+   * @param {string} coverageId - Optional specific coverage ID
+   * @returns {Object|null} Coverage data with insurer info
+   */
+  async getCoverageData(patientId, insurerId, coverageId = null) {
+    try {
+      let coverageResult;
+      
+      if (coverageId) {
+        // Get specific coverage by ID
+        coverageResult = await query(`
+          SELECT pc.*, i.insurer_name, i.nphies_id as insurer_nphies_id
+          FROM patient_coverage pc
+          LEFT JOIN insurers i ON pc.insurer_id = i.insurer_id
+          WHERE pc.coverage_id = $1
+        `, [coverageId]);
+      } else if (patientId && insurerId) {
+        // Get coverage by patient + insurer
+        coverageResult = await query(`
+          SELECT pc.*, i.insurer_name, i.nphies_id as insurer_nphies_id
+          FROM patient_coverage pc
+          LEFT JOIN insurers i ON pc.insurer_id = i.insurer_id
+          WHERE pc.patient_id = $1 AND pc.insurer_id = $2 AND pc.is_active = true
+          ORDER BY pc.created_at DESC
+          LIMIT 1
+        `, [patientId, insurerId]);
+      }
+
+      if (coverageResult && coverageResult.rows.length > 0) {
+        return coverageResult.rows[0];
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error fetching coverage data:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get all prior authorizations with joins and filtering
    */
   async getAll(req, res) {
@@ -244,8 +286,9 @@ class PriorAuthorizationsController extends BaseController {
       }
 
       // Extract columns and values for main table
+      // Note: coverage_id is excluded because DB column is INTEGER but we use UUID from patient_coverage
       const columns = Object.keys(value).filter(key => 
-        !['items', 'supporting_info', 'diagnoses', 'attachments'].includes(key)
+        !['items', 'supporting_info', 'diagnoses', 'attachments', 'coverage_id'].includes(key)
       );
       const values = columns.map(col => value[col]);
 
@@ -333,8 +376,9 @@ class PriorAuthorizationsController extends BaseController {
       }
 
       // Extract columns and values
+      // Note: coverage_id is excluded because DB column is INTEGER but we use UUID from patient_coverage
       const columns = Object.keys(value).filter(key => 
-        !['items', 'supporting_info', 'diagnoses', 'attachments'].includes(key)
+        !['items', 'supporting_info', 'diagnoses', 'attachments', 'coverage_id'].includes(key)
       );
       const values = [...columns.map(col => value[col]), id];
 
@@ -452,14 +496,21 @@ class PriorAuthorizationsController extends BaseController {
       const provider = providerResult.rows[0];
       const insurer = insurerResult.rows[0];
 
+      // Fetch coverage data for the patient/insurer
+      const coverage = await this.getCoverageData(
+        priorAuth.patient_id, 
+        priorAuth.insurer_id,
+        priorAuth.coverage_id
+      );
+
       // Build FHIR bundle
       const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
         priorAuth,
         patient,
         provider,
         insurer,
-        coverage: null, // TODO: Add coverage support
-        policyHolder: null // TODO: Add policy holder support
+        coverage,
+        policyHolder: null // policyHolder can reference the patient if self, or a RelatedPerson/Organization
       });
 
       // Generate request ID
@@ -908,13 +959,20 @@ class PriorAuthorizationsController extends BaseController {
       const provider = providerResult.rows[0];
       const insurer = insurerResult.rows[0];
 
+      // Fetch coverage data for the patient/insurer
+      const coverage = await this.getCoverageData(
+        priorAuth.patient_id, 
+        priorAuth.insurer_id,
+        priorAuth.coverage_id
+      );
+
       // Build FHIR bundle
       const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
         priorAuth,
         patient,
         provider,
         insurer,
-        coverage: null,
+        coverage,
         policyHolder: null
       });
 
@@ -962,6 +1020,13 @@ class PriorAuthorizationsController extends BaseController {
       const provider = providerResult.rows[0];
       const insurer = insurerResult.rows[0];
 
+      // Fetch coverage data for the patient/insurer
+      const coverage = await this.getCoverageData(
+        formData.patient_id, 
+        formData.insurer_id,
+        formData.coverage_id
+      );
+
       // Create a mock priorAuth object from form data
       const priorAuth = {
         id: 'preview',
@@ -985,7 +1050,7 @@ class PriorAuthorizationsController extends BaseController {
         patient,
         provider,
         insurer,
-        coverage: null,
+        coverage,
         policyHolder: null
       });
 
@@ -1059,6 +1124,13 @@ class PriorAuthorizationsController extends BaseController {
       const provider = providerResult.rows[0];
       const insurer = insurerResult.rows[0];
 
+      // Fetch coverage data for the patient/insurer
+      const coverage = await this.getCoverageData(
+        formData.patient_id, 
+        formData.insurer_id,
+        formData.coverage_id
+      );
+
       // Create a mock priorAuth object from form data
       const priorAuth = {
         id: 'test',
@@ -1082,7 +1154,7 @@ class PriorAuthorizationsController extends BaseController {
         patient,
         provider,
         insurer,
-        coverage: null,
+        coverage,
         policyHolder: null
       });
 

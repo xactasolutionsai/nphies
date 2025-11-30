@@ -12,7 +12,7 @@ import api from '@/services/api';
 import { 
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
-  Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy
+  Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard
 } from 'lucide-react';
 
 // Custom CSS for DatePicker
@@ -242,6 +242,8 @@ export default function PriorAuthorizationForm() {
   const [patients, setPatients] = useState([]);
   const [providers, setProviders] = useState([]);
   const [insurers, setInsurers] = useState([]);
+  const [coverages, setCoverages] = useState([]);
+  const [loadingCoverages, setLoadingCoverages] = useState(false);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -253,6 +255,7 @@ export default function PriorAuthorizationForm() {
     patient_id: '',
     provider_id: '',
     insurer_id: '',
+    coverage_id: '',
     diagnosis_codes: '',
     primary_diagnosis: '',
     total_amount: '',
@@ -390,6 +393,16 @@ export default function PriorAuthorizationForm() {
         clinical_info: clinicalInfo,
         admission_info: admissionInfo
       });
+      
+      // Load coverages for the patient (if patient exists)
+      if (data.patient_id) {
+        try {
+          const coveragesRes = await api.getPatientCoverages(data.patient_id);
+          setCoverages(coveragesRes?.data || []);
+        } catch (coverageError) {
+          console.error('Error loading patient coverages:', coverageError);
+        }
+      }
     } catch (error) {
       console.error('Error loading prior authorization:', error);
       alert('Error loading prior authorization');
@@ -399,11 +412,63 @@ export default function PriorAuthorizationForm() {
     }
   };
 
+  // Load coverages when patient is selected
+  const loadPatientCoverages = async (patientId) => {
+    if (!patientId) {
+      setCoverages([]);
+      return;
+    }
+    
+    try {
+      setLoadingCoverages(true);
+      const response = await api.getPatientCoverages(patientId);
+      const patientCoverages = response?.data || [];
+      setCoverages(patientCoverages);
+      
+      // If patient has only one coverage, auto-select it
+      if (patientCoverages.length === 1) {
+        const coverage = patientCoverages[0];
+        setFormData(prev => ({
+          ...prev,
+          coverage_id: coverage.coverage_id,
+          insurer_id: coverage.insurer_id
+        }));
+      } else {
+        // Clear coverage and insurer if patient has multiple or no coverages
+        setFormData(prev => ({
+          ...prev,
+          coverage_id: '',
+          insurer_id: ''
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading patient coverages:', error);
+      setCoverages([]);
+    } finally {
+      setLoadingCoverages(false);
+    }
+  };
+
+  // Handle coverage selection - auto-set insurer
+  const handleCoverageChange = (coverageId) => {
+    const selectedCoverage = coverages.find(c => c.coverage_id === coverageId);
+    setFormData(prev => ({
+      ...prev,
+      coverage_id: coverageId,
+      insurer_id: selectedCoverage?.insurer_id || prev.insurer_id
+    }));
+  };
+
   const handleChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
+    
+    // If patient changed, load their coverages
+    if (field === 'patient_id') {
+      loadPatientCoverages(value);
+    }
   };
 
   const handleItemChange = (index, field, value) => {
@@ -1050,11 +1115,48 @@ export default function PriorAuthorizationForm() {
                 />
               </div>
 
-              {/* Insurer */}
+              {/* Coverage - Shows patient's insurance coverages */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Coverage {formData.patient_id && '*'}
+                  {loadingCoverages && <span className="text-xs text-gray-500">(Loading...)</span>}
+                </Label>
+                {!formData.patient_id ? (
+                  <div className="text-sm text-gray-500 p-3 bg-gray-50 rounded-md">
+                    Select a patient first to see their insurance coverages
+                  </div>
+                ) : coverages.length === 0 && !loadingCoverages ? (
+                  <div className="text-sm text-amber-600 p-3 bg-amber-50 rounded-md">
+                    No coverages found for this patient. You can manually select an insurer below.
+                  </div>
+                ) : (
+                  <Select
+                    value={coverages.map(c => ({ 
+                      value: c.coverage_id, 
+                      label: `${c.insurer_name || 'Unknown Insurer'} - ${c.member_id || c.policy_number}${c.plan_name ? ` (${c.plan_name})` : ''}`
+                    })).find(opt => opt.value == formData.coverage_id)}
+                    onChange={(option) => handleCoverageChange(option?.value || '')}
+                    options={coverages.map(c => ({ 
+                      value: c.coverage_id, 
+                      label: `${c.insurer_name || 'Unknown Insurer'} - ${c.member_id || c.policy_number}${c.plan_name ? ` (${c.plan_name})` : ''}`
+                    }))}
+                    styles={selectStyles}
+                    placeholder="Select coverage..."
+                    isClearable
+                    isSearchable
+                    isLoading={loadingCoverages}
+                    menuPortalTarget={document.body}
+                  />
+                )}
+              </div>
+
+              {/* Insurer - Auto-filled from coverage, or manual selection */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Shield className="h-4 w-4" />
                   Insurer *
+                  {formData.coverage_id && <span className="text-xs text-green-600">(from coverage)</span>}
                 </Label>
                 <Select
                   value={insurers.map(i => ({ value: i.insurer_id, label: `${i.insurer_name || i.name}${i.nphies_id ? ` (${i.nphies_id})` : ''}` })).find(opt => opt.value == formData.insurer_id)}
@@ -1065,7 +1167,11 @@ export default function PriorAuthorizationForm() {
                   isClearable
                   isSearchable
                   menuPortalTarget={document.body}
+                  isDisabled={!!formData.coverage_id}
                 />
+                {formData.coverage_id && (
+                  <p className="text-xs text-gray-500">Clear coverage selection to manually choose insurer</p>
+                )}
               </div>
             </div>
           </CardContent>

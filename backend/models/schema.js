@@ -362,7 +362,7 @@ export const validationSchemas = {
     patient_id: Joi.string().uuid().allow(null, '').optional(),
     provider_id: Joi.string().uuid().allow(null, '').optional(),
     insurer_id: Joi.string().uuid().allow(null, '').optional(),
-    coverage_id: Joi.number().integer().allow(null).optional(),
+    coverage_id: Joi.string().uuid().allow(null, '').optional(),
     practitioner_id: Joi.string().uuid().allow(null, '').optional(),
     
     // Status
