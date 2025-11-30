@@ -360,10 +360,11 @@ class PriorAuthMapper {
    * Per NPHIES spec: ip (inpatient), op (outpatient), etc.
    */
   getClaimSubTypeCode(encounterClass) {
+    // Per NPHIES reference Bundle-a84aabfa: SS (short stay/daycase) uses 'ip' subType
     const subTypes = {
       'inpatient': 'ip',
       'outpatient': 'op',
-      'daycase': 'op',
+      'daycase': 'ip',  // Fixed: daycase (SS) should use 'ip' per NPHIES spec
       'emergency': 'emr',
       'ambulatory': 'op',
       'home': 'op',
@@ -1097,6 +1098,10 @@ class PriorAuthMapper {
     const patientId = bundleResourceIds.patient;
     const providerId = bundleResourceIds.provider;
     const encounterClass = priorAuth.encounter_class || 'ambulatory';
+  
+    // Debug logging to verify encounter class handling
+    console.log('[PriorAuthMapper] buildEncounterResourceWithId - encounterClass:', encounterClass);
+    console.log('[PriorAuthMapper] Is daycase/inpatient?:', ['daycase', 'inpatient'].includes(encounterClass));
   
     // IC-00183: Encounter identifier is required by NPHIES
     const encounterIdentifier = priorAuth.encounter_identifier || 
