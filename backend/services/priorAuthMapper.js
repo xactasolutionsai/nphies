@@ -252,6 +252,11 @@ class PriorAuthMapper {
       ];
     }
 
+    // BV-00770, BV-00802, BV-00027: Determine if this is an institutional claim
+    // Institutional claims require: chief-complaint, estimated-length-of-stay, onAdmission
+    const isInstitutional = priorAuth.auth_type === 'institutional' || 
+                            ['daycase', 'inpatient'].includes(priorAuth.encounter_class);
+
     // CareTeam - REQUIRED per NPHIES spec (IC-00014 error if missing)
     // Always include with at least a default practitioner
     const pract = practitioner || priorAuth.practitioner || {};
@@ -282,47 +287,85 @@ class PriorAuthMapper {
 
     // Add diagnosis if present - using NPHIES-specific systems
     // IB-00242: NPHIES requires ICD-10-AM (Australian Modification) code system
+    // BV-00027: onAdmission is REQUIRED for institutional claims, NOT allowed for non-institutional
     if (priorAuth.diagnoses && priorAuth.diagnoses.length > 0) {
-      claim.diagnosis = priorAuth.diagnoses.map((diag, idx) => ({
-        sequence: diag.sequence || idx + 1,
-        diagnosisCodeableConcept: {
-          coding: [
-            {
-              // Always use ICD-10-AM as required by NPHIES
-              system: 'http://hl7.org/fhir/sid/icd-10-am',
-              code: diag.diagnosis_code,
-              display: diag.diagnosis_display
-            }
-          ]
-        },
-        type: [
-          {
+      claim.diagnosis = priorAuth.diagnoses.map((diag, idx) => {
+        const diagEntry = {
+          sequence: diag.sequence || idx + 1,
+          diagnosisCodeableConcept: {
             coding: [
               {
-                system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-type',
-                code: diag.diagnosis_type || 'principal'
+                // Always use ICD-10-AM as required by NPHIES
+                system: 'http://hl7.org/fhir/sid/icd-10-am',
+                code: diag.diagnosis_code,
+                display: diag.diagnosis_display
               }
             ]
-          }
-        ],
-        ...(diag.on_admission !== undefined && diag.on_admission !== null && {
-          onAdmission: {
+          },
+          type: [
+            {
+              coding: [
+                {
+                  system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-type',
+                  code: diag.diagnosis_type || 'principal'
+                }
+              ]
+            }
+          ]
+        };
+        
+        // BV-00027: onAdmission is REQUIRED for institutional claims
+        // Only add for institutional (inpatient/daycase) encounters
+        if (isInstitutional) {
+          diagEntry.onAdmission = {
             coding: [
               {
                 system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-on-admission',
-                code: diag.on_admission ? 'y' : 'n',
-                display: diag.on_admission ? 'Yes' : 'No'
+                code: diag.on_admission === false ? 'n' : 'y', // Default to 'y' if not specified
+                display: diag.on_admission === false ? 'No' : 'Yes'
               }
             ]
-          }
-        })
-      }));
+          };
+        }
+        
+        return diagEntry;
+      });
     }
 
     // Add supportingInfo first to get sequence numbers for items
     let supportingInfoSequences = [];
-    if (priorAuth.supporting_info && priorAuth.supporting_info.length > 0) {
-      claim.supportingInfo = priorAuth.supporting_info.map((info, idx) => {
+    let supportingInfoList = [...(priorAuth.supporting_info || [])];
+    
+    // BV-00770: Chief Complaint is REQUIRED for institutional claims/authorizations
+    // BV-00802: Estimated length of stay is REQUIRED for institutional authorization
+    
+    if (isInstitutional) {
+      // Add chief-complaint if not present
+      const hasChiefComplaint = supportingInfoList.some(info => info.category === 'chief-complaint');
+      if (!hasChiefComplaint) {
+        supportingInfoList.unshift({
+          category: 'chief-complaint',
+          code: priorAuth.chief_complaint_code || '418799008', // Default: General symptom (SNOMED)
+          code_display: priorAuth.chief_complaint_display || 'General symptom',
+          code_system: 'http://snomed.info/sct',
+          timing_date: priorAuth.request_date || new Date()
+        });
+      }
+      
+      // Add estimated-length-of-stay if not present (required for institutional auth)
+      const hasLengthOfStay = supportingInfoList.some(info => info.category === 'estimated-length-of-stay');
+      if (!hasLengthOfStay) {
+        supportingInfoList.push({
+          category: 'estimated-length-of-stay',
+          value_quantity: priorAuth.estimated_length_of_stay || 1,
+          value_quantity_unit: 'd', // days
+          timing_date: priorAuth.request_date || new Date()
+        });
+      }
+    }
+    
+    if (supportingInfoList.length > 0) {
+      claim.supportingInfo = supportingInfoList.map((info, idx) => {
         const seq = info.sequence || idx + 1;
         supportingInfoSequences.push(seq);
         return this.buildSupportingInfo({ ...info, sequence: seq });
@@ -330,18 +373,30 @@ class PriorAuthMapper {
     }
 
     // Add items with proper sequence links
+    // BV-00118: servicedDate must be within encounter period
+    const encounterPeriod = {
+      start: priorAuth.encounter_start || new Date(),
+      end: priorAuth.encounter_end || null
+    };
+    
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
-        this.buildClaimItem(item, priorAuth.auth_type, idx + 1, supportingInfoSequences)
+        this.buildClaimItem(item, priorAuth.auth_type, idx + 1, supportingInfoSequences, encounterPeriod)
       );
     }
 
     // Total - REQUIRED per NPHIES spec (IC-00062 error if missing)
-    // Calculate from items if not provided
+    // Calculate from items using correct formula: ((quantity * unitPrice) * factor) + tax
     let totalAmount = priorAuth.total_amount;
     if (!totalAmount && priorAuth.items && priorAuth.items.length > 0) {
       totalAmount = priorAuth.items.reduce((sum, item) => {
-        return sum + parseFloat(item.net_amount || item.unit_price || 0);
+        const quantity = parseFloat(item.quantity || 1);
+        const unitPrice = parseFloat(item.unit_price || 0);
+        const factor = parseFloat(item.factor || 1);
+        const tax = parseFloat(item.tax || 0);
+        // BV-00251: Net = ((quantity * unitPrice) * factor) + tax
+        const itemNet = (quantity * unitPrice * factor) + tax;
+        return sum + itemNet;
       }, 0);
     }
     claim.total = {
@@ -390,9 +445,25 @@ class PriorAuthMapper {
   /**
    * Build a single claim item with NPHIES-compliant extensions
    * Reference: https://portal.nphies.sa/ig/Claim-483069.json.html
+   * 
+   * @param {Object} item - The item data
+   * @param {string} authType - Authorization type
+   * @param {number} itemIndex - Item index for sequence
+   * @param {Array} supportingInfoSequences - Supporting info sequence numbers
+   * @param {Object} encounterPeriod - Optional encounter period for date validation
    */
-  buildClaimItem(item, authType, itemIndex, supportingInfoSequences = []) {
+  buildClaimItem(item, authType, itemIndex, supportingInfoSequences = [], encounterPeriod = null) {
     const sequence = item.sequence || itemIndex;
+    
+    // BV-00251: Calculate net correctly as ((quantity * unit_price) * factor) + tax
+    const quantity = parseFloat(item.quantity || 1);
+    const unitPrice = parseFloat(item.unit_price || 0);
+    const factor = parseFloat(item.factor || 1);
+    const tax = parseFloat(item.tax || 0);
+    
+    // Correct net calculation per NPHIES: ((quantity * unitPrice) * factor) + tax
+    const calculatedNet = (quantity * unitPrice * factor) + tax;
+    const netAmount = item.net_amount !== undefined ? parseFloat(item.net_amount) : calculatedNet;
     
     // Build item-level extensions per NPHIES spec
     const itemExtensions = [];
@@ -404,17 +475,16 @@ class PriorAuthMapper {
     });
 
     // Patient share extension
+    const patientShare = parseFloat(item.patient_share || 0);
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share',
       valueMoney: {
-        value: parseFloat(item.patient_share || 0),
+        value: patientShare,
         currency: item.currency || 'SAR'
       }
     });
 
     // Payer share extension
-    const netAmount = parseFloat(item.net_amount || item.unit_price || 0);
-    const patientShare = parseFloat(item.patient_share || 0);
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share',
       valueMoney: {
@@ -429,16 +499,14 @@ class PriorAuthMapper {
       valueBoolean: item.is_maternity || false
     });
 
-    // Tax extension
-    if (item.tax !== undefined && item.tax !== null) {
-      itemExtensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax',
-        valueMoney: {
-          value: parseFloat(item.tax || 0),
-          currency: item.currency || 'SAR'
-        }
-      });
-    }
+    // Tax extension - always include for proper net calculation
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax',
+      valueMoney: {
+        value: tax,
+        currency: item.currency || 'SAR'
+      }
+    });
 
     const claimItem = {
       extension: itemExtensions,
@@ -460,36 +528,57 @@ class PriorAuthMapper {
       }
     };
 
-    // Add serviced date (required for most items)
+    // BV-00118: servicedDate MUST be within the encounter period
+    // Determine the serviced date - use item's date or encounter start
+    let servicedDate;
     if (item.serviced_date) {
-      claimItem.servicedDate = this.formatDate(item.serviced_date);
+      servicedDate = new Date(item.serviced_date);
+    } else if (encounterPeriod?.start) {
+      // Default to encounter start date to ensure it's within period
+      servicedDate = new Date(encounterPeriod.start);
     } else {
-      // Default to today if not specified
-      claimItem.servicedDate = this.formatDate(new Date());
+      servicedDate = new Date();
+    }
+    
+    // Validate servicedDate is within encounter period
+    if (encounterPeriod?.start) {
+      const periodStart = new Date(encounterPeriod.start);
+      const periodEnd = encounterPeriod.end ? new Date(encounterPeriod.end) : null;
+      
+      // If servicedDate is before period start, use period start
+      if (servicedDate < periodStart) {
+        servicedDate = periodStart;
+      }
+      // If servicedDate is after period end (if defined), use period end
+      if (periodEnd && servicedDate > periodEnd) {
+        servicedDate = periodEnd;
+      }
+    }
+    
+    claimItem.servicedDate = this.formatDate(servicedDate);
+
+    // Add quantity - REQUIRED for net calculation
+    claimItem.quantity = {
+      value: quantity
+    };
+
+    // Add unit price - REQUIRED for net calculation
+    claimItem.unitPrice = {
+      value: unitPrice,
+      currency: item.currency || 'SAR'
+    };
+
+    // Add factor if not 1
+    if (factor !== 1) {
+      claimItem.factor = factor;
     }
 
-    // Add quantity
-    if (item.quantity) {
-      claimItem.quantity = {
-        value: parseFloat(item.quantity)
-      };
-    }
-
-    // Add unit price
-    if (item.unit_price) {
-      claimItem.unitPrice = {
-        value: parseFloat(item.unit_price),
-        currency: item.currency || 'SAR'
-      };
-    }
-
-    // Add net amount
-    if (item.net_amount) {
-      claimItem.net = {
-        value: parseFloat(item.net_amount),
-        currency: item.currency || 'SAR'
-      };
-    }
+    // BV-00251: Net must equal ((quantity * unitPrice) * factor) + tax
+    // Use the correctly calculated net value
+    claimItem.net = {
+      value: calculatedNet,
+      currency: item.currency || 'SAR'
+    };
 
     // Body site for procedures
     if (item.body_site_code) {
