@@ -67,7 +67,7 @@ class PriorAuthMapper {
       'emergency': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-EMER|1.0.0',
       'home': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-HH|1.0.0',
       'inpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-IMP|1.0.0',
-      'daycase': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-SS|1.0.0',
+      'daycase': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0',
       'telemedicine': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-VR|1.0.0'
     };
     return profiles[encounterClass] || profiles['ambulatory'];
@@ -188,7 +188,7 @@ class PriorAuthMapper {
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
       valueReference: {
-        reference: `Encounter/${encounterRef}`
+        reference: `http://provider.com/Encounter/${encounterRef}`
       }
     });
 

@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "d4fc2d98-1e11-49eb-aa91-eeb5f2cb9e67",
+  "id": "52196417-daaa-4dc2-9afb-139507d645c7",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-11-30T19:57:41.137Z",
+  "timestamp": "2025-11-30T20:06:59.773Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:6546425d-7830-4c04-bb2d-b1063c67bf9f",
+      "fullUrl": "urn:uuid:4326fa5d-9f03-42f3-a3db-00aed02f8f5e",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "6546425d-7830-4c04-bb2d-b1063c67bf9f",
+        "id": "4326fa5d-9f03-42f3-a3db-00aed02f8f5e",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -39,7 +39,7 @@
           "type": "Organization",
           "identifier": {
             "system": "http://nphies.sa/license/provider-license",
-            "value": "DC-FHIR"
+            "value": "PR-FHIR"
           }
         },
         "source": {
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/c54241b8-b21b-4c17-b7d2-be2cd0915cdc"
+            "reference": "http://provider.com/Claim/ea996ea9-c1a6-4dd2-b351-888f36b93383"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/c54241b8-b21b-4c17-b7d2-be2cd0915cdc",
+      "fullUrl": "http://provider.com/Claim/ea996ea9-c1a6-4dd2-b351-888f36b93383",
       "resource": {
         "resourceType": "Claim",
-        "id": "c54241b8-b21b-4c17-b7d2-be2cd0915cdc",
+        "id": "ea996ea9-c1a6-4dd2-b351-888f36b93383",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/institutional-priorauth|1.0.0"
@@ -64,8 +64,8 @@
         },
         "identifier": [
           {
-            "system": "http://saudidentalclinic.com.sa/identifiers/authorization",
-            "value": "PREVIEW-1764532661118"
+            "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
+            "value": "PREVIEW-1764533219762"
           }
         ],
         "status": "active",
@@ -89,12 +89,12 @@
         "patient": {
           "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
         },
-        "created": "2025-11-30T19:57:41.133Z",
+        "created": "2025-11-30T20:06:59.771Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
         "provider": {
-          "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
         },
         "priority": {
           "coding": [
@@ -127,7 +127,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/dd5f01b8-5da6-48ea-942e-d1dbf819591b"
+              "reference": "Encounter/6b09597e-6889-4fca-8b29-3c042364890c"
             }
           }
         ],
@@ -135,7 +135,7 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/85715ae2-b772-40a2-a448-d4377b9826d9"
+              "reference": "Practitioner/c2e88171-8c03-46b1-954d-6b73e852b5de"
             },
             "role": {
               "coding": [
@@ -487,10 +487,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/dd5f01b8-5da6-48ea-942e-d1dbf819591b",
+      "fullUrl": "http://provider.com/Encounter/6b09597e-6889-4fca-8b29-3c042364890c",
       "resource": {
         "resourceType": "Encounter",
-        "id": "dd5f01b8-5da6-48ea-942e-d1dbf819591b",
+        "id": "6b09597e-6889-4fca-8b29-3c042364890c",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-SS|1.0.0"
@@ -498,8 +498,8 @@
         },
         "identifier": [
           {
-            "system": "http://DC-FHIR.com.sa/identifiers/encounter",
-            "value": "PREVIEW-1764532661118"
+            "system": "http://PR-FHIR.com.sa/identifiers/encounter",
+            "value": "PREVIEW-1764533219762"
           }
         ],
         "status": "planned",
@@ -507,12 +507,6 @@
           "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
           "code": "SS",
           "display": "short stay"
-        },
-        "subject": {
-          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
-        },
-        "serviceProvider": {
-          "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
         },
         "serviceType": {
           "coding": [
@@ -522,6 +516,9 @@
               "display": "Sub-Acute Care"
             }
           ]
+        },
+        "subject": {
+          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
         },
         "period": {
           "start": "2023-12-04T07:25:00.000Z",
@@ -551,6 +548,9 @@
               }
             ]
           }
+        },
+        "serviceProvider": {
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
         }
       }
     },
@@ -624,10 +624,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/85715ae2-b772-40a2-a448-d4377b9826d9",
+      "fullUrl": "http://provider.com/Practitioner/c2e88171-8c03-46b1-954d-6b73e852b5de",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "85715ae2-b772-40a2-a448-d4377b9826d9",
+        "id": "c2e88171-8c03-46b1-954d-6b73e852b5de",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -645,7 +645,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-85715ae2"
+            "value": "PRACT-c2e88171"
           }
         ],
         "active": true,
@@ -675,10 +675,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333",
+      "fullUrl": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
       "resource": {
         "resourceType": "Organization",
-        "id": "f99f16b5-d900-4031-8ea6-1fe50dcc2333",
+        "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
@@ -691,8 +691,8 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                  "code": "5",
-                  "display": "Clinic"
+                  "code": "1",
+                  "display": "Hospital"
                 }
               ]
             }
@@ -701,7 +701,7 @@
         "identifier": [
           {
             "system": "http://nphies.sa/license/provider-license",
-            "value": "DC-FHIR"
+            "value": "PR-FHIR"
           }
         ],
         "active": true,
@@ -715,13 +715,13 @@
             ]
           }
         ],
-        "name": "Saudi Dental Clinic",
+        "name": "Saudi General Hospital",
         "address": [
           {
             "use": "work",
-            "text": "Hajar Valley, Building 104, Riyadh Saudi Arabia",
+            "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
             "line": [
-              "Hajar Valley, Building 104, Riyadh Saudi Arabia"
+              "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
             ],
             "city": "Riyadh",
             "country": "Saudi Arabia"
