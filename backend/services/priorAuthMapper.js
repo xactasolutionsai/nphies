@@ -352,11 +352,14 @@ class PriorAuthMapper {
         });
       }
       
-      // Add estimated-length-of-stay if not present (required for institutional auth)
-      const hasLengthOfStay = supportingInfoList.some(info => info.category === 'estimated-length-of-stay');
+      // Add estimated-Length-of-Stay if not present (required for institutional auth)
+      // Note: NPHIES uses 'estimated-Length-of-Stay' with capital L (per IB-00044)
+      const hasLengthOfStay = supportingInfoList.some(info => 
+        info.category === 'estimated-Length-of-Stay' || info.category === 'estimated-length-of-stay'
+      );
       if (!hasLengthOfStay) {
         supportingInfoList.push({
-          category: 'estimated-length-of-stay',
+          category: 'estimated-Length-of-Stay', // Capital L per NPHIES valueSet
           value_quantity: priorAuth.estimated_length_of_stay || 1,
           value_quantity_unit: 'd', // days
           timing_date: priorAuth.request_date || new Date()
@@ -662,17 +665,67 @@ class PriorAuthMapper {
   }
 
   /**
+   * Get the valid NPHIES supportingInfo category code
+   * NPHIES uses specific case-sensitive codes (IB-00044 error if wrong)
+   * Reference: http://nphies.sa/terminology/CodeSystem/claim-information-category
+   */
+  getNphiesSupportingInfoCategory(category) {
+    // Map of normalized (lowercase) to actual NPHIES category codes
+    const categoryMap = {
+      // Vital signs
+      'vital-sign-systolic': 'vital-sign-systolic',
+      'vital-sign-diastolic': 'vital-sign-diastolic',
+      'vital-sign-height': 'vital-sign-height',
+      'vital-sign-weight': 'vital-sign-weight',
+      'pulse': 'pulse',
+      'temperature': 'temperature',
+      'oxygen-saturation': 'oxygen-saturation',
+      'respiratory-rate': 'respiratory-rate',
+      'admission-weight': 'admission-weight',
+      
+      // Clinical info - Note the exact casing per NPHIES spec
+      'chief-complaint': 'chief-complaint',
+      'estimated-length-of-stay': 'estimated-Length-of-Stay', // Capital L!
+      'patient-history': 'patient-history',
+      'investigation-result': 'investigation-result',
+      'treatment-plan': 'treatment-plan',
+      'physical-examination': 'physical-examination',
+      'history-of-present-illness': 'history-of-present-illness',
+      
+      // Other categories
+      'onset': 'onset',
+      'hospitalized': 'hospitalized',
+      'attachment': 'attachment',
+      'missing-tooth': 'missing-tooth',
+      'prosthesis': 'prosthesis',
+      'days-supply': 'days-supply',
+      'info': 'info',
+      'reason-for-visit': 'reason-for-visit',
+      'lab-test': 'lab-test',
+      'radiology': 'radiology',
+      'discharge': 'discharge'
+    };
+    
+    // Return the correct NPHIES category code
+    const normalizedCategory = (category || '').toLowerCase();
+    return categoryMap[normalizedCategory] || category;
+  }
+
+  /**
    * Build supportingInfo element following NPHIES specification
    * Reference: https://portal.nphies.sa/ig/Claim-483069.json.html
    */
   buildSupportingInfo(info) {
+    // IB-00044: Use correct NPHIES category code
+    const categoryCode = this.getNphiesSupportingInfoCategory(info.category);
+    
     const supportingInfo = {
       sequence: info.sequence,
       category: {
         coding: [
           {
             system: info.category_system || 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: info.category
+            code: categoryCode
           }
         ]
       }
