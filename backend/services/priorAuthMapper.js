@@ -61,15 +61,14 @@ class PriorAuthMapper {
    * - encounter-auth-VR for Telemedicine (Virtual)
    */
   getEncounterProfileUrl(encounterClass) {
-    // Note: NPHIES targetProfile references do NOT include version suffix
     const profiles = {
-      'ambulatory': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB',
-      'outpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB',
-      'emergency': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-EMER',
-      'home': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-HH',
-      'inpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-IMP',
-      'daycase': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter',
-      'telemedicine': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-VR'
+      'ambulatory': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0',
+      'outpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0',
+      'emergency': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-EMER|1.0.0',
+      'home': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-HH|1.0.0',
+      'inpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-IMP|1.0.0',
+      'daycase': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0',
+      'telemedicine': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-VR|1.0.0'
     };
     return profiles[encounterClass] || profiles['ambulatory'];
   }

@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "7d228510-3e18-454d-8192-add1608c653f",
+    "id": "8aa90591-934f-48e8-9468-8bdff5df4ab1",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-02T21:33:37.521+03:00",
+    "timestamp": "2025-12-02T21:42:10.807+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/9b316f69-3232-4235-bd12-1ee52d4582ed",
+            "fullUrl": "http://nphies.sa/MessageHeader/24d876c9-0521-41a4-a25f-8b1b3eb32c4c",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "9b316f69-3232-4235-bd12-1ee52d4582ed",
+                "id": "24d876c9-0521-41a4-a25f-8b1b3eb32c4c",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -46,21 +46,21 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "3ed33c27-5fa4-4f4b-90db-7f6bbaabd5a6",
+                    "identifier": "2ec6a015-e6d0-4fa7-b064-6476939ed66d",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://nphies.sa/ClaimResponse/291"
+                        "reference": "http://nphies.sa/ClaimResponse/647"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/ClaimResponse/291",
+            "fullUrl": "http://nphies.sa/ClaimResponse/647",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "291",
+                "id": "647",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -75,7 +75,7 @@
                 "identifier": [
                     {
                         "system": "http://nphies.sa/ClaimResponse",
-                        "value": "PREVIEW-1764700408888"
+                        "value": "PREVIEW-1764700924155"
                     }
                 ],
                 "status": "active",
@@ -91,7 +91,7 @@
                 "patient": {
                     "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
                 },
-                "created": "2025-12-02T18:33:28.894Z",
+                "created": "2025-12-02T18:42:04.159Z",
                 "insurer": {
                     "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
@@ -102,7 +102,7 @@
                     "type": "Claim",
                     "identifier": {
                         "system": "http://saudidentalclinic.com.sa/identifiers/authorization",
-                        "value": "PREVIEW-1764700408888"
+                        "value": "PREVIEW-1764700924155"
                     }
                 },
                 "outcome": "error",
@@ -123,29 +123,12 @@
                                     "extension": [
                                         {
                                             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[1].resource.extension[0].value"
+                                            "valueString": "Bundle.entry[2].resource.meta.profile[0]"
                                         }
                                     ],
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "RE-00189",
-                                    "display": "Claim encounter is not referring to a valid resource"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[2].resource"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "RE-00170",
-                                    "display": "Referenced SHALL point to a valid profile"
+                                    "code": "BV-00225",
+                                    "display": "Resource profile structure definition does not contain the version number"
                                 }
                             ]
                         }
