@@ -448,6 +448,63 @@ class PriorAuthMapper {
   }
 
   /**
+   * Get FDI tooth display name based on tooth number
+   * FDI World Dental Federation notation (ISO 3950)
+   * Quadrant 1: Upper Right (11-18), Quadrant 2: Upper Left (21-28)
+   * Quadrant 3: Lower Left (31-38), Quadrant 4: Lower Right (41-48)
+   */
+  getFdiToothDisplay(toothNumber) {
+    const quadrants = {
+      '1': 'Upper right',
+      '2': 'Upper left', 
+      '3': 'Lower left',
+      '4': 'Lower right'
+    };
+    
+    const toothTypes = {
+      '1': 'central incisor',
+      '2': 'lateral incisor',
+      '3': 'canine',
+      '4': 'first premolar',
+      '5': 'second premolar',
+      '6': 'first molar',
+      '7': 'second molar',
+      '8': 'third molar'
+    };
+    
+    if (!toothNumber || toothNumber.length !== 2) {
+      return `Tooth ${toothNumber}`;
+    }
+    
+    const quadrant = quadrants[toothNumber[0]];
+    const tooth = toothTypes[toothNumber[1]];
+    
+    if (quadrant && tooth) {
+      return `${quadrant} ${tooth}`;
+    }
+    
+    return `Tooth ${toothNumber}`;
+  }
+
+  /**
+   * Get tooth surface display name
+   * Standard tooth surface codes: M (Mesial), O (Occlusal), D (Distal), B (Buccal), L (Lingual)
+   */
+  getToothSurfaceDisplay(surfaceCode) {
+    const surfaces = {
+      'M': 'Mesial',
+      'O': 'Occlusal',
+      'D': 'Distal',
+      'B': 'Buccal',
+      'L': 'Lingual',
+      'I': 'Incisal',
+      'F': 'Facial',
+      'V': 'Vestibular'
+    };
+    return surfaces[surfaceCode?.toUpperCase()] || surfaceCode;
+  }
+
+  /**
    * Build a single claim item with NPHIES-compliant extensions
    * Reference: https://portal.nphies.sa/ig/Claim-483069.json.html
    * 
@@ -513,6 +570,15 @@ class PriorAuthMapper {
       }
     });
 
+    // Determine the appropriate code system based on auth type
+    // Dental/Oral claims use the dental-billing code system per NPHIES spec
+    const getDefaultProductSystem = (type) => {
+      if (type === 'dental') {
+        return 'http://nphies.sa/terminology/CodeSystem/dental-billing';
+      }
+      return 'http://nphies.sa/terminology/CodeSystem/procedures';
+    };
+
     const claimItem = {
       extension: itemExtensions,
       sequence: sequence,
@@ -525,7 +591,7 @@ class PriorAuthMapper {
       productOrService: {
         coding: [
           {
-            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+            system: item.product_or_service_system || getDefaultProductSystem(authType),
             code: item.product_or_service_code,
             display: item.product_or_service_display
           }
@@ -610,23 +676,27 @@ class PriorAuthMapper {
       }
     }
 
-    // Dental-specific: tooth number
+    // Dental-specific: tooth number using NPHIES FDI tooth numbering system
+    // Reference: http://nphies.sa/terminology/CodeSystem/fdi-tooth
     if (authType === 'dental' && item.tooth_number) {
       claimItem.bodySite = {
         coding: [
           {
-            system: 'http://hl7.org/fhir/ex-tooth',
-            code: item.tooth_number
+            system: 'http://nphies.sa/terminology/CodeSystem/fdi-tooth',
+            code: item.tooth_number,
+            display: item.tooth_display || this.getFdiToothDisplay(item.tooth_number)
           }
         ]
       };
       
+      // Tooth surface using NPHIES tooth-surface code system
       if (item.tooth_surface) {
         claimItem.subSite = item.tooth_surface.split(',').map(surface => ({
           coding: [
             {
-              system: 'http://hl7.org/fhir/surface',
-              code: surface.trim()
+              system: 'http://nphies.sa/terminology/CodeSystem/tooth-surface',
+              code: surface.trim(),
+              display: this.getToothSurfaceDisplay(surface.trim())
             }
           ]
         }));
