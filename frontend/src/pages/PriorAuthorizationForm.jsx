@@ -1665,14 +1665,14 @@ export default function PriorAuthorizationForm() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Dental Procedure Code (oral-health-op)</Label>
+                        <Label>Dental Procedure Code (dental-billing)</Label>
                         <Input
                           value={item.product_or_service_code || ''}
                           onChange={(e) => {
                             handleItemChange(index, 'product_or_service_code', e.target.value);
-                            handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
+                            handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/dental-billing');
                           }}
-                          placeholder="e.g. 97613-07-00"
+                          placeholder="Enter NPHIES dental billing code"
                         />
                       </div>
                       <div className="space-y-2">

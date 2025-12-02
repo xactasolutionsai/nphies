@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "2abffacf-16d0-4e20-9860-373e3a105cee",
+  "id": "3d021bc0-1936-4e22-b72b-d7486bbde59b",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-02T17:06:15.177Z",
+  "timestamp": "2025-12-02T17:58:08.415Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:7a9021bc-55c7-47c2-9311-c59d41c1b580",
+      "fullUrl": "urn:uuid:1d8c5ee9-21d9-4904-8395-e4a093b365f3",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "7a9021bc-55c7-47c2-9311-c59d41c1b580",
+        "id": "1d8c5ee9-21d9-4904-8395-e4a093b365f3",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/4f4275fc-333b-440e-a6b3-c0274fd749e7"
+            "reference": "http://provider.com/Claim/1e195095-e903-487f-9dbd-cb80e57089cd"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/4f4275fc-333b-440e-a6b3-c0274fd749e7",
+      "fullUrl": "http://provider.com/Claim/1e195095-e903-487f-9dbd-cb80e57089cd",
       "resource": {
         "resourceType": "Claim",
-        "id": "4f4275fc-333b-440e-a6b3-c0274fd749e7",
+        "id": "1e195095-e903-487f-9dbd-cb80e57089cd",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-priorauth|1.0.0"
@@ -65,7 +65,7 @@
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-            "value": "PREVIEW-1764695175167"
+            "value": "PREVIEW-1764698288412"
           }
         ],
         "status": "active",
@@ -89,7 +89,7 @@
         "patient": {
           "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
         },
-        "created": "2025-12-02T17:06:15.174Z",
+        "created": "2025-12-02T17:58:08.415Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -127,7 +127,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "http://provider.com/Encounter/5308f2ac-a720-4cb4-b8ad-47627bed4946"
+              "reference": "http://provider.com/Encounter/6997d308-8644-4460-aa93-f084e56a2f0d"
             }
           }
         ],
@@ -135,7 +135,7 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/f7f727d6-2c64-4f1d-b494-2864ce58b10e"
+              "reference": "Practitioner/98a385a6-70cb-4baa-8f2f-f5094eb15430"
             },
             "role": {
               "coding": [
@@ -275,7 +275,7 @@
             "productOrService": {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/dental-billing",
+                  "system": "http://nphies.sa/terminology/CodeSystem/oral-health-op",
                   "code": "30571-00-00",
                   "display": "Appendicectomy"
                 }
@@ -296,9 +296,9 @@
             "bodySite": {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/fdi-tooth",
+                  "system": "http://nphies.sa/terminology/CodeSystem/fdi-oral-region",
                   "code": "37",
-                  "display": "Lower left second molar"
+                  "display": "LOWER LEFT; PERMANENT TEETH # 7"
                 }
               ]
             },
@@ -307,8 +307,8 @@
                 "coding": [
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/tooth-surface",
-                    "code": "LOWER LEFT",
-                    "display": "LOWER LEFT"
+                    "code": "O",
+                    "display": "Occlusal"
                   }
                 ]
               }
@@ -322,10 +322,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/5308f2ac-a720-4cb4-b8ad-47627bed4946",
+      "fullUrl": "http://provider.com/Encounter/6997d308-8644-4460-aa93-f084e56a2f0d",
       "resource": {
         "resourceType": "Encounter",
-        "id": "5308f2ac-a720-4cb4-b8ad-47627bed4946",
+        "id": "6997d308-8644-4460-aa93-f084e56a2f0d",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -334,7 +334,7 @@
         "identifier": [
           {
             "system": "http://PR-FHIR.com.sa/identifiers/encounter",
-            "value": "PREVIEW-1764695175167"
+            "value": "PREVIEW-1764698288412"
           }
         ],
         "status": "planned",
@@ -459,10 +459,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/f7f727d6-2c64-4f1d-b494-2864ce58b10e",
+      "fullUrl": "http://provider.com/Practitioner/98a385a6-70cb-4baa-8f2f-f5094eb15430",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "f7f727d6-2c64-4f1d-b494-2864ce58b10e",
+        "id": "98a385a6-70cb-4baa-8f2f-f5094eb15430",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -480,7 +480,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-f7f727d6"
+            "value": "PRACT-98a385a6"
           }
         ],
         "active": true,

@@ -586,10 +586,11 @@ class PriorAuthMapper {
     });
 
     // Determine the appropriate code system based on auth type
-    // Oral claims use oral-health-op code system per NPHIES spec
+    // Oral claims use dental-billing code system per NPHIES StructureDefinition
+    // Reference: http://nphies.sa/terminology/ValueSet/dental-billing
     const getDefaultProductSystem = (type) => {
       if (type === 'dental') {
-        return 'http://nphies.sa/terminology/CodeSystem/oral-health-op';
+        return 'http://nphies.sa/terminology/CodeSystem/dental-billing';
       }
       return 'http://nphies.sa/terminology/CodeSystem/procedures';
     };
@@ -704,12 +705,13 @@ class PriorAuthMapper {
         ]
       };
       
-      // Tooth surface using NPHIES tooth-surface code system
+      // Tooth surface using NPHIES fdi-tooth-surface code system
+      // Reference: http://nphies.sa/terminology/ValueSet/fdi-tooth-surface
       if (item.tooth_surface) {
         claimItem.subSite = item.tooth_surface.split(',').map(surface => ({
           coding: [
             {
-              system: 'http://nphies.sa/terminology/CodeSystem/tooth-surface',
+              system: 'http://nphies.sa/terminology/CodeSystem/fdi-tooth-surface',
               code: surface.trim(),
               display: this.getToothSurfaceDisplay(surface.trim())
             }
