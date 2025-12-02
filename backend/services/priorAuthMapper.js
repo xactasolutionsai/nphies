@@ -586,11 +586,11 @@ class PriorAuthMapper {
     });
 
     // Determine the appropriate code system based on auth type
-    // Oral claims use dental-billing code system per NPHIES StructureDefinition
+    // Oral claims use oral-health-op CodeSystem (part of dental-billing ValueSet)
     // Reference: http://nphies.sa/terminology/ValueSet/dental-billing
     const getDefaultProductSystem = (type) => {
       if (type === 'dental') {
-        return 'http://nphies.sa/terminology/CodeSystem/dental-billing';
+        return 'http://nphies.sa/terminology/CodeSystem/oral-health-op';
       }
       return 'http://nphies.sa/terminology/CodeSystem/procedures';
     };
