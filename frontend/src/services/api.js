@@ -360,28 +360,60 @@ class ApiService {
     const original = await this.getPriorAuthorization(id);
     const data = original.data || original;
     
-    // Create a copy without ID-specific fields
-    const duplicateData = {
-      ...data,
-      // Reset status to draft
-      status: 'draft',
-      // Generate new request number with timestamp
-      request_number: `DUP-${Date.now()}`,
-      // Clear NPHIES-specific response fields
-      pre_auth_ref: null,
-      nphies_response_id: null,
-      nphies_response: null,
-      bundle_id: null,
-      response_bundle_id: null,
-      // Update dates
-      request_date: new Date().toISOString().split('T')[0],
-      created_at: undefined,
-      updated_at: undefined
-    };
+    // Fields to remove (read-only, computed, or NPHIES response fields)
+    const fieldsToRemove = [
+      'id', 'prior_auth_id', 'created_at', 'updated_at', 
+      'request_date', 'response_date', 'request_bundle', 'response_bundle',
+      // Joined/computed fields
+      'patient_name', 'patient_identifier', 'patient_gender', 'patient_birth_date',
+      'provider_name', 'provider_nphies_id', 'provider_type',
+      'insurer_name', 'insurer_nphies_id',
+      'item_count', 'responses',
+      // NPHIES response fields
+      'pre_auth_ref', 'nphies_response_id', 'nphies_response',
+      'bundle_id', 'response_bundle_id', 'approved_amount', 'approved_date'
+    ];
     
-    // Remove the original ID so a new one is generated
-    delete duplicateData.id;
-    delete duplicateData.prior_auth_id;
+    // Create a clean copy for duplication
+    const duplicateData = { ...data };
+    fieldsToRemove.forEach(field => delete duplicateData[field]);
+    
+    // Reset to draft status with new request number
+    duplicateData.status = 'draft';
+    duplicateData.request_number = `DUP-${Date.now()}`;
+    
+    // Clean nested items - remove IDs so new ones are generated
+    if (data.items && Array.isArray(data.items)) {
+      duplicateData.items = data.items.map(item => {
+        const { id, item_id, prior_auth_id, created_at, updated_at, 
+                adjudication_status, adjudication_amount, adjudication_reason, ...cleanItem } = item;
+        return cleanItem;
+      });
+    }
+    
+    // Clean nested supporting_info - remove IDs
+    if (data.supporting_info && Array.isArray(data.supporting_info)) {
+      duplicateData.supporting_info = data.supporting_info.map(info => {
+        const { id, info_id, prior_auth_id, created_at, updated_at, ...cleanInfo } = info;
+        return cleanInfo;
+      });
+    }
+    
+    // Clean nested diagnoses - remove IDs
+    if (data.diagnoses && Array.isArray(data.diagnoses)) {
+      duplicateData.diagnoses = data.diagnoses.map(diag => {
+        const { id, diagnosis_id, prior_auth_id, created_at, updated_at, ...cleanDiag } = diag;
+        return cleanDiag;
+      });
+    }
+    
+    // Clean nested attachments - remove IDs
+    if (data.attachments && Array.isArray(data.attachments)) {
+      duplicateData.attachments = data.attachments.map(att => {
+        const { id, attachment_id, prior_auth_id, created_at, updated_at, binary_id, ...cleanAtt } = att;
+        return cleanAtt;
+      });
+    }
     
     // Create the duplicate
     return this.createPriorAuthorization(duplicateData);
