@@ -368,8 +368,10 @@ class PriorAuthMapper {
     }
     
     if (supportingInfoList.length > 0) {
+      // BV-00453: Ensure all sequence numbers are unique and sequential
+      // Always recalculate sequence numbers based on array position
       claim.supportingInfo = supportingInfoList.map((info, idx) => {
-        const seq = info.sequence || idx + 1;
+        const seq = idx + 1; // Always use array position + 1 for unique sequences
         supportingInfoSequences.push(seq);
         return this.buildSupportingInfo({ ...info, sequence: seq });
       });
