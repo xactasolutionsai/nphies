@@ -62,6 +62,12 @@ class NphiesMapper {
    * Build FHIR Patient resource
    * Following NPHIES specification: https://portal.nphies.sa/ig/StructureDefinition-patient.html
    * Supports both DB format (snake_case) and raw format (camelCase)
+   * 
+   * NPHIES Identifier Rules:
+   * - National ID (NI): 10 digits starting with 1, system: http://nphies.sa/identifier/nationalid
+   * - Iqama (PRC): 10 digits starting with 2, system: http://nphies.sa/identifier/iqama
+   * - Passport (PPN): varies, system: http://nphies.sa/identifier/passportnumber
+   * - MRN (MR): provider-specific, system: http://provider.com/identifier/mrn
    */
   buildPatientResource(patient) {
     const nameInfo = this.splitName(patient.name);
@@ -69,9 +75,22 @@ class NphiesMapper {
     const patientId = `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}`;
     
     // Support both formats for identifier_type
-    const identifierType = patient.identifier_type || patient.identifierType || 'national_id';
+    let identifierType = patient.identifier_type || patient.identifierType || 'national_id';
     const birthDate = patient.birth_date || patient.birthDate;
     const gender = patient.gender ? patient.gender.toLowerCase() : 'unknown';
+    const identifierValue = (patient.identifier || patient.patient_id || patient.patientId)?.toString() || '';
+
+    // Auto-detect and correct identifier type based on value pattern for Saudi IDs
+    // This prevents NPHIES validation errors IB-00343 and BV-00797
+    if (identifierValue && /^\d{10}$/.test(identifierValue)) {
+      if (identifierValue.startsWith('1') && identifierType !== 'national_id') {
+        console.log(`[NphiesMapper] Auto-correcting identifier type from '${identifierType}' to 'national_id' (value starts with 1)`);
+        identifierType = 'national_id';
+      } else if (identifierValue.startsWith('2') && identifierType !== 'iqama') {
+        console.log(`[NphiesMapper] Auto-correcting identifier type from '${identifierType}' to 'iqama' (value starts with 2)`);
+        identifierType = 'iqama';
+      }
+    }
 
     // Determine identifier system and code based on type
     const getIdentifierConfig = (type) => {
@@ -84,8 +103,8 @@ class NphiesMapper {
           };
         case 'iqama':
           return {
-            code: 'NI',
-            display: 'National Identifier',
+            code: 'PRC',
+            display: 'Permanent Resident Card',
             system: 'http://nphies.sa/identifier/iqama'
           };
         case 'mrn':

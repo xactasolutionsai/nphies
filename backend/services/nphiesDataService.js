@@ -441,15 +441,28 @@ class NphiesDataService {
     const address = patientResource.address?.[0];
 
     // Determine identifier type from system or type code
+    // NPHIES identifier codes:
+    // - NI: National Identifier (Saudi National ID)
+    // - PRC: Permanent Resident Card (Iqama)
+    // - PPN: Passport Number
+    // - MR: Medical Record Number
     let identifierType = 'national_id';
     const typeCode = identifier?.type?.coding?.[0]?.code;
+    const identifierValue = identifier?.value;
     
     if (typeCode === 'MR' || identifier?.system?.includes('mrn')) {
       identifierType = 'mrn';
     } else if (typeCode === 'PPN' || identifier?.system?.includes('passport')) {
       identifierType = 'passport';
-    } else if (identifier?.system?.includes('iqama')) {
+    } else if (typeCode === 'PRC' || identifier?.system?.includes('iqama')) {
       identifierType = 'iqama';
+    } else if (typeCode === 'NI') {
+      // NI can be either national_id or iqama based on system/value
+      if (identifier?.system?.includes('iqama') || (identifierValue && identifierValue.startsWith('2'))) {
+        identifierType = 'iqama';
+      } else {
+        identifierType = 'national_id';
+      }
     }
 
     return {
