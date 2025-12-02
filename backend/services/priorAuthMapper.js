@@ -31,6 +31,27 @@ class PriorAuthMapper {
   }
 
   /**
+   * Format datetime with Saudi Arabia timezone (+03:00)
+   * NPHIES SS/IMP encounters require this format: "2023-12-04T10:25:00+03:00"
+   * Reference: https://portal.nphies.sa/ig/Encounter-10124.json.html
+   */
+  formatDateTimeWithTimezone(date) {
+    if (!date) date = new Date();
+    const d = new Date(date);
+    
+    // Format: YYYY-MM-DDTHH:mm:ss+03:00
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const seconds = String(d.getSeconds()).padStart(2, '0');
+    
+    // Saudi Arabia timezone is +03:00
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+03:00`;
+  }
+
+  /**
    * Get the NPHIES Authorization profile URL based on auth type
    * Reference: https://portal.nphies.sa/ig/usecase-prior-authorizations.html
    */
@@ -1476,12 +1497,29 @@ class PriorAuthMapper {
     };
 
     // period - comes after subject
-    encounter.period = {
-      start: this.formatDateTime(priorAuth.encounter_start || new Date()),
-      ...(priorAuth.encounter_end && {
-        end: this.formatDateTime(priorAuth.encounter_end)
-      })
-    };
+    // NPHIES format depends on encounter class:
+    // - AMB (Ambulatory): date-only format "2023-12-04" (https://portal.nphies.sa/ig/Encounter-10123.json.html)
+    // - SS/IMP (Short Stay/Inpatient): dateTime with timezone "2023-12-04T10:25:00+03:00" (https://portal.nphies.sa/ig/Encounter-10124.json.html)
+    const needsDateTime = ['daycase', 'inpatient'].includes(encounterClass);
+    
+    if (needsDateTime) {
+      // SS/IMP: Use dateTime format with Saudi timezone (+03:00)
+      encounter.period = {
+        start: this.formatDateTimeWithTimezone(priorAuth.encounter_start || new Date())
+      };
+      if (priorAuth.encounter_end) {
+        encounter.period.end = this.formatDateTimeWithTimezone(priorAuth.encounter_end);
+      }
+    } else {
+      // AMB/other: Use date-only format
+      encounter.period = {
+        start: this.formatDate(priorAuth.encounter_start || new Date())
+      };
+      // Only add end date if explicitly provided (ongoing encounters don't have end)
+      if (priorAuth.encounter_end) {
+        encounter.period.end = this.formatDate(priorAuth.encounter_end);
+      }
+    }
 
     // hospitalization - REQUIRED for SS/IMP encounters per NPHIES profile
     // Reference: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7383.json.html

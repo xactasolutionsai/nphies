@@ -1177,31 +1177,47 @@ export default function PriorAuthorizationForm() {
 
             <hr className="border-gray-200" />
 
+            {/* Encounter Period - Format depends on encounter class:
+                - AMB (Ambulatory): date only "2023-12-04"
+                - SS/IMP (Short Stay/Inpatient): dateTime "2023-12-04T10:25:00+03:00" */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Encounter Start Date</Label>
+                <Label>
+                  Encounter Start {['inpatient', 'daycase'].includes(formData.encounter_class) ? 'Date & Time' : 'Date'}
+                </Label>
                 <div className="datepicker-wrapper">
                   <DatePicker
                     selected={formData.encounter_start ? new Date(formData.encounter_start) : null}
-                    onChange={(date) => handleChange('encounter_start', date ? date.toISOString() : '')}
-                    showTimeSelect
-                    dateFormat="yyyy-MM-dd HH:mm"
+                    onChange={(date) => handleChange('encounter_start', date ? (
+                      ['inpatient', 'daycase'].includes(formData.encounter_class) 
+                        ? date.toISOString() 
+                        : date.toISOString().split('T')[0]
+                    ) : '')}
+                    showTimeSelect={['inpatient', 'daycase'].includes(formData.encounter_class)}
+                    dateFormat={['inpatient', 'daycase'].includes(formData.encounter_class) ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"}
                     className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                    placeholderText="Select date and time"
+                    placeholderText={['inpatient', 'daycase'].includes(formData.encounter_class) ? "Select date & time" : "Select date"}
                   />
                   <Calendar className="datepicker-icon h-4 w-4" />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Encounter End Date</Label>
+                <Label>
+                  Encounter End {['inpatient', 'daycase'].includes(formData.encounter_class) ? 'Date & Time' : 'Date'} (Optional)
+                </Label>
                 <div className="datepicker-wrapper">
                   <DatePicker
                     selected={formData.encounter_end ? new Date(formData.encounter_end) : null}
-                    onChange={(date) => handleChange('encounter_end', date ? date.toISOString() : '')}
-                    showTimeSelect
-                    dateFormat="yyyy-MM-dd HH:mm"
+                    onChange={(date) => handleChange('encounter_end', date ? (
+                      ['inpatient', 'daycase'].includes(formData.encounter_class) 
+                        ? date.toISOString() 
+                        : date.toISOString().split('T')[0]
+                    ) : '')}
+                    showTimeSelect={['inpatient', 'daycase'].includes(formData.encounter_class)}
+                    dateFormat={['inpatient', 'daycase'].includes(formData.encounter_class) ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"}
+                    isClearable
                     className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                    placeholderText="Select date and time"
+                    placeholderText={['inpatient', 'daycase'].includes(formData.encounter_class) ? "Select date & time (optional)" : "Select date (optional)"}
                   />
                   <Calendar className="datepicker-icon h-4 w-4" />
                 </div>
