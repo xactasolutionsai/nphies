@@ -185,10 +185,11 @@ class PriorAuthMapper {
     const extensions = [];
 
     // Encounter extension - REQUIRED for institutional
+    // RE-00189: Use relative reference format for encounter (not full URL)
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
       valueReference: {
-        reference: `http://provider.com/Encounter/${encounterRef}`
+        reference: `Encounter/${encounterRef}`
       }
     });
 
