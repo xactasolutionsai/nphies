@@ -133,72 +133,72 @@ const EYE_OPTIONS = [
   { value: 'both', label: 'Both' }
 ];
 
-// FDI Tooth Numbering System (ISO 3950)
+// FDI Oral Region Codes (NPHIES fdi-oral-region CodeSystem)
 // Permanent teeth: Quadrants 1-4 (11-48)
 // Deciduous teeth: Quadrants 5-8 (51-85)
 const FDI_TOOTH_OPTIONS = [
   // === PERMANENT TEETH ===
   // Upper Right (Quadrant 1)
-  { value: '11', label: '11 - Upper right permanent #1 (central incisor)' },
-  { value: '12', label: '12 - Upper right permanent #2 (lateral incisor)' },
-  { value: '13', label: '13 - Upper right permanent #3 (canine)' },
-  { value: '14', label: '14 - Upper right permanent #4 (first premolar)' },
-  { value: '15', label: '15 - Upper right permanent #5 (second premolar)' },
-  { value: '16', label: '16 - Upper right permanent #6 (first molar)' },
-  { value: '17', label: '17 - Upper right permanent #7 (second molar)' },
-  { value: '18', label: '18 - Upper right permanent #8 (third molar)' },
+  { value: '11', label: '11 - UPPER RIGHT; PERMANENT TEETH # 1', display: 'UPPER RIGHT; PERMANENT TEETH # 1' },
+  { value: '12', label: '12 - UPPER RIGHT; PERMANENT TEETH # 2', display: 'UPPER RIGHT; PERMANENT TEETH # 2' },
+  { value: '13', label: '13 - UPPER RIGHT; PERMANENT TEETH # 3', display: 'UPPER RIGHT; PERMANENT TEETH # 3' },
+  { value: '14', label: '14 - UPPER RIGHT; PERMANENT TEETH # 4', display: 'UPPER RIGHT; PERMANENT TEETH # 4' },
+  { value: '15', label: '15 - UPPER RIGHT; PERMANENT TEETH # 5', display: 'UPPER RIGHT; PERMANENT TEETH # 5' },
+  { value: '16', label: '16 - UPPER RIGHT; PERMANENT TEETH # 6', display: 'UPPER RIGHT; PERMANENT TEETH # 6' },
+  { value: '17', label: '17 - UPPER RIGHT; PERMANENT TEETH # 7', display: 'UPPER RIGHT; PERMANENT TEETH # 7' },
+  { value: '18', label: '18 - UPPER RIGHT; PERMANENT TEETH # 8', display: 'UPPER RIGHT; PERMANENT TEETH # 8' },
   // Upper Left (Quadrant 2)
-  { value: '21', label: '21 - Upper left permanent #1 (central incisor)' },
-  { value: '22', label: '22 - Upper left permanent #2 (lateral incisor)' },
-  { value: '23', label: '23 - Upper left permanent #3 (canine)' },
-  { value: '24', label: '24 - Upper left permanent #4 (first premolar)' },
-  { value: '25', label: '25 - Upper left permanent #5 (second premolar)' },
-  { value: '26', label: '26 - Upper left permanent #6 (first molar)' },
-  { value: '27', label: '27 - Upper left permanent #7 (second molar)' },
-  { value: '28', label: '28 - Upper left permanent #8 (third molar)' },
+  { value: '21', label: '21 - UPPER LEFT; PERMANENT TEETH # 1', display: 'UPPER LEFT; PERMANENT TEETH # 1' },
+  { value: '22', label: '22 - UPPER LEFT; PERMANENT TEETH # 2', display: 'UPPER LEFT; PERMANENT TEETH # 2' },
+  { value: '23', label: '23 - UPPER LEFT; PERMANENT TEETH # 3', display: 'UPPER LEFT; PERMANENT TEETH # 3' },
+  { value: '24', label: '24 - UPPER LEFT; PERMANENT TEETH # 4', display: 'UPPER LEFT; PERMANENT TEETH # 4' },
+  { value: '25', label: '25 - UPPER LEFT; PERMANENT TEETH # 5', display: 'UPPER LEFT; PERMANENT TEETH # 5' },
+  { value: '26', label: '26 - UPPER LEFT; PERMANENT TEETH # 6', display: 'UPPER LEFT; PERMANENT TEETH # 6' },
+  { value: '27', label: '27 - UPPER LEFT; PERMANENT TEETH # 7', display: 'UPPER LEFT; PERMANENT TEETH # 7' },
+  { value: '28', label: '28 - UPPER LEFT; PERMANENT TEETH # 8', display: 'UPPER LEFT; PERMANENT TEETH # 8' },
   // Lower Left (Quadrant 3)
-  { value: '31', label: '31 - Lower left permanent #1 (central incisor)' },
-  { value: '32', label: '32 - Lower left permanent #2 (lateral incisor)' },
-  { value: '33', label: '33 - Lower left permanent #3 (canine)' },
-  { value: '34', label: '34 - Lower left permanent #4 (first premolar)' },
-  { value: '35', label: '35 - Lower left permanent #5 (second premolar)' },
-  { value: '36', label: '36 - Lower left permanent #6 (first molar)' },
-  { value: '37', label: '37 - Lower left permanent #7 (second molar)' },
-  { value: '38', label: '38 - Lower left permanent #8 (third molar)' },
+  { value: '31', label: '31 - LOWER LEFT; PERMANENT TEETH # 1', display: 'LOWER LEFT; PERMANENT TEETH # 1' },
+  { value: '32', label: '32 - LOWER LEFT; PERMANENT TEETH # 2', display: 'LOWER LEFT; PERMANENT TEETH # 2' },
+  { value: '33', label: '33 - LOWER LEFT; PERMANENT TEETH # 3', display: 'LOWER LEFT; PERMANENT TEETH # 3' },
+  { value: '34', label: '34 - LOWER LEFT; PERMANENT TEETH # 4', display: 'LOWER LEFT; PERMANENT TEETH # 4' },
+  { value: '35', label: '35 - LOWER LEFT; PERMANENT TEETH # 5', display: 'LOWER LEFT; PERMANENT TEETH # 5' },
+  { value: '36', label: '36 - LOWER LEFT; PERMANENT TEETH # 6', display: 'LOWER LEFT; PERMANENT TEETH # 6' },
+  { value: '37', label: '37 - LOWER LEFT; PERMANENT TEETH # 7', display: 'LOWER LEFT; PERMANENT TEETH # 7' },
+  { value: '38', label: '38 - LOWER LEFT; PERMANENT TEETH # 8', display: 'LOWER LEFT; PERMANENT TEETH # 8' },
   // Lower Right (Quadrant 4)
-  { value: '41', label: '41 - Lower right permanent #1 (central incisor)' },
-  { value: '42', label: '42 - Lower right permanent #2 (lateral incisor)' },
-  { value: '43', label: '43 - Lower right permanent #3 (canine)' },
-  { value: '44', label: '44 - Lower right permanent #4 (first premolar)' },
-  { value: '45', label: '45 - Lower right permanent #5 (second premolar)' },
-  { value: '46', label: '46 - Lower right permanent #6 (first molar)' },
-  { value: '47', label: '47 - Lower right permanent #7 (second molar)' },
-  { value: '48', label: '48 - Lower right permanent #8 (third molar)' },
+  { value: '41', label: '41 - LOWER RIGHT; PERMANENT TEETH # 1', display: 'LOWER RIGHT; PERMANENT TEETH # 1' },
+  { value: '42', label: '42 - LOWER RIGHT; PERMANENT TEETH # 2', display: 'LOWER RIGHT; PERMANENT TEETH # 2' },
+  { value: '43', label: '43 - LOWER RIGHT; PERMANENT TEETH # 3', display: 'LOWER RIGHT; PERMANENT TEETH # 3' },
+  { value: '44', label: '44 - LOWER RIGHT; PERMANENT TEETH # 4', display: 'LOWER RIGHT; PERMANENT TEETH # 4' },
+  { value: '45', label: '45 - LOWER RIGHT; PERMANENT TEETH # 5', display: 'LOWER RIGHT; PERMANENT TEETH # 5' },
+  { value: '46', label: '46 - LOWER RIGHT; PERMANENT TEETH # 6', display: 'LOWER RIGHT; PERMANENT TEETH # 6' },
+  { value: '47', label: '47 - LOWER RIGHT; PERMANENT TEETH # 7', display: 'LOWER RIGHT; PERMANENT TEETH # 7' },
+  { value: '48', label: '48 - LOWER RIGHT; PERMANENT TEETH # 8', display: 'LOWER RIGHT; PERMANENT TEETH # 8' },
   // === DECIDUOUS (BABY) TEETH ===
   // Upper Right Deciduous (Quadrant 5)
-  { value: '51', label: '51 - Upper right deciduous #1' },
-  { value: '52', label: '52 - Upper right deciduous #2' },
-  { value: '53', label: '53 - Upper right deciduous #3' },
-  { value: '54', label: '54 - Upper right deciduous #4' },
-  { value: '55', label: '55 - Upper right deciduous #5' },
+  { value: '51', label: '51 - UPPER RIGHT; DECIDUOUS TEETH # 1', display: 'UPPER RIGHT; DECIDUOUS TEETH # 1' },
+  { value: '52', label: '52 - UPPER RIGHT; DECIDUOUS TEETH # 2', display: 'UPPER RIGHT; DECIDUOUS TEETH # 2' },
+  { value: '53', label: '53 - UPPER RIGHT; DECIDUOUS TEETH # 3', display: 'UPPER RIGHT; DECIDUOUS TEETH # 3' },
+  { value: '54', label: '54 - UPPER RIGHT; DECIDUOUS TEETH # 4', display: 'UPPER RIGHT; DECIDUOUS TEETH # 4' },
+  { value: '55', label: '55 - UPPER RIGHT; DECIDUOUS TEETH # 5', display: 'UPPER RIGHT; DECIDUOUS TEETH # 5' },
   // Upper Left Deciduous (Quadrant 6)
-  { value: '61', label: '61 - Upper left deciduous #1' },
-  { value: '62', label: '62 - Upper left deciduous #2' },
-  { value: '63', label: '63 - Upper left deciduous #3' },
-  { value: '64', label: '64 - Upper left deciduous #4' },
-  { value: '65', label: '65 - Upper left deciduous #5' },
+  { value: '61', label: '61 - UPPER LEFT; DECIDUOUS TEETH # 1', display: 'UPPER LEFT; DECIDUOUS TEETH # 1' },
+  { value: '62', label: '62 - UPPER LEFT; DECIDUOUS TEETH # 2', display: 'UPPER LEFT; DECIDUOUS TEETH # 2' },
+  { value: '63', label: '63 - UPPER LEFT; DECIDUOUS TEETH # 3', display: 'UPPER LEFT; DECIDUOUS TEETH # 3' },
+  { value: '64', label: '64 - UPPER LEFT; DECIDUOUS TEETH # 4', display: 'UPPER LEFT; DECIDUOUS TEETH # 4' },
+  { value: '65', label: '65 - UPPER LEFT; DECIDUOUS TEETH # 5', display: 'UPPER LEFT; DECIDUOUS TEETH # 5' },
   // Lower Left Deciduous (Quadrant 7)
-  { value: '71', label: '71 - Lower left deciduous #1' },
-  { value: '72', label: '72 - Lower left deciduous #2' },
-  { value: '73', label: '73 - Lower left deciduous #3' },
-  { value: '74', label: '74 - Lower left deciduous #4' },
-  { value: '75', label: '75 - Lower left deciduous #5' },
+  { value: '71', label: '71 - LOWER LEFT; DECIDUOUS TEETH # 1', display: 'LOWER LEFT; DECIDUOUS TEETH # 1' },
+  { value: '72', label: '72 - LOWER LEFT; DECIDUOUS TEETH # 2', display: 'LOWER LEFT; DECIDUOUS TEETH # 2' },
+  { value: '73', label: '73 - LOWER LEFT; DECIDUOUS TEETH # 3', display: 'LOWER LEFT; DECIDUOUS TEETH # 3' },
+  { value: '74', label: '74 - LOWER LEFT; DECIDUOUS TEETH # 4', display: 'LOWER LEFT; DECIDUOUS TEETH # 4' },
+  { value: '75', label: '75 - LOWER LEFT; DECIDUOUS TEETH # 5', display: 'LOWER LEFT; DECIDUOUS TEETH # 5' },
   // Lower Right Deciduous (Quadrant 8)
-  { value: '81', label: '81 - Lower right deciduous #1' },
-  { value: '82', label: '82 - Lower right deciduous #2' },
-  { value: '83', label: '83 - Lower right deciduous #3' },
-  { value: '84', label: '84 - Lower right deciduous #4' },
-  { value: '85', label: '85 - Lower right deciduous #5' }
+  { value: '81', label: '81 - LOWER RIGHT; DECIDUOUS TEETH # 1', display: 'LOWER RIGHT; DECIDUOUS TEETH # 1' },
+  { value: '82', label: '82 - LOWER RIGHT; DECIDUOUS TEETH # 2', display: 'LOWER RIGHT; DECIDUOUS TEETH # 2' },
+  { value: '83', label: '83 - LOWER RIGHT; DECIDUOUS TEETH # 3', display: 'LOWER RIGHT; DECIDUOUS TEETH # 3' },
+  { value: '84', label: '84 - LOWER RIGHT; DECIDUOUS TEETH # 4', display: 'LOWER RIGHT; DECIDUOUS TEETH # 4' },
+  { value: '85', label: '85 - LOWER RIGHT; DECIDUOUS TEETH # 5', display: 'LOWER RIGHT; DECIDUOUS TEETH # 5' }
 ];
 
 // Tooth Surface Codes for dental procedures (NPHIES tooth-surface CodeSystem)
@@ -216,69 +216,6 @@ const TOOTH_SURFACE_OPTIONS = [
   { value: 'DO', label: 'DO - Distoclusal' },
   { value: 'DI', label: 'DI - Distoincisal' },
   { value: 'MOD', label: 'MOD - Mesioclusodistal' }
-];
-
-// Common Dental Billing Codes (NPHIES dental-billing CodeSystem)
-const DENTAL_BILLING_OPTIONS = [
-  // Diagnostic
-  { value: 'D0120', label: 'D0120 - Periodic oral evaluation' },
-  { value: 'D0140', label: 'D0140 - Limited oral evaluation' },
-  { value: 'D0150', label: 'D0150 - Comprehensive oral evaluation' },
-  { value: 'D0210', label: 'D0210 - Intraoral complete series' },
-  { value: 'D0220', label: 'D0220 - Periapical first radiograph' },
-  { value: 'D0230', label: 'D0230 - Periapical each additional' },
-  { value: 'D0270', label: 'D0270 - Bitewing single radiograph' },
-  { value: 'D0274', label: 'D0274 - Bitewings four radiographs' },
-  { value: 'D0330', label: 'D0330 - Panoramic radiograph' },
-  // Preventive
-  { value: 'D1110', label: 'D1110 - Prophylaxis adult' },
-  { value: 'D1120', label: 'D1120 - Prophylaxis child' },
-  { value: 'D1206', label: 'D1206 - Topical fluoride varnish' },
-  { value: 'D1351', label: 'D1351 - Sealant per tooth' },
-  // Restorative
-  { value: 'D2140', label: 'D2140 - Amalgam one surface' },
-  { value: 'D2150', label: 'D2150 - Amalgam two surfaces' },
-  { value: 'D2160', label: 'D2160 - Amalgam three surfaces' },
-  { value: 'D2330', label: 'D2330 - Resin composite one surface anterior' },
-  { value: 'D2331', label: 'D2331 - Resin composite two surfaces anterior' },
-  { value: 'D2391', label: 'D2391 - Resin composite one surface posterior' },
-  { value: 'D2392', label: 'D2392 - Resin composite two surfaces posterior' },
-  { value: 'D2393', label: 'D2393 - Resin composite three surfaces posterior' },
-  // Crowns
-  { value: 'D2740', label: 'D2740 - Crown porcelain/ceramic' },
-  { value: 'D2750', label: 'D2750 - Crown porcelain fused to metal' },
-  { value: 'D2751', label: 'D2751 - Crown porcelain fused to metal with noble metal' },
-  { value: 'D2790', label: 'D2790 - Crown full cast high noble metal' },
-  { value: 'D2799', label: 'D2799 - Provisional crown' },
-  // Endodontics
-  { value: 'D3110', label: 'D3110 - Pulp cap direct' },
-  { value: 'D3220', label: 'D3220 - Pulpotomy' },
-  { value: 'D3310', label: 'D3310 - Root canal anterior' },
-  { value: 'D3320', label: 'D3320 - Root canal premolar' },
-  { value: 'D3330', label: 'D3330 - Root canal molar' },
-  { value: 'D3346', label: 'D3346 - Retreatment anterior' },
-  { value: 'D3347', label: 'D3347 - Retreatment premolar' },
-  { value: 'D3348', label: 'D3348 - Retreatment molar' },
-  // Periodontics
-  { value: 'D4210', label: 'D4210 - Gingivectomy per quadrant' },
-  { value: 'D4341', label: 'D4341 - Scaling and root planing per quadrant' },
-  { value: 'D4355', label: 'D4355 - Full mouth debridement' },
-  { value: 'D4910', label: 'D4910 - Periodontal maintenance' },
-  // Prosthodontics
-  { value: 'D5110', label: 'D5110 - Complete denture maxillary' },
-  { value: 'D5120', label: 'D5120 - Complete denture mandibular' },
-  { value: 'D5211', label: 'D5211 - Partial denture maxillary' },
-  { value: 'D5212', label: 'D5212 - Partial denture mandibular' },
-  // Oral Surgery
-  { value: 'D7140', label: 'D7140 - Extraction erupted tooth' },
-  { value: 'D7210', label: 'D7210 - Extraction erupted tooth with elevation' },
-  { value: 'D7220', label: 'D7220 - Removal impacted tooth soft tissue' },
-  { value: 'D7230', label: 'D7230 - Removal impacted tooth partial bony' },
-  { value: 'D7240', label: 'D7240 - Removal impacted tooth complete bony' },
-  { value: 'D7250', label: 'D7250 - Surgical removal of residual roots' },
-  // Orthodontics
-  { value: 'D8080', label: 'D8080 - Comprehensive orthodontic treatment adult' },
-  { value: 'D8090', label: 'D8090 - Comprehensive orthodontic treatment child' }
 ];
 
 const SUPPORTING_INFO_CATEGORY_OPTIONS = [
@@ -1728,29 +1665,33 @@ export default function PriorAuthorizationForm() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Dental Procedure Code</Label>
-                        <Select
-                          value={DENTAL_BILLING_OPTIONS.find(opt => opt.value === item.product_or_service_code)}
-                          onChange={(option) => {
-                            handleItemChange(index, 'product_or_service_code', option?.value || '');
-                            handleItemChange(index, 'product_or_service_display', option?.label?.split(' - ')[1] || '');
-                            handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/dental-billing');
+                        <Label>Dental Procedure Code (oral-health-op)</Label>
+                        <Input
+                          value={item.product_or_service_code || ''}
+                          onChange={(e) => {
+                            handleItemChange(index, 'product_or_service_code', e.target.value);
+                            handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
                           }}
-                          options={DENTAL_BILLING_OPTIONS}
-                          styles={selectStyles}
-                          placeholder="Select dental procedure..."
-                          isClearable
-                          isSearchable
-                          menuPortalTarget={document.body}
+                          placeholder="e.g. 97613-07-00"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <Label>Procedure Description</Label>
+                        <Input
+                          value={item.product_or_service_display || ''}
+                          onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
+                          placeholder="e.g. Lithium disilicate ceramic crown"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Tooth Number (FDI)</Label>
                         <Select
                           value={FDI_TOOTH_OPTIONS.find(opt => opt.value === item.tooth_number)}
                           onChange={(option) => {
                             handleItemChange(index, 'tooth_number', option?.value || '');
-                            handleItemChange(index, 'tooth_display', option?.label?.split(' - ')[1] || '');
+                            handleItemChange(index, 'tooth_display', option?.display || '');
                           }}
                           options={FDI_TOOTH_OPTIONS}
                           styles={selectStyles}

@@ -449,46 +449,25 @@ class PriorAuthMapper {
 
   /**
    * Get FDI tooth display name based on tooth number
-   * FDI World Dental Federation notation (ISO 3950)
+   * NPHIES fdi-oral-region format: "UPPER RIGHT; PERMANENT TEETH # 1"
    * Permanent teeth: Quadrant 1-4 (11-48)
    * Deciduous teeth: Quadrant 5-8 (51-85)
    */
   getFdiToothDisplay(toothNumber) {
     // Permanent teeth quadrants (1-4)
     const permanentQuadrants = {
-      '1': 'Upper right',
-      '2': 'Upper left', 
-      '3': 'Lower left',
-      '4': 'Lower right'
+      '1': 'UPPER RIGHT',
+      '2': 'UPPER LEFT', 
+      '3': 'LOWER LEFT',
+      '4': 'LOWER RIGHT'
     };
     
     // Deciduous teeth quadrants (5-8)
     const deciduousQuadrants = {
-      '5': 'Upper right',
-      '6': 'Upper left',
-      '7': 'Lower left',
-      '8': 'Lower right'
-    };
-    
-    // Permanent teeth types (1-8)
-    const permanentToothTypes = {
-      '1': 'central incisor',
-      '2': 'lateral incisor',
-      '3': 'canine',
-      '4': 'first premolar',
-      '5': 'second premolar',
-      '6': 'first molar',
-      '7': 'second molar',
-      '8': 'third molar'
-    };
-    
-    // Deciduous teeth types (1-5)
-    const deciduousToothTypes = {
-      '1': 'deciduous tooth #1',
-      '2': 'deciduous tooth #2',
-      '3': 'deciduous tooth #3',
-      '4': 'deciduous tooth #4',
-      '5': 'deciduous tooth #5'
+      '5': 'UPPER RIGHT',
+      '6': 'UPPER LEFT',
+      '7': 'LOWER LEFT',
+      '8': 'LOWER RIGHT'
     };
     
     if (!toothNumber || toothNumber.length !== 2) {
@@ -501,15 +480,13 @@ class PriorAuthMapper {
     // Check if permanent (quadrants 1-4) or deciduous (quadrants 5-8)
     if (['1', '2', '3', '4'].includes(quadrantNum)) {
       const quadrant = permanentQuadrants[quadrantNum];
-      const tooth = permanentToothTypes[toothNum];
-      if (quadrant && tooth) {
-        return `${quadrant} ${tooth}`;
+      if (quadrant) {
+        return `${quadrant}; PERMANENT TEETH # ${toothNum}`;
       }
     } else if (['5', '6', '7', '8'].includes(quadrantNum)) {
       const quadrant = deciduousQuadrants[quadrantNum];
-      const tooth = deciduousToothTypes[toothNum];
-      if (quadrant && tooth) {
-        return `${quadrant} ${tooth}`;
+      if (quadrant) {
+        return `${quadrant}; DECIDUOUS TEETH # ${toothNum}`;
       }
     }
     
@@ -609,10 +586,10 @@ class PriorAuthMapper {
     });
 
     // Determine the appropriate code system based on auth type
-    // Dental/Oral claims use the dental-billing code system per NPHIES spec
+    // Oral claims use oral-health-op code system per NPHIES spec
     const getDefaultProductSystem = (type) => {
       if (type === 'dental') {
-        return 'http://nphies.sa/terminology/CodeSystem/dental-billing';
+        return 'http://nphies.sa/terminology/CodeSystem/oral-health-op';
       }
       return 'http://nphies.sa/terminology/CodeSystem/procedures';
     };
@@ -714,13 +691,13 @@ class PriorAuthMapper {
       }
     }
 
-    // Dental-specific: tooth number using NPHIES FDI tooth numbering system
-    // Reference: http://nphies.sa/terminology/CodeSystem/fdi-tooth
+    // Dental-specific: tooth number using NPHIES FDI oral region system
+    // Reference: http://nphies.sa/terminology/CodeSystem/fdi-oral-region
     if (authType === 'dental' && item.tooth_number) {
       claimItem.bodySite = {
         coding: [
           {
-            system: 'http://nphies.sa/terminology/CodeSystem/fdi-tooth',
+            system: 'http://nphies.sa/terminology/CodeSystem/fdi-oral-region',
             code: item.tooth_number,
             display: item.tooth_display || this.getFdiToothDisplay(item.tooth_number)
           }
