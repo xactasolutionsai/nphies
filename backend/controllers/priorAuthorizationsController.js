@@ -541,9 +541,16 @@ class PriorAuthorizationsController extends BaseController {
         const parsedResponse = priorAuthMapper.parsePriorAuthResponse(nphiesResponse.data);
 
         // Update prior authorization with response
+        // Use adjudicationOutcome (approved/rejected) for status determination
         const newStatus = parsedResponse.outcome === 'queued' ? 'queued' : 
-                         parsedResponse.success ? 'approved' : 
-                         parsedResponse.outcome === 'partial' ? 'partial' : 'denied';
+                         parsedResponse.adjudicationOutcome === 'approved' ? 'approved' :
+                         parsedResponse.adjudicationOutcome === 'rejected' ? 'denied' :
+                         parsedResponse.outcome === 'partial' ? 'partial' : 
+                         parsedResponse.success ? 'approved' : 'denied';
+
+        // Calculate total approved amount from totals or item results
+        const totalBenefit = parsedResponse.totals?.find(t => t.category === 'benefit')?.amount ||
+                            parsedResponse.itemResults?.[0]?.adjudication?.find(a => a.category === 'benefit')?.amount;
 
         await query(`
           UPDATE prior_authorizations 
@@ -570,11 +577,11 @@ class PriorAuthorizationsController extends BaseController {
           JSON.stringify(nphiesResponse.data),
           parsedResponse.preAuthPeriod?.start,
           parsedResponse.preAuthPeriod?.end,
-          parsedResponse.itemResults?.[0]?.adjudication?.find(a => a.category === 'benefit')?.amount,
+          totalBenefit,
           id
         ]);
 
-        // Store response in history
+        // Store response in history with additional data
         await query(`
           INSERT INTO prior_authorization_responses 
           (prior_auth_id, response_type, outcome, disposition, pre_auth_ref, 
@@ -583,7 +590,7 @@ class PriorAuthorizationsController extends BaseController {
         `, [
           id,
           'initial',
-          parsedResponse.outcome,
+          parsedResponse.adjudicationOutcome || parsedResponse.outcome,
           parsedResponse.disposition,
           parsedResponse.preAuthRef,
           JSON.stringify(nphiesResponse.data),
@@ -596,15 +603,19 @@ class PriorAuthorizationsController extends BaseController {
         // Update item adjudication if present
         if (parsedResponse.itemResults) {
           for (const itemResult of parsedResponse.itemResults) {
-            const adjStatus = itemResult.adjudication?.find(a => a.category === 'eligible') ? 'approved' :
-                             itemResult.adjudication?.find(a => a.category === 'denied') ? 'denied' : 'pending';
+            // Use item-level outcome extension if available, otherwise derive from adjudication
+            const adjStatus = itemResult.outcome || 
+                             (itemResult.adjudication?.find(a => a.category === 'eligible') ? 'approved' :
+                              itemResult.adjudication?.find(a => a.category === 'denied') ? 'denied' : 'pending');
             const adjAmount = itemResult.adjudication?.find(a => a.category === 'benefit')?.amount;
+            const adjReason = itemResult.adjudication?.find(a => a.reason)?.reasonDisplay || 
+                             itemResult.adjudication?.find(a => a.reason)?.reason;
             
             await query(`
               UPDATE prior_authorization_items 
-              SET adjudication_status = $1, adjudication_amount = $2
-              WHERE prior_auth_id = $3 AND sequence = $4
-            `, [adjStatus, adjAmount, id, itemResult.itemSequence]);
+              SET adjudication_status = $1, adjudication_amount = $2, adjudication_reason = $3
+              WHERE prior_auth_id = $4 AND sequence = $5
+            `, [adjStatus, adjAmount, adjReason, id, itemResult.itemSequence]);
           }
         }
 
@@ -614,7 +625,11 @@ class PriorAuthorizationsController extends BaseController {
         res.json({
           success: true,
           data: updatedData,
-          nphiesResponse: parsedResponse
+          nphiesResponse: {
+            ...parsedResponse,
+            // Exclude rawBundle from API response (it's stored in response_bundle)
+            rawBundle: undefined
+          }
         });
       } else {
         // Handle NPHIES error

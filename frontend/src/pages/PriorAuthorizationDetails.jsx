@@ -132,30 +132,10 @@ export default function PriorAuthorizationDetails() {
   const handleLoadBundle = async () => {
     try {
       setActionLoading(true);
-      // Build bundle preview from current data
+      // Show actual stored bundles from database
       const bundleData = {
-        resourceType: 'Bundle',
-        type: 'message',
-        id: priorAuth.nphies_request_id || `pa-${priorAuth.id}`,
-        entry: [
-          {
-            resource: {
-              resourceType: 'MessageHeader',
-              eventCoding: { code: 'priorauth-request', system: 'http://nphies.sa/terminology' }
-            }
-          },
-          {
-            resource: {
-              resourceType: 'Claim',
-              id: priorAuth.request_number,
-              status: 'active',
-              type: { coding: [{ code: 'preauthorization' }] },
-              patient: { reference: `Patient/${priorAuth.patient_id}` },
-              provider: { reference: `Organization/${priorAuth.provider_id}` },
-              insurer: { reference: `Organization/${priorAuth.insurer_id}` }
-            }
-          }
-        ]
+        request: priorAuth.request_bundle || null,
+        response: priorAuth.response_bundle || null
       };
       setBundle(bundleData);
       setShowBundleDialog(true);
@@ -165,6 +145,37 @@ export default function PriorAuthorizationDetails() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  // Extract totals from response bundle
+  const getResponseTotals = () => {
+    if (!priorAuth.response_bundle) return null;
+    
+    const claimResponse = priorAuth.response_bundle?.entry?.find(
+      e => e.resource?.resourceType === 'ClaimResponse'
+    )?.resource;
+    
+    if (!claimResponse?.total) return null;
+    
+    return claimResponse.total.map(t => ({
+      category: t.category?.coding?.[0]?.code,
+      categoryDisplay: t.category?.coding?.[0]?.display,
+      amount: t.amount?.value,
+      currency: t.amount?.currency || 'SAR'
+    }));
+  };
+
+  // Extract adjudication outcome from response
+  const getAdjudicationOutcome = () => {
+    if (!priorAuth.response_bundle) return null;
+    
+    const claimResponse = priorAuth.response_bundle?.entry?.find(
+      e => e.resource?.resourceType === 'ClaimResponse'
+    )?.resource;
+    
+    return claimResponse?.extension?.find(
+      ext => ext.url?.includes('extension-adjudication-outcome')
+    )?.valueCodeableConcept?.coding?.[0]?.code;
   };
 
   const handleSendToNphies = async () => {
@@ -429,57 +440,115 @@ export default function PriorAuthorizationDetails() {
               <CardContent>
                 {priorAuth.items && priorAuth.items.length > 0 ? (
                   <div className="space-y-4">
-                    {priorAuth.items.map((item, index) => (
-                      <div key={index} className="p-4 border rounded-lg bg-gray-50">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-primary-purple text-white flex items-center justify-center text-sm font-medium">
-                              {item.sequence}
+                    {priorAuth.items.map((item, index) => {
+                      // Get item-level adjudication details from response bundle
+                      const responseItem = priorAuth.response_bundle?.entry?.find(
+                        e => e.resource?.resourceType === 'ClaimResponse'
+                      )?.resource?.item?.find(i => i.itemSequence === item.sequence);
+                      
+                      const itemAdjudications = responseItem?.adjudication || [];
+                      const itemOutcome = responseItem?.extension?.find(
+                        ext => ext.url?.includes('extension-adjudication-outcome')
+                      )?.valueCodeableConcept?.coding?.[0]?.code;
+                      
+                      return (
+                        <div key={index} className="p-4 border rounded-lg bg-gray-50">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-primary-purple text-white flex items-center justify-center text-sm font-medium">
+                                {item.sequence}
+                              </div>
+                              <div>
+                                <p className="font-medium">{item.product_or_service_code}</p>
+                                <p className="text-sm text-gray-500">{item.product_or_service_display || 'No description'}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">{item.product_or_service_code}</p>
-                              <p className="text-sm text-gray-500">{item.product_or_service_display || 'No description'}</p>
-                            </div>
-                          </div>
-                          {item.adjudication_status && (
-                            <Badge variant={item.adjudication_status === 'approved' ? 'default' : 'outline'} 
-                                   className={item.adjudication_status === 'approved' ? 'bg-green-500' : ''}>
-                              {item.adjudication_status}
+                            <Badge variant={
+                              (itemOutcome === 'approved' || item.adjudication_status === 'approved') ? 'default' : 
+                              (itemOutcome === 'rejected' || item.adjudication_status === 'denied') ? 'destructive' : 'outline'
+                            } className={(itemOutcome === 'approved' || item.adjudication_status === 'approved') ? 'bg-green-500' : ''}>
+                              {itemOutcome || item.adjudication_status || 'pending'}
                             </Badge>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-4 gap-4 mt-4 text-sm">
-                          <div>
-                            <p className="text-gray-500">Quantity</p>
-                            <p className="font-medium">{item.quantity || 1}</p>
                           </div>
-                          <div>
-                            <p className="text-gray-500">Unit Price</p>
-                            <p className="font-medium">{formatAmount(item.unit_price, item.currency)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-500">Net Amount</p>
-                            <p className="font-medium">{formatAmount(item.net_amount, item.currency)}</p>
-                          </div>
-                          {item.adjudication_amount && (
+                          
+                          {/* Request Details */}
+                          <div className="grid grid-cols-4 gap-4 mt-4 text-sm">
                             <div>
-                              <p className="text-gray-500">Approved Amount</p>
-                              <p className="font-medium text-green-600">
-                                {formatAmount(item.adjudication_amount, item.currency)}
+                              <p className="text-gray-500">Quantity</p>
+                              <p className="font-medium">{item.quantity || 1}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Unit Price</p>
+                              <p className="font-medium">{formatAmount(item.unit_price, item.currency)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Net Amount</p>
+                              <p className="font-medium">{formatAmount(item.net_amount, item.currency)}</p>
+                            </div>
+                            {item.serviced_date && (
+                              <div>
+                                <p className="text-gray-500">Service Date</p>
+                                <p className="font-medium">{formatDate(item.serviced_date)}</p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Response Adjudication Details */}
+                          {itemAdjudications.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
+                                NPHIES Adjudication
                               </p>
+                              <div className="grid grid-cols-4 gap-4 text-sm">
+                                {itemAdjudications.map((adj, adjIdx) => {
+                                  const category = adj.category?.coding?.[0]?.code;
+                                  const amount = adj.amount?.value;
+                                  const value = adj.value;
+                                  const displayValue = amount !== undefined 
+                                    ? formatAmount(amount, adj.amount?.currency) 
+                                    : value !== undefined 
+                                      ? value 
+                                      : '-';
+                                  
+                                  const categoryColors = {
+                                    eligible: 'text-blue-600',
+                                    benefit: 'text-green-600',
+                                    copay: 'text-orange-600',
+                                    'approved-quantity': 'text-purple-600'
+                                  };
+                                  
+                                  return (
+                                    <div key={adjIdx}>
+                                      <p className="text-gray-500 capitalize">{category?.replace('-', ' ')}</p>
+                                      <p className={`font-medium ${categoryColors[category] || ''}`}>
+                                        {displayValue}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Adjudication Reason if present */}
+                          {item.adjudication_reason && (
+                            <div className="mt-3 p-2 bg-yellow-50 rounded text-sm text-yellow-800">
+                              <span className="font-medium">Reason:</span> {item.adjudication_reason}
+                            </div>
+                          )}
+                          
+                          {/* Additional item details */}
+                          {(item.tooth_number || item.eye || item.days_supply) && (
+                            <div className="mt-3 pt-3 border-t text-sm">
+                              {item.tooth_number && <span className="mr-4">Tooth: {item.tooth_number}</span>}
+                              {item.tooth_surface && <span className="mr-4">Surface: {item.tooth_surface}</span>}
+                              {item.eye && <span className="mr-4">Eye: {item.eye}</span>}
+                              {item.days_supply && <span>Days Supply: {item.days_supply}</span>}
                             </div>
                           )}
                         </div>
-                        {(item.tooth_number || item.eye || item.days_supply) && (
-                          <div className="mt-3 pt-3 border-t text-sm">
-                            {item.tooth_number && <span className="mr-4">Tooth: {item.tooth_number}</span>}
-                            {item.tooth_surface && <span className="mr-4">Surface: {item.tooth_surface}</span>}
-                            {item.eye && <span className="mr-4">Eye: {item.eye}</span>}
-                            {item.days_supply && <span>Days Supply: {item.days_supply}</span>}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-center text-gray-500 py-4">No items</p>
@@ -650,7 +719,38 @@ export default function PriorAuthorizationDetails() {
                 <span className="text-gray-500">Requested Amount</span>
                 <span className="font-medium">{formatAmount(priorAuth.total_amount, priorAuth.currency)}</span>
               </div>
-              {priorAuth.approved_amount && (
+              
+              {/* Response totals from NPHIES */}
+              {(() => {
+                const totals = getResponseTotals();
+                const outcome = getAdjudicationOutcome();
+                if (!totals) return null;
+                
+                return (
+                  <>
+                    <hr className="border-gray-200" />
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-medium text-gray-700">NPHIES Response</span>
+                      {outcome && (
+                        <Badge variant={outcome === 'approved' ? 'default' : outcome === 'rejected' ? 'destructive' : 'secondary'}
+                               className={outcome === 'approved' ? 'bg-green-500' : ''}>
+                          {outcome}
+                        </Badge>
+                      )}
+                    </div>
+                    {totals.map((t, i) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span className="text-gray-500 capitalize">{t.category}</span>
+                        <span className={`font-medium ${t.category === 'benefit' ? 'text-green-600' : t.category === 'copay' ? 'text-orange-600' : ''}`}>
+                          {formatAmount(t.amount, t.currency)}
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
+              
+              {priorAuth.approved_amount && !getResponseTotals() && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Approved Amount</span>
                   <span className="font-medium text-green-600">
@@ -778,8 +878,8 @@ export default function PriorAuthorizationDetails() {
       <Modal
         open={showBundleDialog}
         onClose={() => setShowBundleDialog(false)}
-        title="FHIR Bundle"
-        description="The FHIR R4 message bundle for this prior authorization request"
+        title="FHIR Bundles"
+        description="Request and Response FHIR R4 message bundles for this prior authorization"
         footer={
           <>
             <Button variant="outline" onClick={() => setShowBundleDialog(false)}>Close</Button>
@@ -787,14 +887,62 @@ export default function PriorAuthorizationDetails() {
               navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
               alert('Copied to clipboard!');
             }}>
-              Copy to Clipboard
+              Copy All to Clipboard
             </Button>
           </>
         }
       >
-        <pre className="bg-gray-900 text-green-400 p-4 rounded-lg text-sm overflow-auto max-h-[50vh]">
-          {bundle ? JSON.stringify(bundle, null, 2) : 'Loading...'}
-        </pre>
+        <div className="space-y-6">
+          {/* Request Bundle */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                <Send className="h-4 w-4 text-blue-500" />
+                Request Bundle
+              </h3>
+              {bundle?.request && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(bundle.request, null, 2));
+                    alert('Request bundle copied!');
+                  }}
+                >
+                  Copy
+                </Button>
+              )}
+            </div>
+            <pre className="bg-gray-900 text-green-400 p-4 rounded-lg text-xs overflow-auto max-h-[30vh]">
+              {bundle?.request ? JSON.stringify(bundle.request, null, 2) : 'No request bundle available'}
+            </pre>
+          </div>
+          
+          {/* Response Bundle */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                Response Bundle
+              </h3>
+              {bundle?.response && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(bundle.response, null, 2));
+                    alert('Response bundle copied!');
+                  }}
+                >
+                  Copy
+                </Button>
+              )}
+            </div>
+            <pre className="bg-gray-900 text-blue-400 p-4 rounded-lg text-xs overflow-auto max-h-[30vh]">
+              {bundle?.response ? JSON.stringify(bundle.response, null, 2) : 'No response bundle yet'}
+            </pre>
+          </div>
+        </div>
       </Modal>
 
       {/* Cancel Modal */}

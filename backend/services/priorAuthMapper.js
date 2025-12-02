@@ -1600,6 +1600,7 @@ class PriorAuthMapper {
   /**
    * Parse Prior Authorization Response Bundle
    * Extract key information from ClaimResponse
+   * Reference: docs/response.json for full structure
    */
   parsePriorAuthResponse(responseBundle) {
     try {
@@ -1607,10 +1608,20 @@ class PriorAuthMapper {
         throw new Error('Invalid response bundle');
       }
 
-      // Find key resources
+      // Find key resources in the bundle
       const messageHeader = responseBundle.entry.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
       const claimResponse = responseBundle.entry.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
       const operationOutcome = responseBundle.entry.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
+      const patientResource = responseBundle.entry.find(e => e.resource?.resourceType === 'Patient')?.resource;
+      const coverageResource = responseBundle.entry.find(e => e.resource?.resourceType === 'Coverage')?.resource;
+      const providerResource = responseBundle.entry.find(
+        e => e.resource?.resourceType === 'Organization' && 
+             e.resource?.identifier?.some(i => i.system?.includes('provider-license'))
+      )?.resource;
+      const insurerResource = responseBundle.entry.find(
+        e => e.resource?.resourceType === 'Organization' && 
+             e.resource?.identifier?.some(i => i.system?.includes('payer-license'))
+      )?.resource;
 
       // Check if response is nphies-generated (pended)
       const isNphiesGenerated = responseBundle.meta?.tag?.some(
@@ -1622,9 +1633,11 @@ class PriorAuthMapper {
       if (operationOutcome) {
         const errors = operationOutcome.issue?.map(issue => ({
           severity: issue.severity,
-          code: issue.code,
-          details: issue.details?.text || issue.diagnostics,
-          location: issue.location?.join(', ')
+          code: issue.details?.coding?.[0]?.code || issue.code,
+          message: issue.details?.coding?.[0]?.display || issue.details?.text || issue.diagnostics,
+          location: issue.details?.coding?.[0]?.extension?.find(
+            ext => ext.url?.includes('error-expression')
+          )?.valueString || issue.location?.join(', ')
         })) || [];
 
         if (errors.some(e => e.severity === 'error' || e.severity === 'fatal')) {
@@ -1642,25 +1655,53 @@ class PriorAuthMapper {
           success: false,
           outcome: 'error',
           isNphiesGenerated,
-          errors: [{ code: 'PARSE_ERROR', details: 'No ClaimResponse found in bundle' }]
+          errors: [{ code: 'PARSE_ERROR', message: 'No ClaimResponse found in bundle' }]
         };
       }
 
-      // Extract preAuthRef
+      // Extract overall adjudication outcome from extension (approved/rejected/partial)
+      const adjudicationOutcome = claimResponse.extension?.find(
+        ext => ext.url?.includes('extension-adjudication-outcome')
+      )?.valueCodeableConcept?.coding?.[0]?.code;
+
+      // Extract preAuthRef - the authorization reference number
       const preAuthRef = claimResponse.preAuthRef;
 
-      // Extract preAuthPeriod
+      // Extract preAuthPeriod - authorization validity period
       const preAuthPeriod = claimResponse.preAuthPeriod;
 
-      // Extract adjudication results for items
-      const itemResults = claimResponse.item?.map(item => ({
-        itemSequence: item.itemSequence,
-        adjudication: item.adjudication?.map(adj => ({
-          category: adj.category?.coding?.[0]?.code,
-          amount: adj.amount?.value,
-          currency: adj.amount?.currency,
-          reason: adj.reason?.coding?.[0]?.code
-        }))
+      // Extract adjudication results for items with full details
+      const itemResults = claimResponse.item?.map(item => {
+        // Item-level adjudication outcome
+        const itemOutcome = item.extension?.find(
+          ext => ext.url?.includes('extension-adjudication-outcome')
+        )?.valueCodeableConcept?.coding?.[0]?.code;
+
+        return {
+          itemSequence: item.itemSequence,
+          outcome: itemOutcome,
+          adjudication: item.adjudication?.map(adj => {
+            const category = adj.category?.coding?.[0]?.code;
+            return {
+              category,
+              categoryDisplay: adj.category?.coding?.[0]?.display,
+              // Some adjudications use 'value' (e.g., approved-quantity), others use 'amount'
+              amount: adj.amount?.value,
+              value: adj.value,
+              currency: adj.amount?.currency,
+              reason: adj.reason?.coding?.[0]?.code,
+              reasonDisplay: adj.reason?.coding?.[0]?.display
+            };
+          })
+        };
+      });
+
+      // Extract totals (eligible, benefit, copay totals)
+      const totals = claimResponse.total?.map(total => ({
+        category: total.category?.coding?.[0]?.code,
+        categoryDisplay: total.category?.coding?.[0]?.display,
+        amount: total.amount?.value,
+        currency: total.amount?.currency
       }));
 
       // Extract transfer extensions if present
@@ -1676,13 +1717,54 @@ class PriorAuthMapper {
         ext => ext.url?.includes('extension-transferAuthorizationPeriod')
       )?.valuePeriod;
 
-      // Determine success based on outcome
+      // Determine success based on outcome and adjudication outcome
       const outcome = claimResponse.outcome || 'complete';
-      const success = outcome === 'complete' || outcome === 'partial';
+      const success = (outcome === 'complete' || outcome === 'partial') && 
+                      (adjudicationOutcome !== 'rejected');
+
+      // Extract patient info from response
+      const patient = patientResource ? {
+        id: patientResource.id,
+        name: patientResource.name?.[0]?.text || 
+              [patientResource.name?.[0]?.given?.join(' '), patientResource.name?.[0]?.family].filter(Boolean).join(' '),
+        identifier: patientResource.identifier?.[0]?.value,
+        identifierType: patientResource.identifier?.[0]?.type?.coding?.[0]?.code,
+        gender: patientResource.gender,
+        birthDate: patientResource.birthDate
+      } : null;
+
+      // Extract coverage info from response
+      const coverage = coverageResource ? {
+        id: coverageResource.id,
+        memberId: coverageResource.identifier?.[0]?.value,
+        status: coverageResource.status,
+        type: coverageResource.type?.coding?.[0]?.display,
+        typeCode: coverageResource.type?.coding?.[0]?.code,
+        relationship: coverageResource.relationship?.coding?.[0]?.code,
+        periodStart: coverageResource.period?.start,
+        periodEnd: coverageResource.period?.end,
+        planName: coverageResource.class?.find(c => c.type?.coding?.[0]?.code === 'plan')?.name,
+        planValue: coverageResource.class?.find(c => c.type?.coding?.[0]?.code === 'plan')?.value
+      } : null;
+
+      // Extract provider info from response
+      const provider = providerResource ? {
+        id: providerResource.id,
+        name: providerResource.name,
+        nphiesId: providerResource.identifier?.find(i => i.system?.includes('provider-license'))?.value
+      } : null;
+
+      // Extract insurer info from response
+      const insurer = insurerResource ? {
+        id: insurerResource.id,
+        name: insurerResource.name,
+        nphiesId: insurerResource.identifier?.find(i => i.system?.includes('payer-license'))?.value
+      } : null;
 
       return {
         success,
         outcome,
+        adjudicationOutcome, // approved, rejected, partial, etc.
         disposition: claimResponse.disposition,
         preAuthRef,
         preAuthPeriod: preAuthPeriod ? {
@@ -1692,7 +1774,26 @@ class PriorAuthMapper {
         nphiesResponseId: claimResponse.identifier?.[0]?.value || claimResponse.id,
         responseCode: messageHeader?.response?.code,
         isNphiesGenerated,
+        
+        // Response metadata
+        status: claimResponse.status,
+        type: claimResponse.type?.coding?.[0]?.code,
+        subType: claimResponse.subType?.coding?.[0]?.code,
+        use: claimResponse.use,
+        created: claimResponse.created,
+        
+        // Item-level results
         itemResults,
+        
+        // Totals (eligible, benefit, copay)
+        totals,
+        
+        // Entities from response
+        patient,
+        coverage,
+        provider,
+        insurer,
+        
         // Transfer details
         transfer: transferAuthNumber ? {
           authNumber: transferAuthNumber,
@@ -1702,6 +1803,7 @@ class PriorAuthMapper {
             end: transferAuthPeriod.end
           } : null
         } : null,
+        
         // Raw response for storage
         rawBundle: responseBundle
       };
@@ -1713,7 +1815,7 @@ class PriorAuthMapper {
         outcome: 'error',
         errors: [{
           code: 'PARSE_ERROR',
-          details: error.message
+          message: error.message
         }]
       };
     }
