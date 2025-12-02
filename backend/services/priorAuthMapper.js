@@ -450,18 +450,28 @@ class PriorAuthMapper {
   /**
    * Get FDI tooth display name based on tooth number
    * FDI World Dental Federation notation (ISO 3950)
-   * Quadrant 1: Upper Right (11-18), Quadrant 2: Upper Left (21-28)
-   * Quadrant 3: Lower Left (31-38), Quadrant 4: Lower Right (41-48)
+   * Permanent teeth: Quadrant 1-4 (11-48)
+   * Deciduous teeth: Quadrant 5-8 (51-85)
    */
   getFdiToothDisplay(toothNumber) {
-    const quadrants = {
+    // Permanent teeth quadrants (1-4)
+    const permanentQuadrants = {
       '1': 'Upper right',
       '2': 'Upper left', 
       '3': 'Lower left',
       '4': 'Lower right'
     };
     
-    const toothTypes = {
+    // Deciduous teeth quadrants (5-8)
+    const deciduousQuadrants = {
+      '5': 'Upper right',
+      '6': 'Upper left',
+      '7': 'Lower left',
+      '8': 'Lower right'
+    };
+    
+    // Permanent teeth types (1-8)
+    const permanentToothTypes = {
       '1': 'central incisor',
       '2': 'lateral incisor',
       '3': 'canine',
@@ -472,15 +482,35 @@ class PriorAuthMapper {
       '8': 'third molar'
     };
     
+    // Deciduous teeth types (1-5)
+    const deciduousToothTypes = {
+      '1': 'deciduous tooth #1',
+      '2': 'deciduous tooth #2',
+      '3': 'deciduous tooth #3',
+      '4': 'deciduous tooth #4',
+      '5': 'deciduous tooth #5'
+    };
+    
     if (!toothNumber || toothNumber.length !== 2) {
       return `Tooth ${toothNumber}`;
     }
     
-    const quadrant = quadrants[toothNumber[0]];
-    const tooth = toothTypes[toothNumber[1]];
+    const quadrantNum = toothNumber[0];
+    const toothNum = toothNumber[1];
     
-    if (quadrant && tooth) {
-      return `${quadrant} ${tooth}`;
+    // Check if permanent (quadrants 1-4) or deciduous (quadrants 5-8)
+    if (['1', '2', '3', '4'].includes(quadrantNum)) {
+      const quadrant = permanentQuadrants[quadrantNum];
+      const tooth = permanentToothTypes[toothNum];
+      if (quadrant && tooth) {
+        return `${quadrant} ${tooth}`;
+      }
+    } else if (['5', '6', '7', '8'].includes(quadrantNum)) {
+      const quadrant = deciduousQuadrants[quadrantNum];
+      const tooth = deciduousToothTypes[toothNum];
+      if (quadrant && tooth) {
+        return `${quadrant} ${tooth}`;
+      }
     }
     
     return `Tooth ${toothNumber}`;
@@ -488,18 +518,26 @@ class PriorAuthMapper {
 
   /**
    * Get tooth surface display name
-   * Standard tooth surface codes: M (Mesial), O (Occlusal), D (Distal), B (Buccal), L (Lingual)
+   * NPHIES tooth-surface CodeSystem codes
+   * Single: M (Mesial), O (Occlusal), D (Distal), B (Buccal), L (Lingual), I (Incisal), V (Ventral)
+   * Combined: MO (Mesioclusal), DO (Distoclusal), DI (Distoincisal), MOD (Mesioclusodistal)
    */
   getToothSurfaceDisplay(surfaceCode) {
     const surfaces = {
+      // Single surfaces
       'M': 'Mesial',
       'O': 'Occlusal',
+      'I': 'Incisal',
       'D': 'Distal',
       'B': 'Buccal',
+      'V': 'Ventral',
       'L': 'Lingual',
-      'I': 'Incisal',
       'F': 'Facial',
-      'V': 'Vestibular'
+      // Combined surfaces
+      'MO': 'Mesioclusal',
+      'DO': 'Distoclusal',
+      'DI': 'Distoincisal',
+      'MOD': 'Mesioclusodistal'
     };
     return surfaces[surfaceCode?.toUpperCase()] || surfaceCode;
   }

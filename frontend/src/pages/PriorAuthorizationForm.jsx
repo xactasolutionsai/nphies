@@ -134,57 +134,88 @@ const EYE_OPTIONS = [
 ];
 
 // FDI Tooth Numbering System (ISO 3950)
-// Quadrant 1: Upper Right (11-18), Quadrant 2: Upper Left (21-28)
-// Quadrant 3: Lower Left (31-38), Quadrant 4: Lower Right (41-48)
+// Permanent teeth: Quadrants 1-4 (11-48)
+// Deciduous teeth: Quadrants 5-8 (51-85)
 const FDI_TOOTH_OPTIONS = [
+  // === PERMANENT TEETH ===
   // Upper Right (Quadrant 1)
-  { value: '11', label: '11 - Upper right central incisor' },
-  { value: '12', label: '12 - Upper right lateral incisor' },
-  { value: '13', label: '13 - Upper right canine' },
-  { value: '14', label: '14 - Upper right first premolar' },
-  { value: '15', label: '15 - Upper right second premolar' },
-  { value: '16', label: '16 - Upper right first molar' },
-  { value: '17', label: '17 - Upper right second molar' },
-  { value: '18', label: '18 - Upper right third molar' },
+  { value: '11', label: '11 - Upper right permanent #1 (central incisor)' },
+  { value: '12', label: '12 - Upper right permanent #2 (lateral incisor)' },
+  { value: '13', label: '13 - Upper right permanent #3 (canine)' },
+  { value: '14', label: '14 - Upper right permanent #4 (first premolar)' },
+  { value: '15', label: '15 - Upper right permanent #5 (second premolar)' },
+  { value: '16', label: '16 - Upper right permanent #6 (first molar)' },
+  { value: '17', label: '17 - Upper right permanent #7 (second molar)' },
+  { value: '18', label: '18 - Upper right permanent #8 (third molar)' },
   // Upper Left (Quadrant 2)
-  { value: '21', label: '21 - Upper left central incisor' },
-  { value: '22', label: '22 - Upper left lateral incisor' },
-  { value: '23', label: '23 - Upper left canine' },
-  { value: '24', label: '24 - Upper left first premolar' },
-  { value: '25', label: '25 - Upper left second premolar' },
-  { value: '26', label: '26 - Upper left first molar' },
-  { value: '27', label: '27 - Upper left second molar' },
-  { value: '28', label: '28 - Upper left third molar' },
+  { value: '21', label: '21 - Upper left permanent #1 (central incisor)' },
+  { value: '22', label: '22 - Upper left permanent #2 (lateral incisor)' },
+  { value: '23', label: '23 - Upper left permanent #3 (canine)' },
+  { value: '24', label: '24 - Upper left permanent #4 (first premolar)' },
+  { value: '25', label: '25 - Upper left permanent #5 (second premolar)' },
+  { value: '26', label: '26 - Upper left permanent #6 (first molar)' },
+  { value: '27', label: '27 - Upper left permanent #7 (second molar)' },
+  { value: '28', label: '28 - Upper left permanent #8 (third molar)' },
   // Lower Left (Quadrant 3)
-  { value: '31', label: '31 - Lower left central incisor' },
-  { value: '32', label: '32 - Lower left lateral incisor' },
-  { value: '33', label: '33 - Lower left canine' },
-  { value: '34', label: '34 - Lower left first premolar' },
-  { value: '35', label: '35 - Lower left second premolar' },
-  { value: '36', label: '36 - Lower left first molar' },
-  { value: '37', label: '37 - Lower left second molar' },
-  { value: '38', label: '38 - Lower left third molar' },
+  { value: '31', label: '31 - Lower left permanent #1 (central incisor)' },
+  { value: '32', label: '32 - Lower left permanent #2 (lateral incisor)' },
+  { value: '33', label: '33 - Lower left permanent #3 (canine)' },
+  { value: '34', label: '34 - Lower left permanent #4 (first premolar)' },
+  { value: '35', label: '35 - Lower left permanent #5 (second premolar)' },
+  { value: '36', label: '36 - Lower left permanent #6 (first molar)' },
+  { value: '37', label: '37 - Lower left permanent #7 (second molar)' },
+  { value: '38', label: '38 - Lower left permanent #8 (third molar)' },
   // Lower Right (Quadrant 4)
-  { value: '41', label: '41 - Lower right central incisor' },
-  { value: '42', label: '42 - Lower right lateral incisor' },
-  { value: '43', label: '43 - Lower right canine' },
-  { value: '44', label: '44 - Lower right first premolar' },
-  { value: '45', label: '45 - Lower right second premolar' },
-  { value: '46', label: '46 - Lower right first molar' },
-  { value: '47', label: '47 - Lower right second molar' },
-  { value: '48', label: '48 - Lower right third molar' }
+  { value: '41', label: '41 - Lower right permanent #1 (central incisor)' },
+  { value: '42', label: '42 - Lower right permanent #2 (lateral incisor)' },
+  { value: '43', label: '43 - Lower right permanent #3 (canine)' },
+  { value: '44', label: '44 - Lower right permanent #4 (first premolar)' },
+  { value: '45', label: '45 - Lower right permanent #5 (second premolar)' },
+  { value: '46', label: '46 - Lower right permanent #6 (first molar)' },
+  { value: '47', label: '47 - Lower right permanent #7 (second molar)' },
+  { value: '48', label: '48 - Lower right permanent #8 (third molar)' },
+  // === DECIDUOUS (BABY) TEETH ===
+  // Upper Right Deciduous (Quadrant 5)
+  { value: '51', label: '51 - Upper right deciduous #1' },
+  { value: '52', label: '52 - Upper right deciduous #2' },
+  { value: '53', label: '53 - Upper right deciduous #3' },
+  { value: '54', label: '54 - Upper right deciduous #4' },
+  { value: '55', label: '55 - Upper right deciduous #5' },
+  // Upper Left Deciduous (Quadrant 6)
+  { value: '61', label: '61 - Upper left deciduous #1' },
+  { value: '62', label: '62 - Upper left deciduous #2' },
+  { value: '63', label: '63 - Upper left deciduous #3' },
+  { value: '64', label: '64 - Upper left deciduous #4' },
+  { value: '65', label: '65 - Upper left deciduous #5' },
+  // Lower Left Deciduous (Quadrant 7)
+  { value: '71', label: '71 - Lower left deciduous #1' },
+  { value: '72', label: '72 - Lower left deciduous #2' },
+  { value: '73', label: '73 - Lower left deciduous #3' },
+  { value: '74', label: '74 - Lower left deciduous #4' },
+  { value: '75', label: '75 - Lower left deciduous #5' },
+  // Lower Right Deciduous (Quadrant 8)
+  { value: '81', label: '81 - Lower right deciduous #1' },
+  { value: '82', label: '82 - Lower right deciduous #2' },
+  { value: '83', label: '83 - Lower right deciduous #3' },
+  { value: '84', label: '84 - Lower right deciduous #4' },
+  { value: '85', label: '85 - Lower right deciduous #5' }
 ];
 
-// Tooth Surface Codes for dental procedures
+// Tooth Surface Codes for dental procedures (NPHIES tooth-surface CodeSystem)
 const TOOTH_SURFACE_OPTIONS = [
-  { value: 'M', label: 'M - Mesial' },
-  { value: 'O', label: 'O - Occlusal' },
-  { value: 'D', label: 'D - Distal' },
-  { value: 'B', label: 'B - Buccal' },
-  { value: 'L', label: 'L - Lingual' },
-  { value: 'I', label: 'I - Incisal' },
-  { value: 'F', label: 'F - Facial' },
-  { value: 'V', label: 'V - Vestibular' }
+  // Single surfaces
+  { value: 'M', label: 'M - Mesial (closest to midline)' },
+  { value: 'O', label: 'O - Occlusal (chewing surface)' },
+  { value: 'I', label: 'I - Incisal (biting edge)' },
+  { value: 'D', label: 'D - Distal (away from midline)' },
+  { value: 'B', label: 'B - Buccal (facing cheeks)' },
+  { value: 'V', label: 'V - Ventral (facing lips)' },
+  { value: 'L', label: 'L - Lingual (facing tongue)' },
+  // Combined surfaces
+  { value: 'MO', label: 'MO - Mesioclusal' },
+  { value: 'DO', label: 'DO - Distoclusal' },
+  { value: 'DI', label: 'DI - Distoincisal' },
+  { value: 'MOD', label: 'MOD - Mesioclusodistal' }
 ];
 
 // Common Dental Billing Codes (NPHIES dental-billing CodeSystem)
