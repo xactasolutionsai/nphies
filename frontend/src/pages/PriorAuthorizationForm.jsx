@@ -133,6 +133,123 @@ const EYE_OPTIONS = [
   { value: 'both', label: 'Both' }
 ];
 
+// FDI Tooth Numbering System (ISO 3950)
+// Quadrant 1: Upper Right (11-18), Quadrant 2: Upper Left (21-28)
+// Quadrant 3: Lower Left (31-38), Quadrant 4: Lower Right (41-48)
+const FDI_TOOTH_OPTIONS = [
+  // Upper Right (Quadrant 1)
+  { value: '11', label: '11 - Upper right central incisor' },
+  { value: '12', label: '12 - Upper right lateral incisor' },
+  { value: '13', label: '13 - Upper right canine' },
+  { value: '14', label: '14 - Upper right first premolar' },
+  { value: '15', label: '15 - Upper right second premolar' },
+  { value: '16', label: '16 - Upper right first molar' },
+  { value: '17', label: '17 - Upper right second molar' },
+  { value: '18', label: '18 - Upper right third molar' },
+  // Upper Left (Quadrant 2)
+  { value: '21', label: '21 - Upper left central incisor' },
+  { value: '22', label: '22 - Upper left lateral incisor' },
+  { value: '23', label: '23 - Upper left canine' },
+  { value: '24', label: '24 - Upper left first premolar' },
+  { value: '25', label: '25 - Upper left second premolar' },
+  { value: '26', label: '26 - Upper left first molar' },
+  { value: '27', label: '27 - Upper left second molar' },
+  { value: '28', label: '28 - Upper left third molar' },
+  // Lower Left (Quadrant 3)
+  { value: '31', label: '31 - Lower left central incisor' },
+  { value: '32', label: '32 - Lower left lateral incisor' },
+  { value: '33', label: '33 - Lower left canine' },
+  { value: '34', label: '34 - Lower left first premolar' },
+  { value: '35', label: '35 - Lower left second premolar' },
+  { value: '36', label: '36 - Lower left first molar' },
+  { value: '37', label: '37 - Lower left second molar' },
+  { value: '38', label: '38 - Lower left third molar' },
+  // Lower Right (Quadrant 4)
+  { value: '41', label: '41 - Lower right central incisor' },
+  { value: '42', label: '42 - Lower right lateral incisor' },
+  { value: '43', label: '43 - Lower right canine' },
+  { value: '44', label: '44 - Lower right first premolar' },
+  { value: '45', label: '45 - Lower right second premolar' },
+  { value: '46', label: '46 - Lower right first molar' },
+  { value: '47', label: '47 - Lower right second molar' },
+  { value: '48', label: '48 - Lower right third molar' }
+];
+
+// Tooth Surface Codes for dental procedures
+const TOOTH_SURFACE_OPTIONS = [
+  { value: 'M', label: 'M - Mesial' },
+  { value: 'O', label: 'O - Occlusal' },
+  { value: 'D', label: 'D - Distal' },
+  { value: 'B', label: 'B - Buccal' },
+  { value: 'L', label: 'L - Lingual' },
+  { value: 'I', label: 'I - Incisal' },
+  { value: 'F', label: 'F - Facial' },
+  { value: 'V', label: 'V - Vestibular' }
+];
+
+// Common Dental Billing Codes (NPHIES dental-billing CodeSystem)
+const DENTAL_BILLING_OPTIONS = [
+  // Diagnostic
+  { value: 'D0120', label: 'D0120 - Periodic oral evaluation' },
+  { value: 'D0140', label: 'D0140 - Limited oral evaluation' },
+  { value: 'D0150', label: 'D0150 - Comprehensive oral evaluation' },
+  { value: 'D0210', label: 'D0210 - Intraoral complete series' },
+  { value: 'D0220', label: 'D0220 - Periapical first radiograph' },
+  { value: 'D0230', label: 'D0230 - Periapical each additional' },
+  { value: 'D0270', label: 'D0270 - Bitewing single radiograph' },
+  { value: 'D0274', label: 'D0274 - Bitewings four radiographs' },
+  { value: 'D0330', label: 'D0330 - Panoramic radiograph' },
+  // Preventive
+  { value: 'D1110', label: 'D1110 - Prophylaxis adult' },
+  { value: 'D1120', label: 'D1120 - Prophylaxis child' },
+  { value: 'D1206', label: 'D1206 - Topical fluoride varnish' },
+  { value: 'D1351', label: 'D1351 - Sealant per tooth' },
+  // Restorative
+  { value: 'D2140', label: 'D2140 - Amalgam one surface' },
+  { value: 'D2150', label: 'D2150 - Amalgam two surfaces' },
+  { value: 'D2160', label: 'D2160 - Amalgam three surfaces' },
+  { value: 'D2330', label: 'D2330 - Resin composite one surface anterior' },
+  { value: 'D2331', label: 'D2331 - Resin composite two surfaces anterior' },
+  { value: 'D2391', label: 'D2391 - Resin composite one surface posterior' },
+  { value: 'D2392', label: 'D2392 - Resin composite two surfaces posterior' },
+  { value: 'D2393', label: 'D2393 - Resin composite three surfaces posterior' },
+  // Crowns
+  { value: 'D2740', label: 'D2740 - Crown porcelain/ceramic' },
+  { value: 'D2750', label: 'D2750 - Crown porcelain fused to metal' },
+  { value: 'D2751', label: 'D2751 - Crown porcelain fused to metal with noble metal' },
+  { value: 'D2790', label: 'D2790 - Crown full cast high noble metal' },
+  { value: 'D2799', label: 'D2799 - Provisional crown' },
+  // Endodontics
+  { value: 'D3110', label: 'D3110 - Pulp cap direct' },
+  { value: 'D3220', label: 'D3220 - Pulpotomy' },
+  { value: 'D3310', label: 'D3310 - Root canal anterior' },
+  { value: 'D3320', label: 'D3320 - Root canal premolar' },
+  { value: 'D3330', label: 'D3330 - Root canal molar' },
+  { value: 'D3346', label: 'D3346 - Retreatment anterior' },
+  { value: 'D3347', label: 'D3347 - Retreatment premolar' },
+  { value: 'D3348', label: 'D3348 - Retreatment molar' },
+  // Periodontics
+  { value: 'D4210', label: 'D4210 - Gingivectomy per quadrant' },
+  { value: 'D4341', label: 'D4341 - Scaling and root planing per quadrant' },
+  { value: 'D4355', label: 'D4355 - Full mouth debridement' },
+  { value: 'D4910', label: 'D4910 - Periodontal maintenance' },
+  // Prosthodontics
+  { value: 'D5110', label: 'D5110 - Complete denture maxillary' },
+  { value: 'D5120', label: 'D5120 - Complete denture mandibular' },
+  { value: 'D5211', label: 'D5211 - Partial denture maxillary' },
+  { value: 'D5212', label: 'D5212 - Partial denture mandibular' },
+  // Oral Surgery
+  { value: 'D7140', label: 'D7140 - Extraction erupted tooth' },
+  { value: 'D7210', label: 'D7210 - Extraction erupted tooth with elevation' },
+  { value: 'D7220', label: 'D7220 - Removal impacted tooth soft tissue' },
+  { value: 'D7230', label: 'D7230 - Removal impacted tooth partial bony' },
+  { value: 'D7240', label: 'D7240 - Removal impacted tooth complete bony' },
+  { value: 'D7250', label: 'D7250 - Surgical removal of residual roots' },
+  // Orthodontics
+  { value: 'D8080', label: 'D8080 - Comprehensive orthodontic treatment adult' },
+  { value: 'D8090', label: 'D8090 - Comprehensive orthodontic treatment child' }
+];
+
 const SUPPORTING_INFO_CATEGORY_OPTIONS = [
   { value: 'info', label: 'General Info' },
   { value: 'days-supply', label: 'Days Supply' },
@@ -1577,22 +1694,62 @@ export default function PriorAuthorizationForm() {
 
                 {/* Type-specific fields */}
                 {formData.auth_type === 'dental' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Tooth Number</Label>
-                      <Input
-                        value={item.tooth_number || ''}
-                        onChange={(e) => handleItemChange(index, 'tooth_number', e.target.value)}
-                        placeholder="e.g., 11, 21"
-                      />
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Dental Procedure Code</Label>
+                        <Select
+                          value={DENTAL_BILLING_OPTIONS.find(opt => opt.value === item.product_or_service_code)}
+                          onChange={(option) => {
+                            handleItemChange(index, 'product_or_service_code', option?.value || '');
+                            handleItemChange(index, 'product_or_service_display', option?.label?.split(' - ')[1] || '');
+                            handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/dental-billing');
+                          }}
+                          options={DENTAL_BILLING_OPTIONS}
+                          styles={selectStyles}
+                          placeholder="Select dental procedure..."
+                          isClearable
+                          isSearchable
+                          menuPortalTarget={document.body}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Tooth Number (FDI)</Label>
+                        <Select
+                          value={FDI_TOOTH_OPTIONS.find(opt => opt.value === item.tooth_number)}
+                          onChange={(option) => {
+                            handleItemChange(index, 'tooth_number', option?.value || '');
+                            handleItemChange(index, 'tooth_display', option?.label?.split(' - ')[1] || '');
+                          }}
+                          options={FDI_TOOTH_OPTIONS}
+                          styles={selectStyles}
+                          placeholder="Select tooth..."
+                          isClearable
+                          isSearchable
+                          menuPortalTarget={document.body}
+                        />
+                      </div>
                     </div>
                     <div className="space-y-2">
-                      <Label>Tooth Surface</Label>
-                      <Input
-                        value={item.tooth_surface || ''}
-                        onChange={(e) => handleItemChange(index, 'tooth_surface', e.target.value)}
-                        placeholder="e.g., M, O, D, B, L"
+                      <Label>Tooth Surfaces (select multiple if needed)</Label>
+                      <Select
+                        value={TOOTH_SURFACE_OPTIONS.filter(opt => 
+                          item.tooth_surface?.split(',').map(s => s.trim()).includes(opt.value)
+                        )}
+                        onChange={(options) => {
+                          const surfaces = options?.map(opt => opt.value).join(',') || '';
+                          handleItemChange(index, 'tooth_surface', surfaces);
+                        }}
+                        options={TOOTH_SURFACE_OPTIONS}
+                        styles={selectStyles}
+                        placeholder="Select tooth surfaces..."
+                        isClearable
+                        isMulti
+                        menuPortalTarget={document.body}
                       />
+                      <p className="text-xs text-gray-500">
+                        M=Mesial, O=Occlusal, D=Distal, B=Buccal, L=Lingual
+                      </p>
                     </div>
                   </div>
                 )}

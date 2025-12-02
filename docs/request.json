@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "f0b1b7e7-2c5b-4a8f-9e8a-29c18d5f1a01",
+  "id": "2abffacf-16d0-4e20-9860-373e3a105cee",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-02T13:34:24Z",
+  "timestamp": "2025-12-02T17:06:15.177Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:msgheader-1",
+      "fullUrl": "urn:uuid:7a9021bc-55c7-47c2-9311-c59d41c1b580",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "msgheader-1",
+        "id": "7a9021bc-55c7-47c2-9311-c59d41c1b580",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -21,31 +21,42 @@
         },
         "eventCoding": {
           "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
-          "code": "prior-auth-request",
-          "display": "Prior Authorization Request"
-        },
-        "source": {
-          "name": "Provider HIS",
-          "endpoint": "https://provider.example.com/fhir"
+          "code": "priorauth-request"
         },
         "destination": [
           {
-            "name": "nphies FS",
-            "endpoint": "https://sandbox.nphies.sa/fs"
+            "endpoint": "http://nphies.sa/license/payer-license/INS-FHIR",
+            "receiver": {
+              "type": "Organization",
+              "identifier": {
+                "system": "http://nphies.sa/license/payer-license",
+                "value": "INS-FHIR"
+              }
+            }
           }
         ],
+        "sender": {
+          "type": "Organization",
+          "identifier": {
+            "system": "http://nphies.sa/license/provider-license",
+            "value": "PR-FHIR"
+          }
+        },
+        "source": {
+          "endpoint": "http://provider.com"
+        },
         "focus": [
           {
-            "reference": "urn:uuid:claim-1"
+            "reference": "http://provider.com/Claim/4f4275fc-333b-440e-a6b3-c0274fd749e7"
           }
         ]
       }
     },
     {
-      "fullUrl": "urn:uuid:claim-1",
+      "fullUrl": "http://provider.com/Claim/4f4275fc-333b-440e-a6b3-c0274fd749e7",
       "resource": {
         "resourceType": "Claim",
-        "id": "claim-1",
+        "id": "4f4275fc-333b-440e-a6b3-c0274fd749e7",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-priorauth|1.0.0"
@@ -53,8 +64,8 @@
         },
         "identifier": [
           {
-            "system": "http://provider.example.com/claims",
-            "value": "PA-ORAL-2025-0001"
+            "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
+            "value": "PREVIEW-1764695175167"
           }
         ],
         "status": "active",
@@ -62,67 +73,34 @@
           "coding": [
             {
               "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-              "code": "oral",
-              "display": "Oral"
+              "code": "oral"
             }
-          ],
-          "text": "Oral"
+          ]
         },
         "subType": {
           "coding": [
             {
               "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype",
-              "code": "op",
-              "display": "Outpatient"
+              "code": "ip"
             }
-          ],
-          "text": "Outpatient Oral"
+          ]
         },
         "use": "preauthorization",
         "patient": {
-          "reference": "urn:uuid:patient-1"
+          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
         },
-        "created": "2025-12-02T13:30:00Z",
+        "created": "2025-12-02T17:06:15.174Z",
         "insurer": {
-          "identifier": {
-            "use": "official",
-            "type": {
-              "coding": [
-                {
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                  "code": "NII",
-                  "display": "National Insurance Identifier"
-                }
-              ]
-            },
-            "system": "http://nphies.sa/id/insurer",
-            "value": "INS0001"
-          },
-          "display": "Example Insurance Co."
+          "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
         "provider": {
-          "identifier": {
-            "use": "official",
-            "type": {
-              "coding": [
-                {
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                  "code": "PRN",
-                  "display": "Provider Number"
-                }
-              ]
-            },
-            "system": "http://nphies.sa/id/provider",
-            "value": "PRV123456"
-          },
-          "display": "Example Dental Center"
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
         },
         "priority": {
           "coding": [
             {
               "system": "http://terminology.hl7.org/CodeSystem/processpriority",
-              "code": "normal",
-              "display": "Normal"
+              "code": "normal"
             }
           ]
         },
@@ -131,23 +109,25 @@
             "coding": [
               {
                 "system": "http://terminology.hl7.org/CodeSystem/payeetype",
-                "code": "provider",
-                "display": "Provider"
+                "code": "provider"
               }
             ]
           }
         },
-        "referral": {
-          "reference": "urn:uuid:referral-1"
-        },
-        "facility": {
-          "reference": "urn:uuid:location-1"
-        },
+        "insurance": [
+          {
+            "sequence": 1,
+            "focal": true,
+            "coverage": {
+              "reference": "Coverage/c8dcca19-abdc-4b87-88eb-276c5581e067"
+            }
+          }
+        ],
         "extension": [
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "urn:uuid:encounter-1"
+              "reference": "http://provider.com/Encounter/5308f2ac-a720-4cb4-b8ad-47627bed4946"
             }
           }
         ],
@@ -155,26 +135,56 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "urn:uuid:practitioner-1"
+              "reference": "Practitioner/f7f727d6-2c64-4f1d-b494-2864ce58b10e"
             },
             "role": {
               "coding": [
                 {
-                  "system": "http://terminology.hl7.org/CodeSystem/claim-careteamrole",
-                  "code": "primary",
-                  "display": "Primary care"
+                  "system": "http://terminology.hl7.org/CodeSystem/claimcareteamrole",
+                  "code": "primary"
                 }
               ]
             },
             "qualification": {
               "coding": [
                 {
-                  "system": "http://hl7.org/fhir/ValueSet/c80-practice-codes",
-                  "code": "DENT",
-                  "display": "Dental specialty"
+                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
+                  "code": "08.00"
                 }
-              ],
-              "text": "Dentist"
+              ]
+            }
+          }
+        ],
+        "diagnosis": [
+          {
+            "sequence": 1,
+            "diagnosisCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://hl7.org/fhir/sid/icd-10-am",
+                  "code": "K35.2",
+                  "display": "Acute appendicitis with generalized peritonitis"
+                }
+              ]
+            },
+            "type": [
+              {
+                "coding": [
+                  {
+                    "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type",
+                    "code": "principal"
+                  }
+                ]
+              }
+            ],
+            "onAdmission": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-on-admission",
+                  "code": "y",
+                  "display": "Yes"
+                }
+              ]
             }
           }
         ],
@@ -185,8 +195,7 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "chief-complaint",
-                  "display": "Chief Complaint"
+                  "code": "chief-complaint"
                 }
               ]
             },
@@ -194,12 +203,12 @@
               "coding": [
                 {
                   "system": "http://snomed.info/sct",
-                  "code": "162201000",
-                  "display": "Toothache"
+                  "code": "418799008",
+                  "display": "General symptom"
                 }
-              ],
-              "text": "Toothache lower right molar"
-            }
+              ]
+            },
+            "timingDate": "2025-12-02"
           },
           {
             "sequence": 2,
@@ -207,263 +216,253 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "history-of-present-illness",
-                  "display": "History of present illness"
+                  "code": "estimated-Length-of-Stay"
                 }
               ]
             },
-            "valueString": "Patient reports intermittent tooth pain for 2 weeks, worsened with cold and chewing."
-          },
-          {
-            "sequence": 3,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "physical-examination",
-                  "display": "Physical examination"
-                }
-              ]
-            },
-            "valueString": "Caries with deep cavity in lower right first molar, tender to percussion."
-          },
-          {
-            "sequence": 4,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "treatment-plan",
-                  "display": "Treatment plan"
-                }
-              ]
-            },
-            "valueString": "Proposed root canal treatment and crown restoration."
+            "timingDate": "2025-12-02",
+            "valueQuantity": {
+              "value": 1,
+              "system": "http://unitsofmeasure.org",
+              "code": "d"
+            }
           }
         ],
-        "diagnosis": [
+        "item": [
           {
+            "extension": [
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
+                "valueBoolean": false
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
+                "valueMoney": {
+                  "value": 0,
+                  "currency": "SAR"
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share",
+                "valueMoney": {
+                  "value": 400,
+                  "currency": "SAR"
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
+                "valueBoolean": false
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax",
+                "valueMoney": {
+                  "value": 0,
+                  "currency": "SAR"
+                }
+              }
+            ],
             "sequence": 1,
-            "diagnosisCodeableConcept": {
+            "careTeamSequence": [
+              1
+            ],
+            "diagnosisSequence": [
+              1
+            ],
+            "informationSequence": [
+              1,
+              2
+            ],
+            "productOrService": {
               "coding": [
                 {
-                  "system": "http://hl7.org/fhir/sid/icd-10",
-                  "code": "K02.1",
-                  "display": "Caries of dentine"
+                  "system": "http://nphies.sa/terminology/CodeSystem/dental-billing",
+                  "code": "30571-00-00",
+                  "display": "Appendicectomy"
                 }
-              ],
-              "text": "Dental caries of dentine"
+              ]
             },
-            "type": [
+            "servicedDate": "2023-12-04",
+            "quantity": {
+              "value": 1
+            },
+            "unitPrice": {
+              "value": 300,
+              "currency": "SAR"
+            },
+            "net": {
+              "value": 300,
+              "currency": "SAR"
+            },
+            "bodySite": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/fdi-tooth",
+                  "code": "37",
+                  "display": "Lower left second molar"
+                }
+              ]
+            },
+            "subSite": [
               {
                 "coding": [
                   {
-                    "system": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype",
-                    "code": "principal",
-                    "display": "Principal diagnosis"
+                    "system": "http://nphies.sa/terminology/CodeSystem/tooth-surface",
+                    "code": "LOWER LEFT",
+                    "display": "LOWER LEFT"
                   }
                 ]
               }
             ]
           }
         ],
-        "insurance": [
-          {
-            "sequence": 1,
-            "focal": true,
-            "coverage": {
-              "reference": "urn:uuid:coverage-1"
-            }
-          }
-        ],
-        "item": [
-          {
-            "sequence": 1,
-            "careTeamSequence": [
-              1
-            ],
-            "diagnosisSequence": [
-              1
-            ],
-            "productOrService": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/dental-billing",
-                  "code": "D3310",
-                  "display": "Root canal therapy, molar"
-                }
-              ]
-            },
-            "servicedDate": "2025-12-05",
-            "quantity": {
-              "value": 1
-            },
-            "unitPrice": {
-              "value": 800,
-              "currency": "SAR"
-            },
-            "net": {
-              "value": 800,
-              "currency": "SAR"
-            },
-            "bodySite": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/fdi-tooth",
-                  "code": "46",
-                  "display": "Lower right first molar"
-                }
-              ]
-            }
-          },
-          {
-            "sequence": 2,
-            "careTeamSequence": [
-              1
-            ],
-            "diagnosisSequence": [
-              1
-            ],
-            "productOrService": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/dental-billing",
-                  "code": "D2750",
-                  "display": "Crown - porcelain fused to metal"
-                }
-              ]
-            },
-            "servicedDate": "2025-12-05",
-            "quantity": {
-              "value": 1
-            },
-            "unitPrice": {
-              "value": 1200,
-              "currency": "SAR"
-            },
-            "net": {
-              "value": 1200,
-              "currency": "SAR"
-            },
-            "bodySite": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/fdi-tooth",
-                  "code": "46",
-                  "display": "Lower right first molar"
-                }
-              ]
-            }
-          }
-        ],
         "total": {
-          "value": 2000,
+          "value": 300,
           "currency": "SAR"
         }
       }
     },
     {
-      "fullUrl": "urn:uuid:patient-1",
+      "fullUrl": "http://provider.com/Encounter/5308f2ac-a720-4cb4-b8ad-47627bed4946",
       "resource": {
-        "resourceType": "Patient",
-        "id": "patient-1",
+        "resourceType": "Encounter",
+        "id": "5308f2ac-a720-4cb4-b8ad-47627bed4946",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
           ]
         },
         "identifier": [
           {
-            "use": "official",
-            "type": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/patient-identifier-type",
-                  "code": "NID",
-                  "display": "National ID"
-                }
-              ]
-            },
-            "system": "http://nphies.sa/id/national-id",
-            "value": "1012345678"
+            "system": "http://PR-FHIR.com.sa/identifiers/encounter",
+            "value": "PREVIEW-1764695175167"
           }
         ],
-        "name": [
-          {
-            "use": "official",
-            "family": "Al Saud",
-            "given": [
-              "Ahmed"
+        "status": "planned",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "SS",
+          "display": "short stay"
+        },
+        "serviceType": {
+          "coding": [
+            {
+              "system": "http://nphies.sa/terminology/CodeSystem/service-type",
+              "code": "sub-acute-care",
+              "display": "Sub-Acute Care"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
+        },
+        "period": {
+          "start": "2023-12-04T07:25:00.000Z",
+          "end": "2023-12-04T09:30:00.000Z"
+        },
+        "hospitalization": {
+          "extension": [
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-admissionSpecialty",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
+                    "code": "08.00",
+                    "display": "Internal Medicine Specialty"
+                  }
+                ]
+              }
+            }
+          ],
+          "admitSource": {
+            "coding": [
+              {
+                "system": "http://nphies.sa/terminology/CodeSystem/admit-source",
+                "code": "WKIN",
+                "display": "Walk-in"
+              }
             ]
           }
-        ],
-        "gender": "male",
-        "birthDate": "1990-05-10"
+        },
+        "serviceProvider": {
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
+        }
       }
     },
     {
-      "fullUrl": "urn:uuid:coverage-1",
+      "fullUrl": "http://provider.com/Coverage/c8dcca19-abdc-4b87-88eb-276c5581e067",
       "resource": {
         "resourceType": "Coverage",
-        "id": "coverage-1",
+        "id": "c8dcca19-abdc-4b87-88eb-276c5581e067",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
           ]
         },
+        "identifier": [
+          {
+            "system": "http://payer.com/memberid",
+            "value": "0000000002"
+          }
+        ],
         "status": "active",
         "type": {
           "coding": [
             {
-              "system": "http://terminology.hl7.org/CodeSystem/coverage-kind",
-              "code": "insurance",
-              "display": "Insurance"
+              "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
+              "code": "EHCPOL",
+              "display": "Extended healthcare"
             }
           ]
         },
-        "subscriberId": "SUB-99887766",
+        "policyHolder": {
+          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
+        },
+        "subscriber": {
+          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
+        },
         "beneficiary": {
-          "reference": "urn:uuid:patient-1"
+          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
+        },
+        "relationship": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+              "code": "self",
+              "display": "Self"
+            }
+          ]
         },
         "payor": [
           {
-            "reference": "urn:uuid:insurer-org-1"
+            "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
           }
-        ]
-      }
-    },
-    {
-      "fullUrl": "urn:uuid:encounter-1",
-      "resource": {
-        "resourceType": "Encounter",
-        "id": "encounter-1",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-amb-auth|1.0.0"
-          ]
-        },
-        "status": "in-progress",
-        "class": {
-          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-          "code": "AMB",
-          "display": "ambulatory"
-        },
-        "subject": {
-          "reference": "urn:uuid:patient-1"
-        },
+        ],
+        "class": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
+                  "code": "plan"
+                }
+              ]
+            },
+            "value": "default-plan",
+            "name": "Dream Team"
+          }
+        ],
         "period": {
-          "start": "2025-12-02T13:00:00Z"
-        },
-        "serviceProvider": {
-          "reference": "urn:uuid:provider-org-1"
+          "start": "2021-09-27",
+          "end": "2028-09-27"
         }
       }
     },
     {
-      "fullUrl": "urn:uuid:practitioner-1",
+      "fullUrl": "http://provider.com/Practitioner/f7f727d6-2c64-4f1d-b494-2864ce58b10e",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "practitioner-1",
+        "id": "f7f727d6-2c64-4f1d-b494-2864ce58b10e",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -471,46 +470,105 @@
         },
         "identifier": [
           {
-            "use": "official",
-            "system": "http://nphies.sa/id/practitioner-license",
-            "value": "DENT-12345"
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "MD",
+                  "display": "Medical License Number"
+                }
+              ]
+            },
+            "system": "http://nphies.sa/license/practitioner-license",
+            "value": "PRACT-f7f727d6"
           }
         ],
+        "active": true,
         "name": [
           {
-            "family": "Al Harbi",
+            "use": "official",
+            "text": "Default Practitioner",
+            "family": "Practitioner",
             "given": [
-              "Mona"
+              "Default"
             ]
+          }
+        ],
+        "qualification": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
+                  "code": "08.00",
+                  "display": "Healthcare Professional"
+                }
+              ]
+            }
           }
         ]
       }
     },
     {
-      "fullUrl": "urn:uuid:provider-org-1",
+      "fullUrl": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
       "resource": {
         "resourceType": "Organization",
-        "id": "provider-org-1",
+        "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
           ]
         },
-        "identifier": [
+        "extension": [
           {
-            "use": "official",
-            "system": "http://nphies.sa/id/provider",
-            "value": "PRV123456"
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
+                  "code": "1",
+                  "display": "Hospital"
+                }
+              ]
+            }
           }
         ],
-        "name": "Example Dental Center"
+        "identifier": [
+          {
+            "system": "http://nphies.sa/license/provider-license",
+            "value": "PR-FHIR"
+          }
+        ],
+        "active": true,
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
+                "code": "prov"
+              }
+            ]
+          }
+        ],
+        "name": "Saudi General Hospital",
+        "address": [
+          {
+            "use": "work",
+            "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
+            "line": [
+              "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
+            ],
+            "city": "Riyadh",
+            "country": "Saudi Arabia"
+          }
+        ]
       }
     },
     {
-      "fullUrl": "urn:uuid:insurer-org-1",
+      "fullUrl": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
       "resource": {
         "resourceType": "Organization",
-        "id": "insurer-org-1",
+        "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"
@@ -519,51 +577,140 @@
         "identifier": [
           {
             "use": "official",
-            "system": "http://nphies.sa/id/insurer",
-            "value": "INS0001"
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "NII"
+                }
+              ]
+            },
+            "system": "http://nphies.sa/license/payer-license",
+            "value": "INS-FHIR"
           }
         ],
-        "name": "Example Insurance Co."
+        "active": true,
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
+                "code": "ins",
+                "display": "Insurance Company"
+              }
+            ]
+          }
+        ],
+        "name": "Bupa Arabia Insurance Company",
+        "address": [
+          {
+            "use": "work",
+            "text": "Business Tower, Riyadh",
+            "line": [
+              "Business Tower, Riyadh"
+            ],
+            "city": "Riyadh",
+            "country": "Saudi Arabia"
+          }
+        ]
       }
     },
     {
-      "fullUrl": "urn:uuid:location-1",
+      "fullUrl": "http://provider.com/Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161",
       "resource": {
-        "resourceType": "Location",
-        "id": "location-1",
+        "resourceType": "Patient",
+        "id": "1a72f430-d5b2-4402-91f3-59ee1ed73161",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
           ]
         },
-        "name": "Dental Clinic Room 1",
-        "address": {
-          "text": "Riyadh, Olaya Street, Building 10"
-        }
-      }
-    },
-    {
-      "fullUrl": "urn:uuid:referral-1",
-      "resource": {
-        "resourceType": "ServiceRequest",
-        "id": "referral-1",
-        "status": "active",
-        "intent": "order",
-        "subject": {
-          "reference": "urn:uuid:patient-1"
-        },
-        "code": {
-          "coding": [
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/occupation",
+                  "code": "business"
+                }
+              ]
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "extension": [
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "urn:iso:std:iso:3166",
+                      "code": "SAU",
+                      "display": "Saudi Arabia"
+                    }
+                  ]
+                }
+              }
+            ],
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "PPN",
+                  "display": "Passport Number"
+                }
+              ]
+            },
+            "system": "http://nphies.sa/identifier/passportnumber",
+            "value": "G12345678"
+          }
+        ],
+        "active": true,
+        "name": [
+          {
+            "use": "official",
+            "text": "Ahmad Khaled Abbas",
+            "family": "Abbas",
+            "given": [
+              "Ahmad",
+              "Khaled"
+            ]
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "+966512345691"
+          }
+        ],
+        "gender": "male",
+        "_gender": {
+          "extension": [
             {
-              "system": "http://snomed.info/sct",
-              "code": "225341007",
-              "display": "Consultation for dental treatment"
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender",
+                    "code": "male"
+                  }
+                ]
+              }
             }
           ]
         },
-        "authoredOn": "2025-12-02T12:30:00Z",
-        "requester": {
-          "reference": "urn:uuid:practitioner-1"
+        "birthDate": "1984-12-22",
+        "deceasedBoolean": false,
+        "address": [],
+        "maritalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+              "code": "U"
+            }
+          ]
         }
       }
     }
