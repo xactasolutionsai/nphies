@@ -127,6 +127,102 @@ const DIAGNOSIS_TYPE_OPTIONS = [
   { value: 'discharge', label: 'Discharge' }
 ];
 
+// Dental ICD-10 Codes (K00-K10)
+const DENTAL_ICD10_OPTIONS = [
+  // K00 – Disorders of tooth development and eruption
+  { value: 'K00.0', label: 'K00.0 - Anodontia' },
+  { value: 'K00.1', label: 'K00.1 - Supernumerary teeth' },
+  { value: 'K00.2', label: 'K00.2 - Abnormalities of size & form of teeth' },
+  { value: 'K00.3', label: 'K00.3 - Mottled teeth' },
+  { value: 'K00.4', label: 'K00.4 - Disturbances in tooth formation' },
+  { value: 'K00.5', label: 'K00.5 - Hereditary disturbances of tooth structure' },
+  { value: 'K00.6', label: 'K00.6 - Disturbances in tooth eruption' },
+  { value: 'K00.7', label: 'K00.7 - Teething syndrome' },
+  { value: 'K00.8', label: 'K00.8 - Other disorders of tooth development' },
+  { value: 'K00.9', label: 'K00.9 - Disorder of tooth development, unspecified' },
+  // K01 – Embedded and impacted teeth
+  { value: 'K01.0', label: 'K01.0 - Embedded teeth' },
+  { value: 'K01.1', label: 'K01.1 - Impacted teeth' },
+  // K02 – Dental caries (decay)
+  { value: 'K02.0', label: 'K02.0 - Caries of enamel' },
+  { value: 'K02.1', label: 'K02.1 - Caries of dentin' },
+  { value: 'K02.2', label: 'K02.2 - Caries of cementum' },
+  { value: 'K02.3', label: 'K02.3 - Arrested dental caries' },
+  { value: 'K02.4', label: 'K02.4 - Odontoclasia' },
+  { value: 'K02.5', label: 'K02.5 - Dental caries on smooth surface' },
+  { value: 'K02.6', label: 'K02.6 - Dental caries on pit and fissure' },
+  { value: 'K02.7', label: 'K02.7 - Root caries' },
+  { value: 'K02.8', label: 'K02.8 - Other dental caries' },
+  { value: 'K02.9', label: 'K02.9 - Dental caries, unspecified' },
+  // K03 – Other diseases of hard tissues of teeth
+  { value: 'K03.0', label: 'K03.0 - Excessive attrition of teeth' },
+  { value: 'K03.1', label: 'K03.1 - Abrasion of teeth' },
+  { value: 'K03.2', label: 'K03.2 - Erosion of teeth' },
+  { value: 'K03.3', label: 'K03.3 - Pathological resorption of teeth' },
+  { value: 'K03.4', label: 'K03.4 - Hypercementosis' },
+  { value: 'K03.5', label: 'K03.5 - Ankylosis of teeth' },
+  { value: 'K03.6', label: 'K03.6 - Deposits (calculus) on teeth' },
+  { value: 'K03.7', label: 'K03.7 - Posteruptive colour changes of dental hard tissues' },
+  { value: 'K03.8', label: 'K03.8 - Other specified diseases of hard tissues' },
+  { value: 'K03.9', label: 'K03.9 - Hard tissue disease, unspecified' },
+  // K04 – Diseases of pulp and periapical tissues
+  { value: 'K04.0', label: 'K04.0 - Pulpitis' },
+  { value: 'K04.1', label: 'K04.1 - Necrosis of pulp' },
+  { value: 'K04.2', label: 'K04.2 - Pulp degeneration' },
+  { value: 'K04.3', label: 'K04.3 - Abnormal hard tissue formation in pulp' },
+  { value: 'K04.4', label: 'K04.4 - Acute apical periodontitis of pulpal origin' },
+  { value: 'K04.5', label: 'K04.5 - Chronic apical periodontitis' },
+  { value: 'K04.6', label: 'K04.6 - Periapical abscess with sinus' },
+  { value: 'K04.7', label: 'K04.7 - Periapical abscess without sinus' },
+  { value: 'K04.8', label: 'K04.8 - Radicular cyst' },
+  { value: 'K04.9', label: 'K04.9 - Other diseases of pulp/periapical tissue' },
+  // K05 – Gingivitis and periodontal diseases
+  { value: 'K05.0', label: 'K05.0 - Acute gingivitis' },
+  { value: 'K05.1', label: 'K05.1 - Chronic gingivitis' },
+  { value: 'K05.2', label: 'K05.2 - Acute periodontitis' },
+  { value: 'K05.3', label: 'K05.3 - Chronic periodontitis' },
+  { value: 'K05.4', label: 'K05.4 - Periodontosis' },
+  { value: 'K05.5', label: 'K05.5 - Other periodontal diseases' },
+  { value: 'K05.6', label: 'K05.6 - Periodontal disease, unspecified' },
+  // K06 – Other disorders of gingiva and edentulous alveolar ridge
+  { value: 'K06.0', label: 'K06.0 - Gingival recession' },
+  { value: 'K06.1', label: 'K06.1 - Gingival enlargement' },
+  { value: 'K06.2', label: 'K06.2 - Gingival/edentulous alveolar ridge disorder' },
+  { value: 'K06.8', label: 'K06.8 - Other disorders of gingiva' },
+  { value: 'K06.9', label: 'K06.9 - Disorder of gingiva, unspecified' },
+  // K07 – Dentofacial anomalies
+  { value: 'K07.0', label: 'K07.0 - Major anomalies of jaw size' },
+  { value: 'K07.1', label: 'K07.1 - Anomalies of jaw-cranial base relationship' },
+  { value: 'K07.2', label: 'K07.2 - Anomalies of dental arch relationship' },
+  { value: 'K07.3', label: 'K07.3 - Anomalies of tooth position' },
+  { value: 'K07.4', label: 'K07.4 - Malocclusion, unspecified' },
+  { value: 'K07.5', label: 'K07.5 - Dentofacial functional anomalies' },
+  { value: 'K07.6', label: 'K07.6 - Temporomandibular joint disorders' },
+  { value: 'K07.8', label: 'K07.8 - Other dentofacial anomalies' },
+  { value: 'K07.9', label: 'K07.9 - Dentofacial anomaly, unspecified' },
+  // K08 – Loss of teeth and other local conditions
+  { value: 'K08.0', label: 'K08.0 - Exfoliation of teeth due to systemic causes' },
+  { value: 'K08.1', label: 'K08.1 - Loss of teeth due to accident/extraction' },
+  { value: 'K08.2', label: 'K08.2 - Atrophy of edentulous alveolar ridge' },
+  { value: 'K08.3', label: 'K08.3 - Retained dental root' },
+  { value: 'K08.4', label: 'K08.4 - Odontogenic cysts' },
+  { value: 'K08.8', label: 'K08.8 - Other conditions of teeth' },
+  { value: 'K08.9', label: 'K08.9 - Condition of teeth, unspecified' },
+  // K09 – Cysts of oral region
+  { value: 'K09.0', label: 'K09.0 - Developmental odontogenic cysts' },
+  { value: 'K09.1', label: 'K09.1 - Non-odontogenic developmental cysts' },
+  { value: 'K09.2', label: 'K09.2 - Other cysts of jaws' },
+  { value: 'K09.8', label: 'K09.8 - Other cysts of oral region' },
+  { value: 'K09.9', label: 'K09.9 - Cyst of oral region, unspecified' },
+  // K10 – Other diseases of jaws
+  { value: 'K10.0', label: 'K10.0 - Developmental disorders of jaws' },
+  { value: 'K10.1', label: 'K10.1 - Giant cell granuloma' },
+  { value: 'K10.2', label: 'K10.2 - Inflammatory conditions of jaws' },
+  { value: 'K10.3', label: 'K10.3 - Osteonecrosis of jaw' },
+  { value: 'K10.8', label: 'K10.8 - Other diseases of jaws' },
+  { value: 'K10.9', label: 'K10.9 - Disease of jaw, unspecified' }
+];
+
 const EYE_OPTIONS = [
   { value: 'left', label: 'Left' },
   { value: 'right', label: 'Right' },
@@ -1285,20 +1381,37 @@ export default function PriorAuthorizationForm() {
                   {diagnosis.sequence}
                 </div>
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="space-y-2">
-                    <Label>ICD-10 Code *</Label>
-                    <Input
-                      value={diagnosis.diagnosis_code}
-                      onChange={(e) => handleDiagnosisChange(index, 'diagnosis_code', e.target.value)}
-                      placeholder="e.g., J06.9"
-                    />
-                  </div>
                   <div className="space-y-2 md:col-span-2">
+                    <Label>ICD-10 Code *</Label>
+                    {formData.auth_type === 'dental' ? (
+                      <Select
+                        value={DENTAL_ICD10_OPTIONS.find(opt => opt.value === diagnosis.diagnosis_code)}
+                        onChange={(option) => {
+                          handleDiagnosisChange(index, 'diagnosis_code', option?.value || '');
+                          handleDiagnosisChange(index, 'diagnosis_display', option?.label?.split(' - ')[1] || '');
+                        }}
+                        options={DENTAL_ICD10_OPTIONS}
+                        styles={selectStyles}
+                        placeholder="Select dental diagnosis..."
+                        isClearable
+                        isSearchable
+                        menuPortalTarget={document.body}
+                      />
+                    ) : (
+                      <Input
+                        value={diagnosis.diagnosis_code}
+                        onChange={(e) => handleDiagnosisChange(index, 'diagnosis_code', e.target.value)}
+                        placeholder="e.g., J06.9"
+                      />
+                    )}
+                  </div>
+                  <div className="space-y-2">
                     <Label>Description</Label>
                     <Input
                       value={diagnosis.diagnosis_display || ''}
                       onChange={(e) => handleDiagnosisChange(index, 'diagnosis_display', e.target.value)}
                       placeholder="Diagnosis description"
+                      disabled={formData.auth_type === 'dental'}
                     />
                   </div>
                   <div className="space-y-2">

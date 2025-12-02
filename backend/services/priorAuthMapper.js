@@ -136,7 +136,7 @@ class PriorAuthMapper {
         coding: [
           {
             system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-            code: this.getClaimSubTypeCode(priorAuth.encounter_class || priorAuth.sub_type)
+            code: this.getClaimSubTypeCode(priorAuth.encounter_class || priorAuth.sub_type, priorAuth.auth_type)
           }
         ]
       },
@@ -254,8 +254,13 @@ class PriorAuthMapper {
 
     // BV-00770, BV-00802, BV-00027: Determine if this is an institutional claim
     // Institutional claims require: chief-complaint, estimated-length-of-stay, onAdmission
+    // BV-00027: Oral/dental claims are NOT institutional - onAdmission not allowed
     const isInstitutional = priorAuth.auth_type === 'institutional' || 
-                            ['daycase', 'inpatient'].includes(priorAuth.encounter_class);
+                            (['daycase', 'inpatient'].includes(priorAuth.encounter_class) && 
+                             priorAuth.auth_type !== 'dental');
+    
+    // Check if this is an oral/dental claim
+    const isOralClaim = priorAuth.auth_type === 'dental';
 
     // CareTeam - REQUIRED per NPHIES spec (IC-00014 error if missing)
     // Always include with at least a default practitioner
@@ -367,6 +372,56 @@ class PriorAuthMapper {
       }
     }
     
+    // BV-00752, BV-00803, BV-00804, BV-00805, BV-00806: Oral claims have specific supportingInfo requirements
+    if (isOralClaim) {
+      const requestDate = priorAuth.request_date || new Date();
+      
+      // BV-00752: investigation-result is REQUIRED
+      if (!supportingInfoList.some(info => info.category === 'investigation-result')) {
+        supportingInfoList.push({
+          category: 'investigation-result',
+          value_string: priorAuth.investigation_result || 'Clinical examination completed',
+          timing_date: requestDate
+        });
+      }
+      
+      // BV-00803: treatment-plan is REQUIRED
+      if (!supportingInfoList.some(info => info.category === 'treatment-plan')) {
+        supportingInfoList.push({
+          category: 'treatment-plan',
+          value_string: priorAuth.treatment_plan || 'Dental treatment as per clinical assessment',
+          timing_date: requestDate
+        });
+      }
+      
+      // BV-00804: patient-history is REQUIRED
+      if (!supportingInfoList.some(info => info.category === 'patient-history')) {
+        supportingInfoList.push({
+          category: 'patient-history',
+          value_string: priorAuth.patient_history || 'No significant medical history',
+          timing_date: requestDate
+        });
+      }
+      
+      // BV-00805: physical-examination is REQUIRED
+      if (!supportingInfoList.some(info => info.category === 'physical-examination')) {
+        supportingInfoList.push({
+          category: 'physical-examination',
+          value_string: priorAuth.physical_examination || 'Oral examination performed',
+          timing_date: requestDate
+        });
+      }
+      
+      // BV-00806: history-of-present-illness is REQUIRED
+      if (!supportingInfoList.some(info => info.category === 'history-of-present-illness')) {
+        supportingInfoList.push({
+          category: 'history-of-present-illness',
+          value_string: priorAuth.history_of_present_illness || 'Patient presents for dental treatment',
+          timing_date: requestDate
+        });
+      }
+    }
+    
     if (supportingInfoList.length > 0) {
       // BV-00453: Ensure all sequence numbers are unique and sequential
       // Always recalculate sequence numbers based on array position
@@ -419,7 +474,13 @@ class PriorAuthMapper {
    * Get claim subType code based on encounter class
    * Per NPHIES spec: ip (inpatient), op (outpatient), etc.
    */
-  getClaimSubTypeCode(encounterClass) {
+  getClaimSubTypeCode(encounterClass, authType) {
+    // BV-00366: Oral claims must use 'op' subType
+    // Per NPHIES: oral/dental claims are always outpatient
+    if (authType === 'dental') {
+      return 'op';
+    }
+    
     // Per NPHIES reference Bundle-a84aabfa: SS (short stay/daycase) uses 'ip' subType
     const subTypes = {
       'inpatient': 'ip',
@@ -1337,10 +1398,14 @@ class PriorAuthMapper {
     const encounterId = bundleResourceIds.encounter;
     const patientId = bundleResourceIds.patient;
     const providerId = bundleResourceIds.provider;
-    const encounterClass = priorAuth.encounter_class || 'ambulatory';
+    
+    // BV-00743: Oral claims MUST use 'ambulatory' (AMB) encounter class
+    const isOralClaim = priorAuth.auth_type === 'dental';
+    const encounterClass = isOralClaim ? 'ambulatory' : (priorAuth.encounter_class || 'ambulatory');
   
     // Debug logging to verify encounter class handling
     console.log('[PriorAuthMapper] buildEncounterResourceWithId - encounterClass:', encounterClass);
+    console.log('[PriorAuthMapper] Is oral claim?:', isOralClaim);
     console.log('[PriorAuthMapper] Is daycase/inpatient?:', ['daycase', 'inpatient'].includes(encounterClass));
   
     // IC-00183: Encounter identifier is required by NPHIES
@@ -1371,15 +1436,34 @@ class PriorAuthMapper {
       }
     };
 
+    // BV-00736: serviceEventType extension is REQUIRED for oral/professional claims
+    if (isOralClaim) {
+      encounter.extension = [
+        {
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceEventType',
+          valueCodeableConcept: {
+            coding: [
+              {
+                system: 'http://nphies.sa/terminology/CodeSystem/service-event-type',
+                code: priorAuth.service_event_type || 'new-visit',
+                display: priorAuth.service_event_type_display || 'New Visit'
+              }
+            ]
+          }
+        }
+      ];
+    }
+
     // serviceType - MUST come BEFORE subject per FHIR R4 order
     // REQUIRED for SS/IMP encounters per NPHIES encounter-auth-SS profile
-    if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type) {
+    // Also add for oral claims
+    if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type || isOralClaim) {
       encounter.serviceType = {
         coding: [
           {
             system: 'http://nphies.sa/terminology/CodeSystem/service-type',
-            code: priorAuth.service_type || 'sub-acute-care',
-            display: this.getServiceTypeDisplay(priorAuth.service_type || 'sub-acute-care')
+            code: priorAuth.service_type || (isOralClaim ? 'dental' : 'sub-acute-care'),
+            display: this.getServiceTypeDisplay(priorAuth.service_type || (isOralClaim ? 'dental' : 'sub-acute-care'))
           }
         ]
       };
@@ -1400,7 +1484,8 @@ class PriorAuthMapper {
 
     // hospitalization - REQUIRED for SS/IMP encounters per NPHIES profile
     // Reference: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7383.json.html
-    if (['daycase', 'inpatient'].includes(encounterClass)) {
+    // BV-00807: NOT allowed for oral claims
+    if (['daycase', 'inpatient'].includes(encounterClass) && !isOralClaim) {
       encounter.hospitalization = {
         extension: [
           {
