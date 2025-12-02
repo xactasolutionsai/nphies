@@ -527,8 +527,8 @@ class PriorAuthorizationsController extends BaseController {
         WHERE id = $3
       `, [nphiesRequestId, JSON.stringify(bundle), id]);
 
-      // Send to NPHIES
-      const nphiesResponse = await nphiesService.checkEligibility(bundle);
+      // Send to NPHIES (use submitPriorAuth for prior authorization requests)
+      const nphiesResponse = await nphiesService.submitPriorAuth(bundle);
 
       if (nphiesResponse.success) {
         // Validate response structure
@@ -778,8 +778,8 @@ class PriorAuthorizationsController extends BaseController {
       // Build cancel request bundle
       const cancelBundle = priorAuthMapper.buildCancelRequestBundle(existing, provider, insurer, reason);
 
-      // Send to NPHIES
-      const nphiesResponse = await nphiesService.checkEligibility(cancelBundle);
+      // Send to NPHIES (use submitPriorAuth since cancel is also a Claim operation)
+      const nphiesResponse = await nphiesService.submitPriorAuth(cancelBundle);
 
       if (nphiesResponse.success) {
         // Update status

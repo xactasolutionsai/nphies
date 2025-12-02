@@ -79,9 +79,89 @@ class NphiesService {
   }
 
   /**
-   * Validate FHIR response bundle structure
+   * Submit prior authorization request to NPHIES
+   */
+  async submitPriorAuth(requestBundle) {
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      try {
+        console.log(`[NPHIES] Sending prior authorization request (attempt ${attempt}/${this.retryAttempts})`);
+        
+        const response = await axios.post(
+          `${this.baseURL}/$process-message`,
+          requestBundle,
+          {
+            headers: {
+              'Content-Type': 'application/fhir+json',
+              'Accept': 'application/fhir+json'
+            },
+            timeout: this.timeout,
+            validateStatus: (status) => status < 500 // Accept 4xx responses as valid
+          }
+        );
+
+        console.log(`[NPHIES] Response received: ${response.status}`);
+        
+        // Validate response for prior auth (expects ClaimResponse)
+        const validationResult = this.validatePriorAuthResponse(response.data);
+        if (!validationResult.valid) {
+          console.error('[NPHIES] Invalid prior auth response structure:', validationResult.errors);
+          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
+        }
+
+        return {
+          success: true,
+          status: response.status,
+          data: response.data
+        };
+
+      } catch (error) {
+        lastError = error;
+        console.error(`[NPHIES] Attempt ${attempt} failed:`, error.message);
+
+        // Don't retry on 4xx errors (client errors)
+        if (error.response && error.response.status >= 400 && error.response.status < 500) {
+          console.log('[NPHIES] Client error detected, not retrying');
+          break;
+        }
+
+        // Wait before retrying (exponential backoff)
+        if (attempt < this.retryAttempts) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
+          await this.sleep(waitTime);
+        }
+      }
+    }
+
+    // All attempts failed
+    return {
+      success: false,
+      error: this.formatError(lastError)
+    };
+  }
+
+  /**
+   * Validate FHIR response bundle structure for Eligibility
    */
   validateResponse(response) {
+    return this.validateBundleResponse(response, ['CoverageEligibilityResponse']);
+  }
+
+  /**
+   * Validate FHIR response bundle structure for Prior Authorization
+   */
+  validatePriorAuthResponse(response) {
+    return this.validateBundleResponse(response, ['ClaimResponse']);
+  }
+
+  /**
+   * Generic FHIR response bundle validation
+   * @param {Object} response - The FHIR bundle response
+   * @param {Array<string>} expectedResourceTypes - Array of expected resource types (e.g., ['ClaimResponse', 'CoverageEligibilityResponse'])
+   */
+  validateBundleResponse(response, expectedResourceTypes = []) {
     const errors = [];
 
     if (!response) {
@@ -109,16 +189,18 @@ class NphiesService {
       errors.push('First entry must be MessageHeader');
     }
 
-    // Check for either CoverageEligibilityResponse or OperationOutcome
-    const hasEligibilityResponse = response.entry.some(
-      e => e.resource?.resourceType === 'CoverageEligibilityResponse'
-    );
+    // Check for OperationOutcome (always valid for error responses)
     const hasOperationOutcome = response.entry.some(
       e => e.resource?.resourceType === 'OperationOutcome'
     );
 
-    if (!hasEligibilityResponse && !hasOperationOutcome) {
-      errors.push('Bundle must contain CoverageEligibilityResponse or OperationOutcome');
+    // Check for expected resource types
+    const hasExpectedResource = expectedResourceTypes.length === 0 || expectedResourceTypes.some(
+      resourceType => response.entry.some(e => e.resource?.resourceType === resourceType)
+    );
+
+    if (!hasExpectedResource && !hasOperationOutcome) {
+      errors.push(`Bundle must contain ${expectedResourceTypes.join(' or ')} or OperationOutcome`);
     }
 
     return {
