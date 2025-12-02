@@ -185,11 +185,11 @@ class PriorAuthMapper {
     const extensions = [];
 
     // Encounter extension - REQUIRED for institutional
-    // RE-00189: Use urn:uuid format for encounter reference to match bundle fullUrl
+    // RE-00189: Use relative reference format for encounter (not full URL)
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
       valueReference: {
-        reference: `urn:uuid:${encounterRef}`
+        reference: `Encounter/${encounterRef}`
       }
     });
 
@@ -1414,18 +1414,30 @@ class PriorAuthMapper {
                                 priorAuth.request_number || 
                                 `ENC-${encounterId.substring(0, 8)}`;
 
-    // Build Encounter with FHIR R4 element order per NPHIES example:
-    // resourceType, id, meta, extension, identifier, status, class, serviceType, priority, subject, period, serviceProvider
+    // Build Encounter with FHIR R4 element order:
+    // resourceType, id, meta, identifier, status, class, serviceType, subject, period, hospitalization, serviceProvider
     const encounter = {
       resourceType: 'Encounter',
       id: encounterId,
       meta: {
         profile: [this.getEncounterProfileUrl(encounterClass)]
+      },
+      // IC-00183: Encounter identifier is required
+      identifier: [
+        {
+          system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/encounter`,
+          value: encounterIdentifier
+        }
+      ],
+      status: 'planned',
+      class: {
+        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+        code: this.getEncounterClassCode(encounterClass),
+        display: this.getEncounterClassDisplay(encounterClass)
       }
     };
 
     // BV-00736: serviceEventType extension is REQUIRED for oral/professional claims
-    // Extension MUST come before identifier per NPHIES example
     if (isOralClaim) {
       encounter.extension = [
         {
@@ -1443,56 +1455,32 @@ class PriorAuthMapper {
       ];
     }
 
-    // IC-00183: Encounter identifier is required
-    encounter.identifier = [
-      {
-        system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/encounter`,
-        value: encounterIdentifier
-      }
-    ];
-
-    // Status - use 'in-progress' for authorization per NPHIES example
-    encounter.status = 'in-progress';
-
-    // Class
-    encounter.class = {
-      system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-      code: this.getEncounterClassCode(encounterClass),
-      display: this.getEncounterClassDisplay(encounterClass)
-    };
-
-    // serviceType - REQUIRED for oral/institutional claims
+    // serviceType - MUST come BEFORE subject per FHIR R4 order
+    // REQUIRED for SS/IMP encounters per NPHIES encounter-auth-SS profile
+    // Also add for oral claims
     if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type || isOralClaim) {
       encounter.serviceType = {
         coding: [
           {
             system: 'http://nphies.sa/terminology/CodeSystem/service-type',
-            code: priorAuth.service_type || (isOralClaim ? 'acute-care' : 'sub-acute-care'),
-            display: this.getServiceTypeDisplay(priorAuth.service_type || (isOralClaim ? 'acute-care' : 'sub-acute-care'))
+            code: priorAuth.service_type || (isOralClaim ? 'dental' : 'sub-acute-care'),
+            display: this.getServiceTypeDisplay(priorAuth.service_type || (isOralClaim ? 'dental' : 'sub-acute-care'))
           }
         ]
       };
     }
 
-    // Priority - REQUIRED per NPHIES encounter-auth-AMB example
-    encounter.priority = {
-      coding: [
-        {
-          system: 'http://terminology.hl7.org/CodeSystem/v3-ActPriority',
-          code: priorAuth.priority || 'EL',
-          display: priorAuth.priority === 'UR' ? 'urgent' : 'elective'
-        }
-      ]
-    };
-
-    // subject - patient reference
+    // subject - comes after serviceType
     encounter.subject = {
       reference: `Patient/${patientId}`
     };
 
-    // period - use date-only format per NPHIES example (not datetime)
+    // period - comes after subject
     encounter.period = {
-      start: this.formatDate(priorAuth.encounter_start || new Date())
+      start: this.formatDateTime(priorAuth.encounter_start || new Date()),
+      ...(priorAuth.encounter_end && {
+        end: this.formatDateTime(priorAuth.encounter_end)
+      })
     };
 
     // hospitalization - REQUIRED for SS/IMP encounters per NPHIES profile
@@ -1531,9 +1519,8 @@ class PriorAuthMapper {
       reference: `Organization/${providerId}`
     };
 
-    // RE-00189: Use urn:uuid format for fullUrl to match bundle reference resolution
     return {
-      fullUrl: `urn:uuid:${encounterId}`,
+      fullUrl: `http://provider.com/Encounter/${encounterId}`,
       resource: encounter
     };
   }
