@@ -1253,10 +1253,49 @@ class PriorAuthorizationsController extends BaseController {
   // ============= Helper Methods =============
 
   /**
-   * Clean form data (convert empty strings to null)
+   * Clean form data (convert empty strings to null and remove read-only fields)
    */
   cleanFormData(formData) {
     const cleanedData = { ...formData };
+    
+    // Remove read-only/computed fields that should not be included in create/update
+    const readOnlyFields = [
+      // System-generated fields
+      'id',
+      'created_at',
+      'updated_at',
+      'request_date',
+      'response_date',
+      'request_bundle',
+      'response_bundle',
+      
+      // Joined fields from patients table
+      'patient_name',
+      'patient_identifier',
+      'patient_gender',
+      'patient_birth_date',
+      
+      // Joined fields from providers table
+      'provider_name',
+      'provider_nphies_id',
+      'provider_type',
+      
+      // Joined fields from insurers table
+      'insurer_name',
+      'insurer_nphies_id',
+      
+      // Related data (handled separately)
+      'responses',
+      'items',
+      'supporting_info',
+      'diagnoses',
+      'attachments'
+    ];
+    
+    readOnlyFields.forEach(field => {
+      delete cleanedData[field];
+    });
+    
     const dateFields = ['encounter_start', 'encounter_end', 'eligibility_offline_date',
                         'pre_auth_period_start', 'pre_auth_period_end', 
                         'transfer_period_start', 'transfer_period_end'];
