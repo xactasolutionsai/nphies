@@ -1502,8 +1502,12 @@ class PriorAuthMapper {
     // - SS/IMP (Short Stay/Inpatient): dateTime with timezone "2023-12-04T10:25:00+03:00" (https://portal.nphies.sa/ig/Encounter-10124.json.html)
     const needsDateTime = ['daycase', 'inpatient'].includes(encounterClass);
     
+    // Debug logging for period format
+    console.log('[PriorAuthMapper] Period formatting - needsDateTime:', needsDateTime, 'encounterClass:', encounterClass);
+    
     if (needsDateTime) {
       // SS/IMP: Use dateTime format with Saudi timezone (+03:00)
+      // Per Encounter-10124 example: "2023-12-04T10:25:00+03:00"
       encounter.period = {
         start: this.formatDateTimeWithTimezone(priorAuth.encounter_start || new Date())
       };
@@ -1511,12 +1515,22 @@ class PriorAuthMapper {
         encounter.period.end = this.formatDateTimeWithTimezone(priorAuth.encounter_end);
       }
     } else {
-      // AMB/other: Use date-only format
+      // AMB/other: MUST use date-only format (YYYY-MM-DD)
+      // Per Encounter-10123 example: "2023-12-04"
+      // CRITICAL: Do NOT include time component for ambulatory encounters
+      const startDateRaw = priorAuth.encounter_start || new Date();
+      const formattedStartDate = this.formatDate(startDateRaw);
+      
+      console.log('[PriorAuthMapper] AMB period - raw:', startDateRaw, 'formatted:', formattedStartDate);
+      
       encounter.period = {
-        start: this.formatDate(priorAuth.encounter_start || new Date())
+        start: formattedStartDate
       };
-      // Only add end date if explicitly provided (ongoing encounters don't have end)
-      if (priorAuth.encounter_end) {
+      
+      // AMB encounters typically don't need end date (ongoing encounters per NPHIES example)
+      // Only add if explicitly required AND it's not an oral/dental claim
+      // Per Encounter-10123: ongoing encounters have no end date
+      if (priorAuth.encounter_end && priorAuth.include_encounter_end === true && !isOralClaim) {
         encounter.period.end = this.formatDate(priorAuth.encounter_end);
       }
     }

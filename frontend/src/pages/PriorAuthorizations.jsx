@@ -9,7 +9,7 @@ import api from '@/services/api';
 import { 
   FileText, Plus, Edit, Trash2, Eye, Send, RefreshCw, 
   XCircle, ArrowRightLeft, Clock, CheckCircle, AlertCircle,
-  Filter, Search
+  Filter, Search, Copy
 } from 'lucide-react';
 
 // Auth type display helper
@@ -156,6 +156,24 @@ export default function PriorAuthorizations() {
     }
   };
 
+  const handleDuplicate = async (id) => {
+    if (window.confirm('Create a duplicate of this prior authorization as a new draft?')) {
+      try {
+        setLoading(true);
+        const response = await api.duplicatePriorAuthorization(id);
+        const newId = response.data?.id || response.id;
+        alert('Prior authorization duplicated successfully!');
+        // Navigate to edit the new duplicate
+        navigate(`/prior-authorizations/${newId}/edit`);
+      } catch (error) {
+        console.error('Error duplicating prior authorization:', error);
+        alert(`Error: ${error.response?.data?.error || error.message}`);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const getStatusBadge = (status) => {
     const configs = {
       draft: { variant: 'outline', icon: FileText, className: 'text-gray-600' },
@@ -273,6 +291,19 @@ export default function PriorAuthorizations() {
             }}
           >
             <Eye className="h-4 w-4" />
+          </Button>
+          {/* Duplicate button - available for all records */}
+          <Button
+            size="sm"
+            variant="outline"
+            title="Duplicate as new draft"
+            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDuplicate(row.id);
+            }}
+          >
+            <Copy className="h-4 w-4" />
           </Button>
           {(row.status === 'draft' || row.status === 'error') && (
             <>

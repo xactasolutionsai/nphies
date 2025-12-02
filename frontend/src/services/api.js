@@ -351,6 +351,42 @@ class ApiService {
     });
   }
 
+  /**
+   * Duplicate a prior authorization with a new ID
+   * Fetches the original, strips ID-specific fields, and creates a new draft
+   */
+  async duplicatePriorAuthorization(id) {
+    // Fetch the original prior authorization
+    const original = await this.getPriorAuthorization(id);
+    const data = original.data || original;
+    
+    // Create a copy without ID-specific fields
+    const duplicateData = {
+      ...data,
+      // Reset status to draft
+      status: 'draft',
+      // Generate new request number with timestamp
+      request_number: `DUP-${Date.now()}`,
+      // Clear NPHIES-specific response fields
+      pre_auth_ref: null,
+      nphies_response_id: null,
+      nphies_response: null,
+      bundle_id: null,
+      response_bundle_id: null,
+      // Update dates
+      request_date: new Date().toISOString().split('T')[0],
+      created_at: undefined,
+      updated_at: undefined
+    };
+    
+    // Remove the original ID so a new one is generated
+    delete duplicateData.id;
+    delete duplicateData.prior_auth_id;
+    
+    // Create the duplicate
+    return this.createPriorAuthorization(duplicateData);
+  }
+
   // Prior Authorization NPHIES Workflow Operations
   async sendPriorAuthorizationToNphies(id) {
     return this.request(`/prior-authorizations/${id}/send`, {
