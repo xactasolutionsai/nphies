@@ -283,10 +283,12 @@ class PriorAuthMapper {
 
     // BV-00770, BV-00802, BV-00027: Determine if this is an institutional claim
     // Institutional claims require: chief-complaint, estimated-length-of-stay, onAdmission
-    // BV-00027: Oral/dental claims are NOT institutional - onAdmission not allowed
+    // BV-00027: Oral/dental and vision claims are NOT institutional - onAdmission not allowed
+    // BV-00807: Vision claims cannot use inpatient/daycase encounter class
     const isInstitutional = priorAuth.auth_type === 'institutional' || 
                             (['daycase', 'inpatient'].includes(priorAuth.encounter_class) && 
-                             priorAuth.auth_type !== 'dental');
+                             priorAuth.auth_type !== 'dental' &&
+                             priorAuth.auth_type !== 'vision');
     
     // Check if this is an oral/dental claim
     const isOralClaim = priorAuth.auth_type === 'dental';
@@ -521,7 +523,15 @@ class PriorAuthMapper {
       return 'op';
     }
     
+    // BV-00367: Vision claims must use 'op' subType
+    // Per NPHIES Claim-123073 example: vision claims use OutPatient subType
+    // Reference: https://portal.nphies.sa/ig/Claim-123073.html
+    if (authType === 'vision') {
+      return 'op';
+    }
+    
     // Per NPHIES reference Bundle-a84aabfa: SS (short stay/daycase) uses 'ip' subType
+    // Note: 'ip' and 'daycase' are only valid for institutional claims
     const subTypes = {
       'inpatient': 'ip',
       'outpatient': 'op',
@@ -768,31 +778,11 @@ class PriorAuthMapper {
       currency: item.currency || 'SAR'
     };
 
-    // Body site for procedures
-    if (item.body_site_code) {
-      claimItem.bodySite = {
-        coding: [
-          {
-            system: item.body_site_system || 'http://nphies.sa/terminology/CodeSystem/body-site',
-            code: item.body_site_code
-          }
-        ]
-      };
-      
-      if (item.sub_site_code) {
-        claimItem.subSite = [
-          {
-            coding: [
-              {
-                system: 'http://nphies.sa/terminology/CodeSystem/sub-site',
-                code: item.sub_site_code
-              }
-            ]
-          }
-        ];
-      }
-    }
-
+    // Vision claims: Do NOT use bodySite on Claim.item
+    // Per NPHIES Claim-123073 example, eye information is specified in VisionPrescription.lensSpecification.eye
+    // Reference: https://portal.nphies.sa/ig/Claim-123073.html
+    // BV-00367, BV-00807: Vision claims should not have bodySite
+    
     // Dental-specific: tooth number using NPHIES FDI oral region system
     // Reference: http://nphies.sa/terminology/CodeSystem/fdi-oral-region
     if (authType === 'dental' && item.tooth_number) {
@@ -821,21 +811,30 @@ class PriorAuthMapper {
       }
     }
 
-    // Vision claims: Do NOT use bodySite on Claim.item
-    // Per NPHIES Claim-123073 example, eye information is specified in VisionPrescription.lensSpecification.eye
-    // Reference: https://portal.nphies.sa/ig/Claim-123073.html
-
-    // Professional/Institutional body sites
+    // Professional/Institutional body sites - NOT for vision claims
     if (['professional', 'institutional'].includes(authType) && item.body_site_code) {
       claimItem.bodySite = {
         coding: [
           {
-            system: 'http://hl7.org/fhir/ValueSet/body-site',
+            system: item.body_site_system || 'http://nphies.sa/terminology/CodeSystem/body-site',
             code: item.body_site_code,
             display: this.getBodySiteDisplay(item.body_site_code)
           }
         ]
       };
+      
+      if (item.sub_site_code) {
+        claimItem.subSite = [
+          {
+            coding: [
+              {
+                system: 'http://nphies.sa/terminology/CodeSystem/sub-site',
+                code: item.sub_site_code
+              }
+            ]
+          }
+        ];
+      }
     }
 
     // Pharmacy-specific: medication and days supply
@@ -1464,12 +1463,16 @@ class PriorAuthMapper {
     const providerId = bundleResourceIds.provider;
     
     // BV-00743: Oral claims MUST use 'ambulatory' (AMB) encounter class
+    // BV-00807: Vision claims MUST use 'ambulatory' (AMB) encounter class
+    // Reference: https://portal.nphies.sa/ig/Claim-123073.html - vision claims use AMB
     const isOralClaim = priorAuth.auth_type === 'dental';
-    const encounterClass = isOralClaim ? 'ambulatory' : (priorAuth.encounter_class || 'ambulatory');
+    const isVisionClaim = priorAuth.auth_type === 'vision';
+    const encounterClass = (isOralClaim || isVisionClaim) ? 'ambulatory' : (priorAuth.encounter_class || 'ambulatory');
   
     // Debug logging to verify encounter class handling
     console.log('[PriorAuthMapper] buildEncounterResourceWithId - encounterClass:', encounterClass);
     console.log('[PriorAuthMapper] Is oral claim?:', isOralClaim);
+    console.log('[PriorAuthMapper] Is vision claim?:', isVisionClaim);
     console.log('[PriorAuthMapper] Is daycase/inpatient?:', ['daycase', 'inpatient'].includes(encounterClass));
   
     // IC-00183: Encounter identifier is required by NPHIES
@@ -1523,7 +1526,11 @@ class PriorAuthMapper {
     // Also add for oral claims (dental)
     // NOTE: Vision claims do NOT include serviceType per NPHIES Claim-123073 example
     // Reference: https://portal.nphies.sa/ig/Claim-123073.html
-    if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type || isOralClaim) {
+    // BV-00807: Vision claims must NOT have serviceType
+    const shouldAddServiceType = !isVisionClaim && 
+      (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type || isOralClaim);
+    
+    if (shouldAddServiceType) {
       let serviceTypeCode = priorAuth.service_type;
       if (!serviceTypeCode) {
         if (isOralClaim) serviceTypeCode = 'dental';

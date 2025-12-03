@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "ba5557e4-a688-400a-8357-6731e7ea6ecc",
+  "id": "0c5860e1-8442-4f65-847a-416b9a869d8c",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-03T13:26:08.746Z",
+  "timestamp": "2025-12-03T13:42:02.861Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:9657cec7-6e07-4862-923c-d74d507d1e59",
+      "fullUrl": "urn:uuid:55aa95d3-0941-46bd-8940-95dbeed89b1a",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "9657cec7-6e07-4862-923c-d74d507d1e59",
+        "id": "55aa95d3-0941-46bd-8940-95dbeed89b1a",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/7b370f62-80a8-4612-a826-ec61fdf9264d"
+            "reference": "http://provider.com/Claim/c4ba2735-5f34-4fa9-9d62-52322ecd5db8"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/7b370f62-80a8-4612-a826-ec61fdf9264d",
+      "fullUrl": "http://provider.com/Claim/c4ba2735-5f34-4fa9-9d62-52322ecd5db8",
       "resource": {
         "resourceType": "Claim",
-        "id": "7b370f62-80a8-4612-a826-ec61fdf9264d",
+        "id": "c4ba2735-5f34-4fa9-9d62-52322ecd5db8",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-priorauth|1.0.0"
@@ -66,14 +66,14 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/52e2ecad-bb2f-4a23-8177-f898069467ac"
+              "reference": "Encounter/cfa357d5-166e-44fc-b18f-34888e8ba797"
             }
           }
         ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-            "value": "PREVIEW-1764768368736"
+            "value": "PREVIEW-1764769322849"
           }
         ],
         "status": "active",
@@ -97,7 +97,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-03T13:26:08.744Z",
+        "created": "2025-12-03T13:42:02.857Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -123,13 +123,13 @@
           }
         },
         "prescription": {
-          "reference": "VisionPrescription/38a2b9e4-5948-447b-ad91-992f33b8ac95"
+          "reference": "VisionPrescription/fd28cb2e-e4d2-4deb-b587-bed5455864bf"
         },
         "careTeam": [
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/b764f066-c299-4339-b932-b25eb98224ee"
+              "reference": "Practitioner/f8ec82f7-a2a7-4b6a-aa13-e11ee58ec00d"
             },
             "role": {
               "coding": [
@@ -539,9 +539,8 @@
             "bodySite": {
               "coding": [
                 {
-                  "system": "http://hl7.org/fhir/ValueSet/body-site",
-                  "code": "LIV",
-                  "display": "Left eye"
+                  "system": "http://nphies.sa/terminology/CodeSystem/body-site",
+                  "code": "LIV"
                 }
               ]
             }
@@ -554,10 +553,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/52e2ecad-bb2f-4a23-8177-f898069467ac",
+      "fullUrl": "http://provider.com/Encounter/cfa357d5-166e-44fc-b18f-34888e8ba797",
       "resource": {
         "resourceType": "Encounter",
-        "id": "52e2ecad-bb2f-4a23-8177-f898069467ac",
+        "id": "cfa357d5-166e-44fc-b18f-34888e8ba797",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -566,7 +565,7 @@
         "identifier": [
           {
             "system": "http://PR-FHIR.com.sa/identifiers/encounter",
-            "value": "PREVIEW-1764768368736"
+            "value": "PREVIEW-1764769322849"
           }
         ],
         "status": "planned",
@@ -579,8 +578,8 @@
           "coding": [
             {
               "system": "http://nphies.sa/terminology/CodeSystem/service-type",
-              "code": "ophthalmology",
-              "display": "Ophthalmology"
+              "code": "sub-acute-care",
+              "display": "Sub-Acute Care"
             }
           ]
         },
@@ -691,10 +690,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/b764f066-c299-4339-b932-b25eb98224ee",
+      "fullUrl": "http://provider.com/Practitioner/f8ec82f7-a2a7-4b6a-aa13-e11ee58ec00d",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "b764f066-c299-4339-b932-b25eb98224ee",
+        "id": "f8ec82f7-a2a7-4b6a-aa13-e11ee58ec00d",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -712,7 +711,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-b764f066"
+            "value": "PRACT-f8ec82f7"
           }
         ],
         "active": true,
@@ -940,10 +939,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/VisionPrescription/38a2b9e4-5948-447b-ad91-992f33b8ac95",
+      "fullUrl": "http://provider.com/VisionPrescription/fd28cb2e-e4d2-4deb-b587-bed5455864bf",
       "resource": {
         "resourceType": "VisionPrescription",
-        "id": "38a2b9e4-5948-447b-ad91-992f33b8ac95",
+        "id": "fd28cb2e-e4d2-4deb-b587-bed5455864bf",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0"
@@ -952,18 +951,53 @@
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/visionprescription",
-            "value": "VP-38a2b9e4"
+            "value": "VP-fd28cb2e"
           }
         ],
         "status": "active",
-        "created": "2025-12-03T13:26:08.746Z",
+        "created": "2023-12-01T21:00:00.000Z",
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "dateWritten": "2025-12-03T13:26:08.746Z",
-        "lensSpecification": [],
+        "dateWritten": "2023-12-01T21:00:00.000Z",
+        "lensSpecification": [
+          {
+            "product": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/lens-type",
+                  "code": "lens"
+                }
+              ]
+            },
+            "eye": "right",
+            "sphere": 2.25,
+            "cylinder": 0.75,
+            "axis": 80
+          },
+          {
+            "product": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/lens-type",
+                  "code": "lens"
+                }
+              ]
+            },
+            "eye": "left",
+            "sphere": 1.5,
+            "cylinder": 0.75,
+            "axis": 110,
+            "prism": [
+              {
+                "amount": 2,
+                "base": "up"
+              }
+            ]
+          }
+        ],
         "prescriber": {
-          "reference": "Practitioner/b764f066-c299-4339-b932-b25eb98224ee"
+          "reference": "Practitioner/f8ec82f7-a2a7-4b6a-aa13-e11ee58ec00d"
         }
       }
     }
