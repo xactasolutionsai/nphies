@@ -234,7 +234,14 @@ export default function PriorAuthorizationForm() {
         attachments: data.attachments || [],
         vital_signs: vitalSigns,
         clinical_info: clinicalInfo,
-        admission_info: admissionInfo
+        admission_info: admissionInfo,
+        vision_prescription: data.vision_prescription || {
+          product_type: 'lens',
+          date_written: null,
+          prescriber_license: '',
+          right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
+          left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
+        }
       });
       
       // Load coverages for the patient (if patient exists)
