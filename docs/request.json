@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "1ac8162a-dad6-4dd6-a0d6-8fb5311d5954",
+  "id": "ba5557e4-a688-400a-8357-6731e7ea6ecc",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-03T12:41:11.405Z",
+  "timestamp": "2025-12-03T13:26:08.746Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:e5e2a924-7c4c-4986-a21a-12470674829f",
+      "fullUrl": "urn:uuid:9657cec7-6e07-4862-923c-d74d507d1e59",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "e5e2a924-7c4c-4986-a21a-12470674829f",
+        "id": "9657cec7-6e07-4862-923c-d74d507d1e59",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/f54c36bd-38a0-4a2b-b072-6ffad9a451c6"
+            "reference": "http://provider.com/Claim/7b370f62-80a8-4612-a826-ec61fdf9264d"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/f54c36bd-38a0-4a2b-b072-6ffad9a451c6",
+      "fullUrl": "http://provider.com/Claim/7b370f62-80a8-4612-a826-ec61fdf9264d",
       "resource": {
         "resourceType": "Claim",
-        "id": "f54c36bd-38a0-4a2b-b072-6ffad9a451c6",
+        "id": "7b370f62-80a8-4612-a826-ec61fdf9264d",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-priorauth|1.0.0"
@@ -66,14 +66,14 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/a0c54e94-7251-4911-ab50-629736802794"
+              "reference": "Encounter/52e2ecad-bb2f-4a23-8177-f898069467ac"
             }
           }
         ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-            "value": "PREVIEW-1764765671402"
+            "value": "PREVIEW-1764768368736"
           }
         ],
         "status": "active",
@@ -89,7 +89,7 @@
           "coding": [
             {
               "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype",
-              "code": "op"
+              "code": "ip"
             }
           ]
         },
@@ -97,7 +97,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-03T12:41:11.404Z",
+        "created": "2025-12-03T13:26:08.744Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -123,13 +123,13 @@
           }
         },
         "prescription": {
-          "reference": "VisionPrescription/69c0aa58-918f-4646-b7be-78a3d21c5e0f"
+          "reference": "VisionPrescription/38a2b9e4-5948-447b-ad91-992f33b8ac95"
         },
         "careTeam": [
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/f5395674-272a-4be2-8813-99eda62b654d"
+              "reference": "Practitioner/b764f066-c299-4339-b932-b25eb98224ee"
             },
             "role": {
               "coding": [
@@ -170,7 +170,16 @@
                   }
                 ]
               }
-            ]
+            ],
+            "onAdmission": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-on-admission",
+                  "code": "y",
+                  "display": "Yes"
+                }
+              ]
+            }
           }
         ],
         "supportingInfo": [
@@ -185,8 +194,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-28T21:00:00.000Z",
-              "end": "2023-11-28T21:00:00.000Z"
+              "start": "2023-11-27T21:00:00.000Z",
+              "end": "2023-11-27T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 120,
@@ -205,8 +214,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-28T21:00:00.000Z",
-              "end": "2023-11-28T21:00:00.000Z"
+              "start": "2023-11-27T21:00:00.000Z",
+              "end": "2023-11-27T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 80,
@@ -225,8 +234,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-28T21:00:00.000Z",
-              "end": "2023-11-28T21:00:00.000Z"
+              "start": "2023-11-27T21:00:00.000Z",
+              "end": "2023-11-27T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 160,
@@ -245,8 +254,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-28T21:00:00.000Z",
-              "end": "2023-11-28T21:00:00.000Z"
+              "start": "2023-11-27T21:00:00.000Z",
+              "end": "2023-11-27T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 129,
@@ -265,8 +274,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-28T21:00:00.000Z",
-              "end": "2023-11-28T21:00:00.000Z"
+              "start": "2023-11-27T21:00:00.000Z",
+              "end": "2023-11-27T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 100,
@@ -285,8 +294,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-28T21:00:00.000Z",
-              "end": "2023-11-28T21:00:00.000Z"
+              "start": "2023-11-27T21:00:00.000Z",
+              "end": "2023-11-27T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 37,
@@ -305,8 +314,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-28T21:00:00.000Z",
-              "end": "2023-11-28T21:00:00.000Z"
+              "start": "2023-11-27T21:00:00.000Z",
+              "end": "2023-11-27T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 100,
@@ -325,8 +334,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-28T21:00:00.000Z",
-              "end": "2023-11-28T21:00:00.000Z"
+              "start": "2023-11-27T21:00:00.000Z",
+              "end": "2023-11-27T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 70,
@@ -421,6 +430,23 @@
                 }
               ]
             }
+          },
+          {
+            "sequence": 15,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "estimated-Length-of-Stay"
+                }
+              ]
+            },
+            "timingDate": "2025-12-03",
+            "valueQuantity": {
+              "value": 1,
+              "system": "http://unitsofmeasure.org",
+              "code": "d"
+            }
           }
         ],
         "insurance": [
@@ -449,7 +475,7 @@
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share",
                 "valueMoney": {
-                  "value": 400,
+                  "value": 0,
                   "currency": "SAR"
                 }
               },
@@ -486,7 +512,8 @@
               11,
               12,
               13,
-              14
+              14,
+              15
             ],
             "productOrService": {
               "coding": [
@@ -512,8 +539,9 @@
             "bodySite": {
               "coding": [
                 {
-                  "system": "http://hl7.org/fhir/ex-visioneyecodes",
-                  "code": "both"
+                  "system": "http://hl7.org/fhir/ValueSet/body-site",
+                  "code": "LIV",
+                  "display": "Left eye"
                 }
               ]
             }
@@ -526,32 +554,67 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/a0c54e94-7251-4911-ab50-629736802794",
+      "fullUrl": "http://provider.com/Encounter/52e2ecad-bb2f-4a23-8177-f898069467ac",
       "resource": {
         "resourceType": "Encounter",
-        "id": "a0c54e94-7251-4911-ab50-629736802794",
+        "id": "52e2ecad-bb2f-4a23-8177-f898069467ac",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
           ]
         },
         "identifier": [
           {
             "system": "http://PR-FHIR.com.sa/identifiers/encounter",
-            "value": "PREVIEW-1764765671402"
+            "value": "PREVIEW-1764768368736"
           }
         ],
         "status": "planned",
         "class": {
           "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-          "code": "AMB",
-          "display": "ambulatory"
+          "code": "SS",
+          "display": "short stay"
+        },
+        "serviceType": {
+          "coding": [
+            {
+              "system": "http://nphies.sa/terminology/CodeSystem/service-type",
+              "code": "ophthalmology",
+              "display": "Ophthalmology"
+            }
+          ]
         },
         "subject": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
         "period": {
-          "start": "2025-12-03"
+          "start": "2023-12-04T10:25:00+03:00",
+          "end": "2023-12-04T12:30:00+03:00"
+        },
+        "hospitalization": {
+          "extension": [
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-admissionSpecialty",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
+                    "code": "08.00",
+                    "display": "Internal Medicine Specialty"
+                  }
+                ]
+              }
+            }
+          ],
+          "admitSource": {
+            "coding": [
+              {
+                "system": "http://nphies.sa/terminology/CodeSystem/admit-source",
+                "code": "WKIN",
+                "display": "Walk-in"
+              }
+            ]
+          }
         },
         "serviceProvider": {
           "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
@@ -628,10 +691,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/f5395674-272a-4be2-8813-99eda62b654d",
+      "fullUrl": "http://provider.com/Practitioner/b764f066-c299-4339-b932-b25eb98224ee",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "f5395674-272a-4be2-8813-99eda62b654d",
+        "id": "b764f066-c299-4339-b932-b25eb98224ee",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -649,7 +712,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-f5395674"
+            "value": "PRACT-b764f066"
           }
         ],
         "active": true,
@@ -877,10 +940,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/VisionPrescription/69c0aa58-918f-4646-b7be-78a3d21c5e0f",
+      "fullUrl": "http://provider.com/VisionPrescription/38a2b9e4-5948-447b-ad91-992f33b8ac95",
       "resource": {
         "resourceType": "VisionPrescription",
-        "id": "69c0aa58-918f-4646-b7be-78a3d21c5e0f",
+        "id": "38a2b9e4-5948-447b-ad91-992f33b8ac95",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0"
@@ -889,18 +952,18 @@
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/visionprescription",
-            "value": "VP-69c0aa58"
+            "value": "VP-38a2b9e4"
           }
         ],
         "status": "active",
-        "created": "2025-12-03T12:41:11.405Z",
+        "created": "2025-12-03T13:26:08.746Z",
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "dateWritten": "2025-12-03T12:41:11.405Z",
+        "dateWritten": "2025-12-03T13:26:08.746Z",
         "lensSpecification": [],
         "prescriber": {
-          "reference": "Practitioner/f5395674-272a-4be2-8813-99eda62b654d"
+          "reference": "Practitioner/b764f066-c299-4339-b932-b25eb98224ee"
         }
       }
     }

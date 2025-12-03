@@ -821,39 +821,9 @@ class PriorAuthMapper {
       }
     }
 
-    // Vision-specific: eye/body site using CMS HCPCS body site modifiers
-    // Reference: CMS body site modifiers for vision claims
-    if (authType === 'vision') {
-      // Use body_site_code if provided, otherwise map from eye field
-      if (item.body_site_code) {
-        claimItem.bodySite = {
-          coding: [
-            {
-              system: 'http://hl7.org/fhir/ValueSet/body-site',
-              code: item.body_site_code,
-              display: this.getBodySiteDisplay(item.body_site_code)
-            }
-          ]
-        };
-      } else if (item.eye) {
-        // Map legacy eye field to body site codes
-        const eyeBodySiteCodes = {
-          'right': { code: 'RIV', display: 'Right eye' },
-          'left': { code: 'LIV', display: 'Left eye' },
-          'both': { code: 'RIV', display: 'Right eye' } // For both, we'd typically create two items
-        };
-        const eyeCode = eyeBodySiteCodes[item.eye] || eyeBodySiteCodes['right'];
-        claimItem.bodySite = {
-          coding: [
-            {
-              system: 'http://hl7.org/fhir/ValueSet/body-site',
-              code: eyeCode.code,
-              display: eyeCode.display
-            }
-          ]
-        };
-      }
-    }
+    // Vision claims: Do NOT use bodySite on Claim.item
+    // Per NPHIES Claim-123073 example, eye information is specified in VisionPrescription.lensSpecification.eye
+    // Reference: https://portal.nphies.sa/ig/Claim-123073.html
 
     // Professional/Institutional body sites
     if (['professional', 'institutional'].includes(authType) && item.body_site_code) {
@@ -1550,14 +1520,13 @@ class PriorAuthMapper {
 
     // serviceType - MUST come BEFORE subject per FHIR R4 order
     // REQUIRED for SS/IMP encounters per NPHIES encounter-auth-SS profile
-    // Also add for oral and vision claims
-    // RE-00170 FIX: Vision claims need serviceType for encounter-auth-AMB profile validation
-    const isVisionClaim = priorAuth.auth_type === 'vision';
-    if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type || isOralClaim || isVisionClaim) {
+    // Also add for oral claims (dental)
+    // NOTE: Vision claims do NOT include serviceType per NPHIES Claim-123073 example
+    // Reference: https://portal.nphies.sa/ig/Claim-123073.html
+    if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type || isOralClaim) {
       let serviceTypeCode = priorAuth.service_type;
       if (!serviceTypeCode) {
         if (isOralClaim) serviceTypeCode = 'dental';
-        else if (isVisionClaim) serviceTypeCode = 'ophthalmology';
         else serviceTypeCode = 'sub-acute-care';
       }
       encounter.serviceType = {

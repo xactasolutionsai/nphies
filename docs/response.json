@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "989d0297-b9aa-4913-b758-e6d2a4cf70d1",
+    "id": "50d62c81-73d9-43a7-905f-fb9e0baf5bec",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-03T15:41:19.284+03:00",
+    "timestamp": "2025-12-03T16:27:46.899+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/51b3cf22-2cb7-41c0-96a6-9f4524b8f1cc",
+            "fullUrl": "http://nphies.sa/MessageHeader/fea7fdf9-7b11-4c33-8824-58e9c63f1203",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "51b3cf22-2cb7-41c0-96a6-9f4524b8f1cc",
+                "id": "fea7fdf9-7b11-4c33-8824-58e9c63f1203",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -52,21 +52,21 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "e5e2a924-7c4c-4986-a21a-12470674829f",
+                    "identifier": "9657cec7-6e07-4862-923c-d74d507d1e59",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://nphies.sa/ClaimResponse/779"
+                        "reference": "http://nphies.sa/ClaimResponse/748"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/ClaimResponse/779",
+            "fullUrl": "http://nphies.sa/ClaimResponse/748",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "779",
+                "id": "748",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -81,7 +81,7 @@
                 "identifier": [
                     {
                         "system": "http://nphies.sa/ClaimResponse",
-                        "value": "PREVIEW-1764765671402"
+                        "value": "PREVIEW-1764768368736"
                     }
                 ],
                 "status": "active",
@@ -97,7 +97,7 @@
                 "patient": {
                     "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
                 },
-                "created": "2025-12-03T12:41:11.404Z",
+                "created": "2025-12-03T13:26:08.744Z",
                 "insurer": {
                     "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
@@ -108,7 +108,7 @@
                     "type": "Claim",
                     "identifier": {
                         "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-                        "value": "PREVIEW-1764765671402"
+                        "value": "PREVIEW-1764768368736"
                     }
                 },
                 "outcome": "error",
@@ -146,12 +146,12 @@
                                     "extension": [
                                         {
                                             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[2].resource"
+                                            "valueString": "Bundle.entry[2].resource.serviceType"
                                         }
                                     ],
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "RE-00170",
-                                    "display": "Referenced SHALL point to a valid profile"
+                                    "code": "IB-00153",
+                                    "display": "Encounter serviceType is not using a value from the specified ValueSet"
                                 }
                             ]
                         }

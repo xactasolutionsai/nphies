@@ -1056,7 +1056,9 @@ class PriorAuthorizationsController extends BaseController {
         currency: formData.currency || 'SAR',
         items: formData.items || [],
         diagnoses: formData.diagnoses || [],
-        supporting_info: formData.supporting_info || []
+        supporting_info: formData.supporting_info || [],
+        // Vision prescription data for vision auth types
+        vision_prescription: formData.vision_prescription || null
       };
 
       // Build FHIR bundle
@@ -1160,7 +1162,9 @@ class PriorAuthorizationsController extends BaseController {
         currency: formData.currency || 'SAR',
         items: formData.items || [],
         diagnoses: formData.diagnoses || [],
-        supporting_info: formData.supporting_info || []
+        supporting_info: formData.supporting_info || [],
+        // Vision prescription data for vision auth types
+        vision_prescription: formData.vision_prescription || null
       };
 
       // Build FHIR bundle
