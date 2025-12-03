@@ -223,6 +223,66 @@ const DENTAL_ICD10_OPTIONS = [
   { value: 'K10.9', label: 'K10.9 - Disease of jaw, unspecified' }
 ];
 
+// Vision ICD-10 Codes for eye examinations and disorders
+// Reference: https://icd.who.int/browse10/2016/en
+const VISION_ICD10_OPTIONS = [
+  // === Z01 - Eye Examination Encounters ===
+  { value: 'Z01.0', label: 'Z01.0 - Examination of eyes and vision' },
+  { value: 'Z01.00', label: 'Z01.00 - Encounter for examination of eyes and vision without abnormal findings' },
+  { value: 'Z01.01', label: 'Z01.01 - Encounter for examination of eyes and vision with abnormal findings' },
+  { value: 'Z01.02', label: 'Z01.02 - Encounter for examination of eyes and vision following failed vision screening' },
+  
+  // === H52 - Disorders of Refraction and Accommodation ===
+  { value: 'H52.0', label: 'H52.0 - Hypermetropia (Farsightedness)' },
+  { value: 'H52.1', label: 'H52.1 - Myopia (Nearsightedness)' },
+  { value: 'H52.2', label: 'H52.2 - Astigmatism' },
+  { value: 'H52.20', label: 'H52.20 - Unspecified astigmatism' },
+  { value: 'H52.21', label: 'H52.21 - Irregular astigmatism' },
+  { value: 'H52.22', label: 'H52.22 - Regular astigmatism' },
+  { value: 'H52.3', label: 'H52.3 - Anisometropia and aniseikonia' },
+  { value: 'H52.31', label: 'H52.31 - Anisometropia' },
+  { value: 'H52.32', label: 'H52.32 - Aniseikonia' },
+  { value: 'H52.4', label: 'H52.4 - Presbyopia' },
+  { value: 'H52.5', label: 'H52.5 - Disorders of accommodation' },
+  { value: 'H52.6', label: 'H52.6 - Other disorders of refraction' },
+  { value: 'H52.7', label: 'H52.7 - Unspecified disorder of refraction' },
+  
+  // === H53 - Visual Disturbances ===
+  { value: 'H53.0', label: 'H53.0 - Amblyopia ex anopsia (Lazy eye)' },
+  { value: 'H53.00', label: 'H53.00 - Unspecified amblyopia' },
+  { value: 'H53.01', label: 'H53.01 - Deprivation amblyopia' },
+  { value: 'H53.02', label: 'H53.02 - Refractive amblyopia' },
+  { value: 'H53.03', label: 'H53.03 - Strabismic amblyopia' },
+  { value: 'H53.1', label: 'H53.1 - Subjective visual disturbances' },
+  { value: 'H53.2', label: 'H53.2 - Diplopia (Double vision)' },
+  { value: 'H53.3', label: 'H53.3 - Other disorders of binocular vision' },
+  { value: 'H53.4', label: 'H53.4 - Visual field defects' },
+  { value: 'H53.5', label: 'H53.5 - Color vision deficiencies' },
+  { value: 'H53.6', label: 'H53.6 - Night blindness' },
+  { value: 'H53.8', label: 'H53.8 - Other visual disturbances' },
+  { value: 'H53.9', label: 'H53.9 - Unspecified visual disturbance' },
+  
+  // === H54 - Visual Impairment Including Blindness ===
+  { value: 'H54.0', label: 'H54.0 - Blindness, both eyes' },
+  { value: 'H54.1', label: 'H54.1 - Blindness, one eye, low vision other eye' },
+  { value: 'H54.2', label: 'H54.2 - Low vision, both eyes' },
+  { value: 'H54.3', label: 'H54.3 - Unqualified visual loss, both eyes' },
+  { value: 'H54.4', label: 'H54.4 - Blindness, one eye' },
+  { value: 'H54.5', label: 'H54.5 - Low vision, one eye' },
+  { value: 'H54.6', label: 'H54.6 - Unqualified visual loss, one eye' },
+  { value: 'H54.7', label: 'H54.7 - Unspecified visual loss' },
+  
+  // === Other Common Eye Conditions ===
+  { value: 'H40.9', label: 'H40.9 - Unspecified glaucoma' },
+  { value: 'H25.9', label: 'H25.9 - Unspecified age-related cataract' },
+  { value: 'H26.9', label: 'H26.9 - Unspecified cataract' },
+  { value: 'H35.30', label: 'H35.30 - Unspecified macular degeneration' },
+  { value: 'H04.12', label: 'H04.12 - Dry eye syndrome' },
+  { value: 'H10.9', label: 'H10.9 - Unspecified conjunctivitis' },
+  { value: 'H16.9', label: 'H16.9 - Unspecified keratitis' },
+  { value: 'H50.9', label: 'H50.9 - Unspecified strabismus' }
+];
+
 const EYE_OPTIONS = [
   { value: 'left', label: 'Left' },
   { value: 'right', label: 'Right' },
@@ -471,6 +531,28 @@ export default function PriorAuthorizationForm() {
     admission_info: {
       admission_weight: '',
       estimated_length_of_stay: ''
+    },
+    // Vision Prescription Data (per NPHIES VisionPrescription-3.json standard)
+    vision_prescription: {
+      product_type: 'lens', // 'lens' or 'contact'
+      date_written: null,
+      prescriber_license: '', // Optional: for identifier-based prescriber reference
+      right_eye: {
+        sphere: '',
+        cylinder: '',
+        axis: '',
+        add: '',
+        prism_amount: '',
+        prism_base: '' // up, down, in, out
+      },
+      left_eye: {
+        sphere: '',
+        cylinder: '',
+        axis: '',
+        add: '',
+        prism_amount: '',
+        prism_base: '' // up, down, in, out
+      }
     }
   });
 
@@ -750,6 +832,34 @@ export default function PriorAuthorizationForm() {
       ...prev,
       admission_info: { ...prev.admission_info, [key]: value }
     }));
+  };
+
+  // Handler for vision prescription fields
+  const handleVisionPrescriptionChange = (field, value, eye = null) => {
+    setFormData(prev => {
+      if (eye) {
+        // Update eye-specific field (sphere, cylinder, axis, add)
+        return {
+          ...prev,
+          vision_prescription: {
+            ...prev.vision_prescription,
+            [eye]: {
+              ...prev.vision_prescription[eye],
+              [field]: value
+            }
+          }
+        };
+      } else {
+        // Update general field (product_type, date_written)
+        return {
+          ...prev,
+          vision_prescription: {
+            ...prev.vision_prescription,
+            [field]: value
+          }
+        };
+      }
+    });
   };
 
   // Build supporting info array from structured data (for save/preview)
@@ -1446,16 +1556,16 @@ export default function PriorAuthorizationForm() {
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>ICD-10 Code *</Label>
-                    {formData.auth_type === 'dental' ? (
+                    {(formData.auth_type === 'dental' || formData.auth_type === 'vision') ? (
                       <Select
-                        value={DENTAL_ICD10_OPTIONS.find(opt => opt.value === diagnosis.diagnosis_code)}
+                        value={(formData.auth_type === 'dental' ? DENTAL_ICD10_OPTIONS : VISION_ICD10_OPTIONS).find(opt => opt.value === diagnosis.diagnosis_code)}
                         onChange={(option) => {
                           handleDiagnosisChange(index, 'diagnosis_code', option?.value || '');
                           handleDiagnosisChange(index, 'diagnosis_display', option?.label?.split(' - ')[1] || '');
                         }}
-                        options={DENTAL_ICD10_OPTIONS}
+                        options={formData.auth_type === 'dental' ? DENTAL_ICD10_OPTIONS : VISION_ICD10_OPTIONS}
                         styles={selectStyles}
-                        placeholder="Select dental diagnosis..."
+                        placeholder={formData.auth_type === 'dental' ? "Select dental diagnosis..." : "Select vision diagnosis..."}
                         isClearable
                         isSearchable
                         menuPortalTarget={document.body}
@@ -1474,7 +1584,7 @@ export default function PriorAuthorizationForm() {
                       value={diagnosis.diagnosis_display || ''}
                       onChange={(e) => handleDiagnosisChange(index, 'diagnosis_display', e.target.value)}
                       placeholder="Diagnosis description"
-                      disabled={formData.auth_type === 'dental'}
+                      disabled={formData.auth_type === 'dental' || formData.auth_type === 'vision'}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1735,20 +1845,247 @@ export default function PriorAuthorizationForm() {
 
       {/* Items Tab */}
       {activeTab === 'items' && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Service Items</CardTitle>
-                <CardDescription>Services, procedures, or medications requiring authorization</CardDescription>
+        <div className="space-y-6">
+          {/* Vision Prescription Card - Only for vision auth type */}
+          {formData.auth_type === 'vision' && (
+            <Card className="border-blue-200 bg-blue-50/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="h-5 w-5 text-blue-600" />
+                  Vision Prescription
+                </CardTitle>
+                <CardDescription>Lens specifications for the vision authorization</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Prescription Type and Date */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Product Type *</Label>
+                    <Select
+                      value={[
+                        { value: 'lens', label: 'Spectacle Lens' },
+                        { value: 'contact', label: 'Contact Lens' }
+                      ].find(opt => opt.value === formData.vision_prescription.product_type)}
+                      onChange={(option) => handleVisionPrescriptionChange('product_type', option?.value || 'lens')}
+                      options={[
+                        { value: 'lens', label: 'Spectacle Lens' },
+                        { value: 'contact', label: 'Contact Lens' }
+                      ]}
+                      styles={selectStyles}
+                      menuPortalTarget={document.body}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Date Written</Label>
+                    <div className="datepicker-wrapper">
+                      <DatePicker
+                        selected={formData.vision_prescription.date_written ? new Date(formData.vision_prescription.date_written) : null}
+                        onChange={(date) => handleVisionPrescriptionChange('date_written', date ? date.toISOString() : null)}
+                        dateFormat="yyyy-MM-dd"
+                        className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholderText="Select prescription date"
+                      />
+                      <Calendar className="datepicker-icon h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Eye Specifications */}
+                <div className="p-4 border rounded-lg bg-white">
+                  <h4 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center text-xs">R</div>
+                    Right Eye (OD)
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div className="space-y-2">
+                      <Label>Sphere (SPH)</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={formData.vision_prescription.right_eye.sphere}
+                        onChange={(e) => handleVisionPrescriptionChange('sphere', e.target.value, 'right_eye')}
+                        placeholder="e.g., -2.50"
+                      />
+                      <p className="text-xs text-gray-400">Diopters</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Cylinder (CYL)</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={formData.vision_prescription.right_eye.cylinder}
+                        onChange={(e) => handleVisionPrescriptionChange('cylinder', e.target.value, 'right_eye')}
+                        placeholder="e.g., -1.25"
+                      />
+                      <p className="text-xs text-gray-400">Diopters</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Axis</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="180"
+                        value={formData.vision_prescription.right_eye.axis}
+                        onChange={(e) => handleVisionPrescriptionChange('axis', e.target.value, 'right_eye')}
+                        placeholder="1-180"
+                      />
+                      <p className="text-xs text-gray-400">Degrees</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Add (Reading)</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={formData.vision_prescription.right_eye.add}
+                        onChange={(e) => handleVisionPrescriptionChange('add', e.target.value, 'right_eye')}
+                        placeholder="e.g., +2.00"
+                      />
+                      <p className="text-xs text-gray-400">Diopters</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Prism Amount</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={formData.vision_prescription.right_eye.prism_amount}
+                        onChange={(e) => handleVisionPrescriptionChange('prism_amount', e.target.value, 'right_eye')}
+                        placeholder="e.g., 2"
+                      />
+                      <p className="text-xs text-gray-400">Prism diopters</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Prism Base</Label>
+                      <Select
+                        value={[
+                          { value: 'up', label: 'Up' },
+                          { value: 'down', label: 'Down' },
+                          { value: 'in', label: 'In' },
+                          { value: 'out', label: 'Out' }
+                        ].find(opt => opt.value === formData.vision_prescription.right_eye.prism_base)}
+                        onChange={(option) => handleVisionPrescriptionChange('prism_base', option?.value || '', 'right_eye')}
+                        options={[
+                          { value: 'up', label: 'Up' },
+                          { value: 'down', label: 'Down' },
+                          { value: 'in', label: 'In' },
+                          { value: 'out', label: 'Out' }
+                        ]}
+                        styles={selectStyles}
+                        placeholder="Select..."
+                        isClearable
+                        menuPortalTarget={document.body}
+                      />
+                      <p className="text-xs text-gray-400">Base direction</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Left Eye Specifications */}
+                <div className="p-4 border rounded-lg bg-white">
+                  <h4 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs">L</div>
+                    Left Eye (OS)
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div className="space-y-2">
+                      <Label>Sphere (SPH)</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={formData.vision_prescription.left_eye.sphere}
+                        onChange={(e) => handleVisionPrescriptionChange('sphere', e.target.value, 'left_eye')}
+                        placeholder="e.g., -2.25"
+                      />
+                      <p className="text-xs text-gray-400">Diopters</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Cylinder (CYL)</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={formData.vision_prescription.left_eye.cylinder}
+                        onChange={(e) => handleVisionPrescriptionChange('cylinder', e.target.value, 'left_eye')}
+                        placeholder="e.g., -1.00"
+                      />
+                      <p className="text-xs text-gray-400">Diopters</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Axis</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="180"
+                        value={formData.vision_prescription.left_eye.axis}
+                        onChange={(e) => handleVisionPrescriptionChange('axis', e.target.value, 'left_eye')}
+                        placeholder="1-180"
+                      />
+                      <p className="text-xs text-gray-400">Degrees</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Add (Reading)</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={formData.vision_prescription.left_eye.add}
+                        onChange={(e) => handleVisionPrescriptionChange('add', e.target.value, 'left_eye')}
+                        placeholder="e.g., +2.00"
+                      />
+                      <p className="text-xs text-gray-400">Diopters</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Prism Amount</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={formData.vision_prescription.left_eye.prism_amount}
+                        onChange={(e) => handleVisionPrescriptionChange('prism_amount', e.target.value, 'left_eye')}
+                        placeholder="e.g., 2"
+                      />
+                      <p className="text-xs text-gray-400">Prism diopters</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Prism Base</Label>
+                      <Select
+                        value={[
+                          { value: 'up', label: 'Up' },
+                          { value: 'down', label: 'Down' },
+                          { value: 'in', label: 'In' },
+                          { value: 'out', label: 'Out' }
+                        ].find(opt => opt.value === formData.vision_prescription.left_eye.prism_base)}
+                        onChange={(option) => handleVisionPrescriptionChange('prism_base', option?.value || '', 'left_eye')}
+                        options={[
+                          { value: 'up', label: 'Up' },
+                          { value: 'down', label: 'Down' },
+                          { value: 'in', label: 'In' },
+                          { value: 'out', label: 'Out' }
+                        ]}
+                        styles={selectStyles}
+                        placeholder="Select..."
+                        isClearable
+                        menuPortalTarget={document.body}
+                      />
+                      <p className="text-xs text-gray-400">Base direction</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Service Items Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Service Items</CardTitle>
+                  <CardDescription>Services, procedures, or medications requiring authorization</CardDescription>
+                </div>
+                <Button type="button" onClick={addItem} variant="outline" size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Item
+                </Button>
               </div>
-              <Button type="button" onClick={addItem} variant="outline" size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Item
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </CardHeader>
+            <CardContent className="space-y-4">
             {formData.items.map((item, index) => (
               <div key={index} className="p-4 border rounded-lg bg-gray-50 space-y-4">
                 <div className="flex items-center justify-between">
@@ -1952,6 +2289,7 @@ export default function PriorAuthorizationForm() {
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
 
       {/* Supporting Info Tab */}

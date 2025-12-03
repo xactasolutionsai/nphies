@@ -251,6 +251,14 @@ class PriorAuthMapper {
       }
     };
 
+    // Prescription reference - required for vision claims per NPHIES vision-priorauth profile
+    // Reference: Claim-123073.json "prescription": { "reference": "VisionPrescription/3" }
+    if (priorAuth.auth_type === 'vision' && bundleResourceIds.visionPrescription) {
+      claim.prescription = {
+        reference: `VisionPrescription/${bundleResourceIds.visionPrescription}`
+      };
+    }
+
     // If this is an update, add the related reference
     if (priorAuth.is_update && priorAuth.pre_auth_ref) {
       claim.related = [
@@ -1158,7 +1166,9 @@ class PriorAuthMapper {
       coverage: coverage?.id || coverage?.coverage_id || this.generateId(),
       encounter: this.generateId(),
       practitioner: practitioner?.practitioner_id || this.generateId(),
-      policyHolder: policyHolder?.id || this.generateId()
+      policyHolder: policyHolder?.id || this.generateId(),
+      // Vision-specific: VisionPrescription ID (only used for vision auth type)
+      visionPrescription: priorAuth.auth_type === 'vision' ? this.generateId() : null
     };
 
     // Build Patient resource with consistent ID
@@ -1208,6 +1218,18 @@ class PriorAuthMapper {
     // Build MessageHeader (must be first)
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
 
+    // Build VisionPrescription for vision auth type
+    let visionPrescriptionResource = null;
+    if (priorAuth.auth_type === 'vision' && bundleResourceIds.visionPrescription) {
+      visionPrescriptionResource = this.buildVisionPrescriptionResource(
+        priorAuth.vision_prescription,
+        bundleResourceIds.patient,
+        bundleResourceIds.practitioner,
+        bundleResourceIds.visionPrescription,
+        provider
+      );
+    }
+
     // Build attachments as Binary resources
     const binaryResources = [];
     if (priorAuth.attachments && priorAuth.attachments.length > 0) {
@@ -1228,6 +1250,11 @@ class PriorAuthMapper {
       insurerResource,
       patientResource
     ];
+
+    // Add VisionPrescription for vision claims
+    if (visionPrescriptionResource) {
+      entries.push(visionPrescriptionResource);
+    }
 
     // Add binary resources for attachments
     binaryResources.forEach(binary => entries.push(binary));
@@ -1726,6 +1753,151 @@ class PriorAuthMapper {
       'NIIP': 'National Insurance Payor Identifier'
     };
     return displays[code] || 'License Number';
+  }
+
+  /**
+   * Build VisionPrescription resource for vision prior authorization
+   * Reference: https://portal.nphies.sa/ig/StructureDefinition-vision-prescription.html
+   * Sample: Claim-123073.json references VisionPrescription/3
+   * 
+   * @param {Object} visionPrescription - Vision prescription data
+   * @param {string} patientId - Patient resource ID
+   * @param {string} practitionerId - Practitioner resource ID
+   * @param {string} prescriptionId - ID for this VisionPrescription resource
+   */
+  buildVisionPrescriptionResource(visionPrescription, patientId, practitionerId, prescriptionId, provider) {
+    const prescription = visionPrescription || {};
+    
+    // Build provider identifier URL based on provider name
+    const providerIdentifierSystem = provider?.identifier_system || 
+      `http://${(provider?.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+
+    const resource = {
+      resourceType: 'VisionPrescription',
+      id: prescriptionId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0']
+      },
+      identifier: [
+        {
+          system: `${providerIdentifierSystem}/visionprescription`,
+          value: prescription.identifier || `VP-${prescriptionId.substring(0, 8)}`
+        }
+      ],
+      status: 'active',
+      created: this.formatDateTime(prescription.date_written || new Date()),
+      patient: {
+        reference: `Patient/${patientId}`
+      },
+      dateWritten: this.formatDateTime(prescription.date_written || new Date()),
+      lensSpecification: []
+    };
+
+    // Prescriber - NPHIES uses identifier-based reference per VisionPrescription-3.json example
+    // Reference: https://portal.nphies.sa/ig/VisionPrescription-3.json.html
+    if (prescription.prescriber_license) {
+      resource.prescriber = {
+        type: 'Practitioner',
+        identifier: {
+          type: {
+            coding: [
+              {
+                system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                code: 'MD'
+              }
+            ]
+          },
+          system: 'http://nphies.sa/licenses/practitioner',
+          value: prescription.prescriber_license
+        }
+      };
+    } else {
+      // Fallback to direct reference if no license provided
+      resource.prescriber = {
+        reference: `Practitioner/${practitionerId}`
+      };
+    }
+
+    // Add right eye (OD) lens specification if data exists
+    if (prescription.right_eye && this.hasLensData(prescription.right_eye)) {
+      resource.lensSpecification.push(
+        this.buildLensSpecification(prescription.right_eye, 'right', prescription.product_type)
+      );
+    }
+
+    // Add left eye (OS) lens specification if data exists
+    if (prescription.left_eye && this.hasLensData(prescription.left_eye)) {
+      resource.lensSpecification.push(
+        this.buildLensSpecification(prescription.left_eye, 'left', prescription.product_type)
+      );
+    }
+
+    return {
+      fullUrl: `http://provider.com/VisionPrescription/${prescriptionId}`,
+      resource
+    };
+  }
+
+  /**
+   * Check if lens specification has any data
+   */
+  hasLensData(lensData) {
+    if (!lensData) return false;
+    return lensData.sphere || lensData.cylinder || lensData.axis || lensData.add;
+  }
+
+  /**
+   * Build single lens specification for an eye
+   * Reference: https://portal.nphies.sa/ig/VisionPrescription-3.json.html
+   * @param {Object} eyeData - Eye-specific data (sphere, cylinder, axis, add, prism)
+   * @param {string} eye - 'right' or 'left'
+   * @param {string} productType - 'lens' or 'contact'
+   */
+  buildLensSpecification(eyeData, eye, productType = 'lens') {
+    const spec = {
+      product: {
+        coding: [
+          {
+            // NPHIES uses their own lens-type CodeSystem
+            system: 'http://nphies.sa/terminology/CodeSystem/lens-type',
+            code: productType === 'contact' ? 'contact' : 'lens'
+          }
+        ]
+      },
+      eye: eye // 'right' or 'left'
+    };
+
+    // Add sphere if provided
+    if (eyeData.sphere !== '' && eyeData.sphere !== null && eyeData.sphere !== undefined) {
+      spec.sphere = parseFloat(eyeData.sphere);
+    }
+
+    // Add cylinder if provided
+    if (eyeData.cylinder !== '' && eyeData.cylinder !== null && eyeData.cylinder !== undefined) {
+      spec.cylinder = parseFloat(eyeData.cylinder);
+    }
+
+    // Add axis if provided (required when cylinder is present)
+    if (eyeData.axis !== '' && eyeData.axis !== null && eyeData.axis !== undefined) {
+      spec.axis = parseInt(eyeData.axis, 10);
+    }
+
+    // Add reading addition (add) if provided
+    if (eyeData.add !== '' && eyeData.add !== null && eyeData.add !== undefined) {
+      spec.add = parseFloat(eyeData.add);
+    }
+
+    // Add prism if provided - per NPHIES VisionPrescription-3 example
+    if (eyeData.prism_amount !== '' && eyeData.prism_amount !== null && eyeData.prism_amount !== undefined) {
+      spec.prism = [
+        {
+          amount: parseFloat(eyeData.prism_amount),
+          base: eyeData.prism_base || 'up' // up, down, in, out
+        }
+      ];
+    }
+
+    return spec;
   }
 
 
