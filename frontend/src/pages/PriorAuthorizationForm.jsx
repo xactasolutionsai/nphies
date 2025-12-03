@@ -20,6 +20,8 @@ import {
   AUTH_TYPE_OPTIONS,
   PRIORITY_OPTIONS,
   ENCOUNTER_CLASS_OPTIONS,
+  ALLOWED_ENCOUNTER_CLASSES,
+  getEncounterClassOptions,
   CURRENCY_OPTIONS,
   DIAGNOSIS_TYPE_OPTIONS,
   DENTAL_ICD10_OPTIONS,
@@ -569,9 +571,10 @@ export default function PriorAuthorizationForm() {
         delete dataToSave.vision_prescription;
       }
       
-      // Dental claims use AMB encounter class - don't send end date
+      // Dental/Vision claims use AMB encounter class - don't send end date
       // Per NPHIES Encounter-10123 example: AMB encounters have no end date
-      if (dataToSave.auth_type === 'dental') {
+      // NPHIES Rules: Dental and Vision must use 'ambulatory'
+      if (dataToSave.auth_type === 'dental' || dataToSave.auth_type === 'vision') {
         delete dataToSave.encounter_end;
         dataToSave.encounter_class = 'ambulatory';
       }
@@ -622,8 +625,10 @@ export default function PriorAuthorizationForm() {
       }
       
       // Dental claims use AMB encounter class - don't send end date
+      // Dental/Vision claims use AMB encounter class - don't send end date
       // Per NPHIES Encounter-10123 example: AMB encounters have no end date
-      if (dataToSave.auth_type === 'dental') {
+      // NPHIES Rules: Dental and Vision must use 'ambulatory'
+      if (dataToSave.auth_type === 'dental' || dataToSave.auth_type === 'vision') {
         delete dataToSave.encounter_end;
         dataToSave.encounter_class = 'ambulatory';
       }
@@ -683,8 +688,10 @@ export default function PriorAuthorizationForm() {
       }
       
       // Dental claims use AMB encounter class - don't send end date
+      // Dental/Vision claims use AMB encounter class - don't send end date
       // Per NPHIES Encounter-10123 example: AMB encounters have no end date
-      if (dataToPreview.auth_type === 'dental') {
+      // NPHIES Rules: Dental and Vision must use 'ambulatory'
+      if (dataToPreview.auth_type === 'dental' || dataToPreview.auth_type === 'vision') {
         delete dataToPreview.encounter_end;
         dataToPreview.encounter_class = 'ambulatory';
       }
@@ -729,8 +736,10 @@ export default function PriorAuthorizationForm() {
       }
       
       // Dental claims use AMB encounter class - don't send end date
+      // Dental/Vision claims use AMB encounter class - don't send end date
       // Per NPHIES Encounter-10123 example: AMB encounters have no end date
-      if (dataToTest.auth_type === 'dental') {
+      // NPHIES Rules: Dental and Vision must use 'ambulatory'
+      if (dataToTest.auth_type === 'dental' || dataToTest.auth_type === 'vision') {
         delete dataToTest.encounter_end;
         dataToTest.encounter_class = 'ambulatory';
       }
@@ -892,11 +901,28 @@ export default function PriorAuthorizationForm() {
                   onChange={(option) => {
                     const newAuthType = option?.value || 'professional';
                     handleChange('auth_type', newAuthType);
-                    // Dental claims use AMB encounter class - clear end date per NPHIES example
-                    // (AMB encounters don't need end date - ongoing encounters)
-                    if (newAuthType === 'dental') {
+                    
+                    // Get allowed encounter classes for the new auth type
+                    const allowed = ALLOWED_ENCOUNTER_CLASSES[newAuthType] || ALLOWED_ENCOUNTER_CLASSES.professional;
+                    const currentClass = formData.encounter_class;
+                    
+                    // Auto-update encounter class if current selection is not allowed for new auth type
+                    // NPHIES Rules:
+                    // - Dental/Vision: Must use 'ambulatory' (AMB)
+                    // - Outpatient: Only for 'dental' or 'professional'
+                    // - Inpatient/Daycase: Only for 'institutional'
+                    if (!allowed.includes(currentClass)) {
+                      // Default to first allowed option (usually 'ambulatory')
+                      handleChange('encounter_class', allowed[0]);
+                      // Clear end date for ambulatory encounters
+                      if (allowed[0] === 'ambulatory') {
+                        handleChange('encounter_end', '');
+                      }
+                    }
+                    
+                    // Clear end date for dental/vision (AMB encounters don't need end date)
+                    if (newAuthType === 'dental' || newAuthType === 'vision') {
                       handleChange('encounter_end', '');
-                      handleChange('encounter_class', 'ambulatory');
                     }
                   }}
                   options={AUTH_TYPE_OPTIONS}
@@ -919,9 +945,10 @@ export default function PriorAuthorizationForm() {
                 <Select
                   value={ENCOUNTER_CLASS_OPTIONS.find(opt => opt.value === formData.encounter_class)}
                   onChange={(option) => handleChange('encounter_class', option?.value || 'ambulatory')}
-                  options={ENCOUNTER_CLASS_OPTIONS}
+                  options={getEncounterClassOptions(formData.auth_type)}
                   styles={selectStyles}
                   menuPortalTarget={document.body}
+                  isOptionDisabled={(option) => option.isDisabled}
                 />
               </div>
             </div>

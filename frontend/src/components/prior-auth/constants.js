@@ -24,6 +24,40 @@ export const ENCOUNTER_CLASS_OPTIONS = [
   { value: 'telemedicine', label: 'Telemedicine (VR)' }
 ];
 
+// ============================================================================
+// ENCOUNTER CLASS RULES BY AUTH TYPE
+// Reference: NPHIES validation errors BV-00807, BV-00743
+// ============================================================================
+// - Outpatient: SHALL be used only when claim is 'oral' or 'professional'
+// - Inpatient/Day Case/Inpatient Acute: SHALL be used only when claim is 'institutional'
+// - Vision: Must use 'ambulatory' (AMB) per NPHIES Claim-123073 example
+
+export const ALLOWED_ENCOUNTER_CLASSES = {
+  // Institutional: Can use inpatient, daycase, and other classes
+  institutional: ['inpatient', 'daycase', 'emergency', 'ambulatory', 'home', 'telemedicine'],
+  
+  // Professional: Can use outpatient, ambulatory, and other non-inpatient classes
+  professional: ['outpatient', 'ambulatory', 'emergency', 'home', 'telemedicine'],
+  
+  // Dental (Oral): Must use ambulatory per NPHIES
+  dental: ['ambulatory'],
+  
+  // Vision: Must use ambulatory per NPHIES Claim-123073
+  vision: ['ambulatory'],
+  
+  // Pharmacy: Similar to professional, uses ambulatory
+  pharmacy: ['ambulatory', 'outpatient', 'emergency', 'home', 'telemedicine']
+};
+
+// Helper function to get filtered encounter class options based on auth type
+export const getEncounterClassOptions = (authType) => {
+  const allowed = ALLOWED_ENCOUNTER_CLASSES[authType] || ALLOWED_ENCOUNTER_CLASSES.professional;
+  return ENCOUNTER_CLASS_OPTIONS.map(option => ({
+    ...option,
+    isDisabled: !allowed.includes(option.value)
+  }));
+};
+
 export const CURRENCY_OPTIONS = [
   { value: 'SAR', label: 'SAR - Saudi Riyal' },
   { value: 'USD', label: 'USD - US Dollar' }

@@ -83,7 +83,7 @@ class PriorAuthMapper {
    */
   getEncounterProfileUrl(encounterClass) {
     const profiles = {
-      'ambulatory': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition|1.0.0',
+      'ambulatory': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0',
       'outpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0',
       'emergency': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-EMER|1.0.0',
       'home': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-HH|1.0.0',
