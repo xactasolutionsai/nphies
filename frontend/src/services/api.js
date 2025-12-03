@@ -371,7 +371,11 @@ class ApiService {
       'item_count', 'responses',
       // NPHIES response fields
       'pre_auth_ref', 'nphies_response_id', 'nphies_response',
-      'bundle_id', 'response_bundle_id', 'approved_amount', 'approved_date'
+      'bundle_id', 'response_bundle_id', 'approved_amount', 'approved_date',
+      // Additional response/adjudication fields
+      'adjudication_outcome', 'eligible_amount', 'benefit_amount', 'copay_amount',
+      'eligibility_offline_ref', 'sub_type', 'outcome', 'disposition',
+      'nphies_request_id', 'is_nphies_generated', 'pre_auth_period_start', 'pre_auth_period_end'
     ];
     
     // Create a clean copy for duplication
