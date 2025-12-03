@@ -777,40 +777,40 @@ export default function PriorAuthorizationDetails() {
                         <div>
                           <p className="text-gray-500">Sphere (SPH)</p>
                           <p className="font-medium text-lg">
-                            {priorAuth.vision_prescription.right_sphere !== undefined 
-                              ? (priorAuth.vision_prescription.right_sphere >= 0 ? '+' : '') + priorAuth.vision_prescription.right_sphere 
+                            {priorAuth.vision_prescription.right_eye?.sphere 
+                              ? (parseFloat(priorAuth.vision_prescription.right_eye.sphere) >= 0 ? '+' : '') + priorAuth.vision_prescription.right_eye.sphere 
                               : '-'}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Cylinder (CYL)</p>
                           <p className="font-medium text-lg">
-                            {priorAuth.vision_prescription.right_cylinder !== undefined 
-                              ? (priorAuth.vision_prescription.right_cylinder >= 0 ? '+' : '') + priorAuth.vision_prescription.right_cylinder 
+                            {priorAuth.vision_prescription.right_eye?.cylinder 
+                              ? (parseFloat(priorAuth.vision_prescription.right_eye.cylinder) >= 0 ? '+' : '') + priorAuth.vision_prescription.right_eye.cylinder 
                               : '-'}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Axis</p>
                           <p className="font-medium text-lg">
-                            {priorAuth.vision_prescription.right_axis !== undefined 
-                              ? priorAuth.vision_prescription.right_axis + '°' 
+                            {priorAuth.vision_prescription.right_eye?.axis 
+                              ? priorAuth.vision_prescription.right_eye.axis + '°' 
                               : '-'}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Add Power</p>
                           <p className="font-medium text-lg">
-                            {priorAuth.vision_prescription.right_add !== undefined 
-                              ? '+' + priorAuth.vision_prescription.right_add 
+                            {priorAuth.vision_prescription.right_eye?.add 
+                              ? '+' + priorAuth.vision_prescription.right_eye.add 
                               : '-'}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Prism</p>
                           <p className="font-medium">
-                            {priorAuth.vision_prescription.right_prism 
-                              ? `${priorAuth.vision_prescription.right_prism} ${priorAuth.vision_prescription.right_prism_base || ''}` 
+                            {priorAuth.vision_prescription.right_eye?.prism_amount 
+                              ? `${priorAuth.vision_prescription.right_eye.prism_amount} ${priorAuth.vision_prescription.right_eye.prism_base || ''}` 
                               : '-'}
                           </p>
                         </div>
@@ -827,40 +827,40 @@ export default function PriorAuthorizationDetails() {
                         <div>
                           <p className="text-gray-500">Sphere (SPH)</p>
                           <p className="font-medium text-lg">
-                            {priorAuth.vision_prescription.left_sphere !== undefined 
-                              ? (priorAuth.vision_prescription.left_sphere >= 0 ? '+' : '') + priorAuth.vision_prescription.left_sphere 
+                            {priorAuth.vision_prescription.left_eye?.sphere 
+                              ? (parseFloat(priorAuth.vision_prescription.left_eye.sphere) >= 0 ? '+' : '') + priorAuth.vision_prescription.left_eye.sphere 
                               : '-'}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Cylinder (CYL)</p>
                           <p className="font-medium text-lg">
-                            {priorAuth.vision_prescription.left_cylinder !== undefined 
-                              ? (priorAuth.vision_prescription.left_cylinder >= 0 ? '+' : '') + priorAuth.vision_prescription.left_cylinder 
+                            {priorAuth.vision_prescription.left_eye?.cylinder 
+                              ? (parseFloat(priorAuth.vision_prescription.left_eye.cylinder) >= 0 ? '+' : '') + priorAuth.vision_prescription.left_eye.cylinder 
                               : '-'}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Axis</p>
                           <p className="font-medium text-lg">
-                            {priorAuth.vision_prescription.left_axis !== undefined 
-                              ? priorAuth.vision_prescription.left_axis + '°' 
+                            {priorAuth.vision_prescription.left_eye?.axis 
+                              ? priorAuth.vision_prescription.left_eye.axis + '°' 
                               : '-'}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Add Power</p>
                           <p className="font-medium text-lg">
-                            {priorAuth.vision_prescription.left_add !== undefined 
-                              ? '+' + priorAuth.vision_prescription.left_add 
+                            {priorAuth.vision_prescription.left_eye?.add 
+                              ? '+' + priorAuth.vision_prescription.left_eye.add 
                               : '-'}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Prism</p>
                           <p className="font-medium">
-                            {priorAuth.vision_prescription.left_prism 
-                              ? `${priorAuth.vision_prescription.left_prism} ${priorAuth.vision_prescription.left_prism_base || ''}` 
+                            {priorAuth.vision_prescription.left_eye?.prism_amount 
+                              ? `${priorAuth.vision_prescription.left_eye.prism_amount} ${priorAuth.vision_prescription.left_eye.prism_base || ''}` 
                               : '-'}
                           </p>
                         </div>
