@@ -27,10 +27,11 @@ export const ENCOUNTER_CLASS_OPTIONS = [
 // ============================================================================
 // ENCOUNTER CLASS RULES BY AUTH TYPE
 // Reference: NPHIES validation errors BV-00807, BV-00743
+// Reference: NPHIES IG - Vision claims do NOT require Encounter
 // ============================================================================
 // - Outpatient: SHALL be used only when claim is 'oral' or 'professional'
 // - Inpatient/Day Case/Inpatient Acute: SHALL be used only when claim is 'institutional'
-// - Vision: Must use 'ambulatory' (AMB) per NPHIES Claim-123073 example
+// - Vision: NO ENCOUNTER - Vision claims are simple outpatient services without clinical encounter context
 
 export const ALLOWED_ENCOUNTER_CLASSES = {
   // Institutional: Can use inpatient, daycase, and other classes
@@ -42,8 +43,9 @@ export const ALLOWED_ENCOUNTER_CLASSES = {
   // Dental (Oral): Must use ambulatory per NPHIES
   dental: ['ambulatory'],
   
-  // Vision: Must use ambulatory per NPHIES Claim-123073
-  vision: ['ambulatory'],
+  // Vision: NO ENCOUNTER REQUIRED per NPHIES IG
+  // Vision Claims only contain: Patient, Provider, Diagnosis, Items, Benefit, Supporting Info
+  vision: [],
   
   // Pharmacy: Similar to professional, uses ambulatory
   pharmacy: ['ambulatory', 'outpatient', 'emergency', 'home', 'telemedicine']
@@ -51,6 +53,10 @@ export const ALLOWED_ENCOUNTER_CLASSES = {
 
 // Helper function to get filtered encounter class options based on auth type
 export const getEncounterClassOptions = (authType) => {
+  // Vision doesn't use Encounter at all
+  if (authType === 'vision') {
+    return [];
+  }
   const allowed = ALLOWED_ENCOUNTER_CLASSES[authType] || ALLOWED_ENCOUNTER_CLASSES.professional;
   return ENCOUNTER_CLASS_OPTIONS.map(option => ({
     ...option,

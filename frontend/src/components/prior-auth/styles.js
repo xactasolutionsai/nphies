@@ -57,12 +57,31 @@ export const selectStyles = {
       borderColor: '#e5e7eb'
     }
   }),
-  option: (base, { isFocused, isSelected }) => ({
+  option: (base, { isFocused, isSelected, isDisabled }) => ({
     ...base,
-    backgroundColor: isSelected ? '#553781' : isFocused ? '#f3f4f6' : 'white',
-    color: isSelected ? 'white' : '#374151',
-    cursor: 'pointer',
-    padding: '8px 12px'
+    backgroundColor: isDisabled 
+      ? '#f3f4f6'  // Gray background for disabled
+      : isSelected 
+        ? '#553781' 
+        : isFocused 
+          ? '#ede9f5' 
+          : 'white',
+    color: isDisabled 
+      ? '#9ca3af'  // Lighter gray text for disabled
+      : isSelected 
+        ? 'white' 
+        : '#374151',
+    cursor: isDisabled ? 'not-allowed' : 'pointer',
+    padding: '8px 12px',
+    opacity: isDisabled ? 0.7 : 1,
+    fontStyle: isDisabled ? 'italic' : 'normal',
+    '&:hover': {
+      backgroundColor: isDisabled 
+        ? '#f3f4f6'  // Keep gray on hover for disabled
+        : isSelected 
+          ? '#452d6b' 
+          : '#ede9f5'
+    }
   }),
   menu: (base) => ({ 
     ...base, 

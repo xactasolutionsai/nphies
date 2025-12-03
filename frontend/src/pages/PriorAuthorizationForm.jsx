@@ -940,77 +940,95 @@ export default function PriorAuthorizationForm() {
                   menuPortalTarget={document.body}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Encounter Class</Label>
-                <Select
-                  value={ENCOUNTER_CLASS_OPTIONS.find(opt => opt.value === formData.encounter_class)}
-                  onChange={(option) => handleChange('encounter_class', option?.value || 'ambulatory')}
-                  options={getEncounterClassOptions(formData.auth_type)}
-                  styles={selectStyles}
-                  menuPortalTarget={document.body}
-                  isOptionDisabled={(option) => option.isDisabled}
-                />
-              </div>
+              {/* Encounter Class - NOT shown for Vision claims (Vision doesn't use Encounter) */}
+              {formData.auth_type !== 'vision' && (
+                <div className="space-y-2">
+                  <Label>Encounter Class</Label>
+                  <Select
+                    value={ENCOUNTER_CLASS_OPTIONS.find(opt => opt.value === formData.encounter_class)}
+                    onChange={(option) => handleChange('encounter_class', option?.value || 'ambulatory')}
+                    options={getEncounterClassOptions(formData.auth_type)}
+                    styles={selectStyles}
+                    menuPortalTarget={document.body}
+                    isOptionDisabled={(option) => option.isDisabled}
+                  />
+                </div>
+              )}
             </div>
 
-            <hr className="border-gray-200" />
+            {/* Vision claims info - No Encounter needed */}
+            {formData.auth_type === 'vision' && (
+              <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <AlertCircle className="h-5 w-5 text-blue-500" />
+                <span className="text-sm text-blue-700">
+                  Vision claims do not require Encounter information per NPHIES specification.
+                </span>
+              </div>
+            )}
 
-            {/* Encounter Period - Format depends on encounter class:
-                - AMB (Ambulatory/Dental): date only "2023-12-04" per https://portal.nphies.sa/ig/Encounter-10123.json.html
-                - SS/IMP (Short Stay/Inpatient): dateTime "2023-12-04T10:25:00+03:00" per https://portal.nphies.sa/ig/Encounter-10124.json.html
-                Note: Dental claims always use AMB encounter class */}
-            {(() => {
-              // Dental claims MUST use ambulatory encounter class (date-only, no end date per NPHIES)
-              const isDentalClaim = formData.auth_type === 'dental';
-              const needsDateTime = !isDentalClaim && ['inpatient', 'daycase'].includes(formData.encounter_class);
-              // Per NPHIES Encounter-10123 example: AMB encounters don't need end date (ongoing)
-              const showEndDate = needsDateTime;
-              
-              return (
-                <div className={`grid grid-cols-1 ${showEndDate ? 'md:grid-cols-2' : ''} gap-4`}>
-                  <div className="space-y-2">
-                    <Label>
-                      Encounter Start {needsDateTime ? 'Date & Time' : 'Date'}
-                      {isDentalClaim && <span className="text-xs text-gray-500 ml-1">(Dental uses date only)</span>}
-                    </Label>
-                    <div className="datepicker-wrapper">
-                      <DatePicker
-                        selected={formData.encounter_start ? new Date(formData.encounter_start) : null}
-                        onChange={(date) => handleChange('encounter_start', date ? (
-                          needsDateTime 
-                            ? date.toISOString() 
-                            : date.toISOString().split('T')[0]
-                        ) : '')}
-                        showTimeSelect={needsDateTime}
-                        dateFormat={needsDateTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"}
-                        className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                        placeholderText={needsDateTime ? "Select date & time" : "Select date"}
-                      />
-                      <Calendar className="datepicker-icon h-4 w-4" />
-                    </div>
-                  </div>
-                  {showEndDate && (
-                    <div className="space-y-2">
-                      <Label>
-                        Encounter End Date & Time (Optional)
-                      </Label>
-                      <div className="datepicker-wrapper">
-                        <DatePicker
-                          selected={formData.encounter_end ? new Date(formData.encounter_end) : null}
-                          onChange={(date) => handleChange('encounter_end', date ? date.toISOString() : '')}
-                          showTimeSelect
-                          dateFormat="yyyy-MM-dd HH:mm"
-                          isClearable
-                          className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                          placeholderText="Select date & time (optional)"
-                        />
-                        <Calendar className="datepicker-icon h-4 w-4" />
+            {/* Encounter Period - Only for non-Vision claims */}
+            {formData.auth_type !== 'vision' && (
+              <>
+                <hr className="border-gray-200" />
+
+                {/* Encounter Period - Format depends on encounter class:
+                    - AMB (Ambulatory/Dental): date only "2023-12-04" per https://portal.nphies.sa/ig/Encounter-10123.json.html
+                    - SS/IMP (Short Stay/Inpatient): dateTime "2023-12-04T10:25:00+03:00" per https://portal.nphies.sa/ig/Encounter-10124.json.html
+                    Note: Dental claims always use AMB encounter class */}
+                {(() => {
+                  // Dental claims MUST use ambulatory encounter class (date-only, no end date per NPHIES)
+                  const isDentalClaim = formData.auth_type === 'dental';
+                  const needsDateTime = !isDentalClaim && ['inpatient', 'daycase'].includes(formData.encounter_class);
+                  // Per NPHIES Encounter-10123 example: AMB encounters don't need end date (ongoing)
+                  const showEndDate = needsDateTime;
+                  
+                  return (
+                    <div className={`grid grid-cols-1 ${showEndDate ? 'md:grid-cols-2' : ''} gap-4`}>
+                      <div className="space-y-2">
+                        <Label>
+                          Encounter Start {needsDateTime ? 'Date & Time' : 'Date'}
+                          {isDentalClaim && <span className="text-xs text-gray-500 ml-1">(Dental uses date only)</span>}
+                        </Label>
+                        <div className="datepicker-wrapper">
+                          <DatePicker
+                            selected={formData.encounter_start ? new Date(formData.encounter_start) : null}
+                            onChange={(date) => handleChange('encounter_start', date ? (
+                              needsDateTime 
+                                ? date.toISOString() 
+                                : date.toISOString().split('T')[0]
+                            ) : '')}
+                            showTimeSelect={needsDateTime}
+                            dateFormat={needsDateTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"}
+                            className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                            placeholderText={needsDateTime ? "Select date & time" : "Select date"}
+                          />
+                          <Calendar className="datepicker-icon h-4 w-4" />
+                        </div>
                       </div>
+                      {showEndDate && (
+                        <div className="space-y-2">
+                          <Label>
+                            Encounter End Date & Time (Optional)
+                          </Label>
+                          <div className="datepicker-wrapper">
+                            <DatePicker
+                              selected={formData.encounter_end ? new Date(formData.encounter_end) : null}
+                              onChange={(date) => handleChange('encounter_end', date ? date.toISOString() : '')}
+                              showTimeSelect
+                              dateFormat="yyyy-MM-dd HH:mm"
+                              isClearable
+                              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                              placeholderText="Select date & time (optional)"
+                            />
+                            <Calendar className="datepicker-icon h-4 w-4" />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })()}
+                  );
+                })()}
+              </>
+            )}
 
             <hr className="border-gray-200" />
 

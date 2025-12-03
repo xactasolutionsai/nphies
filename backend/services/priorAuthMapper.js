@@ -136,14 +136,18 @@ class PriorAuthMapper {
     // Per NPHIES spec, extension must appear before identifier in the Claim resource
     const extensions = [];
 
-    // Encounter extension - REQUIRED for all prior auth types
+    // Encounter extension - REQUIRED for Institutional, Professional, Oral (Dental) claims
     // RE-00189: Use relative reference format for encounter (not full URL)
-    extensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
-      valueReference: {
-        reference: `Encounter/${encounterRef}`
-      }
-    });
+    // NOTE: Vision claims do NOT require Encounter per NPHIES IG - they are simple outpatient services
+    // without clinical encounter context. Vision Claims only contain: Patient, Provider, Diagnosis, Items, Benefit, Supporting Info
+    if (priorAuth.auth_type !== 'vision') {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
+        valueReference: {
+          reference: `Encounter/${encounterRef}`
+        }
+      });
+    }
 
     // Eligibility offline reference extension
     if (priorAuth.eligibility_offline_ref) {
@@ -1194,12 +1198,17 @@ class PriorAuthMapper {
     );
     
     // Build Encounter with consistent ID
-    const encounterResource = this.buildEncounterResourceWithId(
-      priorAuth, 
-      patient, 
-      provider,
-      bundleResourceIds
-    );
+    // NOTE: Vision claims do NOT require Encounter per NPHIES IG
+    // Vision is treated as simple outpatient service without clinical encounter context
+    let encounterResource = null;
+    if (priorAuth.auth_type !== 'vision') {
+      encounterResource = this.buildEncounterResourceWithId(
+        priorAuth, 
+        patient, 
+        provider,
+        bundleResourceIds
+      );
+    }
     
     // Build Practitioner resource (REQUIRED for careTeam per IC-00014)
     const practitionerResource = this.buildPractitionerResourceWithId(
@@ -1208,13 +1217,14 @@ class PriorAuthMapper {
     );
     
     // Build Claim (main PA request resource) with all consistent IDs
+    // NOTE: encounterResource is null for Vision claims
     const claimResource = this.buildClaimResource(
       priorAuth, 
       patient, 
       provider, 
       insurer, 
       coverage, 
-      encounterResource.resource,
+      encounterResource?.resource || null,
       practitioner,
       bundleResourceIds
     );
@@ -1244,10 +1254,12 @@ class PriorAuthMapper {
 
     // Assemble bundle with MessageHeader first per NPHIES specification
     // Order matters: MessageHeader, Claim, then all referenced resources
+    // NOTE: Vision claims do NOT include Encounter resource
     const entries = [
       messageHeader,
       claimResource,
-      encounterResource,
+      // Only include Encounter for non-Vision claims
+      ...(encounterResource ? [encounterResource] : []),
       coverageResource,
       practitionerResource,
       providerResource,
