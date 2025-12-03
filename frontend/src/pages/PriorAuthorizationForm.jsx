@@ -25,6 +25,7 @@ import {
   DENTAL_ICD10_OPTIONS,
   VISION_ICD10_OPTIONS,
   EYE_OPTIONS,
+  BODY_SITE_OPTIONS_BY_AUTH_TYPE,
   FDI_TOOTH_OPTIONS,
   TOOTH_SURFACE_OPTIONS,
   SUPPORTING_INFO_CATEGORY_OPTIONS,
@@ -1843,17 +1844,50 @@ export default function PriorAuthorizationForm() {
                 )}
 
                 {formData.auth_type === 'vision' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Eye</Label>
+                      <Select
+                        value={EYE_OPTIONS.find(opt => opt.value === item.eye)}
+                        onChange={(option) => handleItemChange(index, 'eye', option?.value || '')}
+                        options={EYE_OPTIONS}
+                        styles={selectStyles}
+                        placeholder="Select eye..."
+                        isClearable
+                        menuPortalTarget={document.body}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Body Site</Label>
+                      <Select
+                        value={BODY_SITE_OPTIONS_BY_AUTH_TYPE.vision?.find(opt => opt.value === item.body_site_code)}
+                        onChange={(option) => handleItemChange(index, 'body_site_code', option?.value || '')}
+                        options={BODY_SITE_OPTIONS_BY_AUTH_TYPE.vision || []}
+                        styles={selectStyles}
+                        placeholder="Select body site..."
+                        isClearable
+                        menuPortalTarget={document.body}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Body Site for Professional/Institutional */}
+                {['professional', 'institutional'].includes(formData.auth_type) && (
                   <div className="space-y-2">
-                    <Label>Eye</Label>
+                    <Label>Body Site (Optional)</Label>
                     <Select
-                      value={EYE_OPTIONS.find(opt => opt.value === item.eye)}
-                      onChange={(option) => handleItemChange(index, 'eye', option?.value || '')}
-                      options={EYE_OPTIONS}
+                      value={BODY_SITE_OPTIONS_BY_AUTH_TYPE[formData.auth_type]?.find(opt => opt.value === item.body_site_code)}
+                      onChange={(option) => handleItemChange(index, 'body_site_code', option?.value || '')}
+                      options={BODY_SITE_OPTIONS_BY_AUTH_TYPE[formData.auth_type] || []}
                       styles={selectStyles}
-                      placeholder="Select eye..."
+                      placeholder="Select body site if applicable..."
                       isClearable
                       menuPortalTarget={document.body}
                     />
+                    <p className="text-xs text-gray-500">
+                      LT/RT for sides, F1-F9/FA for hands, T1-T9/TA for feet, LC/LD/LM/RC/RI for coronary
+                    </p>
                   </div>
                 )}
 

@@ -198,6 +198,87 @@ export const EYE_OPTIONS = [
   { value: 'both', label: 'Both' }
 ];
 
+// ============================================================================
+// BODY SITE OPTIONS BY AUTHORIZATION TYPE
+// Reference: CMS/HCPCS Body Site Modifiers
+// ============================================================================
+
+// Vision Body Sites
+export const VISION_BODY_SITE_OPTIONS = [
+  { value: 'RIV', label: 'RIV - Right eye', display: 'Right eye' },
+  { value: 'LIV', label: 'LIV - Left eye', display: 'Left eye' },
+  { value: 'E1', label: 'E1 - Upper left, eyelid', display: 'Upper left, eyelid' },
+  { value: 'E2', label: 'E2 - Lower left, eyelid', display: 'Lower left, eyelid' },
+  { value: 'E3', label: 'E3 - Upper right, eyelid', display: 'Upper right, eyelid' },
+  { value: 'E4', label: 'E4 - Lower right, eyelid', display: 'Lower right, eyelid' }
+];
+
+// Hand/Digit Body Sites (Professional/Institutional)
+export const HAND_BODY_SITE_OPTIONS = [
+  // Left Hand
+  { value: 'FA', label: 'FA - Left hand, thumb', display: 'Left hand, thumb' },
+  { value: 'F1', label: 'F1 - Left hand, second digit', display: 'Left hand, second digit' },
+  { value: 'F2', label: 'F2 - Left hand, third digit', display: 'Left hand, third digit' },
+  { value: 'F3', label: 'F3 - Left hand, fourth digit', display: 'Left hand, fourth digit' },
+  { value: 'F4', label: 'F4 - Left hand, fifth digit', display: 'Left hand, fifth digit' },
+  // Right Hand
+  { value: 'F5', label: 'F5 - Right hand, thumb', display: 'Right hand, thumb' },
+  { value: 'F6', label: 'F6 - Right hand, second digit', display: 'Right hand, second digit' },
+  { value: 'F7', label: 'F7 - Right hand, third digit', display: 'Right hand, third digit' },
+  { value: 'F8', label: 'F8 - Right hand, fourth digit', display: 'Right hand, fourth digit' },
+  { value: 'F9', label: 'F9 - Right hand, fifth digit', display: 'Right hand, fifth digit' }
+];
+
+// Foot/Toe Body Sites (Professional/Institutional)
+export const FOOT_BODY_SITE_OPTIONS = [
+  // Left Foot
+  { value: 'TA', label: 'TA - Left foot, great toe', display: 'Left foot, great toe' },
+  { value: 'T1', label: 'T1 - Left foot, second digit', display: 'Left foot, second digit' },
+  { value: 'T2', label: 'T2 - Left foot, third digit', display: 'Left foot, third digit' },
+  { value: 'T3', label: 'T3 - Left foot, fourth digit', display: 'Left foot, fourth digit' },
+  { value: 'T4', label: 'T4 - Left foot, fifth digit', display: 'Left foot, fifth digit' },
+  // Right Foot
+  { value: 'T5', label: 'T5 - Right foot, great toe', display: 'Right foot, great toe' },
+  { value: 'T6', label: 'T6 - Right foot, second digit', display: 'Right foot, second digit' },
+  { value: 'T7', label: 'T7 - Right foot, third digit', display: 'Right foot, third digit' },
+  { value: 'T8', label: 'T8 - Right foot, fourth digit', display: 'Right foot, fourth digit' },
+  { value: 'T9', label: 'T9 - Right foot, fifth digit', display: 'Right foot, fifth digit' }
+];
+
+// Coronary Artery Body Sites (Institutional/Professional - Cardiac)
+export const CORONARY_BODY_SITE_OPTIONS = [
+  { value: 'LC', label: 'LC - Left circumflex coronary artery', display: 'Left circumflex coronary artery' },
+  { value: 'LD', label: 'LD - Left anterior descending coronary artery', display: 'Left anterior descending coronary artery' },
+  { value: 'LM', label: 'LM - Left main coronary artery', display: 'Left main coronary artery' },
+  { value: 'RC', label: 'RC - Right coronary artery', display: 'Right coronary artery' },
+  { value: 'RI', label: 'RI - Ramus intermedius coronary artery', display: 'Ramus intermedius coronary artery' }
+];
+
+// General Side Indicators
+export const SIDE_BODY_SITE_OPTIONS = [
+  { value: 'LT', label: 'LT - Left side', display: 'Left side (used to identify procedures performed on the left side of the body)' },
+  { value: 'RT', label: 'RT - Right side', display: 'Right side (used to identify procedures performed on the right side of the body)' }
+];
+
+// Combined Body Site Options by Authorization Type
+export const BODY_SITE_OPTIONS_BY_AUTH_TYPE = {
+  vision: VISION_BODY_SITE_OPTIONS,
+  dental: [], // Dental uses FDI tooth codes instead
+  professional: [
+    ...SIDE_BODY_SITE_OPTIONS,
+    ...HAND_BODY_SITE_OPTIONS,
+    ...FOOT_BODY_SITE_OPTIONS,
+    ...CORONARY_BODY_SITE_OPTIONS
+  ],
+  institutional: [
+    ...SIDE_BODY_SITE_OPTIONS,
+    ...HAND_BODY_SITE_OPTIONS,
+    ...FOOT_BODY_SITE_OPTIONS,
+    ...CORONARY_BODY_SITE_OPTIONS
+  ],
+  pharmacy: [] // Pharmacy typically doesn't use body sites
+};
+
 // FDI Oral Region Codes (NPHIES fdi-oral-region CodeSystem)
 // Permanent teeth: Quadrants 1-4 (11-48)
 // Deciduous teeth: Quadrants 5-8 (51-85)

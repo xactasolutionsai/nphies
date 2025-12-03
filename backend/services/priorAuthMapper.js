@@ -821,21 +821,48 @@ class PriorAuthMapper {
       }
     }
 
-    // Vision-specific: eye using SNOMED CT codes (required by IB-00016)
-    // Reference: http://hl7.org/fhir/ValueSet/body-site (SNOMEDCTBodyStructures)
-    if (authType === 'vision' && item.eye) {
-      const eyeSnomedCodes = {
-        'right': { code: '18944008', display: 'Anatomical structure of right eye proper' },
-        'left': { code: '8966001', display: 'Anatomical structure of left eye proper' },
-        'both': { code: '40638003', display: 'Both eyes' }
-      };
-      const eyeCode = eyeSnomedCodes[item.eye] || eyeSnomedCodes['both'];
+    // Vision-specific: eye/body site using CMS HCPCS body site modifiers
+    // Reference: CMS body site modifiers for vision claims
+    if (authType === 'vision') {
+      // Use body_site_code if provided, otherwise map from eye field
+      if (item.body_site_code) {
+        claimItem.bodySite = {
+          coding: [
+            {
+              system: 'http://hl7.org/fhir/ValueSet/body-site',
+              code: item.body_site_code,
+              display: this.getBodySiteDisplay(item.body_site_code)
+            }
+          ]
+        };
+      } else if (item.eye) {
+        // Map legacy eye field to body site codes
+        const eyeBodySiteCodes = {
+          'right': { code: 'RIV', display: 'Right eye' },
+          'left': { code: 'LIV', display: 'Left eye' },
+          'both': { code: 'RIV', display: 'Right eye' } // For both, we'd typically create two items
+        };
+        const eyeCode = eyeBodySiteCodes[item.eye] || eyeBodySiteCodes['right'];
+        claimItem.bodySite = {
+          coding: [
+            {
+              system: 'http://hl7.org/fhir/ValueSet/body-site',
+              code: eyeCode.code,
+              display: eyeCode.display
+            }
+          ]
+        };
+      }
+    }
+
+    // Professional/Institutional body sites
+    if (['professional', 'institutional'].includes(authType) && item.body_site_code) {
       claimItem.bodySite = {
         coding: [
           {
-            system: 'http://snomed.info/sct',
-            code: eyeCode.code,
-            display: eyeCode.display
+            system: 'http://hl7.org/fhir/ValueSet/body-site',
+            code: item.body_site_code,
+            display: this.getBodySiteDisplay(item.body_site_code)
           }
         ]
       };
@@ -1665,6 +1692,54 @@ class PriorAuthMapper {
       'ophthalmology': 'Ophthalmology',
       'optometry': 'Optometry',
       'vision': 'Vision Care'
+    };
+    return displays[code] || code;
+  }
+
+  /**
+   * Get body site display name
+   * Reference: CMS/HCPCS Body Site Modifiers
+   */
+  getBodySiteDisplay(code) {
+    const displays = {
+      // Vision body sites
+      'RIV': 'Right eye',
+      'LIV': 'Left eye',
+      'E3': 'Upper right, eyelid',
+      'E4': 'Lower right, eyelid',
+      // Left hand digits
+      'FA': 'Left hand, thumb',
+      'F1': 'Left hand, second digit',
+      'F2': 'Left hand, third digit',
+      'F3': 'Left hand, fourth digit',
+      'F4': 'Left hand, fifth digit',
+      // Right hand digits
+      'F5': 'Right hand, thumb',
+      'F6': 'Right hand, second digit',
+      'F7': 'Right hand, third digit',
+      'F8': 'Right hand, fourth digit',
+      'F9': 'Right hand, fifth digit',
+      // Left foot digits
+      'TA': 'Left foot, great toe',
+      'T1': 'Left foot, second digit',
+      'T2': 'Left foot, third digit',
+      'T3': 'Left foot, fourth digit',
+      'T4': 'Left foot, fifth digit',
+      // Right foot digits
+      'T5': 'Right foot, great toe',
+      'T6': 'Right foot, second digit',
+      'T7': 'Right foot, third digit',
+      'T8': 'Right foot, fourth digit',
+      'T9': 'Right foot, fifth digit',
+      // Coronary arteries
+      'LC': 'Left circumflex coronary artery',
+      'LD': 'Left anterior descending coronary artery',
+      'LM': 'Left main coronary artery',
+      'RC': 'Right coronary artery',
+      'RI': 'Ramus intermedius coronary artery',
+      // Side indicators
+      'LT': 'Left side',
+      'RT': 'Right side'
     };
     return displays[code] || code;
   }
