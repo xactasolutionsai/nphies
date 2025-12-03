@@ -1245,13 +1245,9 @@ class PriorAuthorizationsController extends BaseController {
           t => t.code === 'NPHIES generated'
         );
 
-        // Extract pre-auth reference and period from ClaimResponse
-        const claimResponseEntry = responseBundle.entry?.find(
-          e => e.resource?.resourceType === 'ClaimResponse'
-        );
-        const claimResponse = claimResponseEntry?.resource;
-        const preAuthRef = claimResponse?.preAuthRef;
-        const preAuthPeriod = claimResponse?.preAuthPeriod;
+        // Extract pre-auth reference and period from ClaimResponse (reuse claimResponseEntry from above)
+        const preAuthRef = claimResponseEntry?.resource?.preAuthRef;
+        const preAuthPeriod = claimResponseEntry?.resource?.preAuthPeriod;
 
         // If we have an existing record ID, save the bundles to the database
         if (existingId && existingId !== 'test') {
