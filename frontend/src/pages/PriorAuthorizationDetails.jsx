@@ -178,6 +178,72 @@ export default function PriorAuthorizationDetails() {
     )?.valueCodeableConcept?.coding?.[0]?.code;
   };
 
+  // Extract ClaimResponse details from response bundle
+  const getClaimResponseDetails = () => {
+    if (!priorAuth.response_bundle) return null;
+    
+    const claimResponse = priorAuth.response_bundle?.entry?.find(
+      e => e.resource?.resourceType === 'ClaimResponse'
+    )?.resource;
+    
+    if (!claimResponse) return null;
+
+    return {
+      id: claimResponse.id,
+      identifier: claimResponse.identifier?.[0]?.value,
+      status: claimResponse.status,
+      type: claimResponse.type?.coding?.[0]?.code,
+      subType: claimResponse.subType?.coding?.[0]?.code,
+      use: claimResponse.use,
+      outcome: claimResponse.outcome,
+      preAuthRef: claimResponse.preAuthRef,
+      preAuthPeriod: claimResponse.preAuthPeriod,
+      created: claimResponse.created,
+      disposition: claimResponse.disposition
+    };
+  };
+
+  // Extract Coverage details from response bundle
+  const getCoverageDetails = () => {
+    if (!priorAuth.response_bundle) return null;
+    
+    const coverage = priorAuth.response_bundle?.entry?.find(
+      e => e.resource?.resourceType === 'Coverage'
+    )?.resource;
+    
+    if (!coverage) return null;
+
+    return {
+      id: coverage.id,
+      memberId: coverage.identifier?.[0]?.value,
+      status: coverage.status,
+      type: coverage.type?.coding?.[0]?.display || coverage.type?.coding?.[0]?.code,
+      policyPeriod: coverage.period,
+      planName: coverage.class?.find(c => c.type?.coding?.[0]?.code === 'plan')?.name
+    };
+  };
+
+  // Extract Patient details from response bundle
+  const getPatientFromResponse = () => {
+    if (!priorAuth.response_bundle) return null;
+    
+    const patient = priorAuth.response_bundle?.entry?.find(
+      e => e.resource?.resourceType === 'Patient'
+    )?.resource;
+    
+    if (!patient) return null;
+
+    return {
+      id: patient.id,
+      name: patient.name?.[0]?.text || `${patient.name?.[0]?.given?.join(' ')} ${patient.name?.[0]?.family}`,
+      identifier: patient.identifier?.[0]?.value,
+      identifierType: patient.identifier?.[0]?.type?.coding?.[0]?.display,
+      gender: patient.gender,
+      birthDate: patient.birthDate,
+      active: patient.active
+    };
+  };
+
   const handleSendToNphies = async () => {
     if (!window.confirm('Send this prior authorization to NPHIES?')) return;
     
@@ -352,7 +418,7 @@ export default function PriorAuthorizationDetails() {
         {/* Left Column - Main Details */}
         <div className="lg:col-span-2 space-y-6">
           {/* Tabs */}
-          <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit">
+          <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
             <TabButton active={activeTab === 'details'} onClick={() => setActiveTab('details')}>
               Details
             </TabButton>
@@ -362,6 +428,18 @@ export default function PriorAuthorizationDetails() {
             <TabButton active={activeTab === 'clinical'} onClick={() => setActiveTab('clinical')}>
               Clinical
             </TabButton>
+            {priorAuth.auth_type === 'vision' && (
+              <TabButton active={activeTab === 'vision'} onClick={() => setActiveTab('vision')}>
+                <Eye className="h-4 w-4 mr-1 inline" />
+                Vision Rx
+              </TabButton>
+            )}
+            {priorAuth.response_bundle && (
+              <TabButton active={activeTab === 'nphies'} onClick={() => setActiveTab('nphies')}>
+                <CheckCircle className="h-4 w-4 mr-1 inline" />
+                NPHIES Response
+              </TabButton>
+            )}
             <TabButton active={activeTab === 'responses'} onClick={() => setActiveTab('responses')}>
               Responses ({priorAuth.responses?.length || 0})
             </TabButton>
@@ -383,10 +461,18 @@ export default function PriorAuthorizationDetails() {
                     <Label className="text-gray-500">Priority</Label>
                     <p className="font-medium capitalize">{priorAuth.priority || 'Normal'}</p>
                   </div>
-                  <div>
-                    <Label className="text-gray-500">Encounter Class</Label>
-                    <p className="font-medium">{getEncounterClassDisplay(priorAuth.encounter_class)}</p>
-                  </div>
+                  {/* Vision claims don't use Encounter per NPHIES */}
+                  {priorAuth.auth_type !== 'vision' ? (
+                    <div>
+                      <Label className="text-gray-500">Encounter Class</Label>
+                      <p className="font-medium">{getEncounterClassDisplay(priorAuth.encounter_class)}</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <Label className="text-gray-500">Encounter</Label>
+                      <p className="text-gray-400 text-sm italic">Not required for Vision claims</p>
+                    </div>
+                  )}
                   <div>
                     <Label className="text-gray-500">Outcome</Label>
                     <p className="font-medium capitalize">{priorAuth.outcome || '-'}</p>
@@ -636,6 +722,454 @@ export default function PriorAuthorizationDetails() {
             </Card>
           )}
 
+          {/* Vision Prescription Tab */}
+          {activeTab === 'vision' && priorAuth.auth_type === 'vision' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="h-5 w-5" />
+                  Vision Prescription Details
+                </CardTitle>
+                <CardDescription>
+                  Lens specifications for the vision authorization
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* General Vision Prescription Info */}
+                {priorAuth.vision_prescription && (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <Label className="text-gray-500">Product Type</Label>
+                        <p className="font-medium capitalize">
+                          {priorAuth.vision_prescription.product_type || '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-gray-500">Lens Type</Label>
+                        <p className="font-medium capitalize">
+                          {priorAuth.vision_prescription.lens_type || '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-gray-500">Date Written</Label>
+                        <p className="font-medium">
+                          {formatDate(priorAuth.vision_prescription.date_written) || '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-gray-500">Prescription Status</Label>
+                        <Badge variant="outline" className="mt-1">
+                          {priorAuth.vision_prescription.status || 'Active'}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <hr className="border-gray-200" />
+
+                    {/* Right Eye */}
+                    <div className="p-4 border rounded-lg bg-blue-50/50">
+                      <h4 className="font-medium mb-4 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">R</div>
+                        Right Eye (OD)
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500">Sphere (SPH)</p>
+                          <p className="font-medium text-lg">
+                            {priorAuth.vision_prescription.right_sphere !== undefined 
+                              ? (priorAuth.vision_prescription.right_sphere >= 0 ? '+' : '') + priorAuth.vision_prescription.right_sphere 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Cylinder (CYL)</p>
+                          <p className="font-medium text-lg">
+                            {priorAuth.vision_prescription.right_cylinder !== undefined 
+                              ? (priorAuth.vision_prescription.right_cylinder >= 0 ? '+' : '') + priorAuth.vision_prescription.right_cylinder 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Axis</p>
+                          <p className="font-medium text-lg">
+                            {priorAuth.vision_prescription.right_axis !== undefined 
+                              ? priorAuth.vision_prescription.right_axis + '°' 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Add Power</p>
+                          <p className="font-medium text-lg">
+                            {priorAuth.vision_prescription.right_add !== undefined 
+                              ? '+' + priorAuth.vision_prescription.right_add 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Prism</p>
+                          <p className="font-medium">
+                            {priorAuth.vision_prescription.right_prism 
+                              ? `${priorAuth.vision_prescription.right_prism} ${priorAuth.vision_prescription.right_prism_base || ''}` 
+                              : '-'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Left Eye */}
+                    <div className="p-4 border rounded-lg bg-green-50/50">
+                      <h4 className="font-medium mb-4 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">L</div>
+                        Left Eye (OS)
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500">Sphere (SPH)</p>
+                          <p className="font-medium text-lg">
+                            {priorAuth.vision_prescription.left_sphere !== undefined 
+                              ? (priorAuth.vision_prescription.left_sphere >= 0 ? '+' : '') + priorAuth.vision_prescription.left_sphere 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Cylinder (CYL)</p>
+                          <p className="font-medium text-lg">
+                            {priorAuth.vision_prescription.left_cylinder !== undefined 
+                              ? (priorAuth.vision_prescription.left_cylinder >= 0 ? '+' : '') + priorAuth.vision_prescription.left_cylinder 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Axis</p>
+                          <p className="font-medium text-lg">
+                            {priorAuth.vision_prescription.left_axis !== undefined 
+                              ? priorAuth.vision_prescription.left_axis + '°' 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Add Power</p>
+                          <p className="font-medium text-lg">
+                            {priorAuth.vision_prescription.left_add !== undefined 
+                              ? '+' + priorAuth.vision_prescription.left_add 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Prism</p>
+                          <p className="font-medium">
+                            {priorAuth.vision_prescription.left_prism 
+                              ? `${priorAuth.vision_prescription.left_prism} ${priorAuth.vision_prescription.left_prism_base || ''}` 
+                              : '-'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Additional Notes */}
+                    {priorAuth.vision_prescription.notes && (
+                      <>
+                        <hr className="border-gray-200" />
+                        <div>
+                          <Label className="text-gray-500">Prescriber Notes</Label>
+                          <p className="mt-1 p-3 bg-gray-50 rounded-lg">
+                            {priorAuth.vision_prescription.notes}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {!priorAuth.vision_prescription && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p>No vision prescription data available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* NPHIES Response Tab */}
+          {activeTab === 'nphies' && priorAuth.response_bundle && (
+            <div className="space-y-6">
+              {/* ClaimResponse Details */}
+              {(() => {
+                const claimResponseDetails = getClaimResponseDetails();
+                if (!claimResponseDetails) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Receipt className="h-5 w-5" />
+                        Claim Response
+                      </CardTitle>
+                      <CardDescription>
+                        NPHIES Prior Authorization Response Details
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Response ID</Label>
+                          <p className="font-mono text-sm">{claimResponseDetails.id || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Status</Label>
+                          <Badge variant="outline" className="mt-1 capitalize">
+                            {claimResponseDetails.status || '-'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Outcome</Label>
+                          <Badge 
+                            variant={claimResponseDetails.outcome === 'complete' ? 'default' : 'secondary'}
+                            className={claimResponseDetails.outcome === 'complete' ? 'bg-green-500 mt-1' : 'mt-1'}
+                          >
+                            {claimResponseDetails.outcome || '-'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Created</Label>
+                          <p className="font-medium">{formatDate(claimResponseDetails.created)}</p>
+                        </div>
+                      </div>
+
+                      <hr className="border-gray-200" />
+
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Type</Label>
+                          <p className="font-medium capitalize">{claimResponseDetails.type || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Sub Type</Label>
+                          <p className="font-medium uppercase">{claimResponseDetails.subType || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Use</Label>
+                          <p className="font-medium capitalize">{claimResponseDetails.use || '-'}</p>
+                        </div>
+                      </div>
+
+                      {/* Pre-Auth Reference - Highlighted */}
+                      {claimResponseDetails.preAuthRef && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <Label className="text-green-700">Pre-Authorization Reference Number</Label>
+                            <p className="text-2xl font-mono font-bold text-green-600 mt-1">
+                              {claimResponseDetails.preAuthRef}
+                            </p>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Pre-Auth Period */}
+                      {claimResponseDetails.preAuthPeriod && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <Label className="text-blue-700">Authorization Validity Period</Label>
+                            <div className="flex items-center gap-4 mt-2">
+                              <div>
+                                <p className="text-xs text-gray-500">Start Date</p>
+                                <p className="font-medium text-lg">
+                                  {formatDate(claimResponseDetails.preAuthPeriod.start)}
+                                </p>
+                              </div>
+                              <div className="text-gray-400">→</div>
+                              <div>
+                                <p className="text-xs text-gray-500">End Date</p>
+                                <p className="font-medium text-lg">
+                                  {formatDate(claimResponseDetails.preAuthPeriod.end)}
+                                </p>
+                              </div>
+                              <div className="ml-auto">
+                                <Badge variant="outline" className="text-blue-600 border-blue-300">
+                                  {(() => {
+                                    const end = new Date(claimResponseDetails.preAuthPeriod.end);
+                                    const now = new Date();
+                                    const days = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+                                    if (days < 0) return 'Expired';
+                                    if (days === 0) return 'Expires Today';
+                                    return `${days} days remaining`;
+                                  })()}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Disposition */}
+                      {claimResponseDetails.disposition && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">Disposition</Label>
+                            <p className="mt-1 p-3 bg-gray-50 rounded-lg">
+                              {claimResponseDetails.disposition}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Totals Summary */}
+              {(() => {
+                const totals = getResponseTotals();
+                const outcome = getAdjudicationOutcome();
+                if (!totals) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5" />
+                        Financial Adjudication
+                        {outcome && (
+                          <Badge 
+                            variant={outcome === 'approved' ? 'default' : outcome === 'rejected' ? 'destructive' : 'secondary'}
+                            className={outcome === 'approved' ? 'bg-green-500 ml-2' : 'ml-2'}
+                          >
+                            {outcome}
+                          </Badge>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {totals.map((t, i) => (
+                          <div 
+                            key={i} 
+                            className={`p-4 rounded-lg border ${
+                              t.category === 'eligible' ? 'bg-blue-50 border-blue-200' :
+                              t.category === 'benefit' ? 'bg-green-50 border-green-200' :
+                              t.category === 'copay' ? 'bg-orange-50 border-orange-200' :
+                              'bg-gray-50 border-gray-200'
+                            }`}
+                          >
+                            <p className={`text-sm font-medium capitalize ${
+                              t.category === 'eligible' ? 'text-blue-700' :
+                              t.category === 'benefit' ? 'text-green-700' :
+                              t.category === 'copay' ? 'text-orange-700' :
+                              'text-gray-700'
+                            }`}>
+                              {t.category?.replace('-', ' ')}
+                            </p>
+                            <p className={`text-2xl font-bold mt-1 ${
+                              t.category === 'eligible' ? 'text-blue-600' :
+                              t.category === 'benefit' ? 'text-green-600' :
+                              t.category === 'copay' ? 'text-orange-600' :
+                              'text-gray-900'
+                            }`}>
+                              {formatAmount(t.amount, t.currency)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Coverage Details */}
+              {(() => {
+                const coverage = getCoverageDetails();
+                if (!coverage) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Coverage Information
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Member ID</Label>
+                          <p className="font-mono font-medium">{coverage.memberId || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Status</Label>
+                          <Badge variant={coverage.status === 'active' ? 'default' : 'secondary'} 
+                                 className={coverage.status === 'active' ? 'bg-green-500 mt-1' : 'mt-1'}>
+                            {coverage.status || '-'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Coverage Type</Label>
+                          <p className="font-medium">{coverage.type || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Plan Name</Label>
+                          <p className="font-medium">{coverage.planName || '-'}</p>
+                        </div>
+                      </div>
+                      {coverage.policyPeriod && (
+                        <div className="mt-4 pt-4 border-t">
+                          <Label className="text-gray-500">Policy Period</Label>
+                          <p className="font-medium mt-1">
+                            {formatDate(coverage.policyPeriod.start)} — {formatDate(coverage.policyPeriod.end)}
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Patient Details from Response */}
+              {(() => {
+                const patient = getPatientFromResponse();
+                if (!patient) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <User className="h-5 w-5" />
+                        Patient (from Response)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Name</Label>
+                          <p className="font-medium">{patient.name || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Identifier</Label>
+                          <p className="font-mono">{patient.identifier || '-'}</p>
+                          {patient.identifierType && (
+                            <p className="text-xs text-gray-500">{patient.identifierType}</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Gender</Label>
+                          <p className="font-medium capitalize">{patient.gender || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Date of Birth</Label>
+                          <p className="font-medium">{formatDate(patient.birthDate)}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Responses Tab */}
           {activeTab === 'responses' && (
             <Card>
@@ -839,6 +1373,56 @@ export default function PriorAuthorizationDetails() {
               </CardContent>
             </Card>
           )}
+
+          {/* Pre-Auth Period Card */}
+          {(() => {
+            const claimResponse = getClaimResponseDetails();
+            if (!claimResponse?.preAuthPeriod) return null;
+
+            const endDate = new Date(claimResponse.preAuthPeriod.end);
+            const now = new Date();
+            const daysRemaining = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+            const isExpired = daysRemaining < 0;
+            const isExpiringSoon = daysRemaining >= 0 && daysRemaining <= 7;
+
+            return (
+              <Card className={isExpired ? 'border-red-300 bg-red-50' : isExpiringSoon ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'}>
+                <CardHeader>
+                  <CardTitle className={`text-lg flex items-center gap-2 ${isExpired ? 'text-red-700' : isExpiringSoon ? 'text-orange-700' : 'text-green-700'}`}>
+                    <Calendar className="h-5 w-5" />
+                    Authorization Validity
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Valid From</span>
+                    <span className="font-medium">{formatDate(claimResponse.preAuthPeriod.start)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Valid Until</span>
+                    <span className="font-medium">{formatDate(claimResponse.preAuthPeriod.end)}</span>
+                  </div>
+                  <hr className={isExpired ? 'border-red-200' : isExpiringSoon ? 'border-orange-200' : 'border-green-200'} />
+                  <div className="text-center">
+                    <Badge 
+                      variant={isExpired ? 'destructive' : isExpiringSoon ? 'secondary' : 'default'}
+                      className={`text-sm py-1 px-3 ${
+                        isExpired ? '' : 
+                        isExpiringSoon ? 'bg-orange-500 text-white' : 
+                        'bg-green-500'
+                      }`}
+                    >
+                      {isExpired 
+                        ? 'Expired' 
+                        : daysRemaining === 0 
+                          ? 'Expires Today' 
+                          : `${daysRemaining} days remaining`}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Timeline */}
           <Card>
