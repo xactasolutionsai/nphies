@@ -696,6 +696,13 @@ export default function PriorAuthorizationForm() {
         dataToPreview.encounter_class = 'ambulatory';
       }
 
+      // Include the ID if we're editing an existing record - this allows the backend to save
+      // the request bundle for later viewing in the details page
+      if (id) {
+        dataToPreview.id = id;
+        dataToPreview.prior_auth_id = id;
+      }
+
       const response = await api.previewPriorAuthorizationBundle(dataToPreview);
       setPreviewData(response);
       setShowPreview(true);
@@ -742,6 +749,13 @@ export default function PriorAuthorizationForm() {
       if (dataToTest.auth_type === 'dental' || dataToTest.auth_type === 'vision') {
         delete dataToTest.encounter_end;
         dataToTest.encounter_class = 'ambulatory';
+      }
+
+      // Include the ID if we're editing an existing record - this allows the backend to save
+      // the request/response bundles for later viewing in the details page
+      if (id) {
+        dataToTest.id = id;
+        dataToTest.prior_auth_id = id;
       }
 
       const response = await api.testSendPriorAuthorization(dataToTest);

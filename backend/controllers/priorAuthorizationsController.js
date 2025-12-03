@@ -999,11 +999,13 @@ class PriorAuthorizationsController extends BaseController {
   }
 
   /**
-   * Preview FHIR bundle from form data (without saving)
+   * Preview FHIR bundle from form data (optionally saves request_bundle if record ID provided)
    */
   async previewBundle(req, res) {
     try {
       const formData = req.body;
+      // Get optional ID - if provided, we'll save the request bundle to this record
+      const existingId = formData.id || formData.prior_auth_id;
 
       // Validate required fields
       if (!formData.patient_id) {
@@ -1044,8 +1046,8 @@ class PriorAuthorizationsController extends BaseController {
 
       // Create a mock priorAuth object from form data
       const priorAuth = {
-        id: 'preview',
-        request_number: `PREVIEW-${Date.now()}`,
+        id: existingId || 'preview',
+        request_number: formData.request_number || `PREVIEW-${Date.now()}`,
         auth_type: formData.auth_type || 'professional',
         status: 'draft',
         priority: formData.priority || 'normal',
@@ -1071,6 +1073,21 @@ class PriorAuthorizationsController extends BaseController {
         policyHolder: null
       });
 
+      // If we have an existing record ID, save the request bundle to the database
+      if (existingId && existingId !== 'preview') {
+        try {
+          await query(`
+            UPDATE prior_authorizations 
+            SET request_bundle = $1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2
+          `, [JSON.stringify(bundle), existingId]);
+          console.log(`[Preview] Saved request bundle to prior authorization ID ${existingId}`);
+        } catch (saveError) {
+          console.error('[Preview] Error saving request bundle:', saveError);
+          // Don't fail the request, just log the error
+        }
+      }
+
       // Return preview data with entities summary
       res.json({
         success: true,
@@ -1095,7 +1112,8 @@ class PriorAuthorizationsController extends BaseController {
           itemsCount: formData.items?.length || 0,
           diagnosesCount: formData.diagnoses?.length || 0
         },
-        fhirBundle: bundle
+        fhirBundle: bundle,
+        savedToRecord: existingId && existingId !== 'preview' ? existingId : null
       });
     } catch (error) {
       console.error('Error generating preview bundle:', error);
@@ -1104,12 +1122,15 @@ class PriorAuthorizationsController extends BaseController {
   }
 
   /**
-   * Test send to NPHIES (validates bundle without saving to DB)
+   * Test send to NPHIES (validates bundle and optionally saves to DB)
    * This sends the bundle to NPHIES and returns the response for review
+   * If an existing record ID is provided, it will save the bundles to that record
    */
   async testSendToNphies(req, res) {
     try {
       const formData = req.body;
+      // Get optional ID - if provided, we'll save the bundles to this record
+      const existingId = formData.id || formData.prior_auth_id;
 
       // Validate required fields
       if (!formData.patient_id) {
@@ -1150,8 +1171,8 @@ class PriorAuthorizationsController extends BaseController {
 
       // Create a mock priorAuth object from form data
       const priorAuth = {
-        id: 'test',
-        request_number: `PREVIEW-${Date.now()}`,
+        id: existingId || 'test',
+        request_number: formData.request_number || `PREVIEW-${Date.now()}`,
         auth_type: formData.auth_type || 'professional',
         status: 'draft',
         priority: formData.priority || 'normal',
@@ -1224,22 +1245,74 @@ class PriorAuthorizationsController extends BaseController {
           t => t.code === 'NPHIES generated'
         );
 
+        // Extract pre-auth reference and period from ClaimResponse
+        const claimResponseEntry = responseBundle.entry?.find(
+          e => e.resource?.resourceType === 'ClaimResponse'
+        );
+        const claimResponse = claimResponseEntry?.resource;
+        const preAuthRef = claimResponse?.preAuthRef;
+        const preAuthPeriod = claimResponse?.preAuthPeriod;
+
+        // If we have an existing record ID, save the bundles to the database
+        if (existingId && existingId !== 'test') {
+          try {
+            await query(`
+              UPDATE prior_authorizations 
+              SET request_bundle = $1,
+                  response_bundle = $2,
+                  pre_auth_ref = COALESCE($3, pre_auth_ref),
+                  pre_auth_period_start = COALESCE($4, pre_auth_period_start),
+                  pre_auth_period_end = COALESCE($5, pre_auth_period_end),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = $6
+            `, [
+              JSON.stringify(bundle),
+              JSON.stringify(responseBundle),
+              preAuthRef,
+              preAuthPeriod?.start,
+              preAuthPeriod?.end,
+              existingId
+            ]);
+            console.log(`[TestSend] Saved bundles to prior authorization ID ${existingId}`);
+          } catch (saveError) {
+            console.error('[TestSend] Error saving bundles:', saveError);
+            // Don't fail the request, just log the error
+          }
+        }
+
         return res.json({
           success: errors.length === 0,
           outcome,
           nphiesResponseId,
           isNphiesGenerated,
           errors,
+          preAuthRef,
+          preAuthPeriod,
           entities: {
             patient: { name: patient.name, identifier: patient.identifier },
             provider: { name: provider.provider_name, nphiesId: provider.nphies_id },
             insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id }
           },
           data: responseBundle,
-          requestBundle: bundle
+          requestBundle: bundle,
+          savedToRecord: existingId && existingId !== 'test' ? existingId : null
         });
       } else {
-        // NPHIES error
+        // NPHIES error - still save the request bundle if we have an existing record
+        if (existingId && existingId !== 'test') {
+          try {
+            await query(`
+              UPDATE prior_authorizations 
+              SET request_bundle = $1,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = $2
+            `, [JSON.stringify(bundle), existingId]);
+            console.log(`[TestSend] Saved request bundle to prior authorization ID ${existingId} (error response)`);
+          } catch (saveError) {
+            console.error('[TestSend] Error saving request bundle:', saveError);
+          }
+        }
+
         return res.json({
           success: false,
           outcome: 'error',
@@ -1253,7 +1326,8 @@ class PriorAuthorizationsController extends BaseController {
             insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id }
           },
           data: nphiesResponse.raw,
-          requestBundle: bundle
+          requestBundle: bundle,
+          savedToRecord: existingId && existingId !== 'test' ? existingId : null
         });
       }
     } catch (error) {
