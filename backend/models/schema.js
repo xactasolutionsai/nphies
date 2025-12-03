@@ -397,6 +397,7 @@ export const validationSchemas = {
     // Eligibility Reference
     eligibility_ref: Joi.string().max(100).allow(null, '').optional(),
     eligibility_offline_date: Joi.date().allow(null, '').optional(),
+    eligibility_offline_ref: Joi.string().max(255).allow(null, '').optional(),
     
     // Clinical
     diagnosis_codes: Joi.string().allow(null, '').optional(),
@@ -408,7 +409,15 @@ export const validationSchemas = {
     // Financial
     total_amount: Joi.number().precision(2).allow(null).optional(),
     approved_amount: Joi.number().precision(2).allow(null).optional(),
+    eligible_amount: Joi.number().precision(2).allow(null).optional(),
+    benefit_amount: Joi.number().precision(2).allow(null).optional(),
+    copay_amount: Joi.number().precision(2).allow(null).optional(),
     currency: Joi.string().max(3).allow(null, '').optional(),
+    
+    // Adjudication (NPHIES response fields)
+    adjudication_outcome: Joi.string().valid('approved', 'rejected', 'partial', 'pended').allow(null, '').optional(),
+    sub_type: Joi.string().max(50).allow(null, '').optional(),
+    vision_prescription: Joi.object().allow(null).optional(),
     
     // Pre-auth period
     pre_auth_period_start: Joi.date().allow(null, '').optional(),
