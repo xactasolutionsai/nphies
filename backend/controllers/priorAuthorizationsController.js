@@ -110,10 +110,14 @@ class PriorAuthorizationsController extends BaseController {
       const countResult = await query(countQuery, countParams);
       const total = parseInt(countResult.rows[0].total);
 
-      // Get paginated data with joins
+      // Get paginated data with joins - including new adjudication columns
       const dataQuery = `
         SELECT
-          pa.*,
+          pa.id, pa.request_number, pa.auth_type, pa.patient_id, pa.provider_id, pa.insurer_id,
+          pa.status, pa.outcome, pa.adjudication_outcome, pa.disposition, pa.pre_auth_ref,
+          pa.pre_auth_period_start, pa.pre_auth_period_end, pa.total_amount, pa.approved_amount,
+          pa.eligible_amount, pa.benefit_amount, pa.copay_amount, pa.currency,
+          pa.request_date, pa.response_date, pa.created_at, pa.updated_at,
           p.name as patient_name,
           p.identifier as patient_identifier,
           pr.provider_name,
@@ -150,10 +154,21 @@ class PriorAuthorizationsController extends BaseController {
    * Internal method to get full prior authorization by ID
    */
   async getByIdInternal(id) {
-    // Get main form data
+    // Get main form data including all new columns
     const formQuery = `
       SELECT
-        pa.*,
+        pa.id, pa.request_number, pa.auth_type, pa.patient_id, pa.provider_id, pa.insurer_id,
+        pa.coverage_id, pa.practitioner_id, pa.status, pa.outcome, pa.adjudication_outcome,
+        pa.disposition, pa.pre_auth_ref, pa.nphies_request_id, pa.nphies_response_id,
+        pa.is_nphies_generated, pa.encounter_class, pa.encounter_start, pa.encounter_end,
+        pa.is_update, pa.related_auth_id, pa.is_transfer, pa.transfer_provider_id,
+        pa.transfer_auth_number, pa.transfer_period_start, pa.transfer_period_end,
+        pa.is_cancelled, pa.cancellation_reason, pa.eligibility_ref, pa.eligibility_offline_ref,
+        pa.eligibility_offline_date, pa.diagnosis_codes, pa.primary_diagnosis, pa.priority,
+        pa.total_amount, pa.approved_amount, pa.eligible_amount, pa.benefit_amount, pa.copay_amount,
+        pa.currency, pa.request_bundle, pa.response_bundle, pa.request_date, pa.response_date,
+        pa.pre_auth_period_start, pa.pre_auth_period_end, pa.created_at, pa.updated_at,
+        pa.encounter_identifier, pa.service_type, pa.sub_type, pa.vision_prescription,
         p.name as patient_name,
         p.identifier as patient_identifier,
         p.gender as patient_gender,
@@ -548,8 +563,13 @@ class PriorAuthorizationsController extends BaseController {
                          parsedResponse.outcome === 'partial' ? 'partial' : 
                          parsedResponse.success ? 'approved' : 'denied';
 
-        // Calculate total approved amount from totals or item results
-        const totalBenefit = parsedResponse.totals?.find(t => t.category === 'benefit')?.amount ||
+        // Extract all totals from response
+        const eligibleTotal = parsedResponse.totals?.find(t => t.category === 'eligible')?.amount;
+        const benefitTotal = parsedResponse.totals?.find(t => t.category === 'benefit')?.amount;
+        const copayTotal = parsedResponse.totals?.find(t => t.category === 'copay')?.amount;
+        
+        // Fallback to item-level if totals not present
+        const totalBenefit = benefitTotal ||
                             parsedResponse.itemResults?.[0]?.adjudication?.find(a => a.category === 'benefit')?.amount;
 
         await query(`
@@ -565,8 +585,12 @@ class PriorAuthorizationsController extends BaseController {
               pre_auth_period_start = $8,
               pre_auth_period_end = $9,
               approved_amount = $10,
+              adjudication_outcome = $11,
+              eligible_amount = $12,
+              benefit_amount = $13,
+              copay_amount = $14,
               updated_at = CURRENT_TIMESTAMP
-          WHERE id = $11
+          WHERE id = $15
         `, [
           newStatus,
           parsedResponse.outcome,
@@ -578,6 +602,10 @@ class PriorAuthorizationsController extends BaseController {
           parsedResponse.preAuthPeriod?.start,
           parsedResponse.preAuthPeriod?.end,
           totalBenefit,
+          parsedResponse.adjudicationOutcome,
+          eligibleTotal,
+          benefitTotal,
+          copayTotal,
           id
         ]);
 
@@ -1249,7 +1277,25 @@ class PriorAuthorizationsController extends BaseController {
         const preAuthRef = claimResponseEntry?.resource?.preAuthRef;
         const preAuthPeriod = claimResponseEntry?.resource?.preAuthPeriod;
 
-        // If we have an existing record ID, save the bundles to the database
+        // Extract adjudication outcome from ClaimResponse extension
+        const adjudicationOutcome = claimResponseEntry?.resource?.extension?.find(
+          ext => ext.url?.includes('extension-adjudication-outcome')
+        )?.valueCodeableConcept?.coding?.[0]?.code;
+
+        // Extract totals from ClaimResponse
+        const totals = claimResponseEntry?.resource?.total || [];
+        const eligibleTotal = totals.find(t => t.category?.coding?.[0]?.code === 'eligible')?.amount?.value;
+        const benefitTotal = totals.find(t => t.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+        const copayTotal = totals.find(t => t.category?.coding?.[0]?.code === 'copay')?.amount?.value;
+
+        // Determine status based on adjudication outcome
+        const newStatus = outcome === 'queued' ? 'queued' : 
+                         adjudicationOutcome === 'approved' ? 'approved' :
+                         adjudicationOutcome === 'rejected' ? 'denied' :
+                         outcome === 'partial' ? 'partial' : 
+                         errors.length === 0 ? 'approved' : 'denied';
+
+        // If we have an existing record ID, save the bundles AND update status to the database
         if (existingId && existingId !== 'test') {
           try {
             await query(`
@@ -1259,17 +1305,36 @@ class PriorAuthorizationsController extends BaseController {
                   pre_auth_ref = COALESCE($3, pre_auth_ref),
                   pre_auth_period_start = COALESCE($4, pre_auth_period_start),
                   pre_auth_period_end = COALESCE($5, pre_auth_period_end),
+                  status = $6,
+                  outcome = $7,
+                  adjudication_outcome = $8,
+                  nphies_response_id = $9,
+                  is_nphies_generated = $10,
+                  approved_amount = COALESCE($11, approved_amount),
+                  eligible_amount = COALESCE($12, eligible_amount),
+                  benefit_amount = COALESCE($13, benefit_amount),
+                  copay_amount = COALESCE($14, copay_amount),
+                  response_date = CURRENT_TIMESTAMP,
                   updated_at = CURRENT_TIMESTAMP
-              WHERE id = $6
+              WHERE id = $15
             `, [
               JSON.stringify(bundle),
               JSON.stringify(responseBundle),
               preAuthRef,
               preAuthPeriod?.start,
               preAuthPeriod?.end,
+              newStatus,
+              outcome,
+              adjudicationOutcome,
+              nphiesResponseId,
+              isNphiesGenerated,
+              benefitTotal,
+              eligibleTotal,
+              benefitTotal,
+              copayTotal,
               existingId
             ]);
-            console.log(`[TestSend] Saved bundles to prior authorization ID ${existingId}`);
+            console.log(`[TestSend] Saved bundles and status to prior authorization ID ${existingId}`);
           } catch (saveError) {
             console.error('[TestSend] Error saving bundles:', saveError);
             // Don't fail the request, just log the error
@@ -1279,11 +1344,18 @@ class PriorAuthorizationsController extends BaseController {
         return res.json({
           success: errors.length === 0,
           outcome,
+          adjudicationOutcome,
+          status: newStatus,
           nphiesResponseId,
           isNphiesGenerated,
           errors,
           preAuthRef,
           preAuthPeriod,
+          totals: {
+            eligible: eligibleTotal,
+            benefit: benefitTotal,
+            copay: copayTotal
+          },
           entities: {
             patient: { name: patient.name, identifier: patient.identifier },
             provider: { name: provider.provider_name, nphiesId: provider.nphies_id },
