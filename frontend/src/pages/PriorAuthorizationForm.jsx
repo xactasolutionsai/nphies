@@ -559,10 +559,14 @@ export default function PriorAuthorizationForm() {
         ...formData,
         supporting_info: buildSupportingInfoArray()
       };
-      // Remove structured fields (already merged into supporting_info)
+      // Remove structured fields (already merged into supporting_info or handled separately)
       delete dataToSave.vital_signs;
       delete dataToSave.clinical_info;
       delete dataToSave.admission_info;
+      // Keep vision_prescription for vision auth types - needed for VisionPrescription FHIR resource
+      if (dataToSave.auth_type !== 'vision') {
+        delete dataToSave.vision_prescription;
+      }
       
       // Dental claims use AMB encounter class - don't send end date
       // Per NPHIES Encounter-10123 example: AMB encounters have no end date
@@ -607,10 +611,14 @@ export default function PriorAuthorizationForm() {
         ...formData,
         supporting_info: buildSupportingInfoArray()
       };
-      // Remove structured fields (already merged into supporting_info)
+      // Remove structured fields (already merged into supporting_info or handled separately)
       delete dataToSave.vital_signs;
       delete dataToSave.clinical_info;
       delete dataToSave.admission_info;
+      // Keep vision_prescription for vision auth types - needed for VisionPrescription FHIR resource
+      if (dataToSave.auth_type !== 'vision') {
+        delete dataToSave.vision_prescription;
+      }
       
       // Dental claims use AMB encounter class - don't send end date
       // Per NPHIES Encounter-10123 example: AMB encounters have no end date
@@ -664,10 +672,14 @@ export default function PriorAuthorizationForm() {
         ...formData,
         supporting_info: buildSupportingInfoArray()
       };
-      // Remove structured fields (already merged into supporting_info)
+      // Remove structured fields (already merged into supporting_info or handled separately)
       delete dataToPreview.vital_signs;
       delete dataToPreview.clinical_info;
       delete dataToPreview.admission_info;
+      // Keep vision_prescription for vision auth types - needed for VisionPrescription FHIR resource
+      if (dataToPreview.auth_type !== 'vision') {
+        delete dataToPreview.vision_prescription;
+      }
       
       // Dental claims use AMB encounter class - don't send end date
       // Per NPHIES Encounter-10123 example: AMB encounters have no end date
@@ -706,10 +718,14 @@ export default function PriorAuthorizationForm() {
         ...formData,
         supporting_info: buildSupportingInfoArray()
       };
-      // Remove structured fields (already merged into supporting_info)
+      // Remove structured fields (already merged into supporting_info or handled separately)
       delete dataToTest.vital_signs;
       delete dataToTest.clinical_info;
       delete dataToTest.admission_info;
+      // Keep vision_prescription for vision auth types - needed for VisionPrescription FHIR resource
+      if (dataToTest.auth_type !== 'vision') {
+        delete dataToTest.vision_prescription;
+      }
       
       // Dental claims use AMB encounter class - don't send end date
       // Per NPHIES Encounter-10123 example: AMB encounters have no end date

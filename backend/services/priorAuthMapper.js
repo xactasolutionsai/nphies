@@ -821,13 +821,21 @@ class PriorAuthMapper {
       }
     }
 
-    // Vision-specific: eye
+    // Vision-specific: eye using SNOMED CT codes (required by IB-00016)
+    // Reference: http://hl7.org/fhir/ValueSet/body-site (SNOMEDCTBodyStructures)
     if (authType === 'vision' && item.eye) {
+      const eyeSnomedCodes = {
+        'right': { code: '18944008', display: 'Anatomical structure of right eye proper' },
+        'left': { code: '8966001', display: 'Anatomical structure of left eye proper' },
+        'both': { code: '40638003', display: 'Both eyes' }
+      };
+      const eyeCode = eyeSnomedCodes[item.eye] || eyeSnomedCodes['both'];
       claimItem.bodySite = {
         coding: [
           {
-            system: 'http://hl7.org/fhir/ex-visioneyecodes',
-            code: item.eye
+            system: 'http://snomed.info/sct',
+            code: eyeCode.code,
+            display: eyeCode.display
           }
         ]
       };
@@ -1515,14 +1523,22 @@ class PriorAuthMapper {
 
     // serviceType - MUST come BEFORE subject per FHIR R4 order
     // REQUIRED for SS/IMP encounters per NPHIES encounter-auth-SS profile
-    // Also add for oral claims
-    if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type || isOralClaim) {
+    // Also add for oral and vision claims
+    // RE-00170 FIX: Vision claims need serviceType for encounter-auth-AMB profile validation
+    const isVisionClaim = priorAuth.auth_type === 'vision';
+    if (['daycase', 'inpatient'].includes(encounterClass) || priorAuth.service_type || isOralClaim || isVisionClaim) {
+      let serviceTypeCode = priorAuth.service_type;
+      if (!serviceTypeCode) {
+        if (isOralClaim) serviceTypeCode = 'dental';
+        else if (isVisionClaim) serviceTypeCode = 'ophthalmology';
+        else serviceTypeCode = 'sub-acute-care';
+      }
       encounter.serviceType = {
         coding: [
           {
             system: 'http://nphies.sa/terminology/CodeSystem/service-type',
-            code: priorAuth.service_type || (isOralClaim ? 'dental' : 'sub-acute-care'),
-            display: this.getServiceTypeDisplay(priorAuth.service_type || (isOralClaim ? 'dental' : 'sub-acute-care'))
+            code: serviceTypeCode,
+            display: this.getServiceTypeDisplay(serviceTypeCode)
           }
         ]
       };
@@ -1645,7 +1661,10 @@ class PriorAuthMapper {
       'palliative-care': 'Palliative Care',
       'mental-health': 'Mental Health',
       'dental': 'Dental',
-      'optical': 'Optical'
+      'optical': 'Optical',
+      'ophthalmology': 'Ophthalmology',
+      'optometry': 'Optometry',
+      'vision': 'Vision Care'
     };
     return displays[code] || code;
   }

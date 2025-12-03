@@ -479,7 +479,30 @@ export const validationSchemas = {
       title: Joi.string().max(255).allow(null, '').optional(),
       description: Joi.string().allow(null, '').optional(),
       category: Joi.string().max(50).allow(null, '').optional()
-    })).optional()
+    })).optional(),
+    
+    // Vision Prescription data (for vision auth types only)
+    vision_prescription: Joi.object({
+      product_type: Joi.string().valid('lens', 'contact').allow(null, '').optional(),
+      date_written: Joi.date().allow(null, '').optional(),
+      prescriber_license: Joi.string().max(100).allow(null, '').optional(),
+      right_eye: Joi.object({
+        sphere: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        cylinder: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        axis: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        add: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        prism_amount: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        prism_base: Joi.string().valid('up', 'down', 'in', 'out').allow(null, '').optional()
+      }).optional(),
+      left_eye: Joi.object({
+        sphere: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        cylinder: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        axis: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        add: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        prism_amount: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        prism_base: Joi.string().valid('up', 'down', 'in', 'out').allow(null, '').optional()
+      }).optional()
+    }).allow(null).optional()
   }),
 
   // Prior Authorization Item validation schema

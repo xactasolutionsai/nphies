@@ -1,22 +1,28 @@
 {
     "resourceType": "Bundle",
-    "id": "4e64d8b1-b0dd-4a35-878e-0de7e84db24a",
+    "id": "989d0297-b9aa-4913-b758-e6d2a4cf70d1",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-02T22:47:06.279+03:00",
+    "timestamp": "2025-12-03T15:41:19.284+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/a48263a1-8a66-4266-88b2-2b39db40beb4",
+            "fullUrl": "http://nphies.sa/MessageHeader/51b3cf22-2cb7-41c0-96a6-9f4524b8f1cc",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "a48263a1-8a66-4266-88b2-2b39db40beb4",
+                "id": "51b3cf22-2cb7-41c0-96a6-9f4524b8f1cc",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
+                    ],
+                    "tag": [
+                        {
+                            "system": "http://nphies.sa/terminology/CodeSystem/meta-tags",
+                            "code": "queued-messages"
+                        }
                     ]
                 },
                 "eventCoding": {
@@ -30,7 +36,7 @@
                             "type": "Organization",
                             "identifier": {
                                 "system": "http://nphies.sa/license/provider-license",
-                                "value": "DC-FHIR"
+                                "value": "PR-FHIR"
                             }
                         }
                     }
@@ -46,21 +52,21 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "ec3b032d-03b3-4420-9aff-2bc0b76241a3",
+                    "identifier": "e5e2a924-7c4c-4986-a21a-12470674829f",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://nphies.sa/ClaimResponse/152"
+                        "reference": "http://nphies.sa/ClaimResponse/779"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/ClaimResponse/152",
+            "fullUrl": "http://nphies.sa/ClaimResponse/779",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "152",
+                "id": "779",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -75,7 +81,7 @@
                 "identifier": [
                     {
                         "system": "http://nphies.sa/ClaimResponse",
-                        "value": "PREVIEW-1764704817259"
+                        "value": "PREVIEW-1764765671402"
                     }
                 ],
                 "status": "active",
@@ -83,7 +89,7 @@
                     "coding": [
                         {
                             "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-                            "code": "oral"
+                            "code": "vision"
                         }
                     ]
                 },
@@ -91,18 +97,18 @@
                 "patient": {
                     "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
                 },
-                "created": "2025-12-02T19:46:57.261Z",
+                "created": "2025-12-03T12:41:11.404Z",
                 "insurer": {
                     "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
                 "requestor": {
-                    "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
+                    "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
                 },
                 "request": {
                     "type": "Claim",
                     "identifier": {
-                        "system": "http://saudidentalclinic.com.sa/identifiers/authorization",
-                        "value": "PREVIEW-1764704817259"
+                        "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
+                        "value": "PREVIEW-1764765671402"
                     }
                 },
                 "outcome": "error",
@@ -111,7 +117,7 @@
                         "sequence": 1,
                         "focal": true,
                         "coverage": {
-                            "reference": "Coverage/42977c70-f25a-486b-a555-78ed5bb2b0a8"
+                            "reference": "Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
                         }
                     }
                 ],
@@ -123,12 +129,12 @@
                                     "extension": [
                                         {
                                             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[1].resource.extension[0].value"
+                                            "valueString": "Bundle.entry[1].resource.item[0].bodySite"
                                         }
                                     ],
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "RE-00189",
-                                    "display": "Claim encounter is not referring to a valid resource"
+                                    "code": "IB-00016",
+                                    "display": "Claim item bodySite is not using a value from the specified ValueSet"
                                 }
                             ]
                         }
@@ -146,6 +152,23 @@
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
                                     "code": "RE-00170",
                                     "display": "Referenced SHALL point to a valid profile"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "Bundle.entry[8].resource.lensSpecification"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "IC-00313",
+                                    "display": "VisionPrescription lensSpecification is not provided"
                                 }
                             ]
                         }
@@ -246,10 +269,10 @@
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333",
+            "fullUrl": "http://nphies.sa/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
             "resource": {
                 "resourceType": "Organization",
-                "id": "f99f16b5-d900-4031-8ea6-1fe50dcc2333",
+                "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
@@ -262,8 +285,8 @@
                             "coding": [
                                 {
                                     "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                                    "code": "5",
-                                    "display": "Clinic"
+                                    "code": "1",
+                                    "display": "Hospital"
                                 }
                             ]
                         }
@@ -272,7 +295,7 @@
                 "identifier": [
                     {
                         "system": "http://nphies.sa/license/provider-license",
-                        "value": "DC-FHIR"
+                        "value": "PR-FHIR"
                     }
                 ],
                 "active": true,
@@ -286,13 +309,13 @@
                         ]
                     }
                 ],
-                "name": "Saudi Dental Clinic",
+                "name": "Saudi General Hospital",
                 "address": [
                     {
                         "use": "work",
-                        "text": "Hajar Valley, Building 104, Riyadh Saudi Arabia",
+                        "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
                         "line": [
-                            "Hajar Valley, Building 104, Riyadh Saudi Arabia"
+                            "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
                         ],
                         "city": "Riyadh",
                         "country": "Saudi Arabia"
@@ -337,7 +360,7 @@
                         ]
                     }
                 ],
-                "name": "Bupa Arabia Insurance Company",
+                "name": "Saudi National Insurance",
                 "address": [
                     {
                         "use": "work",
@@ -352,10 +375,10 @@
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Coverage/42977c70-f25a-486b-a555-78ed5bb2b0a8",
+            "fullUrl": "http://nphies.sa/Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
             "resource": {
                 "resourceType": "Coverage",
-                "id": "42977c70-f25a-486b-a555-78ed5bb2b0a8",
+                "id": "32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"

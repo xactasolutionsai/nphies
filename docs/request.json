@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "53f81762-cf82-4fc4-99ab-90a4d04cfb5b",
+  "id": "1ac8162a-dad6-4dd6-a0d6-8fb5311d5954",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-03T10:30:34.316Z",
+  "timestamp": "2025-12-03T12:41:11.405Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:b8d05525-5a90-49f2-852c-b94c253e3ca4",
+      "fullUrl": "urn:uuid:e5e2a924-7c4c-4986-a21a-12470674829f",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "b8d05525-5a90-49f2-852c-b94c253e3ca4",
+        "id": "e5e2a924-7c4c-4986-a21a-12470674829f",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -39,7 +39,7 @@
           "type": "Organization",
           "identifier": {
             "system": "http://nphies.sa/license/provider-license",
-            "value": "DC-FHIR"
+            "value": "PR-FHIR"
           }
         },
         "source": {
@@ -47,25 +47,33 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/6c34753b-bb9b-4326-b721-e68f6f1ebdf9"
+            "reference": "http://provider.com/Claim/f54c36bd-38a0-4a2b-b072-6ffad9a451c6"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/6c34753b-bb9b-4326-b721-e68f6f1ebdf9",
+      "fullUrl": "http://provider.com/Claim/f54c36bd-38a0-4a2b-b072-6ffad9a451c6",
       "resource": {
         "resourceType": "Claim",
-        "id": "6c34753b-bb9b-4326-b721-e68f6f1ebdf9",
+        "id": "f54c36bd-38a0-4a2b-b072-6ffad9a451c6",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-priorauth|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-priorauth|1.0.0"
           ]
         },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
+            "valueReference": {
+              "reference": "Encounter/a0c54e94-7251-4911-ab50-629736802794"
+            }
+          }
+        ],
         "identifier": [
           {
-            "system": "http://saudidentalclinic.com.sa/identifiers/authorization",
-            "value": "PREVIEW-1764757834312"
+            "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
+            "value": "PREVIEW-1764765671402"
           }
         ],
         "status": "active",
@@ -73,7 +81,7 @@
           "coding": [
             {
               "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-              "code": "oral"
+              "code": "vision"
             }
           ]
         },
@@ -89,12 +97,12 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-03T10:30:34.315Z",
+        "created": "2025-12-03T12:41:11.404Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
         "provider": {
-          "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
         },
         "priority": {
           "coding": [
@@ -114,28 +122,14 @@
             ]
           }
         },
-        "insurance": [
-          {
-            "sequence": 1,
-            "focal": true,
-            "coverage": {
-              "reference": "Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
-            }
-          }
-        ],
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
-            "valueReference": {
-              "reference": "Encounter/27b0c91b-2f2c-407a-aa0c-5ba5fef2b9d2"
-            }
-          }
-        ],
+        "prescription": {
+          "reference": "VisionPrescription/69c0aa58-918f-4646-b7be-78a3d21c5e0f"
+        },
         "careTeam": [
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/332afc27-1f0d-418f-b3b1-9ab43c10beee"
+              "reference": "Practitioner/f5395674-272a-4be2-8813-99eda62b654d"
             },
             "role": {
               "coding": [
@@ -162,8 +156,8 @@
               "coding": [
                 {
                   "system": "http://hl7.org/fhir/sid/icd-10-am",
-                  "code": "K02.0",
-                  "display": "Caries of enamel"
+                  "code": "Z01.0",
+                  "display": "Examination of eyes and vision"
                 }
               ]
             },
@@ -429,6 +423,15 @@
             }
           }
         ],
+        "insurance": [
+          {
+            "sequence": 1,
+            "focal": true,
+            "coverage": {
+              "reference": "Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
+            }
+          }
+        ],
         "item": [
           {
             "extension": [
@@ -446,7 +449,7 @@
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share",
                 "valueMoney": {
-                  "value": 300,
+                  "value": 400,
                   "currency": "SAR"
                 }
               },
@@ -488,9 +491,9 @@
             "productOrService": {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/oral-health-op",
-                  "code": "97043-00-00",
-                  "display": "Dental antibiotic sensitivity test"
+                  "system": "http://nphies.sa/terminology/CodeSystem/procedures",
+                  "code": "96092-00-10",
+                  "display": "Fitting of spectacles"
                 }
               ]
             },
@@ -499,35 +502,34 @@
               "value": 1
             },
             "unitPrice": {
-              "value": 300,
+              "value": 800,
               "currency": "SAR"
             },
             "net": {
-              "value": 300,
+              "value": 800,
               "currency": "SAR"
             },
             "bodySite": {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/fdi-oral-region",
-                  "code": "13",
-                  "display": "UPPER RIGHT; PERMANENT TEETH # 3"
+                  "system": "http://hl7.org/fhir/ex-visioneyecodes",
+                  "code": "both"
                 }
               ]
             }
           }
         ],
         "total": {
-          "value": 300,
+          "value": 800,
           "currency": "SAR"
         }
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/27b0c91b-2f2c-407a-aa0c-5ba5fef2b9d2",
+      "fullUrl": "http://provider.com/Encounter/a0c54e94-7251-4911-ab50-629736802794",
       "resource": {
         "resourceType": "Encounter",
-        "id": "27b0c91b-2f2c-407a-aa0c-5ba5fef2b9d2",
+        "id": "a0c54e94-7251-4911-ab50-629736802794",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0"
@@ -535,8 +537,8 @@
         },
         "identifier": [
           {
-            "system": "http://DC-FHIR.com.sa/identifiers/encounter",
-            "value": "PREVIEW-1764757834312"
+            "system": "http://PR-FHIR.com.sa/identifiers/encounter",
+            "value": "PREVIEW-1764765671402"
           }
         ],
         "status": "planned",
@@ -545,37 +547,14 @@
           "code": "AMB",
           "display": "ambulatory"
         },
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceEventType",
-            "valueCodeableConcept": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/service-event-type",
-                  "code": "new-visit",
-                  "display": "New Visit"
-                }
-              ]
-            }
-          }
-        ],
-        "serviceType": {
-          "coding": [
-            {
-              "system": "http://nphies.sa/terminology/CodeSystem/service-type",
-              "code": "dental",
-              "display": "Dental"
-            }
-          ]
-        },
         "subject": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
         "period": {
-          "start": "2023-12-04"
+          "start": "2025-12-03"
         },
         "serviceProvider": {
-          "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
         }
       }
     },
@@ -649,10 +628,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/332afc27-1f0d-418f-b3b1-9ab43c10beee",
+      "fullUrl": "http://provider.com/Practitioner/f5395674-272a-4be2-8813-99eda62b654d",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "332afc27-1f0d-418f-b3b1-9ab43c10beee",
+        "id": "f5395674-272a-4be2-8813-99eda62b654d",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -670,7 +649,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-332afc27"
+            "value": "PRACT-f5395674"
           }
         ],
         "active": true,
@@ -700,10 +679,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333",
+      "fullUrl": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
       "resource": {
         "resourceType": "Organization",
-        "id": "f99f16b5-d900-4031-8ea6-1fe50dcc2333",
+        "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
@@ -726,7 +705,7 @@
         "identifier": [
           {
             "system": "http://nphies.sa/license/provider-license",
-            "value": "DC-FHIR"
+            "value": "PR-FHIR"
           }
         ],
         "active": true,
@@ -740,13 +719,13 @@
             ]
           }
         ],
-        "name": "Saudi Dental Clinic",
+        "name": "Saudi General Hospital",
         "address": [
           {
             "use": "work",
-            "text": "Hajar Valley, Building 104, Riyadh Saudi Arabia",
+            "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
             "line": [
-              "Hajar Valley, Building 104, Riyadh Saudi Arabia"
+              "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
             ],
             "city": "Riyadh",
             "country": "Saudi Arabia"
@@ -869,7 +848,6 @@
             ]
           }
         ],
-        "telecom": [],
         "gender": "female",
         "_gender": {
           "extension": [
@@ -888,7 +866,6 @@
         },
         "birthDate": "1989-03-10",
         "deceasedBoolean": false,
-        "address": [],
         "maritalStatus": {
           "coding": [
             {
@@ -896,6 +873,34 @@
               "code": "U"
             }
           ]
+        }
+      }
+    },
+    {
+      "fullUrl": "http://provider.com/VisionPrescription/69c0aa58-918f-4646-b7be-78a3d21c5e0f",
+      "resource": {
+        "resourceType": "VisionPrescription",
+        "id": "69c0aa58-918f-4646-b7be-78a3d21c5e0f",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://saudigeneralhospital.com.sa/identifiers/visionprescription",
+            "value": "VP-69c0aa58"
+          }
+        ],
+        "status": "active",
+        "created": "2025-12-03T12:41:11.405Z",
+        "patient": {
+          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
+        },
+        "dateWritten": "2025-12-03T12:41:11.405Z",
+        "lensSpecification": [],
+        "prescriber": {
+          "reference": "Practitioner/f5395674-272a-4be2-8813-99eda62b654d"
         }
       }
     }
