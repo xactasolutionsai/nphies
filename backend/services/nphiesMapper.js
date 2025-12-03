@@ -188,12 +188,15 @@ class NphiesMapper {
             given: nameInfo.given
           }
         ],
-        telecom: patient.phone ? [
-          {
-            system: 'phone',
-            value: patient.phone
-          }
-        ] : [],
+        // NPHIES FIX: Only include telecom if phone is provided (don't send empty arrays)
+        ...(patient.phone && {
+          telecom: [
+            {
+              system: 'phone',
+              value: patient.phone
+            }
+          ]
+        }),
         gender: gender,
         _gender: {
           extension: [
@@ -213,15 +216,18 @@ class NphiesMapper {
         // Only include birthDate if it has a valid value (FHIR doesn't allow null)
         ...(birthDate && { birthDate: this.formatDate(birthDate) }),
         deceasedBoolean: false,
-        address: patient.address ? [
-          {
-            use: 'home',
-            text: patient.address,
-            line: [patient.address],
-            city: patient.city || 'Riyadh',
-            country: 'Saudi Arabia'
-          }
-        ] : [],
+        // NPHIES FIX: Only include address if provided (don't send empty arrays)
+        ...(patient.address && {
+          address: [
+            {
+              use: 'home',
+              text: patient.address,
+              line: [patient.address],
+              city: patient.city || 'Riyadh',
+              country: 'Saudi Arabia'
+            }
+          ]
+        }),
         // maritalStatus is REQUIRED by NPHIES (1..1 cardinality)
         maritalStatus: {
           coding: [

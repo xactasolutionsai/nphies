@@ -132,80 +132,11 @@ class PriorAuthMapper {
     const providerIdentifierSystem = provider.identifier_system || 
       `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
-    const claim = {
-      resourceType: 'Claim',
-      id: claimId,
-      meta: {
-        profile: [this.getAuthorizationProfileUrl(priorAuth.auth_type)]
-      },
-      identifier: [
-        {
-          system: `${providerIdentifierSystem}/authorization`,
-          value: priorAuth.request_number || `req_${Date.now()}`
-        }
-      ],
-      status: 'active',
-      type: {
-        coding: [
-          {
-            system: 'http://terminology.hl7.org/CodeSystem/claim-type',
-            code: this.getClaimTypeCode(priorAuth.auth_type)
-          }
-        ]
-      },
-      subType: {
-        coding: [
-          {
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-            code: this.getClaimSubTypeCode(priorAuth.encounter_class || priorAuth.sub_type, priorAuth.auth_type)
-          }
-        ]
-      },
-      use: 'preauthorization',
-      patient: {
-        reference: `Patient/${patientRef}`
-      },
-      created: this.formatDateTime(priorAuth.request_date || new Date()),
-      insurer: {
-        reference: `Organization/${insurerRef}`
-      },
-      provider: {
-        reference: `Organization/${providerRef}`
-      },
-      priority: {
-        coding: [
-          {
-            system: 'http://terminology.hl7.org/CodeSystem/processpriority',
-            code: priorAuth.priority || 'normal'
-          }
-        ]
-      },
-      // Payee - required per NPHIES spec
-      payee: {
-        type: {
-          coding: [
-            {
-              system: 'http://terminology.hl7.org/CodeSystem/payeetype',
-              code: 'provider'
-            }
-          ]
-        }
-      },
-      insurance: [
-        {
-          sequence: 1,
-          focal: true,
-          coverage: {
-            reference: `Coverage/${coverageRef}`
-          }
-        }
-      ]
-    };
-
-    // Build extensions array following NPHIES spec exactly
+    // NPHIES ELEMENT ORDER FIX: Build extensions FIRST before constructing claim
+    // Per NPHIES spec, extension must appear before identifier in the Claim resource
     const extensions = [];
 
-    // Encounter extension - REQUIRED for institutional
+    // Encounter extension - REQUIRED for all prior auth types
     // RE-00189: Use relative reference format for encounter (not full URL)
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
@@ -248,9 +179,77 @@ class PriorAuthMapper {
       });
     }
 
+    // NPHIES ELEMENT ORDER: Build claim object with elements in NPHIES-mandated order
+    // Order: resourceType, id, meta, extension, identifier, status, type, subType, use,
+    //        patient, created, insurer, provider, priority, payee, related, careTeam,
+    //        supportingInfo, diagnosis, insurance, item, total
+    const claim = {
+      resourceType: 'Claim',
+      id: claimId,
+      meta: {
+        profile: [this.getAuthorizationProfileUrl(priorAuth.auth_type)]
+      }
+    };
+
+    // Add extension right after meta (BEFORE identifier)
     if (extensions.length > 0) {
       claim.extension = extensions;
     }
+
+    // Continue building claim in correct order
+    claim.identifier = [
+      {
+        system: `${providerIdentifierSystem}/authorization`,
+        value: priorAuth.request_number || `req_${Date.now()}`
+      }
+    ];
+    claim.status = 'active';
+    claim.type = {
+      coding: [
+        {
+          system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+          code: this.getClaimTypeCode(priorAuth.auth_type)
+        }
+      ]
+    };
+    claim.subType = {
+      coding: [
+        {
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
+          code: this.getClaimSubTypeCode(priorAuth.encounter_class || priorAuth.sub_type, priorAuth.auth_type)
+        }
+      ]
+    };
+    claim.use = 'preauthorization';
+    claim.patient = {
+      reference: `Patient/${patientRef}`
+    };
+    claim.created = this.formatDateTime(priorAuth.request_date || new Date());
+    claim.insurer = {
+      reference: `Organization/${insurerRef}`
+    };
+    claim.provider = {
+      reference: `Organization/${providerRef}`
+    };
+    claim.priority = {
+      coding: [
+        {
+          system: 'http://terminology.hl7.org/CodeSystem/processpriority',
+          code: priorAuth.priority || 'normal'
+        }
+      ]
+    };
+    // Payee - required per NPHIES spec
+    claim.payee = {
+      type: {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/payeetype',
+            code: 'provider'
+          }
+        ]
+      }
+    };
 
     // If this is an update, add the related reference
     if (priorAuth.is_update && priorAuth.pre_auth_ref) {
@@ -453,6 +452,17 @@ class PriorAuthMapper {
         return this.buildSupportingInfo({ ...info, sequence: seq });
       });
     }
+
+    // NPHIES ELEMENT ORDER: insurance comes after supportingInfo/diagnosis, before item/total
+    claim.insurance = [
+      {
+        sequence: 1,
+        focal: true,
+        coverage: {
+          reference: `Coverage/${coverageRef}`
+        }
+      }
+    ];
 
     // Add items with proper sequence links
     // BV-00118: servicedDate must be within encounter period
@@ -1518,20 +1528,39 @@ class PriorAuthMapper {
       // AMB/other: MUST use date-only format (YYYY-MM-DD)
       // Per Encounter-10123 example: "2023-12-04"
       // CRITICAL: Do NOT include time component for ambulatory encounters
+      // RE-00170 FIX: Explicitly strip time from input if present
       const startDateRaw = priorAuth.encounter_start || new Date();
-      const formattedStartDate = this.formatDate(startDateRaw);
       
-      console.log('[PriorAuthMapper] AMB period - raw:', startDateRaw, 'formatted:', formattedStartDate);
+      // Ensure date-only format by explicitly stripping time component
+      // Handles both ISO string "2023-12-04T19:00:00.000Z" and Date objects
+      let dateOnlyStart;
+      if (typeof startDateRaw === 'string' && startDateRaw.includes('T')) {
+        // Input has time component, strip it
+        dateOnlyStart = startDateRaw.split('T')[0];
+      } else {
+        // Use formatDate which also strips time
+        dateOnlyStart = this.formatDate(startDateRaw);
+      }
+      
+      console.log('[PriorAuthMapper] AMB period - raw:', startDateRaw, 'dateOnly:', dateOnlyStart);
       
       encounter.period = {
-        start: formattedStartDate
+        start: dateOnlyStart
       };
       
       // AMB encounters typically don't need end date (ongoing encounters per NPHIES example)
       // Only add if explicitly required AND it's not an oral/dental claim
       // Per Encounter-10123: ongoing encounters have no end date
+      // NPHIES oral claims should NEVER have encounter end date
       if (priorAuth.encounter_end && priorAuth.include_encounter_end === true && !isOralClaim) {
-        encounter.period.end = this.formatDate(priorAuth.encounter_end);
+        const endDateRaw = priorAuth.encounter_end;
+        let dateOnlyEnd;
+        if (typeof endDateRaw === 'string' && endDateRaw.includes('T')) {
+          dateOnlyEnd = endDateRaw.split('T')[0];
+        } else {
+          dateOnlyEnd = this.formatDate(endDateRaw);
+        }
+        encounter.period.end = dateOnlyEnd;
       }
     }
 

@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "6ea36d89-ece7-495c-9aab-21c9e48d8ac1",
+  "id": "53f81762-cf82-4fc4-99ab-90a4d04cfb5b",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-02T19:46:57.262Z",
+  "timestamp": "2025-12-03T10:30:34.316Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:ec3b032d-03b3-4420-9aff-2bc0b76241a3",
+      "fullUrl": "urn:uuid:b8d05525-5a90-49f2-852c-b94c253e3ca4",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "ec3b032d-03b3-4420-9aff-2bc0b76241a3",
+        "id": "b8d05525-5a90-49f2-852c-b94c253e3ca4",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/04b6c1af-496c-4315-80f9-96e3d320736d"
+            "reference": "http://provider.com/Claim/6c34753b-bb9b-4326-b721-e68f6f1ebdf9"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/04b6c1af-496c-4315-80f9-96e3d320736d",
+      "fullUrl": "http://provider.com/Claim/6c34753b-bb9b-4326-b721-e68f6f1ebdf9",
       "resource": {
         "resourceType": "Claim",
-        "id": "04b6c1af-496c-4315-80f9-96e3d320736d",
+        "id": "6c34753b-bb9b-4326-b721-e68f6f1ebdf9",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-priorauth|1.0.0"
@@ -65,7 +65,7 @@
         "identifier": [
           {
             "system": "http://saudidentalclinic.com.sa/identifiers/authorization",
-            "value": "PREVIEW-1764704817259"
+            "value": "PREVIEW-1764757834312"
           }
         ],
         "status": "active",
@@ -89,7 +89,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-02T19:46:57.261Z",
+        "created": "2025-12-03T10:30:34.315Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -119,7 +119,7 @@
             "sequence": 1,
             "focal": true,
             "coverage": {
-              "reference": "Coverage/42977c70-f25a-486b-a555-78ed5bb2b0a8"
+              "reference": "Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
             }
           }
         ],
@@ -127,7 +127,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/2d2dd909-a31b-411c-a06a-6ca58daad4d1"
+              "reference": "Encounter/27b0c91b-2f2c-407a-aa0c-5ba5fef2b9d2"
             }
           }
         ],
@@ -135,7 +135,7 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/2e0f0671-a022-43d0-ae0c-ee51be6b1eaa"
+              "reference": "Practitioner/332afc27-1f0d-418f-b3b1-9ab43c10beee"
             },
             "role": {
               "coding": [
@@ -186,12 +186,19 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "investigation-result"
+                  "code": "vital-sign-systolic"
                 }
               ]
             },
-            "timingDate": "2025-12-02",
-            "valueString": "Clinical examination completed"
+            "timingPeriod": {
+              "start": "2023-11-28T21:00:00.000Z",
+              "end": "2023-11-28T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 120,
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
           },
           {
             "sequence": 2,
@@ -199,15 +206,162 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "treatment-plan"
+                  "code": "vital-sign-diastolic"
                 }
               ]
             },
-            "timingDate": "2025-12-02",
-            "valueString": "Dental treatment as per clinical assessment"
+            "timingPeriod": {
+              "start": "2023-11-28T21:00:00.000Z",
+              "end": "2023-11-28T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 80,
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
           },
           {
             "sequence": 3,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "vital-sign-height"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-11-28T21:00:00.000Z",
+              "end": "2023-11-28T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 160,
+              "system": "http://unitsofmeasure.org",
+              "code": "cm"
+            }
+          },
+          {
+            "sequence": 4,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "vital-sign-weight"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-11-28T21:00:00.000Z",
+              "end": "2023-11-28T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 129,
+              "system": "http://unitsofmeasure.org",
+              "code": "kg"
+            }
+          },
+          {
+            "sequence": 5,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "pulse"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-11-28T21:00:00.000Z",
+              "end": "2023-11-28T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 100,
+              "system": "http://unitsofmeasure.org",
+              "code": "/min"
+            }
+          },
+          {
+            "sequence": 6,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "temperature"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-11-28T21:00:00.000Z",
+              "end": "2023-11-28T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 37,
+              "system": "http://unitsofmeasure.org",
+              "code": "Cel"
+            }
+          },
+          {
+            "sequence": 7,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "oxygen-saturation"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-11-28T21:00:00.000Z",
+              "end": "2023-11-28T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 100,
+              "system": "http://unitsofmeasure.org",
+              "code": "%"
+            }
+          },
+          {
+            "sequence": 8,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "respiratory-rate"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-11-28T21:00:00.000Z",
+              "end": "2023-11-28T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 70,
+              "system": "http://unitsofmeasure.org",
+              "code": "/min"
+            }
+          },
+          {
+            "sequence": 9,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "chief-complaint"
+                }
+              ]
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "28845006",
+                  "display": "Acute appendicitis with generalized peritonitis"
+                }
+              ]
+            }
+          },
+          {
+            "sequence": 10,
             "category": {
               "coding": [
                 {
@@ -216,24 +370,10 @@
                 }
               ]
             },
-            "timingDate": "2025-12-02",
-            "valueString": "No significant medical history"
+            "valueString": "No systemic disease"
           },
           {
-            "sequence": 4,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "physical-examination"
-                }
-              ]
-            },
-            "timingDate": "2025-12-02",
-            "valueString": "Oral examination performed"
-          },
-          {
-            "sequence": 5,
+            "sequence": 11,
             "category": {
               "coding": [
                 {
@@ -242,8 +382,51 @@
                 }
               ]
             },
-            "timingDate": "2025-12-02",
-            "valueString": "Patient presents for dental treatment"
+            "valueString": "No history"
+          },
+          {
+            "sequence": 12,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "physical-examination"
+                }
+              ]
+            },
+            "valueString": "Stable"
+          },
+          {
+            "sequence": 13,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "treatment-plan"
+                }
+              ]
+            },
+            "valueString": "Appendectomy"
+          },
+          {
+            "sequence": 14,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "investigation-result"
+                }
+              ]
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
+                  "code": "INP",
+                  "display": "Investigation(s) not performed"
+                }
+              ]
+            }
           }
         ],
         "item": [
@@ -263,7 +446,7 @@
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share",
                 "valueMoney": {
-                  "value": 1300,
+                  "value": 300,
                   "currency": "SAR"
                 }
               },
@@ -291,14 +474,23 @@
               2,
               3,
               4,
-              5
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14
             ],
             "productOrService": {
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/oral-health-op",
-                  "code": "97613-07-00",
-                  "display": "Lithium disilicate ceramic crown (e max), indirect; per crown"
+                  "code": "97043-00-00",
+                  "display": "Dental antibiotic sensitivity test"
                 }
               ]
             },
@@ -307,46 +499,35 @@
               "value": 1
             },
             "unitPrice": {
-              "value": 1300,
+              "value": 300,
               "currency": "SAR"
             },
             "net": {
-              "value": 1300,
+              "value": 300,
               "currency": "SAR"
             },
             "bodySite": {
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/fdi-oral-region",
-                  "code": "37",
-                  "display": "LOWER LEFT; PERMANENT TEETH # 7"
+                  "code": "13",
+                  "display": "UPPER RIGHT; PERMANENT TEETH # 3"
                 }
               ]
-            },
-            "subSite": [
-              {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/fdi-tooth-surface",
-                    "code": "O",
-                    "display": "Occlusal"
-                  }
-                ]
-              }
-            ]
+            }
           }
         ],
         "total": {
-          "value": 1300,
+          "value": 300,
           "currency": "SAR"
         }
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/2d2dd909-a31b-411c-a06a-6ca58daad4d1",
+      "fullUrl": "http://provider.com/Encounter/27b0c91b-2f2c-407a-aa0c-5ba5fef2b9d2",
       "resource": {
         "resourceType": "Encounter",
-        "id": "2d2dd909-a31b-411c-a06a-6ca58daad4d1",
+        "id": "27b0c91b-2f2c-407a-aa0c-5ba5fef2b9d2",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0"
@@ -355,7 +536,7 @@
         "identifier": [
           {
             "system": "http://DC-FHIR.com.sa/identifiers/encounter",
-            "value": "PREVIEW-1764704817259"
+            "value": "PREVIEW-1764757834312"
           }
         ],
         "status": "planned",
@@ -391,8 +572,7 @@
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
         "period": {
-          "start": "2023-12-04T19:00:00.000Z",
-          "end": "2025-12-01T21:00:00.000Z"
+          "start": "2023-12-04"
         },
         "serviceProvider": {
           "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
@@ -400,10 +580,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Coverage/42977c70-f25a-486b-a555-78ed5bb2b0a8",
+      "fullUrl": "http://provider.com/Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
       "resource": {
         "resourceType": "Coverage",
-        "id": "42977c70-f25a-486b-a555-78ed5bb2b0a8",
+        "id": "32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
@@ -469,10 +649,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/2e0f0671-a022-43d0-ae0c-ee51be6b1eaa",
+      "fullUrl": "http://provider.com/Practitioner/332afc27-1f0d-418f-b3b1-9ab43c10beee",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "2e0f0671-a022-43d0-ae0c-ee51be6b1eaa",
+        "id": "332afc27-1f0d-418f-b3b1-9ab43c10beee",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -490,7 +670,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-2e0f0671"
+            "value": "PRACT-332afc27"
           }
         ],
         "active": true,
@@ -536,8 +716,8 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                  "code": "5",
-                  "display": "Clinic"
+                  "code": "1",
+                  "display": "Hospital"
                 }
               ]
             }
@@ -611,7 +791,7 @@
             ]
           }
         ],
-        "name": "Bupa Arabia Insurance Company",
+        "name": "Saudi National Insurance",
         "address": [
           {
             "use": "work",
