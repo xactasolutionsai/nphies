@@ -36,8 +36,6 @@ import {
   ADMISSION_FIELDS,
   INVESTIGATION_RESULT_OPTIONS,
   SERVICE_EVENT_TYPE_OPTIONS,
-  DENTAL_CHIEF_COMPLAINT_OPTIONS,
-  CHIEF_COMPLAINT_FORMAT_OPTIONS,
   PRACTICE_CODES_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
@@ -1005,60 +1003,18 @@ export default function PriorAuthorizationForm() {
 
             {/* Dental-specific fields - Required per NPHIES */}
             {formData.auth_type === 'dental' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Service Event Type *</Label>
-                  <Select
-                    value={SERVICE_EVENT_TYPE_OPTIONS.find(opt => opt.value === formData.service_event_type)}
-                    onChange={(option) => handleChange('service_event_type', option?.value || 'ICSE')}
-                    options={SERVICE_EVENT_TYPE_OPTIONS}
-                    styles={selectStyles}
-                    menuPortalTarget={document.body}
-                  />
-                  <p className="text-xs text-gray-500">
-                    ICSE = New visit, SCSE = Follow-up visit
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Chief Complaint Format</Label>
-                  <Select
-                    value={CHIEF_COMPLAINT_FORMAT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_format)}
-                    onChange={(option) => handleClinicalInfoChange('chief_complaint_format', option?.value || 'snomed')}
-                    options={CHIEF_COMPLAINT_FORMAT_OPTIONS}
-                    styles={selectStyles}
-                    menuPortalTarget={document.body}
-                  />
-                </div>
-                {formData.clinical_info.chief_complaint_format === 'snomed' ? (
-                  <div className="space-y-2">
-                    <Label>Chief Complaint (SNOMED Code) *</Label>
-                    <Select
-                      value={DENTAL_CHIEF_COMPLAINT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_code)}
-                      onChange={(option) => {
-                        handleClinicalInfoChange('chief_complaint_code', option?.value || '27355003');
-                        handleClinicalInfoChange('chief_complaint_display', option?.label?.split(' - ')[1] || 'Toothache');
-                      }}
-                      options={DENTAL_CHIEF_COMPLAINT_OPTIONS}
-                      styles={selectStyles}
-                      menuPortalTarget={document.body}
-                    />
-                    <p className="text-xs text-gray-500">
-                      Per NPHIES Claim-293093: Uses SNOMED-CT codes
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label>Chief Complaint (Free Text) *</Label>
-                    <Input
-                      value={formData.clinical_info.chief_complaint_text}
-                      onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
-                      placeholder="e.g., Periodic oral examination"
-                    />
-                    <p className="text-xs text-gray-500">
-                      Per NPHIES Claim-298042: Free text description
-                    </p>
-                  </div>
-                )}
+              <div className="space-y-2">
+                <Label>Service Event Type *</Label>
+                <Select
+                  value={SERVICE_EVENT_TYPE_OPTIONS.find(opt => opt.value === formData.service_event_type)}
+                  onChange={(option) => handleChange('service_event_type', option?.value || 'ICSE')}
+                  options={SERVICE_EVENT_TYPE_OPTIONS}
+                  styles={selectStyles}
+                  menuPortalTarget={document.body}
+                />
+                <p className="text-xs text-gray-500">
+                  ICSE = New visit, SCSE = Follow-up visit
+                </p>
               </div>
             )}
 
