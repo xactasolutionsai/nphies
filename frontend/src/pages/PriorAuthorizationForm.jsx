@@ -36,7 +36,9 @@ import {
   ADMISSION_FIELDS,
   INVESTIGATION_RESULT_OPTIONS,
   SERVICE_EVENT_TYPE_OPTIONS,
-  PRACTICE_CODES_OPTIONS
+  PRACTICE_CODES_OPTIONS,
+  DENTAL_CHIEF_COMPLAINT_OPTIONS,
+  CHIEF_COMPLAINT_FORMAT_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -476,8 +478,16 @@ export default function PriorAuthorizationForm() {
       }
     });
 
-    // Add chief complaint if provided
-    if (formData.clinical_info.chief_complaint_code) {
+    // Add chief complaint if provided (supports SNOMED code or free text)
+    if (formData.clinical_info.chief_complaint_format === 'text' && formData.clinical_info.chief_complaint_text) {
+      // Free text format: code.text
+      supportingInfo.push({
+        sequence: sequence++,
+        category: 'chief-complaint',
+        code_text: formData.clinical_info.chief_complaint_text
+      });
+    } else if (formData.clinical_info.chief_complaint_code) {
+      // SNOMED code format: code.coding
       supportingInfo.push({
         sequence: sequence++,
         category: 'chief-complaint',
@@ -1415,27 +1425,82 @@ export default function PriorAuthorizationForm() {
               <CardDescription>Chief complaint, patient history, and clinical findings</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Chief Complaint Row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="chief_complaint_code">Chief Complaint Code (SNOMED)</Label>
-                  <Input
-                    id="chief_complaint_code"
-                    value={formData.clinical_info.chief_complaint_code}
-                    onChange={(e) => handleClinicalInfoChange('chief_complaint_code', e.target.value)}
-                    placeholder="e.g., 21522001"
-                  />
+              {/* Chief Complaint Section */}
+              {formData.auth_type === 'dental' ? (
+                /* Dental: SNOMED dropdown or Free Text */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Chief Complaint Format</Label>
+                      <Select
+                        value={CHIEF_COMPLAINT_FORMAT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_format)}
+                        onChange={(option) => {
+                          handleClinicalInfoChange('chief_complaint_format', option?.value || 'snomed');
+                          // Clear values when switching format
+                          if (option?.value === 'text') {
+                            handleClinicalInfoChange('chief_complaint_code', '');
+                            handleClinicalInfoChange('chief_complaint_display', '');
+                          } else {
+                            handleClinicalInfoChange('chief_complaint_text', '');
+                          }
+                        }}
+                        options={CHIEF_COMPLAINT_FORMAT_OPTIONS}
+                        styles={selectStyles}
+                        menuPortalTarget={document.body}
+                      />
+                    </div>
+                    {formData.clinical_info.chief_complaint_format === 'snomed' ? (
+                      <div className="space-y-2 md:col-span-2">
+                        <Label>Chief Complaint (SNOMED) *</Label>
+                        <Select
+                          value={DENTAL_CHIEF_COMPLAINT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_code)}
+                          onChange={(option) => {
+                            handleClinicalInfoChange('chief_complaint_code', option?.value || '');
+                            handleClinicalInfoChange('chief_complaint_display', option?.label?.split(' - ')[1] || '');
+                          }}
+                          options={DENTAL_CHIEF_COMPLAINT_OPTIONS}
+                          styles={selectStyles}
+                          placeholder="Select chief complaint..."
+                          isClearable
+                          isSearchable
+                          menuPortalTarget={document.body}
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2 md:col-span-2">
+                        <Label>Chief Complaint (Free Text) *</Label>
+                        <Input
+                          value={formData.clinical_info.chief_complaint_text}
+                          onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
+                          placeholder="e.g., Periodic oral examination"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="chief_complaint_display">Chief Complaint Description</Label>
-                  <Input
-                    id="chief_complaint_display"
-                    value={formData.clinical_info.chief_complaint_display}
-                    onChange={(e) => handleClinicalInfoChange('chief_complaint_display', e.target.value)}
-                    placeholder="e.g., Abdominal pain"
-                  />
+              ) : (
+                /* Non-Dental: Standard SNOMED code + description */
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="chief_complaint_code">Chief Complaint Code (SNOMED)</Label>
+                    <Input
+                      id="chief_complaint_code"
+                      value={formData.clinical_info.chief_complaint_code}
+                      onChange={(e) => handleClinicalInfoChange('chief_complaint_code', e.target.value)}
+                      placeholder="e.g., 21522001"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="chief_complaint_display">Chief Complaint Description</Label>
+                    <Input
+                      id="chief_complaint_display"
+                      value={formData.clinical_info.chief_complaint_display}
+                      onChange={(e) => handleClinicalInfoChange('chief_complaint_display', e.target.value)}
+                      placeholder="e.g., Abdominal pain"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Clinical Text Fields */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
