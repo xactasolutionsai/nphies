@@ -434,7 +434,8 @@ class VisionMapper extends BaseMapper {
       productOrService: {
         coding: [
           {
-            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/scientific-codes',
+            // IB-00030: Vision claims use 'procedures' CodeSystem, NOT 'scientific-codes'
+            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
             code: item.product_or_service_code,
             display: item.product_or_service_display
           }
