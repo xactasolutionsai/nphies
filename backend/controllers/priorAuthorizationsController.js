@@ -625,6 +625,8 @@ class PriorAuthorizationsController extends BaseController {
         console.log(`[PriorAuth] Database updated - ID: ${id}, Status: ${newStatus}, AdjudicationOutcome: ${parsedResponse.adjudicationOutcome}`);
 
         // Store response in history with additional data
+        // Note: outcome column uses FHIR ClaimResponse.outcome values (complete/partial/error/queued)
+        // NOT adjudicationOutcome values (approved/rejected) - those go in the main table's adjudication_outcome column
         await query(`
           INSERT INTO prior_authorization_responses 
           (prior_auth_id, response_type, outcome, disposition, pre_auth_ref, 
@@ -633,7 +635,7 @@ class PriorAuthorizationsController extends BaseController {
         `, [
           id,
           'initial',
-          parsedResponse.adjudicationOutcome || parsedResponse.outcome,
+          parsedResponse.outcome || 'complete',  // FHIR outcome: complete/partial/error/queued
           parsedResponse.disposition,
           parsedResponse.preAuthRef,
           JSON.stringify(nphiesResponse.data),
