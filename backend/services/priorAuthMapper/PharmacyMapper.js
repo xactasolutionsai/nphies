@@ -150,7 +150,9 @@ class PharmacyMapper extends BaseMapper {
       });
     }
 
-    if (priorAuth.eligibility_ref) {
+    // Only add eligibility reference if it's a valid FHIR reference format
+    // Must be in format "ResourceType/id" (e.g., "CoverageEligibilityResponse/uuid")
+    if (priorAuth.eligibility_ref && priorAuth.eligibility_ref.includes('/')) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
         valueReference: {

@@ -1215,9 +1215,19 @@ class BaseMapper {
         ext => ext.url?.includes('extension-transferAuthorizationPeriod')
       )?.valuePeriod;
 
+      // Extract errors from ClaimResponse.error field (NPHIES specific)
+      const claimResponseErrors = claimResponse.error?.map(err => ({
+        code: err.code?.coding?.[0]?.code,
+        message: err.code?.coding?.[0]?.display,
+        location: err.code?.coding?.[0]?.extension?.find(
+          ext => ext.url?.includes('error-expression')
+        )?.valueString
+      })) || [];
+
       const outcome = claimResponse.outcome || 'complete';
+      const hasErrors = claimResponseErrors.length > 0 || outcome === 'error';
       const success = (outcome === 'complete' || outcome === 'partial') && 
-                      (adjudicationOutcome !== 'rejected');
+                      (adjudicationOutcome !== 'rejected') && !hasErrors;
 
       const patient = patientResource ? {
         id: patientResource.id,
@@ -1286,6 +1296,7 @@ class BaseMapper {
             end: transferAuthPeriod.end
           } : null
         } : null,
+        errors: claimResponseErrors.length > 0 ? claimResponseErrors : undefined,
         rawBundle: responseBundle
       };
 
