@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "06c3b779-2484-4dc9-b8e7-4370a8342c56",
+    "id": "7123d1a1-97c5-4cb7-a991-675b6eaaa7fd",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-04T19:31:33.938+03:00",
+    "timestamp": "2025-12-04T19:43:20.404+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/1126c6b9-6bbb-437a-a093-93650dbe6654",
+            "fullUrl": "http://nphies.sa/MessageHeader/d1a2d2b3-5fee-46ce-8155-450a63d256cc",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "1126c6b9-6bbb-437a-a093-93650dbe6654",
+                "id": "d1a2d2b3-5fee-46ce-8155-450a63d256cc",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -46,21 +46,21 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "e9bab918-4f45-431b-bb33-4b5a37008556",
+                    "identifier": "8436fdc2-ba6a-45bb-8c42-984af74ea9ba",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://nphies.sa/ClaimResponse/636"
+                        "reference": "http://nphies.sa/ClaimResponse/161"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/ClaimResponse/636",
+            "fullUrl": "http://nphies.sa/ClaimResponse/161",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "636",
+                "id": "161",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -91,7 +91,7 @@
                 "patient": {
                     "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
                 },
-                "created": "2025-12-04T16:31:09.066Z",
+                "created": "2025-12-04T16:43:12.889Z",
                 "insurer": {
                     "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
@@ -123,12 +123,114 @@
                                     "extension": [
                                         {
                                             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[1].resource.supportingInfo[0].valueCodeableConcept"
+                                            "valueString": "bundle.entry[1].resource.supportingInfo[0].code.coding"
                                         }
                                     ],
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "DT-01293",
-                                    "display": "The provided value does not match the specified element data type"
+                                    "code": "IB-00045",
+                                    "display": "Claim supportingInfo code is not using a value from the specified ValueSet"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[1].resource.supportingInfo"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00752",
+                                    "display": "Investigation Result Shall be Provided in Supporting info of Authorization or Claim"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[1].resource.supportingInfo"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00803",
+                                    "display": "Supporting information 'treatment plan' is required in claim and authorization."
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[1].resource.supportingInfo"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00804",
+                                    "display": "Supporting information 'patient history' is required in claim and authorization."
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[1].resource.supportingInfo"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00805",
+                                    "display": "Supporting information 'physical examination' is required in claim and authorization."
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[1].resource.supportingInfo"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00806",
+                                    "display": "Supporting information 'history of present illness' is required in claim and authorization."
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[1].resource.item[0].productOrService.coding[0]"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "IB-00265",
+                                    "display": "Claim product or service does not belong to the related value set for oral claims"
                                 }
                             ]
                         }

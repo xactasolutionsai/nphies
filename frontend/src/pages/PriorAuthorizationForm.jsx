@@ -36,7 +36,9 @@ import {
   ADMISSION_FIELDS,
   INVESTIGATION_RESULT_OPTIONS,
   SERVICE_EVENT_TYPE_OPTIONS,
-  DENTAL_CHIEF_COMPLAINT_OPTIONS
+  DENTAL_CHIEF_COMPLAINT_OPTIONS,
+  CHIEF_COMPLAINT_FORMAT_OPTIONS,
+  PRACTICE_CODES_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -79,10 +81,9 @@ export default function PriorAuthorizationForm() {
     currency: 'SAR',
     encounter_class: 'ambulatory',
     service_event_type: 'ICSE', // NPHIES: ICSE (Initial) or SCSE (Subsequent) - for dental claims
-    chief_complaint_code: '27355003', // NPHIES: SNOMED code for chief complaint (per Claim-293093 example)
-    chief_complaint_display: 'Toothache', // SNOMED display for chief complaint
     patient_id: '',
     provider_id: '',
+    practice_code: '08.00', // NPHIES: Practice code for careTeam.qualification (default: Internal Medicine)
     insurer_id: '',
     coverage_id: '',
     diagnosis_codes: '',
@@ -108,8 +109,10 @@ export default function PriorAuthorizationForm() {
       measurement_time: null
     },
     clinical_info: {
-      chief_complaint_code: '',
-      chief_complaint_display: '',
+      chief_complaint_format: 'snomed', // 'snomed' for SNOMED codes, 'text' for free text
+      chief_complaint_code: '27355003', // Default: Toothache (SNOMED)
+      chief_complaint_display: 'Toothache',
+      chief_complaint_text: '', // Free text option (like json2 example)
       patient_history: '',
       history_of_present_illness: '',
       physical_examination: '',
@@ -1002,21 +1005,45 @@ export default function PriorAuthorizationForm() {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Chief Complaint (SNOMED Code) *</Label>
+                  <Label>Chief Complaint Format</Label>
                   <Select
-                    value={DENTAL_CHIEF_COMPLAINT_OPTIONS.find(opt => opt.value === formData.chief_complaint_code)}
-                    onChange={(option) => {
-                      handleChange('chief_complaint_code', option?.value || '27355003');
-                      handleChange('chief_complaint_display', option?.label?.split(' - ')[1] || 'Toothache');
-                    }}
-                    options={DENTAL_CHIEF_COMPLAINT_OPTIONS}
+                    value={CHIEF_COMPLAINT_FORMAT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_format)}
+                    onChange={(option) => handleClinicalInfoChange('chief_complaint_format', option?.value || 'snomed')}
+                    options={CHIEF_COMPLAINT_FORMAT_OPTIONS}
                     styles={selectStyles}
                     menuPortalTarget={document.body}
                   />
-                  <p className="text-xs text-gray-500">
-                    Per NPHIES: Oral claims require chief-complaint with SNOMED code
-                  </p>
                 </div>
+                {formData.clinical_info.chief_complaint_format === 'snomed' ? (
+                  <div className="space-y-2">
+                    <Label>Chief Complaint (SNOMED Code) *</Label>
+                    <Select
+                      value={DENTAL_CHIEF_COMPLAINT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_code)}
+                      onChange={(option) => {
+                        handleClinicalInfoChange('chief_complaint_code', option?.value || '27355003');
+                        handleClinicalInfoChange('chief_complaint_display', option?.label?.split(' - ')[1] || 'Toothache');
+                      }}
+                      options={DENTAL_CHIEF_COMPLAINT_OPTIONS}
+                      styles={selectStyles}
+                      menuPortalTarget={document.body}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Per NPHIES Claim-293093: Uses SNOMED-CT codes
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Chief Complaint (Free Text) *</Label>
+                    <Input
+                      value={formData.clinical_info.chief_complaint_text}
+                      onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
+                      placeholder="e.g., Periodic oral examination"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Per NPHIES Claim-298042: Free text description
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1170,6 +1197,26 @@ export default function PriorAuthorizationForm() {
                   isSearchable
                   menuPortalTarget={document.body}
                 />
+              </div>
+
+              {/* Practice Code - NPHIES careTeam.qualification */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Stethoscope className="h-4 w-4" />
+                  Practice Code / Specialty *
+                </Label>
+                <Select
+                  value={PRACTICE_CODES_OPTIONS.flatMap(group => group.options).find(opt => opt.value === formData.practice_code)}
+                  onChange={(option) => handleChange('practice_code', option?.value || '08.00')}
+                  options={PRACTICE_CODES_OPTIONS}
+                  styles={selectStyles}
+                  placeholder="Select practice code/specialty..."
+                  isSearchable
+                  menuPortalTarget={document.body}
+                />
+                <p className="text-xs text-gray-500">
+                  NPHIES: Provider's practice specialty for careTeam.qualification
+                </p>
               </div>
 
               {/* Coverage - Shows patient's insurance coverages */}

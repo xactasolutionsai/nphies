@@ -1,0 +1,214 @@
+{
+    "resourceType" : "Claim",
+    "id" : "298042",
+    "meta" : {
+      "profile" : [
+        🔗 "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-priorauth|1.0.0"
+      ]
+    },
+    "text" : {
+      "status" : "extensions",
+      "div" : "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Claim 298042</b></p><a name=\"298042\"> </a><a name=\"hc298042\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-oral-priorauth.html\">Nphies Authorization Oralversion: null1.0.0)</a></p></div><p><b>Encounter</b>: <a href=\"Encounter-10123.html\">Encounter: extension = Initial client service event; identifier = http://saudidentalclinic.com.sa/identifiers/encounter#AB0001; status = in-progress; class = ambulatory (ActCode#AMB); serviceType = Acute Care; priority = elective; period = 2023-12-04 --&gt; (ongoing)</a></p><p><b>Transfer</b>: true</p><p><b>identifier</b>: <code>http://saudidentalclinic.com.sa/identifiers/authorization</code>/req_298044</p><p><b>status</b>: Active</p><p><b>type</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/claim-type oral}\">Oral</span></p><p><b>subType</b>: <span title=\"Codes:{http://nphies.sa/terminology/CodeSystem/claim-subtype op}\">OutPatient</span></p><p><b>use</b>: Preauthorization</p><p><b>patient</b>: <a href=\"Patient-453.html\">Sara Abbas Female, DoB: 1989-03-13 ( Permanent Resident Card Number: 2000000003)</a></p><p><b>created</b>: 2021-10-07</p><p><b>insurer</b>: <a href=\"Organization-bff3aa1fbd3648619ac082357bf135db.html\">Organization Saudi National Insurance</a></p><p><b>provider</b>: <a href=\"Organization-215.html\">Organization Saudi Dental Clinic</a></p><p><b>priority</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/processpriority normal}\">Normal</span></p><h3>Payees</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>Type</b></td></tr><tr><td style=\"display: none\">*</td><td><span title=\"Codes:{http://terminology.hl7.org/CodeSystem/payeetype provider}\">Provider</span></td></tr></table><h3>CareTeams</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>Sequence</b></td><td><b>Provider</b></td><td><b>Role</b></td><td><b>Qualification</b></td></tr><tr><td style=\"display: none\">*</td><td>1</td><td><a href=\"Practitioner-4.html\">Practitioner Dr. Ashraf Naeem</a></td><td><span title=\"Codes:{http://terminology.hl7.org/CodeSystem/claimcareteamrole primary}\">Primary provider</span></td><td><span title=\"Codes:{http://nphies.sa/terminology/CodeSystem/practice-codes 22.00}\">Dental</span></td></tr></table><h3>SupportingInfos</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>Sequence</b></td><td><b>Category</b></td><td><b>Code</b></td></tr><tr><td style=\"display: none\">*</td><td>1</td><td><span title=\"Codes:{http://nphies.sa/terminology/CodeSystem/claim-information-category chief-complaint}\">chief complaint</span></td><td><span title=\"Codes:\">Periodic oral examination</span></td></tr></table><h3>Diagnoses</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>Sequence</b></td><td><b>Diagnosis[x]</b></td><td><b>Type</b></td></tr><tr><td style=\"display: none\">*</td><td>1</td><td><span title=\"Codes:{http://hl7.org/fhir/sid/icd-10-am K01.1}\">K01.1</span></td><td><span title=\"Codes:{http://nphies.sa/terminology/CodeSystem/diagnosis-type principal}\">Principal Diagnosis</span></td></tr></table><h3>Insurances</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>Sequence</b></td><td><b>Focal</b></td><td><b>Coverage</b></td></tr><tr><td style=\"display: none\">*</td><td>1</td><td>true</td><td><a href=\"Coverage-1985.html\">Coverage: identifier = http://sni.com.sa/identifiers/memberid#0000000003; status = active; type = extended healthcare; relationship = Spouse; network = Golden C</a></td></tr></table><blockquote><p><b>item</b></p><p><b>Package Code</b>: false</p><p><b>Tax</b>: <span title=\"Saudi Riyal\">SAR0.00</span> (SAR)</p><p><b>Patient Share</b>: <span title=\"Saudi Riyal\">SAR0.00</span> (SAR)</p><p><b>sequence</b>: 1</p><p><b>careTeamSequence</b>: 1</p><p><b>diagnosisSequence</b>: 1</p><p><b>productOrService</b>: <span title=\"Codes:{http://nphies.sa/terminology/CodeSystem/oral-health-op 415}\">Root canal</span></p><p><b>serviced</b>: 2021-10-07</p><p><b>quantity</b>: 1</p><h3>UnitPrices</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>Value</b></td><td><b>Currency</b></td></tr><tr><td style=\"display: none\">*</td><td>0</td><td>Saudi riyal</td></tr></table><h3>Nets</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>Value</b></td><td><b>Currency</b></td></tr><tr><td style=\"display: none\">*</td><td>0</td><td>Saudi riyal</td></tr></table><p><b>bodySite</b>: <span title=\"Codes:{http://nphies.sa/terminology/CodeSystem/fdi-oral-region 13}\">UPPER RIGHT; PERMANENT TEETH # 3</span></p></blockquote><h3>Totals</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>Value</b></td><td><b>Currency</b></td></tr><tr><td style=\"display: none\">*</td><td>0</td><td>Saudi riyal</td></tr></table></div>"
+    },
+    "extension" : [
+      {
+        "url" : "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
+        "valueReference" : {
+          🔗 "reference" : "Encounter/10123"
+        }
+      },
+      {
+        "url" : "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transfer",
+        "valueBoolean" : true
+      }
+    ],
+    "identifier" : [
+      {
+        "system" : "http://saudidentalclinic.com.sa/identifiers/authorization",
+        "value" : "req_298044"
+      }
+    ],
+    "status" : "active",
+    "type" : {
+      "coding" : [
+        {
+          "system" : "http://terminology.hl7.org/CodeSystem/claim-type",
+          "code" : "oral"
+        }
+      ]
+    },
+    "subType" : {
+      "coding" : [
+        {
+          "system" : "http://nphies.sa/terminology/CodeSystem/claim-subtype",
+          "code" : "op"
+        }
+      ]
+    },
+    "use" : "preauthorization",
+    "patient" : {
+      🔗 "reference" : "Patient/453"
+    },
+    "created" : "2021-10-07",
+    "insurer" : {
+      🔗 "reference" : "Organization/bff3aa1fbd3648619ac082357bf135db"
+    },
+    "provider" : {
+      🔗 "reference" : "Organization/215"
+    },
+    "priority" : {
+      "coding" : [
+        {
+          "system" : "http://terminology.hl7.org/CodeSystem/processpriority",
+          "code" : "normal"
+        }
+      ]
+    },
+    "payee" : {
+      "type" : {
+        "coding" : [
+          {
+            "system" : "http://terminology.hl7.org/CodeSystem/payeetype",
+            "code" : "provider"
+          }
+        ]
+      }
+    },
+    "careTeam" : [
+      {
+        "sequence" : 1,
+        "provider" : {
+          🔗 "reference" : "Practitioner/4"
+        },
+        "role" : {
+          "coding" : [
+            {
+              "system" : "http://terminology.hl7.org/CodeSystem/claimcareteamrole",
+              "code" : "primary"
+            }
+          ]
+        },
+        "qualification" : {
+          "coding" : [
+            {
+              "system" : "http://nphies.sa/terminology/CodeSystem/practice-codes",
+              "code" : "22.00"
+            }
+          ]
+        }
+      }
+    ],
+    "supportingInfo" : [
+      {
+        "sequence" : 1,
+        "category" : {
+          "coding" : [
+            {
+              "system" : "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+              "code" : "chief-complaint"
+            }
+          ]
+        },
+        "code" : {
+          "text" : "Periodic oral examination"
+        }
+      }
+    ],
+    "diagnosis" : [
+      {
+        "sequence" : 1,
+        "diagnosisCodeableConcept" : {
+          "coding" : [
+            {
+              "system" : "http://hl7.org/fhir/sid/icd-10-am",
+              "code" : "K01.1"
+            }
+          ]
+        },
+        "type" : [
+          {
+            "coding" : [
+              {
+                "system" : "http://nphies.sa/terminology/CodeSystem/diagnosis-type",
+                "code" : "principal"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "insurance" : [
+      {
+        "sequence" : 1,
+        "focal" : true,
+        "coverage" : {
+          🔗 "reference" : "Coverage/1985"
+        }
+      }
+    ],
+    "item" : [
+      {
+        "extension" : [
+          {
+            "url" : "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
+            "valueBoolean" : false
+          },
+          {
+            "url" : "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax",
+            "valueMoney" : {
+              "value" : 0,
+              "currency" : "SAR"
+            }
+          },
+          {
+            "url" : "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
+            "valueMoney" : {
+              "value" : 0,
+              "currency" : "SAR"
+            }
+          }
+        ],
+        "sequence" : 1,
+        "careTeamSequence" : [
+          1
+        ],
+        "diagnosisSequence" : [
+          1
+        ],
+        "productOrService" : {
+          "coding" : [
+            {
+              "system" : "http://nphies.sa/terminology/CodeSystem/oral-health-op",
+              "code" : "415",
+              "display" : "Root canal"
+            }
+          ]
+        },
+        "servicedDate" : "2021-10-07",
+        "quantity" : {
+          "value" : 1
+        },
+        "unitPrice" : {
+          "value" : 0,
+          "currency" : "SAR"
+        },
+        "net" : {
+          "value" : 0,
+          "currency" : "SAR"
+        },
+        "bodySite" : {
+          "coding" : [
+            {
+              "system" : "http://nphies.sa/terminology/CodeSystem/fdi-oral-region",
+              "code" : "13",
+              "display" : "UPPER RIGHT; PERMANENT TEETH # 3"
+            }
+          ]
+        }
+      }
+    ],
+    "total" : {
+      "value" : 0,
+      "currency" : "SAR"
+    }
+  }

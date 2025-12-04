@@ -300,6 +300,8 @@ class PriorAuthMapper {
     // CareTeam - REQUIRED per NPHIES spec (IC-00014 error if missing)
     // Always include with at least a default practitioner
     const pract = practitioner || priorAuth.practitioner || {};
+    // Practice code priority: form-level > practitioner object > default
+    const practiceCode = priorAuth.practice_code || pract.practice_code || pract.specialty_code || '08.00';
     claim.careTeam = [
       {
         sequence: 1,
@@ -318,7 +320,7 @@ class PriorAuthMapper {
           coding: [
             {
               system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
-              code: pract.practice_code || pract.specialty_code || '08.00'
+              code: practiceCode
             }
           ]
         }
@@ -407,18 +409,30 @@ class PriorAuthMapper {
       }
     }
     
-    // Oral claims supportingInfo - Following official NPHIES example: https://portal.nphies.sa/ig/Claim-293093.json.html
-    // The official example shows ONLY chief-complaint with SNOMED code is required for oral claims
+    // Oral claims supportingInfo - Following official NPHIES examples:
+    // - Claim-293093: Uses SNOMED code (code.coding[])
+    // - Claim-298042: Uses free text (code.text)
     if (isOralClaim) {
-      // chief-complaint is REQUIRED for oral claims - uses SNOMED-CT code system
-      // Example from NPHIES: { code: "80353004", display: "Enamel caries", system: "http://snomed.info/sct" }
+      // chief-complaint is REQUIRED for oral claims
       if (!supportingInfoList.some(info => info.category === 'chief-complaint')) {
-        supportingInfoList.push({
-          category: 'chief-complaint',
-          code: priorAuth.chief_complaint_code || '27355003', // Default: Toothache (SNOMED)
-          code_display: priorAuth.chief_complaint_display || 'Toothache',
-          code_system: 'http://snomed.info/sct' // SNOMED-CT system per NPHIES example
-        });
+        const clinicalInfo = priorAuth.clinical_info || {};
+        const format = clinicalInfo.chief_complaint_format || 'snomed';
+        
+        if (format === 'text' && clinicalInfo.chief_complaint_text) {
+          // Free text format per Claim-298042 example
+          supportingInfoList.push({
+            category: 'chief-complaint',
+            code_text: clinicalInfo.chief_complaint_text
+          });
+        } else {
+          // SNOMED code format per Claim-293093 example
+          supportingInfoList.push({
+            category: 'chief-complaint',
+            code: clinicalInfo.chief_complaint_code || priorAuth.chief_complaint_code || '27355003',
+            code_display: clinicalInfo.chief_complaint_display || priorAuth.chief_complaint_display || 'Toothache',
+            code_system: 'http://snomed.info/sct'
+          });
+        }
       }
     }
     
@@ -913,7 +927,13 @@ class PriorAuthMapper {
 
     // Add code if present (e.g., chief-complaint, investigation-result)
     // BV-00786: investigation-result requires valueCodeableConcept, not code
-    if (info.code) {
+    // Per NPHIES Claim-298042: chief-complaint can also use code.text (free text)
+    if (info.code_text) {
+      // Free text format (per Claim-298042 example)
+      supportingInfo.code = {
+        text: info.code_text
+      };
+    } else if (info.code) {
       const codeableConcept = {
         coding: [
           {

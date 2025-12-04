@@ -519,3 +519,310 @@ export const DENTAL_CHIEF_COMPLAINT_OPTIONS = [
   { value: 'other', label: 'Other (specify code)' }
 ];
 
+// Chief Complaint Format Options (for dental/oral claims)
+// NPHIES supports both SNOMED codes (Claim-293093) and free text (Claim-298042)
+export const CHIEF_COMPLAINT_FORMAT_OPTIONS = [
+  { value: 'snomed', label: 'SNOMED Code (structured)' },
+  { value: 'text', label: 'Free Text' }
+];
+
+// NPHIES Practice Codes (for careTeam.qualification) - Grouped by category
+// Reference: http://nphies.sa/terminology/CodeSystem/practice-codes
+export const PRACTICE_CODES_OPTIONS = [
+  {
+    label: 'Anesthesiology',
+    options: [
+      { value: '00.00', label: '00.00 - Anesthesiology Specialty' },
+      { value: '00.01', label: '00.01 - Ambulatory Anesthesia' },
+    ]
+  },
+  {
+    label: 'Obstetrics/Gynecology',
+    options: [
+      { value: '01.00', label: '01.00 - Obstetrics/Gynecology' },
+      { value: '01.01', label: '01.01 - Obstetrics Anesthesia' },
+      { value: '01.02', label: '01.02 - Pediatrics Anesthesia' },
+    ]
+  },
+  {
+    label: 'Cardiology',
+    options: [
+      { value: '02.00', label: '02.00 - Pediatrics Cardiology' },
+      { value: '02.01', label: '02.01 - Community Medicine Specialty' },
+      { value: '02.02', label: '02.02 - Community Specialty' },
+    ]
+  },
+  {
+    label: 'Dermatology',
+    options: [
+      { value: '03.00', label: '03.00 - Dermatology Specialty' },
+      { value: '03.01', label: '03.01 - Dermatology Surgery' },
+      { value: '03.02', label: '03.02 - Hair Implant Dermatology' },
+      { value: '03.03', label: '03.03 - Pediatric Dermatology' },
+    ]
+  },
+  {
+    label: 'Emergency Medicine',
+    options: [
+      { value: '04.00', label: '04.00 - Emergency Medicine Specialty' },
+      { value: '04.01', label: '04.01 - Adult Emergency Medicine' },
+      { value: '04.02', label: '04.02 - Pediatrics Emergency Medicine' },
+    ]
+  },
+  {
+    label: 'ENT',
+    options: [
+      { value: '05.00', label: '05.00 - Adult ENT' },
+      { value: '05.01', label: '05.01 - Pediatrics ENT' },
+    ]
+  },
+  {
+    label: 'Family Medicine',
+    options: [
+      { value: '06.00', label: '06.00 - Family Medicine' },
+      { value: '06.01', label: '06.01 - Oral & Maxillofacial Surgery' },
+    ]
+  },
+  {
+    label: 'Pediatrics',
+    options: [
+      { value: '07.00', label: '07.00 - Pediatrics' },
+      { value: '07.01', label: '07.01 - Pediatrics Otolaryngology' },
+    ]
+  },
+  {
+    label: 'Internal Medicine',
+    options: [
+      { value: '08.00', label: '08.00 - Internal Medicine Specialty' },
+      { value: '08.01', label: '08.01 - Family Medicine Specialty' },
+      { value: '08.02', label: '08.02 - Primary Care / Ophthalmology' },
+      { value: '08.03', label: '08.03 - Primary Care / Pulmonary' },
+      { value: '08.04', label: '08.04 - Primary Care / Family Care' },
+      { value: '08.05', label: '08.05 - Primary Health Care' },
+      { value: '08.06', label: '08.06 - Internal Medicine Specialty' },
+    ]
+  },
+  {
+    label: 'Subspecialties',
+    options: [
+      { value: '09.00', label: '09.00 - Adolescence Medicine' },
+      { value: '10.00', label: '10.00 - Diabetics Medicine' },
+      { value: '11.00', label: '11.00 - Gastroenterology' },
+      { value: '11.01', label: '11.01 - Gastroenterology/Hepatology' },
+      { value: '11.02', label: '11.02 - Pediatrics Gastroenterology' },
+      { value: '12.00', label: '12.00 - Geriatric Medicine' },
+      { value: '13.00', label: '13.00 - Hematology' },
+      { value: '14.00', label: '14.00 - Nephrology' },
+      { value: '14.01', label: '14.01 - Pediatric Nephrology' },
+      { value: '15.00', label: '15.00 - Clinical Immunology' },
+      { value: '16.00', label: '16.00 - Obesity Medicine' },
+      { value: '17.00', label: '17.00 - Sleep Medicine' },
+      { value: '18.00', label: '18.00 - Sport Neurology' },
+      { value: '19.00', label: '19.00 - Neurology' },
+      { value: '19.01', label: '19.01 - Pediatric Neuro Care' },
+      { value: '19.02', label: '19.02 - Endocrinology' },
+      { value: '19.03', label: '19.03 - Head & Neck Oncology' },
+      { value: '19.04', label: '19.04 - Hematology / Stem Cell' },
+      { value: '19.05', label: '19.05 - Hematology - Coagulation Medicine' },
+      { value: '19.06', label: '19.06 - Immunology Allergy' },
+      { value: '19.07', label: '19.07 - Genetic Medicine' },
+      { value: '19.08', label: '19.08 - General Medicine' },
+    ]
+  },
+  {
+    label: 'Reproductive & OB/GYN',
+    options: [
+      { value: '20.00', label: '20.00 - Reproductive Endocrinology & Infertility' },
+      { value: '20.01', label: '20.01 - Fertility' },
+      { value: '20.02', label: '20.02 - Maternal Fetal Medicine' },
+      { value: '20.03', label: '20.03 - Obstetrics/Perinatology' },
+      { value: '20.04', label: '20.04 - Pediatrics Gynecology Oncology' },
+      { value: '20.05', label: '20.05 - Comprehensive Ophthalmology' },
+      { value: '20.06', label: '20.06 - Pediatric Ophthalmology & Strabismus' },
+      { value: '20.07', label: '20.07 - Retina' },
+    ]
+  },
+  {
+    label: 'Oncology',
+    options: [
+      { value: '21.00', label: '21.00 - Ocular Oncology' },
+      { value: '21.01', label: '21.01 - Primary Care / Ophthalmology & Vitreoretina' },
+      { value: '21.02', label: '21.02 - Medical Oncology' },
+      { value: '21.03', label: '21.03 - Pediatric Oncology' },
+      { value: '21.04', label: '21.04 - Radiation Oncology' },
+    ]
+  },
+  {
+    label: 'Dental',
+    options: [
+      { value: '22.00', label: '22.00 - Dental' },
+      { value: '22.01', label: '22.01 - Maxillofacial Pathology' },
+      { value: '22.02', label: '22.02 - Pediatric Dentistry' },
+      { value: '22.03', label: '22.03 - Orthodontics' },
+      { value: '22.04', label: '22.04 - Oral Diagnosis' },
+      { value: '22.05', label: '22.05 - Endodontics' },
+      { value: '22.06', label: '22.06 - Periodontics' },
+      { value: '22.07', label: '22.07 - Prosthodontics' },
+      { value: '22.08', label: '22.08 - Restorative Dentistry' },
+      { value: '22.09', label: '22.09 - Oral & Maxillofacial Surgery' },
+    ]
+  },
+  {
+    label: 'Pathology',
+    options: [
+      { value: '23.00', label: '23.00 - Anatomic Pathology' },
+      { value: '23.01', label: '23.01 - Clinical Pathology' },
+      { value: '23.02', label: '23.02 - Medical Microbiology' },
+      { value: '23.03', label: '23.03 - Neuropathology' },
+      { value: '23.04', label: '23.04 - Molecular Genetic Pathology' },
+      { value: '23.05', label: '23.05 - Chemical Pathology' },
+      { value: '23.06', label: '23.06 - Hematopathology' },
+      { value: '23.07', label: '23.07 - Bone & Soft Tissue Pathology' },
+      { value: '23.08', label: '23.08 - Dermatopathology' },
+      { value: '23.09', label: '23.09 - Cytopathology' },
+      { value: '23.10', label: '23.10 - Renal Pathology' },
+      { value: '23.11', label: '23.11 - Gut & Hepato Pathology' },
+    ]
+  },
+  {
+    label: 'Physical Medicine',
+    options: [
+      { value: '24.00', label: '24.00 - Physical Medicine & Rehabilitation' },
+      { value: '24.01', label: '24.01 - Prosthetics' },
+    ]
+  },
+  {
+    label: 'Psychiatry',
+    options: [
+      { value: '25.00', label: '25.00 - Psychiatry' },
+      { value: '25.01', label: '25.01 - Pediatric Rheumatology' },
+      { value: '25.02', label: '25.02 - Pediatric Pulmonology' },
+      { value: '25.03', label: '25.03 - Pulmonary/Chest Medicine' },
+    ]
+  },
+  {
+    label: 'Radiology & Pediatric Specialties',
+    options: [
+      { value: '26.00', label: '26.00 - Radiology' },
+      { value: '26.01', label: '26.01 - Pediatrics Radiology' },
+      { value: '26.02', label: '26.02 - Pediatrics Gastroenterology' },
+      { value: '26.03', label: '26.03 - Pediatrics Hematology' },
+      { value: '26.04', label: '26.04 - Pediatrics Infectious Disease' },
+      { value: '26.05', label: '26.05 - Pediatrics Intensive Care' },
+      { value: '26.06', label: '26.06 - Neonatal Intensive Care (NICU)' },
+      { value: '26.07', label: '26.07 - Neonatal Medicine' },
+      { value: '26.08', label: '26.08 - Neurology' },
+      { value: '26.09', label: '26.09 - Neurosurgery' },
+      { value: '26.10', label: '26.10 - Pediatrics Cardiology' },
+      { value: '26.11', label: '26.11 - Preventive Cardiology' },
+      { value: '26.12', label: '26.12 - Pediatrics Endocrinology' },
+      { value: '26.13', label: '26.13 - Pediatric Plastic Surgery' },
+      { value: '26.14', label: '26.14 - Primary Care Preventive Pediatrics' },
+      { value: '26.15', label: '26.15 - Pediatric Dermatology' },
+      { value: '26.16', label: '26.16 - Pediatrics Allergy Immunology' },
+      { value: '26.17', label: '26.17 - Pediatric Neurology' },
+    ]
+  },
+  {
+    label: 'Psychology & Mental Health',
+    options: [
+      { value: '27.00', label: '27.00 - Proctology' },
+      { value: '27.01', label: '27.01 - Psychiatry Specialist' },
+      { value: '27.02', label: '27.02 - Physical Medicine & Rehabilitation' },
+      { value: '27.03', label: '27.03 - Pain Management' },
+      { value: '27.04', label: '27.04 - Child / Adolescent Psychiatry' },
+      { value: '27.05', label: '27.05 - Mental Health' },
+      { value: '27.06', label: '27.06 - Forensic Psychiatry' },
+      { value: '27.07', label: '27.07 - Addiction Psychiatry' },
+      { value: '27.08', label: '27.08 - Consultation Liaison Psychiatry' },
+      { value: '27.09', label: '27.09 - Geriatric Psychiatry' },
+    ]
+  },
+  {
+    label: 'Rheumatology & Surgical Subspecialties',
+    options: [
+      { value: '28.00', label: '28.00 - Rheumatology' },
+      { value: '28.01', label: '28.01 - Breast Surgery' },
+      { value: '28.02', label: '28.02 - Colorectal Surgery' },
+      { value: '28.03', label: '28.03 - Critical Care Medicine' },
+      { value: '28.04', label: '28.04 - Hand Surgery' },
+      { value: '28.05', label: '28.05 - Pediatric Surgery' },
+      { value: '28.06', label: '28.06 - Endoscopy' },
+      { value: '28.07', label: '28.07 - Audio Vestibular Medicine' },
+    ]
+  },
+  {
+    label: 'Radiology Subspecialties',
+    options: [
+      { value: '29.00', label: '29.00 - Emergency Radiology' },
+      { value: '29.01', label: '29.01 - Abdominal Radiology' },
+      { value: '29.02', label: '29.02 - Pediatric Radiology' },
+      { value: '29.03', label: '29.03 - Interventional Neuroradiology' },
+      { value: '29.04', label: '29.04 - Musculoskeletal Radiology' },
+      { value: '29.05', label: '29.05 - Neuroradiology' },
+      { value: '29.06', label: '29.06 - Cardiovascular Radiology' },
+    ]
+  },
+  {
+    label: 'Surgery',
+    options: [
+      { value: '30.00', label: '30.00 - Surgery Specialty' },
+      { value: '30.01', label: '30.01 - Bariatric Surgery' },
+      { value: '30.02', label: '30.02 - Breast & Endo Surgery' },
+      { value: '30.03', label: '30.03 - Colorectal Surgery' },
+      { value: '30.04', label: '30.04 - General Surgery' },
+      { value: '30.05', label: '30.05 - Hepatobiliary & Upper GI Surgery' },
+      { value: '30.06', label: '30.06 - Neonatal Surgery' },
+      { value: '30.07', label: '30.07 - Pediatric Surgery' },
+      { value: '30.08', label: '30.08 - Thoracic Surgery/Chest Surgery' },
+      { value: '30.09', label: '30.09 - Transplant Surgery' },
+      { value: '30.10', label: '30.10 - Trauma Surgery' },
+      { value: '30.11', label: '30.11 - Vascular Surgery' },
+      { value: '30.12', label: '30.12 - Skull Base Surgery' },
+      { value: '30.13', label: '30.13 - Renal and Pancreas Transplant Surgery' },
+    ]
+  },
+  {
+    label: 'Urology',
+    options: [
+      { value: '31.00', label: '31.00 - Urology' },
+      { value: '31.01', label: '31.01 - Pediatric Urology' },
+    ]
+  },
+  {
+    label: 'Critical & Intensive Care',
+    options: [
+      { value: '32.00', label: '32.00 - Critical Care' },
+      { value: '33.00', label: '33.00 - Infectious Disease' },
+      { value: '34.00', label: '34.00 - Intensive Care (ICU)' },
+    ]
+  },
+  {
+    label: 'General Dental',
+    options: [
+      { value: '35.00', label: '35.00 - Pediatric Dental' },
+      { value: '36.00', label: '36.00 - General Dental Specialty' },
+    ]
+  },
+  {
+    label: 'Allied Health',
+    options: [
+      { value: '37.00', label: '37.00 - Dietitian' },
+      { value: '38.00', label: '38.00 - Clinical Pharmacist' },
+      { value: '39.00', label: '39.00 - Physiotherapist' },
+      { value: '40.00', label: '40.00 - Nurse' },
+      { value: '41.00', label: '41.00 - Midwife' },
+      { value: '42.00', label: '42.00 - Audiologist' },
+      { value: '43.00', label: '43.00 - Speech Therapist' },
+      { value: '44.00', label: '44.00 - Occupational Therapist' },
+      { value: '45.00', label: '45.00 - Optometrist' },
+      { value: '46.00', label: '46.00 - Psychologist' },
+      { value: '47.00', label: '47.00 - Social Worker' },
+      { value: '48.00', label: '48.00 - Respiratory Therapist' },
+      { value: '49.00', label: '49.00 - Lab Technician' },
+      { value: '50.00', label: '50.00 - Radiology Technician' },
+      { value: '51.00', label: '51.00 - Other' },
+    ]
+  },
+];
+

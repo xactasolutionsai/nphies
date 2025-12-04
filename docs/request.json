@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "65110112-5c68-4d54-ba3b-11de142e9988",
+  "id": "0848a687-8637-45ff-9bd9-229937d8c51d",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-04T16:31:09.069Z",
+  "timestamp": "2025-12-04T16:43:12.891Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:e9bab918-4f45-431b-bb33-4b5a37008556",
+      "fullUrl": "urn:uuid:8436fdc2-ba6a-45bb-8c42-984af74ea9ba",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "e9bab918-4f45-431b-bb33-4b5a37008556",
+        "id": "8436fdc2-ba6a-45bb-8c42-984af74ea9ba",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/9cf6a9c6-75ad-45cb-ba2b-e56ee1228722"
+            "reference": "http://provider.com/Claim/fafe507a-07f9-4e71-a214-8413c02d9f0f"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/9cf6a9c6-75ad-45cb-ba2b-e56ee1228722",
+      "fullUrl": "http://provider.com/Claim/fafe507a-07f9-4e71-a214-8413c02d9f0f",
       "resource": {
         "resourceType": "Claim",
-        "id": "9cf6a9c6-75ad-45cb-ba2b-e56ee1228722",
+        "id": "fafe507a-07f9-4e71-a214-8413c02d9f0f",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-priorauth|1.0.0"
@@ -66,7 +66,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/7541915f-964b-4744-bf9a-712c9f2e5cf0"
+              "reference": "Encounter/8d2b4299-1bf3-4b13-a79d-20e1b1ba8e77"
             }
           }
         ],
@@ -97,7 +97,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-04T16:31:09.066Z",
+        "created": "2025-12-04T16:43:12.889Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -126,7 +126,7 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/3caf73b1-5fb1-4d1d-88f0-471291f363f4"
+              "reference": "Practitioner/1cdecb66-477b-433d-9dba-af09a0abecec"
             },
             "role": {
               "coding": [
@@ -177,85 +177,19 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "investigation-result"
-                }
-              ]
-            },
-            "valueCodeableConcept": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
-                  "code": "IRA",
-                  "display": "Investigation results attached"
-                }
-              ]
-            },
-            "timingDate": "2025-12-04"
-          },
-          {
-            "sequence": 2,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "treatment-plan"
-                }
-              ]
-            },
-            "timingDate": "2025-12-04",
-            "valueString": "Dental treatment as per clinical assessment"
-          },
-          {
-            "sequence": 3,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "patient-history"
-                }
-              ]
-            },
-            "timingDate": "2025-12-04",
-            "valueString": "No significant medical history"
-          },
-          {
-            "sequence": 4,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "physical-examination"
-                }
-              ]
-            },
-            "timingDate": "2025-12-04",
-            "valueString": "Oral examination performed"
-          },
-          {
-            "sequence": 5,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "history-of-present-illness"
-                }
-              ]
-            },
-            "timingDate": "2025-12-04",
-            "valueString": "Patient presents for dental treatment"
-          },
-          {
-            "sequence": 6,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
                   "code": "chief-complaint"
                 }
               ]
             },
-            "timingDate": "2025-12-04",
-            "valueString": "Dental complaint"
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "27355003",
+                  "display": "Toothache"
+                }
+              ]
+            }
           }
         ],
         "insurance": [
@@ -308,19 +242,14 @@
               1
             ],
             "informationSequence": [
-              1,
-              2,
-              3,
-              4,
-              5,
-              6
+              1
             ],
             "productOrService": {
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/oral-health-op",
-                  "code": "97011-00-00",
-                  "display": "Comprehensive oral examination"
+                  "code": "97613-07-00",
+                  "display": "Lithium disilicate ceramic crown (e max), indirect; per crown"
                 }
               ]
             },
@@ -365,10 +294,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/7541915f-964b-4744-bf9a-712c9f2e5cf0",
+      "fullUrl": "http://provider.com/Encounter/8d2b4299-1bf3-4b13-a79d-20e1b1ba8e77",
       "resource": {
         "resourceType": "Encounter",
-        "id": "7541915f-964b-4744-bf9a-712c9f2e5cf0",
+        "id": "8d2b4299-1bf3-4b13-a79d-20e1b1ba8e77",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -490,10 +419,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/3caf73b1-5fb1-4d1d-88f0-471291f363f4",
+      "fullUrl": "http://provider.com/Practitioner/1cdecb66-477b-433d-9dba-af09a0abecec",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "3caf73b1-5fb1-4d1d-88f0-471291f363f4",
+        "id": "1cdecb66-477b-433d-9dba-af09a0abecec",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -511,7 +440,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-3caf73b1"
+            "value": "PRACT-1cdecb66"
           }
         ],
         "active": true,
