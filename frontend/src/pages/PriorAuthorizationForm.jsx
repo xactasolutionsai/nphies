@@ -791,11 +791,26 @@ export default function PriorAuthorizationForm() {
     }
   };
 
-  const handleCopyJson = () => {
-    const bundleData = previewData?.data || previewData?.fhirBundle;
+  const handleCopyJson = (bundleType = 'request') => {
+    let bundleData;
+    let bundleName;
+    
+    if (bundleType === 'response') {
+      // Copy NPHIES response bundle (only available after test send)
+      bundleData = previewData?.data;
+      bundleName = 'NPHIES Response Bundle';
+    } else {
+      // Copy request bundle (what was/will be sent to NPHIES)
+      // For preview: fhirBundle, for test send: requestBundle
+      bundleData = previewData?.requestBundle || previewData?.fhirBundle;
+      bundleName = 'FHIR Request Bundle';
+    }
+    
     if (bundleData) {
       navigator.clipboard.writeText(JSON.stringify(bundleData, null, 2));
-      alert('FHIR Bundle copied to clipboard!');
+      alert(`${bundleName} copied to clipboard!`);
+    } else {
+      alert(`No ${bundleName.toLowerCase()} available to copy.`);
     }
   };
 
@@ -2290,19 +2305,27 @@ export default function PriorAuthorizationForm() {
                   </div>
                   <div className="bg-white rounded-lg p-3 border">
                     <p className="text-gray-500 text-xs mb-1">Authorization Type</p>
-                    <p className="font-medium capitalize">{previewData.entities?.authType || formData.auth_type || 'N/A'}</p>
+                    <p className="font-medium capitalize">{previewData.options?.authType || formData.auth_type || 'N/A'}</p>
                     <p className="text-xs text-gray-400">
-                      {previewData.entities?.itemsCount || formData.items?.length || 0} items
+                      {previewData.options?.itemsCount || formData.items?.length || 0} items
                     </p>
                   </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap gap-2">
-                  <Badge variant="outline" className="capitalize">
-                    Priority: {formData.priority || 'normal'}
+                  <Badge className="capitalize bg-primary-purple">
+                    {previewData.options?.authType || formData.auth_type || 'professional'}
                   </Badge>
-                  {formData.encounter_class && (
+                  <Badge variant="outline" className="capitalize">
+                    Priority: {previewData.options?.priority || formData.priority || 'normal'}
+                  </Badge>
+                  {(previewData.options?.encounterClass || formData.encounter_class) && (
                     <Badge variant="outline" className="capitalize">
-                      Encounter: {formData.encounter_class}
+                      Encounter: {previewData.options?.encounterClass || formData.encounter_class}
+                    </Badge>
+                  )}
+                  {previewData.preAuthRef && (
+                    <Badge variant="secondary" className="font-mono text-xs">
+                      Pre-Auth Ref: {previewData.preAuthRef}
                     </Badge>
                   )}
                   {previewData.nphiesResponseId && (
@@ -2313,30 +2336,68 @@ export default function PriorAuthorizationForm() {
                 </div>
               </div>
 
-              {/* FHIR Bundle JSON */}
+              {/* Request Bundle JSON - What was/will be sent to NPHIES */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    FHIR Bundle (JSON)
+                    <Send className="h-4 w-4 text-blue-500" />
+                    Request Bundle (Sent to NPHIES)
                   </h3>
-                  <Button variant="outline" size="sm" onClick={handleCopyJson}>
+                  <Button variant="outline" size="sm" onClick={() => handleCopyJson('request')}>
                     <Copy className="h-4 w-4 mr-2" />
-                    Copy JSON
+                    Copy Request
                   </Button>
                 </div>
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs max-h-[400px] overflow-y-auto">
-                  {JSON.stringify(previewData.data || previewData.fhirBundle, null, 2)}
-                </pre>
+                {(previewData.requestBundle || previewData.fhirBundle) ? (
+                  <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs max-h-[350px] overflow-y-auto">
+                    {JSON.stringify(previewData.requestBundle || previewData.fhirBundle, null, 2)}
+                  </pre>
+                ) : (
+                  <div className="bg-gray-100 p-4 rounded-lg text-gray-500 text-center">
+                    No request bundle available
+                  </div>
+                )}
               </div>
+
+              {/* Response Bundle JSON - Only shown for test send results */}
+              {previewData.data && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-green-500" />
+                      Response Bundle (From NPHIES)
+                      {previewData.outcome && (
+                        <Badge variant={previewData.outcome === 'error' ? 'destructive' : 'default'} className="ml-2">
+                          {previewData.outcome}
+                        </Badge>
+                      )}
+                    </h3>
+                    <Button variant="outline" size="sm" onClick={() => handleCopyJson('response')}>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy Response
+                    </Button>
+                  </div>
+                  <pre className="bg-slate-900 text-amber-400 p-4 rounded-lg overflow-x-auto text-xs max-h-[350px] overflow-y-auto">
+                    {JSON.stringify(previewData.data, null, 2)}
+                  </pre>
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
-              <Button variant="outline" onClick={handleCopyJson}>
-                <Copy className="h-4 w-4 mr-2" />
-                Copy to Clipboard
-              </Button>
+            <div className="flex items-center justify-between p-6 border-t bg-gray-50">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleCopyJson('request')}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Request
+                </Button>
+                {previewData.data && (
+                  <Button variant="outline" size="sm" onClick={() => handleCopyJson('response')}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy Response
+                  </Button>
+                )}
+              </div>
               <Button onClick={() => setShowPreview(false)}>
                 Close Preview
               </Button>
