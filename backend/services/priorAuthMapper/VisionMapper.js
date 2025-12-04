@@ -525,6 +525,7 @@ class VisionMapper extends BaseMapper {
 
   /**
    * Build individual lens specification
+   * Per NPHIES VisionPrescription example: uses lens-type CodeSystem, no display field
    */
   buildLensSpecification(eyeData, eye, productType) {
     const data = eyeData || {};
@@ -533,52 +534,56 @@ class VisionMapper extends BaseMapper {
       product: {
         coding: [
           {
-            system: 'http://terminology.hl7.org/CodeSystem/ex-visionprescriptionproduct',
-            code: productType || data.product || 'lens',
-            display: this.getVisionProductDisplay(productType || data.product || 'lens')
+            // NPHIES requires lens-type CodeSystem, NOT ex-visionprescriptionproduct
+            system: 'http://nphies.sa/terminology/CodeSystem/lens-type',
+            code: productType || data.product || 'lens'
+            // Note: NO display field per NPHIES specification
           }
         ]
       },
       eye: eye || data.eye || 'right'
     };
 
+    // Helper to check if value is valid for numeric field (not null, undefined, empty string, or NaN)
+    const isValidNumeric = (val) => val !== undefined && val !== null && val !== '' && !isNaN(parseFloat(val));
+    
     // Sphere (SPH) - required
-    if (data.sphere !== undefined && data.sphere !== null) {
+    if (isValidNumeric(data.sphere)) {
       lensSpec.sphere = parseFloat(data.sphere);
     }
 
     // Cylinder (CYL)
-    if (data.cylinder !== undefined && data.cylinder !== null) {
+    if (isValidNumeric(data.cylinder)) {
       lensSpec.cylinder = parseFloat(data.cylinder);
     }
 
     // Axis
-    if (data.axis !== undefined && data.axis !== null) {
+    if (isValidNumeric(data.axis)) {
       lensSpec.axis = parseInt(data.axis);
     }
 
     // Add (for reading/bifocal)
-    if (data.add !== undefined && data.add !== null) {
+    if (isValidNumeric(data.add)) {
       lensSpec.add = parseFloat(data.add);
     }
 
     // Power (for contacts)
-    if (data.power !== undefined && data.power !== null) {
+    if (isValidNumeric(data.power)) {
       lensSpec.power = parseFloat(data.power);
     }
 
     // Back curve (for contacts)
-    if (data.back_curve !== undefined && data.back_curve !== null) {
+    if (isValidNumeric(data.back_curve)) {
       lensSpec.backCurve = parseFloat(data.back_curve);
     }
 
     // Diameter (for contacts)
-    if (data.diameter !== undefined && data.diameter !== null) {
+    if (isValidNumeric(data.diameter)) {
       lensSpec.diameter = parseFloat(data.diameter);
     }
 
     // Duration
-    if (data.duration_value) {
+    if (isValidNumeric(data.duration_value)) {
       lensSpec.duration = {
         value: parseFloat(data.duration_value),
         unit: data.duration_unit || 'month',
@@ -602,13 +607,18 @@ class VisionMapper extends BaseMapper {
       lensSpec.note = [{ text: data.note }];
     }
 
-    // Prism
+    // Prism - only add if valid amount and base are provided
     if (data.prism && Array.isArray(data.prism)) {
-      lensSpec.prism = data.prism.map(p => ({
-        amount: parseFloat(p.amount),
-        base: p.base
-      }));
-    } else if (data.prism_amount !== undefined && data.prism_base) {
+      const validPrisms = data.prism
+        .filter(p => isValidNumeric(p.amount) && p.base)
+        .map(p => ({
+          amount: parseFloat(p.amount),
+          base: p.base
+        }));
+      if (validPrisms.length > 0) {
+        lensSpec.prism = validPrisms;
+      }
+    } else if (isValidNumeric(data.prism_amount) && data.prism_base) {
       lensSpec.prism = [{
         amount: parseFloat(data.prism_amount),
         base: data.prism_base

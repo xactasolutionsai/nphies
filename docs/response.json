@@ -1,22 +1,28 @@
 {
     "resourceType": "Bundle",
-    "id": "7123d1a1-97c5-4cb7-a991-675b6eaaa7fd",
+    "id": "11bf345a-271d-4c8b-8e64-adb24530190d",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-04T19:43:20.404+03:00",
+    "timestamp": "2025-12-04T21:34:08.791+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/d1a2d2b3-5fee-46ce-8155-450a63d256cc",
+            "fullUrl": "http://nphies.sa/MessageHeader/f99bd0c8-c28d-4800-b7ab-10556968d86d",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "d1a2d2b3-5fee-46ce-8155-450a63d256cc",
+                "id": "f99bd0c8-c28d-4800-b7ab-10556968d86d",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
+                    ],
+                    "tag": [
+                        {
+                            "system": "http://nphies.sa/terminology/CodeSystem/meta-tags",
+                            "code": "queued-messages"
+                        }
                     ]
                 },
                 "eventCoding": {
@@ -30,7 +36,7 @@
                             "type": "Organization",
                             "identifier": {
                                 "system": "http://nphies.sa/license/provider-license",
-                                "value": "DC-FHIR"
+                                "value": "PR-FHIR"
                             }
                         }
                     }
@@ -46,21 +52,21 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "8436fdc2-ba6a-45bb-8c42-984af74ea9ba",
+                    "identifier": "e971bdef-e034-47ee-a224-55072caf0354",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://nphies.sa/ClaimResponse/161"
+                        "reference": "http://nphies.sa/ClaimResponse/851"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/ClaimResponse/161",
+            "fullUrl": "http://nphies.sa/ClaimResponse/851",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "161",
+                "id": "851",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -75,7 +81,7 @@
                 "identifier": [
                     {
                         "system": "http://nphies.sa/ClaimResponse",
-                        "value": "PA-1764704810758"
+                        "value": "DUP-1764870357687"
                     }
                 ],
                 "status": "active",
@@ -83,7 +89,7 @@
                     "coding": [
                         {
                             "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-                            "code": "oral"
+                            "code": "vision"
                         }
                     ]
                 },
@@ -91,18 +97,18 @@
                 "patient": {
                     "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
                 },
-                "created": "2025-12-04T16:43:12.889Z",
+                "created": "2025-12-04T18:27:43.641Z",
                 "insurer": {
                     "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
                 "requestor": {
-                    "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
+                    "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
                 },
                 "request": {
                     "type": "Claim",
                     "identifier": {
-                        "system": "http://saudidentalclinic.com.sa/identifiers/authorization",
-                        "value": "PA-1764704810758"
+                        "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
+                        "value": "DUP-1764870357687"
                     }
                 },
                 "outcome": "error",
@@ -123,12 +129,12 @@
                                     "extension": [
                                         {
                                             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[1].resource.supportingInfo[0].code.coding"
+                                            "valueString": "Bundle.entry[2].resource.lensSpecification[0]"
                                         }
                                     ],
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "IB-00045",
-                                    "display": "Claim supportingInfo code is not using a value from the specified ValueSet"
+                                    "code": "GE-00013",
+                                    "display": "Resource SHALL have a valid structure"
                                 }
                             ]
                         }
@@ -140,97 +146,12 @@
                                     "extension": [
                                         {
                                             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[1].resource.supportingInfo"
+                                            "valueString": "Bundle.entry[2].resource.lensSpecification[1]"
                                         }
                                     ],
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "BV-00752",
-                                    "display": "Investigation Result Shall be Provided in Supporting info of Authorization or Claim"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[1].resource.supportingInfo"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "BV-00803",
-                                    "display": "Supporting information 'treatment plan' is required in claim and authorization."
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[1].resource.supportingInfo"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "BV-00804",
-                                    "display": "Supporting information 'patient history' is required in claim and authorization."
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[1].resource.supportingInfo"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "BV-00805",
-                                    "display": "Supporting information 'physical examination' is required in claim and authorization."
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[1].resource.supportingInfo"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "BV-00806",
-                                    "display": "Supporting information 'history of present illness' is required in claim and authorization."
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[1].resource.item[0].productOrService.coding[0]"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "IB-00265",
-                                    "display": "Claim product or service does not belong to the related value set for oral claims"
+                                    "code": "GE-00013",
+                                    "display": "Resource SHALL have a valid structure"
                                 }
                             ]
                         }
@@ -331,10 +252,10 @@
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333",
+            "fullUrl": "http://nphies.sa/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
             "resource": {
                 "resourceType": "Organization",
-                "id": "f99f16b5-d900-4031-8ea6-1fe50dcc2333",
+                "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
@@ -357,7 +278,7 @@
                 "identifier": [
                     {
                         "system": "http://nphies.sa/license/provider-license",
-                        "value": "DC-FHIR"
+                        "value": "PR-FHIR"
                     }
                 ],
                 "active": true,
@@ -371,13 +292,13 @@
                         ]
                     }
                 ],
-                "name": "Saudi Dental Clinic",
+                "name": "Saudi General Hospital",
                 "address": [
                     {
                         "use": "work",
-                        "text": "Hajar Valley, Building 104, Riyadh Saudi Arabia",
+                        "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
                         "line": [
-                            "Hajar Valley, Building 104, Riyadh Saudi Arabia"
+                            "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
                         ],
                         "city": "Riyadh",
                         "country": "Saudi Arabia"
