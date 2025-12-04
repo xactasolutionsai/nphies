@@ -1088,6 +1088,7 @@ class PriorAuthorizationsController extends BaseController {
       );
 
       // Create a mock priorAuth object from form data
+      // IMPORTANT: Include ALL fields that mappers use, so preview matches sendToNphies behavior
       const priorAuth = {
         id: existingId || 'preview',
         request_number: formData.request_number || `PREVIEW-${Date.now()}`,
@@ -1103,7 +1104,20 @@ class PriorAuthorizationsController extends BaseController {
         diagnoses: formData.diagnoses || [],
         supporting_info: formData.supporting_info || [],
         // Vision prescription data for vision auth types
-        vision_prescription: formData.vision_prescription || null
+        vision_prescription: formData.vision_prescription || null,
+        // Eligibility fields - must match what sendToNphies uses from database
+        eligibility_ref: formData.eligibility_ref || null,
+        eligibility_offline_ref: formData.eligibility_offline_ref || null,
+        eligibility_offline_date: formData.eligibility_offline_date || null,
+        // Transfer fields
+        is_transfer: formData.is_transfer || false,
+        transfer_provider_id: formData.transfer_provider_id || null,
+        transfer_auth_number: formData.transfer_auth_number || null,
+        transfer_period_start: formData.transfer_period_start || null,
+        transfer_period_end: formData.transfer_period_end || null,
+        // Service type for institutional claims
+        service_type: formData.service_type || null,
+        sub_type: formData.sub_type || 'op'
       };
 
       // Build FHIR bundle
