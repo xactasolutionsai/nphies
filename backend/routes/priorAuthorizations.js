@@ -23,9 +23,6 @@ const router = express.Router();
 // Preview (must be before :id routes)
 router.post('/preview', (req, res) => priorAuthorizationsController.previewBundle(req, res));
 
-// Test send to NPHIES (validates without saving) - must be before :id routes
-router.post('/test-send', (req, res) => priorAuthorizationsController.testSendToNphies(req, res));
-
 // Basic CRUD operations
 router.get('/', (req, res) => priorAuthorizationsController.getAll(req, res));
 router.get('/:id', (req, res) => priorAuthorizationsController.getById(req, res));

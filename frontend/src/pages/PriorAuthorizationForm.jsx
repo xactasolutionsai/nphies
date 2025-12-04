@@ -57,7 +57,6 @@ export default function PriorAuthorizationForm() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
-  const [testSending, setTestSending] = useState(false);
   const [errors, setErrors] = useState([]);
   const [activeTab, setActiveTab] = useState('basic');
   
@@ -731,74 +730,6 @@ export default function PriorAuthorizationForm() {
     }
   };
 
-  // Test send to NPHIES (validates without saving to DB)
-  const handleTestSend = async () => {
-    try {
-      setTestSending(true);
-      setErrors([]);
-
-      const validation = validateForm();
-      if (!validation.valid) {
-        setErrors(validation.errors);
-        alert('Please fix the validation errors before testing.');
-        return;
-      }
-
-      // Merge structured vital signs and clinical data into supporting_info
-      const dataToTest = {
-        ...formData,
-        supporting_info: buildSupportingInfoArray()
-      };
-      // Remove structured fields (already merged into supporting_info or handled separately)
-      delete dataToTest.vital_signs;
-      delete dataToTest.clinical_info;
-      delete dataToTest.admission_info;
-      // Keep vision_prescription for vision auth types - needed for VisionPrescription FHIR resource
-      if (dataToTest.auth_type !== 'vision') {
-        delete dataToTest.vision_prescription;
-      }
-      
-      // Dental claims use AMB encounter class - don't send end date
-      // Dental/Vision claims use AMB encounter class - don't send end date
-      // Per NPHIES Encounter-10123 example: AMB encounters have no end date
-      // NPHIES Rules: Dental and Vision must use 'ambulatory'
-      if (dataToTest.auth_type === 'dental' || dataToTest.auth_type === 'vision') {
-        delete dataToTest.encounter_end;
-        dataToTest.encounter_class = 'ambulatory';
-      }
-
-      // Include the ID if we're editing an existing record - this allows the backend to save
-      // the request/response bundles for later viewing in the details page
-      if (id) {
-        dataToTest.id = id;
-        dataToTest.prior_auth_id = id;
-      }
-
-      const response = await api.testSendPriorAuthorization(dataToTest);
-      setPreviewData(response);
-      setShowPreview(true);
-    } catch (error) {
-      console.error('Error testing NPHIES send:', error);
-      const errorMsg = error.response?.data?.error || error.message;
-      setPreviewData({
-        success: false,
-        outcome: 'error',
-        errors: [{
-          code: 'REQUEST_ERROR',
-          message: errorMsg
-        }],
-        entities: {
-          patient: { name: patients.find(p => p.patient_id === formData.patient_id)?.name || 'N/A' },
-          provider: { name: providers.find(p => p.provider_id === formData.provider_id)?.provider_name || 'N/A' },
-          insurer: { name: insurers.find(i => i.insurer_id === formData.insurer_id)?.insurer_name || 'N/A' }
-        }
-      });
-      setShowPreview(true);
-    } finally {
-      setTestSending(false);
-    }
-  };
-
   const handleCopyJson = (bundleType = 'request') => {
     let bundleData;
     let bundleName;
@@ -860,27 +791,18 @@ export default function PriorAuthorizationForm() {
           <Button 
             variant="outline" 
             onClick={handlePreview} 
-            disabled={previewLoading || testSending || saving || sending}
+            disabled={previewLoading || saving || sending}
           >
             <Eye className="h-4 w-4 mr-2" />
             {previewLoading ? 'Building...' : 'Preview JSON'}
           </Button>
-          <Button 
-            variant="outline"
-            onClick={handleTestSend} 
-            disabled={testSending || previewLoading || saving || sending}
-            className="border-amber-500 text-amber-600 hover:bg-amber-50"
-          >
-            <Shield className="h-4 w-4 mr-2" />
-            {testSending ? 'Testing...' : 'Test with NPHIES'}
-          </Button>
-          <Button onClick={handleSave} disabled={saving || sending || previewLoading || testSending}>
+          <Button onClick={handleSave} disabled={saving || sending || previewLoading}>
             <Save className="h-4 w-4 mr-2" />
             {saving ? 'Saving...' : 'Save Draft'}
           </Button>
           <Button 
             onClick={handleSaveAndSend} 
-            disabled={saving || sending || previewLoading || testSending}
+            disabled={saving || sending || previewLoading}
             className="bg-gradient-to-r from-blue-500 to-blue-600"
           >
             <Send className="h-4 w-4 mr-2" />

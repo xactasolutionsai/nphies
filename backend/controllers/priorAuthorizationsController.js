@@ -555,6 +555,15 @@ class PriorAuthorizationsController extends BaseController {
         // Parse response
         const parsedResponse = priorAuthMapper.parsePriorAuthResponse(nphiesResponse.data);
 
+        // Debug logging for response parsing
+        console.log('[PriorAuth] ===== NPHIES Response Parsing =====');
+        console.log('[PriorAuth] Prior Auth ID:', id);
+        console.log('[PriorAuth] Parsed outcome:', parsedResponse.outcome);
+        console.log('[PriorAuth] Parsed adjudicationOutcome:', parsedResponse.adjudicationOutcome);
+        console.log('[PriorAuth] Parsed success:', parsedResponse.success);
+        console.log('[PriorAuth] Parsed preAuthRef:', parsedResponse.preAuthRef);
+        console.log('[PriorAuth] Parsed errors:', parsedResponse.errors);
+
         // Update prior authorization with response
         // Use adjudicationOutcome (approved/rejected) for status determination
         const newStatus = parsedResponse.outcome === 'queued' ? 'queued' : 
@@ -562,6 +571,10 @@ class PriorAuthorizationsController extends BaseController {
                          parsedResponse.adjudicationOutcome === 'rejected' ? 'denied' :
                          parsedResponse.outcome === 'partial' ? 'partial' : 
                          parsedResponse.success ? 'approved' : 'denied';
+
+        // Debug logging for status determination
+        console.log('[PriorAuth] Calculated newStatus:', newStatus);
+        console.log('[PriorAuth] =====================================');
 
         // Extract all totals from response
         const eligibleTotal = parsedResponse.totals?.find(t => t.category === 'eligible')?.amount;
@@ -608,6 +621,8 @@ class PriorAuthorizationsController extends BaseController {
           copayTotal,
           id
         ]);
+
+        console.log(`[PriorAuth] Database updated - ID: ${id}, Status: ${newStatus}, AdjudicationOutcome: ${parsedResponse.adjudicationOutcome}`);
 
         // Store response in history with additional data
         await query(`
@@ -1146,268 +1161,6 @@ class PriorAuthorizationsController extends BaseController {
     } catch (error) {
       console.error('Error generating preview bundle:', error);
       res.status(500).json({ error: error.message || 'Failed to generate preview' });
-    }
-  }
-
-  /**
-   * Test send to NPHIES (validates bundle and optionally saves to DB)
-   * This sends the bundle to NPHIES and returns the response for review
-   * If an existing record ID is provided, it will save the bundles to that record
-   */
-  async testSendToNphies(req, res) {
-    try {
-      const formData = req.body;
-      // Get optional ID - if provided, we'll save the bundles to this record
-      const existingId = formData.id || formData.prior_auth_id;
-
-      // Validate required fields
-      if (!formData.patient_id) {
-        return res.status(400).json({ error: 'Patient is required' });
-      }
-      if (!formData.provider_id) {
-        return res.status(400).json({ error: 'Provider is required' });
-      }
-      if (!formData.insurer_id) {
-        return res.status(400).json({ error: 'Insurer is required' });
-      }
-
-      // Get patient, provider, insurer data
-      const patientResult = await query('SELECT * FROM patients WHERE patient_id = $1', [formData.patient_id]);
-      const providerResult = await query('SELECT * FROM providers WHERE provider_id = $1', [formData.provider_id]);
-      const insurerResult = await query('SELECT * FROM insurers WHERE insurer_id = $1', [formData.insurer_id]);
-
-      if (patientResult.rows.length === 0) {
-        return res.status(400).json({ error: 'Patient not found' });
-      }
-      if (providerResult.rows.length === 0) {
-        return res.status(400).json({ error: 'Provider not found' });
-      }
-      if (insurerResult.rows.length === 0) {
-        return res.status(400).json({ error: 'Insurer not found' });
-      }
-
-      const patient = patientResult.rows[0];
-      const provider = providerResult.rows[0];
-      const insurer = insurerResult.rows[0];
-
-      // Fetch coverage data for the patient/insurer
-      const coverage = await this.getCoverageData(
-        formData.patient_id, 
-        formData.insurer_id,
-        formData.coverage_id
-      );
-
-      // Create a mock priorAuth object from form data
-      const priorAuth = {
-        id: existingId || 'test',
-        request_number: formData.request_number || `PREVIEW-${Date.now()}`,
-        auth_type: formData.auth_type || 'professional',
-        status: 'draft',
-        priority: formData.priority || 'normal',
-        encounter_class: formData.encounter_class,
-        encounter_start: formData.encounter_start,
-        encounter_end: formData.encounter_end,
-        total_amount: formData.total_amount,
-        currency: formData.currency || 'SAR',
-        items: formData.items || [],
-        diagnoses: formData.diagnoses || [],
-        supporting_info: formData.supporting_info || [],
-        // Vision prescription data for vision auth types
-        vision_prescription: formData.vision_prescription || null
-      };
-
-      // Build FHIR bundle
-      const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
-        priorAuth,
-        patient,
-        provider,
-        insurer,
-        coverage,
-        policyHolder: null
-      });
-
-      // Send to NPHIES for validation
-      const nphiesResponse = await nphiesService.sendPriorAuth(bundle);
-
-      // Parse errors from NPHIES response
-      let errors = [];
-      let outcome = 'complete';
-      let nphiesResponseId = null;
-
-      if (nphiesResponse?.data) {
-        const responseBundle = nphiesResponse.data;
-        
-        // Find ClaimResponse in the bundle
-        const claimResponseEntry = responseBundle.entry?.find(
-          e => e.resource?.resourceType === 'ClaimResponse'
-        );
-        
-        if (claimResponseEntry?.resource) {
-          const claimResponse = claimResponseEntry.resource;
-          outcome = claimResponse.outcome || 'complete';
-          nphiesResponseId = claimResponse.identifier?.[0]?.value;
-          
-          // Extract errors from ClaimResponse
-          if (claimResponse.error && claimResponse.error.length > 0) {
-            errors = claimResponse.error.map(err => {
-              const coding = err.code?.coding?.[0] || {};
-              const locationExt = coding.extension?.find(
-                ext => ext.url?.includes('extension-error-expression')
-              );
-              
-              return {
-                code: coding.code || 'UNKNOWN',
-                message: coding.display || 'Unknown error',
-                location: locationExt?.valueString || null,
-                system: coding.system
-              };
-            });
-          }
-        }
-        
-        // Check for NPHIES generated tag
-        const messageHeader = responseBundle.entry?.find(
-          e => e.resource?.resourceType === 'MessageHeader'
-        );
-        const isNphiesGenerated = messageHeader?.resource?.meta?.tag?.some(
-          t => t.code === 'NPHIES generated'
-        );
-
-        // Extract pre-auth reference and period from ClaimResponse (reuse claimResponseEntry from above)
-        const preAuthRef = claimResponseEntry?.resource?.preAuthRef;
-        const preAuthPeriod = claimResponseEntry?.resource?.preAuthPeriod;
-
-        // Extract adjudication outcome from ClaimResponse extension
-        const adjudicationOutcome = claimResponseEntry?.resource?.extension?.find(
-          ext => ext.url?.includes('extension-adjudication-outcome')
-        )?.valueCodeableConcept?.coding?.[0]?.code;
-
-        // Extract totals from ClaimResponse
-        const totals = claimResponseEntry?.resource?.total || [];
-        const eligibleTotal = totals.find(t => t.category?.coding?.[0]?.code === 'eligible')?.amount?.value;
-        const benefitTotal = totals.find(t => t.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
-        const copayTotal = totals.find(t => t.category?.coding?.[0]?.code === 'copay')?.amount?.value;
-
-        // Determine status based on adjudication outcome
-        const newStatus = outcome === 'queued' ? 'queued' : 
-                         adjudicationOutcome === 'approved' ? 'approved' :
-                         adjudicationOutcome === 'rejected' ? 'denied' :
-                         outcome === 'partial' ? 'partial' : 
-                         errors.length === 0 ? 'approved' : 'denied';
-
-        // If we have an existing record ID, save the bundles AND update status to the database
-        if (existingId && existingId !== 'test') {
-          try {
-            await query(`
-              UPDATE prior_authorizations 
-              SET request_bundle = $1,
-                  response_bundle = $2,
-                  pre_auth_ref = COALESCE($3, pre_auth_ref),
-                  pre_auth_period_start = COALESCE($4, pre_auth_period_start),
-                  pre_auth_period_end = COALESCE($5, pre_auth_period_end),
-                  status = $6,
-                  outcome = $7,
-                  adjudication_outcome = $8,
-                  nphies_response_id = $9,
-                  is_nphies_generated = $10,
-                  approved_amount = COALESCE($11, approved_amount),
-                  eligible_amount = COALESCE($12, eligible_amount),
-                  benefit_amount = COALESCE($13, benefit_amount),
-                  copay_amount = COALESCE($14, copay_amount),
-                  response_date = CURRENT_TIMESTAMP,
-                  updated_at = CURRENT_TIMESTAMP
-              WHERE id = $15
-            `, [
-              JSON.stringify(bundle),
-              JSON.stringify(responseBundle),
-              preAuthRef,
-              preAuthPeriod?.start,
-              preAuthPeriod?.end,
-              newStatus,
-              outcome,
-              adjudicationOutcome,
-              nphiesResponseId,
-              isNphiesGenerated,
-              benefitTotal,
-              eligibleTotal,
-              benefitTotal,
-              copayTotal,
-              existingId
-            ]);
-            console.log(`[TestSend] Saved bundles and status to prior authorization ID ${existingId}`);
-          } catch (saveError) {
-            console.error('[TestSend] Error saving bundles:', saveError);
-            // Don't fail the request, just log the error
-          }
-        }
-
-        return res.json({
-          success: errors.length === 0,
-          outcome,
-          adjudicationOutcome,
-          status: newStatus,
-          nphiesResponseId,
-          isNphiesGenerated,
-          errors,
-          preAuthRef,
-          preAuthPeriod,
-          totals: {
-            eligible: eligibleTotal,
-            benefit: benefitTotal,
-            copay: copayTotal
-          },
-          entities: {
-            patient: { name: patient.name, identifier: patient.identifier },
-            provider: { name: provider.provider_name, nphiesId: provider.nphies_id },
-            insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id }
-          },
-          data: responseBundle,
-          requestBundle: bundle,
-          savedToRecord: existingId && existingId !== 'test' ? existingId : null
-        });
-      } else {
-        // NPHIES error - still save the request bundle if we have an existing record
-        if (existingId && existingId !== 'test') {
-          try {
-            await query(`
-              UPDATE prior_authorizations 
-              SET request_bundle = $1,
-                  updated_at = CURRENT_TIMESTAMP
-              WHERE id = $2
-            `, [JSON.stringify(bundle), existingId]);
-            console.log(`[TestSend] Saved request bundle to prior authorization ID ${existingId} (error response)`);
-          } catch (saveError) {
-            console.error('[TestSend] Error saving request bundle:', saveError);
-          }
-        }
-
-        return res.json({
-          success: false,
-          outcome: 'error',
-          errors: [{
-            code: nphiesResponse.error?.code || 'NPHIES_ERROR',
-            message: nphiesResponse.error?.message || 'Failed to communicate with NPHIES'
-          }],
-          entities: {
-            patient: { name: patient.name, identifier: patient.identifier },
-            provider: { name: provider.provider_name, nphiesId: provider.nphies_id },
-            insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id }
-          },
-          data: nphiesResponse.raw,
-          requestBundle: bundle,
-          savedToRecord: existingId && existingId !== 'test' ? existingId : null
-        });
-      }
-    } catch (error) {
-      console.error('Error testing NPHIES send:', error);
-      res.status(500).json({ 
-        success: false,
-        error: error.message || 'Failed to test send to NPHIES',
-        errors: [{
-          code: 'INTERNAL_ERROR',
-          message: error.message || 'An unexpected error occurred'
-        }]
-      });
     }
   }
 
