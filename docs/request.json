@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "ddd83c27-6316-4544-9b06-17da21a8711b",
+  "id": "5323af49-2d71-4eb6-8d0e-acb0d75d509d",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-04T18:56:53.114Z",
+  "timestamp": "2025-12-04T19:38:48.832Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:a549ce0d-c8cc-471e-89dc-b0b0c07d1102",
+      "fullUrl": "urn:uuid:8d8c1e56-6127-4fee-ab8b-6dbb12feb3bf",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "a549ce0d-c8cc-471e-89dc-b0b0c07d1102",
+        "id": "8d8c1e56-6127-4fee-ab8b-6dbb12feb3bf",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/93b91c44-dd4f-4671-b7ce-33f001a86743"
+            "reference": "http://provider.com/Claim/71a43e3a-25e1-4650-b9f6-677522a725d8"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/93b91c44-dd4f-4671-b7ce-33f001a86743",
+      "fullUrl": "http://provider.com/Claim/71a43e3a-25e1-4650-b9f6-677522a725d8",
       "resource": {
         "resourceType": "Claim",
-        "id": "93b91c44-dd4f-4671-b7ce-33f001a86743",
+        "id": "71a43e3a-25e1-4650-b9f6-677522a725d8",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-priorauth|1.0.0"
@@ -66,7 +66,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescription",
             "valueReference": {
-              "reference": "VisionPrescription/a7f3c731-10f8-497e-ac9c-a5f8baa59085"
+              "reference": "VisionPrescription/b4469989-886d-404e-bc8c-7f552bf83001"
             }
           }
         ],
@@ -97,7 +97,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-04T18:56:53.113Z",
+        "created": "2025-12-04T19:38:48.832Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -123,13 +123,13 @@
           }
         },
         "prescription": {
-          "reference": "VisionPrescription/a7f3c731-10f8-497e-ac9c-a5f8baa59085"
+          "reference": "VisionPrescription/b4469989-886d-404e-bc8c-7f552bf83001"
         },
         "careTeam": [
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/51064102-264f-4616-baef-0747abf0b294"
+              "reference": "Practitioner/ec2f8b98-7ea0-4d66-a239-81bdc3795909"
             },
             "role": {
               "coding": [
@@ -171,6 +171,76 @@
                 ]
               }
             ]
+          }
+        ],
+        "supportingInfo": [
+          {
+            "sequence": 1,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "patient-history"
+                }
+              ]
+            },
+            "valueString": "No systemic disease"
+          },
+          {
+            "sequence": 2,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "history-of-present-illness"
+                }
+              ]
+            },
+            "valueString": "No history"
+          },
+          {
+            "sequence": 3,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "physical-examination"
+                }
+              ]
+            },
+            "valueString": "Stable"
+          },
+          {
+            "sequence": 4,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "treatment-plan"
+                }
+              ]
+            },
+            "valueString": "Appendectomy"
+          },
+          {
+            "sequence": 5,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "investigation-result"
+                }
+              ]
+            },
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
+                  "code": "INP",
+                  "display": "INP - Investigation(s) not performed"
+                }
+              ]
+            }
           }
         ],
         "insurance": [
@@ -222,7 +292,13 @@
             "diagnosisSequence": [
               1
             ],
-            "informationSequence": [],
+            "informationSequence": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
             "productOrService": {
               "coding": [
                 {
@@ -232,7 +308,7 @@
                 }
               ]
             },
-            "servicedDate": "2023-12-04",
+            "servicedDate": "2023-12-03",
             "quantity": {
               "value": 1
             },
@@ -253,10 +329,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/VisionPrescription/a7f3c731-10f8-497e-ac9c-a5f8baa59085",
+      "fullUrl": "http://provider.com/VisionPrescription/b4469989-886d-404e-bc8c-7f552bf83001",
       "resource": {
         "resourceType": "VisionPrescription",
-        "id": "a7f3c731-10f8-497e-ac9c-a5f8baa59085",
+        "id": "b4469989-886d-404e-bc8c-7f552bf83001",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0"
@@ -265,7 +341,7 @@
         "identifier": [
           {
             "system": "http://PR-FHIR.com.sa/identifiers/prescription",
-            "value": "RX-a7f3c731"
+            "value": "RX-b4469989"
           }
         ],
         "status": "active",
@@ -275,7 +351,7 @@
         },
         "dateWritten": "2023-12-01",
         "prescriber": {
-          "reference": "Practitioner/51064102-264f-4616-baef-0747abf0b294"
+          "reference": "Practitioner/ec2f8b98-7ea0-4d66-a239-81bdc3795909"
         },
         "lensSpecification": [
           {
@@ -385,10 +461,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/51064102-264f-4616-baef-0747abf0b294",
+      "fullUrl": "http://provider.com/Practitioner/ec2f8b98-7ea0-4d66-a239-81bdc3795909",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "51064102-264f-4616-baef-0747abf0b294",
+        "id": "ec2f8b98-7ea0-4d66-a239-81bdc3795909",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -406,7 +482,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-51064102"
+            "value": "PRACT-ec2f8b98"
           }
         ],
         "active": true,

@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "11bf345a-271d-4c8b-8e64-adb24530190d",
+    "id": "66d38b40-3fd2-45e7-8f9a-945c64bf341b",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-04T21:34:08.791+03:00",
+    "timestamp": "2025-12-04T22:40:20.765+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/f99bd0c8-c28d-4800-b7ab-10556968d86d",
+            "fullUrl": "http://nphies.sa/MessageHeader/474d88d6-7549-4999-9174-f0ebe048cf2d",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "f99bd0c8-c28d-4800-b7ab-10556968d86d",
+                "id": "474d88d6-7549-4999-9174-f0ebe048cf2d",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -52,21 +52,21 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "e971bdef-e034-47ee-a224-55072caf0354",
+                    "identifier": "8d8c1e56-6127-4fee-ab8b-6dbb12feb3bf",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://nphies.sa/ClaimResponse/851"
+                        "reference": "http://nphies.sa/ClaimResponse/362"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/ClaimResponse/851",
+            "fullUrl": "http://nphies.sa/ClaimResponse/362",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "851",
+                "id": "362",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -97,7 +97,7 @@
                 "patient": {
                     "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
                 },
-                "created": "2025-12-04T18:27:43.641Z",
+                "created": "2025-12-04T19:38:48.832Z",
                 "insurer": {
                     "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
@@ -129,29 +129,12 @@
                                     "extension": [
                                         {
                                             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[2].resource.lensSpecification[0]"
+                                            "valueString": "Bundle.entry[1].resource.supportingInfo[4].valueCodeableConcept"
                                         }
                                     ],
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "GE-00013",
-                                    "display": "Resource SHALL have a valid structure"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[2].resource.lensSpecification[1]"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "GE-00013",
-                                    "display": "Resource SHALL have a valid structure"
+                                    "code": "DT-01293",
+                                    "display": "The provided value does not match the specified element data type"
                                 }
                             ]
                         }

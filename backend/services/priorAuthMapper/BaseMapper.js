@@ -894,11 +894,9 @@ class BaseMapper {
         ]
       };
       
-      if (categoryCode === 'investigation-result') {
-        supportingInfo.valueCodeableConcept = codeableConcept;
-      } else {
-        supportingInfo.code = codeableConcept;
-      }
+      // NPHIES requires investigation-result to use 'code' field, NOT 'valueCodeableConcept'
+      // DT-01293 error occurs if valueCodeableConcept is used
+      supportingInfo.code = codeableConcept;
     }
 
     // Add timing
