@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "ec094b1c-d3e3-42c9-ba10-e4483ce85099",
+    "id": "06c3b779-2484-4dc9-b8e7-4370a8342c56",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-04T19:08:31.580+03:00",
+    "timestamp": "2025-12-04T19:31:33.938+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/adfed18f-2521-4248-b088-23ab1ee939d1",
+            "fullUrl": "http://nphies.sa/MessageHeader/1126c6b9-6bbb-437a-a093-93650dbe6654",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "adfed18f-2521-4248-b088-23ab1ee939d1",
+                "id": "1126c6b9-6bbb-437a-a093-93650dbe6654",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -46,21 +46,21 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "fd9f0990-4c9a-4379-bd5e-108d9ad8a55c",
+                    "identifier": "e9bab918-4f45-431b-bb33-4b5a37008556",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://nphies.sa/ClaimResponse/405"
+                        "reference": "http://nphies.sa/ClaimResponse/636"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/ClaimResponse/405",
+            "fullUrl": "http://nphies.sa/ClaimResponse/636",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "405",
+                "id": "636",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -91,7 +91,7 @@
                 "patient": {
                     "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
                 },
-                "created": "2025-12-04T16:08:24.224Z",
+                "created": "2025-12-04T16:31:09.066Z",
                 "insurer": {
                     "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
@@ -123,46 +123,12 @@
                                     "extension": [
                                         {
                                             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[1].resource.supportingInfo[0]"
+                                            "valueString": "Bundle.entry[1].resource.supportingInfo[0].valueCodeableConcept"
                                         }
                                     ],
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "BV-00786",
-                                    "display": "Supporting information 'investigation-result' requires a value from the specified NPHIES CodeSystem mentioning the investigation-result"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[1].resource.supportingInfo"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "BV-00751",
-                                    "display": "Chief Complaint Shall be Provided in Supporting info of Oral Authorization or Claim"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "bundle.entry[2].resource.period.start"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "BV-00811",
-                                    "display": "Date time format up to seconds SHALL be mandatory"
+                                    "code": "DT-01293",
+                                    "display": "The provided value does not match the specified element data type"
                                 }
                             ]
                         }

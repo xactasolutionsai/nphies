@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "725d55a1-c0c1-4293-bce2-6a92399885b1",
+  "id": "65110112-5c68-4d54-ba3b-11de142e9988",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-04T16:08:24.225Z",
+  "timestamp": "2025-12-04T16:31:09.069Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:fd9f0990-4c9a-4379-bd5e-108d9ad8a55c",
+      "fullUrl": "urn:uuid:e9bab918-4f45-431b-bb33-4b5a37008556",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "fd9f0990-4c9a-4379-bd5e-108d9ad8a55c",
+        "id": "e9bab918-4f45-431b-bb33-4b5a37008556",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/0f84518e-b261-4a91-847c-3543d72c7304"
+            "reference": "http://provider.com/Claim/9cf6a9c6-75ad-45cb-ba2b-e56ee1228722"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/0f84518e-b261-4a91-847c-3543d72c7304",
+      "fullUrl": "http://provider.com/Claim/9cf6a9c6-75ad-45cb-ba2b-e56ee1228722",
       "resource": {
         "resourceType": "Claim",
-        "id": "0f84518e-b261-4a91-847c-3543d72c7304",
+        "id": "9cf6a9c6-75ad-45cb-ba2b-e56ee1228722",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-priorauth|1.0.0"
@@ -66,7 +66,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/a7b46ae0-8e97-431a-a76a-b3782a4a3549"
+              "reference": "Encounter/7541915f-964b-4744-bf9a-712c9f2e5cf0"
             }
           }
         ],
@@ -97,7 +97,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-04T16:08:24.224Z",
+        "created": "2025-12-04T16:31:09.066Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -126,7 +126,7 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/71d15580-4333-4cfa-9370-230f36e8795a"
+              "reference": "Practitioner/3caf73b1-5fb1-4d1d-88f0-471291f363f4"
             },
             "role": {
               "coding": [
@@ -181,8 +181,16 @@
                 }
               ]
             },
-            "timingDate": "2025-12-04",
-            "valueString": "Clinical examination completed"
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
+                  "code": "IRA",
+                  "display": "Investigation results attached"
+                }
+              ]
+            },
+            "timingDate": "2025-12-04"
           },
           {
             "sequence": 2,
@@ -235,6 +243,19 @@
             },
             "timingDate": "2025-12-04",
             "valueString": "Patient presents for dental treatment"
+          },
+          {
+            "sequence": 6,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "chief-complaint"
+                }
+              ]
+            },
+            "timingDate": "2025-12-04",
+            "valueString": "Dental complaint"
           }
         ],
         "insurance": [
@@ -291,7 +312,8 @@
               2,
               3,
               4,
-              5
+              5,
+              6
             ],
             "productOrService": {
               "coding": [
@@ -343,10 +365,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/a7b46ae0-8e97-431a-a76a-b3782a4a3549",
+      "fullUrl": "http://provider.com/Encounter/7541915f-964b-4744-bf9a-712c9f2e5cf0",
       "resource": {
         "resourceType": "Encounter",
-        "id": "a7b46ae0-8e97-431a-a76a-b3782a4a3549",
+        "id": "7541915f-964b-4744-bf9a-712c9f2e5cf0",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -391,7 +413,7 @@
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
         "period": {
-          "start": "2023-12-04"
+          "start": "2023-12-04T22:00:00+03:00"
         },
         "serviceProvider": {
           "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
@@ -468,10 +490,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/71d15580-4333-4cfa-9370-230f36e8795a",
+      "fullUrl": "http://provider.com/Practitioner/3caf73b1-5fb1-4d1d-88f0-471291f363f4",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "71d15580-4333-4cfa-9370-230f36e8795a",
+        "id": "3caf73b1-5fb1-4d1d-88f0-471291f363f4",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -489,7 +511,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-71d15580"
+            "value": "PRACT-3caf73b1"
           }
         ],
         "active": true,

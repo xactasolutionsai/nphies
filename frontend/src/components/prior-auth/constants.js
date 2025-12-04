@@ -489,12 +489,33 @@ export const SERVICE_EVENT_TYPE_OPTIONS = [
 
 // NPHIES Investigation Result Options (for dental/oral claims)
 // Reference: http://nphies.sa/terminology/CodeSystem/investigation-result
-// BV-00786: Required for oral claims with valueCodeableConcept
+// Note: Per official NPHIES oral example (Claim-293093), investigation-result is NOT required for oral claims
 export const INVESTIGATION_RESULT_OPTIONS = [
   { value: 'IRA', label: 'IRA - Investigation results attached' },
   { value: 'INP', label: 'INP - Investigation(s) not performed' },
   { value: 'IRP', label: 'IRP - Investigation results pending' },
   { value: 'NA', label: 'NA - Not applicable' },
   { value: 'other', label: 'Other' }
+];
+
+// NPHIES Dental Chief Complaint Options (SNOMED-CT codes)
+// Reference: https://portal.nphies.sa/ig/Claim-293093.json.html
+// Oral claims ONLY require chief-complaint with SNOMED code (no investigation-result needed)
+export const DENTAL_CHIEF_COMPLAINT_OPTIONS = [
+  { value: '27355003', label: '27355003 - Toothache' },
+  { value: '80353004', label: '80353004 - Enamel caries' },
+  { value: '109564008', label: '109564008 - Dental caries' },
+  { value: '234948008', label: '234948008 - Dental abscess' },
+  { value: '82212003', label: '82212003 - Pulpitis' },
+  { value: '6288001', label: '6288001 - Periodontitis' },
+  { value: '66383009', label: '66383009 - Gingivitis' },
+  { value: '41652007', label: '41652007 - Malocclusion' },
+  { value: '399095008', label: '399095008 - Fractured tooth' },
+  { value: '234947003', label: '234947003 - Missing tooth' },
+  { value: '37320007', label: '37320007 - Impacted tooth' },
+  { value: '46726004', label: '46726004 - Temporomandibular joint disorder' },
+  { value: '702402003', label: '702402003 - Dental examination' },
+  { value: '35198009', label: '35198009 - Dental prophylaxis' },
+  { value: 'other', label: 'Other (specify code)' }
 ];
 

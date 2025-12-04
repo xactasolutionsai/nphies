@@ -35,7 +35,8 @@ import {
   CLINICAL_TEXT_FIELDS,
   ADMISSION_FIELDS,
   INVESTIGATION_RESULT_OPTIONS,
-  SERVICE_EVENT_TYPE_OPTIONS
+  SERVICE_EVENT_TYPE_OPTIONS,
+  DENTAL_CHIEF_COMPLAINT_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -78,8 +79,8 @@ export default function PriorAuthorizationForm() {
     currency: 'SAR',
     encounter_class: 'ambulatory',
     service_event_type: 'ICSE', // NPHIES: ICSE (Initial) or SCSE (Subsequent) - for dental claims
-    investigation_result_code: 'IRA', // NPHIES: BV-00786 - Required for dental claims
-    chief_complaint: '', // NPHIES: BV-00751 - Required for dental claims
+    chief_complaint_code: '27355003', // NPHIES: SNOMED code for chief complaint (per Claim-293093 example)
+    chief_complaint_display: 'Toothache', // SNOMED display for chief complaint
     patient_id: '',
     provider_id: '',
     insurer_id: '',
@@ -1001,27 +1002,19 @@ export default function PriorAuthorizationForm() {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Investigation Result *</Label>
+                  <Label>Chief Complaint (SNOMED Code) *</Label>
                   <Select
-                    value={INVESTIGATION_RESULT_OPTIONS.find(opt => opt.value === formData.investigation_result_code)}
-                    onChange={(option) => handleChange('investigation_result_code', option?.value || 'IRA')}
-                    options={INVESTIGATION_RESULT_OPTIONS}
+                    value={DENTAL_CHIEF_COMPLAINT_OPTIONS.find(opt => opt.value === formData.chief_complaint_code)}
+                    onChange={(option) => {
+                      handleChange('chief_complaint_code', option?.value || '27355003');
+                      handleChange('chief_complaint_display', option?.label?.split(' - ')[1] || 'Toothache');
+                    }}
+                    options={DENTAL_CHIEF_COMPLAINT_OPTIONS}
                     styles={selectStyles}
                     menuPortalTarget={document.body}
                   />
                   <p className="text-xs text-gray-500">
-                    BV-00786: Required for dental claims
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Chief Complaint *</Label>
-                  <Input
-                    value={formData.chief_complaint}
-                    onChange={(e) => handleChange('chief_complaint', e.target.value)}
-                    placeholder="e.g., Tooth pain, Dental cleaning"
-                  />
-                  <p className="text-xs text-gray-500">
-                    BV-00751: Required for dental claims
+                    Per NPHIES: Oral claims require chief-complaint with SNOMED code
                   </p>
                 </div>
               </div>

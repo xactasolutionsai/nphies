@@ -407,64 +407,17 @@ class PriorAuthMapper {
       }
     }
     
-    // BV-00752, BV-00803, BV-00804, BV-00805, BV-00806: Oral claims have specific supportingInfo requirements
+    // Oral claims supportingInfo - Following official NPHIES example: https://portal.nphies.sa/ig/Claim-293093.json.html
+    // The official example shows ONLY chief-complaint with SNOMED code is required for oral claims
     if (isOralClaim) {
-      const requestDate = priorAuth.request_date || new Date();
-      
-      // BV-00752, BV-00786: investigation-result is REQUIRED and must use valueCodeableConcept
-      // Valid codes: IRA (Investigation results attached), INP (not performed), IRP (pending), NA, other
-      if (!supportingInfoList.some(info => info.category === 'investigation-result')) {
-        supportingInfoList.push({
-          category: 'investigation-result',
-          code: priorAuth.investigation_result_code || 'IRA',
-          code_display: priorAuth.investigation_result_display || 'Investigation results attached',
-          code_system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
-          timing_date: requestDate
-        });
-      }
-      
-      // BV-00803: treatment-plan is REQUIRED
-      if (!supportingInfoList.some(info => info.category === 'treatment-plan')) {
-        supportingInfoList.push({
-          category: 'treatment-plan',
-          value_string: priorAuth.treatment_plan || 'Dental treatment as per clinical assessment',
-          timing_date: requestDate
-        });
-      }
-      
-      // BV-00804: patient-history is REQUIRED
-      if (!supportingInfoList.some(info => info.category === 'patient-history')) {
-        supportingInfoList.push({
-          category: 'patient-history',
-          value_string: priorAuth.patient_history || 'No significant medical history',
-          timing_date: requestDate
-        });
-      }
-      
-      // BV-00805: physical-examination is REQUIRED
-      if (!supportingInfoList.some(info => info.category === 'physical-examination')) {
-        supportingInfoList.push({
-          category: 'physical-examination',
-          value_string: priorAuth.physical_examination || 'Oral examination performed',
-          timing_date: requestDate
-        });
-      }
-      
-      // BV-00806: history-of-present-illness is REQUIRED
-      if (!supportingInfoList.some(info => info.category === 'history-of-present-illness')) {
-        supportingInfoList.push({
-          category: 'history-of-present-illness',
-          value_string: priorAuth.history_of_present_illness || 'Patient presents for dental treatment',
-          timing_date: requestDate
-        });
-      }
-      
-      // BV-00751: chief-complaint is REQUIRED for oral claims
+      // chief-complaint is REQUIRED for oral claims - uses SNOMED-CT code system
+      // Example from NPHIES: { code: "80353004", display: "Enamel caries", system: "http://snomed.info/sct" }
       if (!supportingInfoList.some(info => info.category === 'chief-complaint')) {
         supportingInfoList.push({
           category: 'chief-complaint',
-          value_string: priorAuth.chief_complaint || 'Dental complaint',
-          timing_date: requestDate
+          code: priorAuth.chief_complaint_code || '27355003', // Default: Toothache (SNOMED)
+          code_display: priorAuth.chief_complaint_display || 'Toothache',
+          code_system: 'http://snomed.info/sct' // SNOMED-CT system per NPHIES example
         });
       }
     }
