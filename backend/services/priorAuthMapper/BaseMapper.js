@@ -1118,7 +1118,14 @@ class BaseMapper {
         }
       }
 
+      // Debug logging for parsing
+      console.log('[BaseMapper] ===== Parsing NPHIES Response =====');
+      console.log('[BaseMapper] Response bundle type:', responseBundle?.resourceType);
+      console.log('[BaseMapper] Response bundle has entries:', !!responseBundle?.entry, 'count:', responseBundle?.entry?.length);
+      console.log('[BaseMapper] ClaimResponse found:', !!claimResponse);
+
       if (!claimResponse) {
+        console.log('[BaseMapper] ERROR: No ClaimResponse in bundle');
         return {
           success: false,
           outcome: 'error',
@@ -1127,9 +1134,29 @@ class BaseMapper {
         };
       }
 
-      const adjudicationOutcome = claimResponse.extension?.find(
+      // Debug ClaimResponse structure
+      console.log('[BaseMapper] ClaimResponse.id:', claimResponse.id);
+      console.log('[BaseMapper] ClaimResponse.outcome:', claimResponse.outcome);
+      console.log('[BaseMapper] ClaimResponse has extension:', !!claimResponse.extension, 'count:', claimResponse.extension?.length);
+      
+      // Log all extensions for debugging
+      if (claimResponse.extension) {
+        claimResponse.extension.forEach((ext, idx) => {
+          console.log(`[BaseMapper] Extension[${idx}] URL:`, ext.url);
+          console.log(`[BaseMapper] Extension[${idx}] valueCodeableConcept:`, JSON.stringify(ext.valueCodeableConcept));
+        });
+      }
+
+      // Find the adjudication outcome extension
+      const adjudicationExt = claimResponse.extension?.find(
         ext => ext.url?.includes('extension-adjudication-outcome')
-      )?.valueCodeableConcept?.coding?.[0]?.code;
+      );
+      console.log('[BaseMapper] Found adjudication extension:', !!adjudicationExt);
+      console.log('[BaseMapper] Adjudication extension full value:', JSON.stringify(adjudicationExt));
+
+      const adjudicationOutcome = adjudicationExt?.valueCodeableConcept?.coding?.[0]?.code;
+      console.log('[BaseMapper] Extracted adjudicationOutcome:', adjudicationOutcome);
+      console.log('[BaseMapper] =====================================');
 
       const preAuthRef = claimResponse.preAuthRef;
       const preAuthPeriod = claimResponse.preAuthPeriod;
