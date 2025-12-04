@@ -34,7 +34,8 @@ import {
   VITAL_SIGNS_FIELDS,
   CLINICAL_TEXT_FIELDS,
   ADMISSION_FIELDS,
-  INVESTIGATION_RESULT_OPTIONS
+  INVESTIGATION_RESULT_OPTIONS,
+  SERVICE_EVENT_TYPE_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -76,6 +77,7 @@ export default function PriorAuthorizationForm() {
     priority: 'normal',
     currency: 'SAR',
     encounter_class: 'ambulatory',
+    service_event_type: 'ICSE', // NPHIES: ICSE (Initial) or SCSE (Subsequent) - for dental claims
     patient_id: '',
     provider_id: '',
     insurer_id: '',
@@ -977,6 +979,25 @@ export default function PriorAuthorizationForm() {
                 <span className="text-sm text-blue-700">
                   Vision claims do not require Encounter information per NPHIES specification.
                 </span>
+              </div>
+            )}
+
+            {/* Service Event Type - Required for dental claims per NPHIES */}
+            {formData.auth_type === 'dental' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Service Event Type *</Label>
+                  <Select
+                    value={SERVICE_EVENT_TYPE_OPTIONS.find(opt => opt.value === formData.service_event_type)}
+                    onChange={(option) => handleChange('service_event_type', option?.value || 'ICSE')}
+                    options={SERVICE_EVENT_TYPE_OPTIONS}
+                    styles={selectStyles}
+                    menuPortalTarget={document.body}
+                  />
+                  <p className="text-xs text-gray-500">
+                    ICSE = New visit, SCSE = Follow-up visit
+                  </p>
+                </div>
               </div>
             )}
 

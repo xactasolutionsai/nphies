@@ -1516,6 +1516,7 @@ class PriorAuthMapper {
     };
 
     // BV-00736: serviceEventType extension is REQUIRED for oral/professional claims
+    // Valid codes per NPHIES CodeSystem service-event-type: ICSE (Initial), SCSE (Subsequent)
     if (isOralClaim) {
       encounter.extension = [
         {
@@ -1524,8 +1525,8 @@ class PriorAuthMapper {
             coding: [
               {
                 system: 'http://nphies.sa/terminology/CodeSystem/service-event-type',
-                code: priorAuth.service_event_type || 'new-visit',
-                display: priorAuth.service_event_type_display || 'New Visit'
+                code: priorAuth.service_event_type || 'ICSE',
+                display: priorAuth.service_event_type_display || 'Initial client service event'
               }
             ]
           }
@@ -1545,7 +1546,9 @@ class PriorAuthMapper {
     if (shouldAddServiceType) {
       let serviceTypeCode = priorAuth.service_type;
       if (!serviceTypeCode) {
-        if (isOralClaim) serviceTypeCode = 'dental';
+        // IB-00153: Use valid NPHIES service-type codes
+        // Valid codes: dental-care, acute-care, sub-acute-care, etc.
+        if (isOralClaim) serviceTypeCode = 'dental-care';
         else serviceTypeCode = 'sub-acute-care';
       }
       encounter.serviceType = {
@@ -1668,18 +1671,19 @@ class PriorAuthMapper {
    * Get service type display name
    */
   getServiceTypeDisplay(code) {
+    // Valid codes per NPHIES CodeSystem service-type
     const displays = {
-      'sub-acute-care': 'Sub-Acute Care',
       'acute-care': 'Acute Care',
-      'chronic-care': 'Chronic Care',
+      'sub-acute-care': 'Sub-Acute Care',
       'rehabilitation': 'Rehabilitation',
+      'mental-behavioral': 'Mental & Behavioral',
+      'geriatric-care': 'Geriatric Care',
+      'newborn': 'Newborn',
+      'family-planning': 'Family Planning',
+      'dental-care': 'Dental Care',
       'palliative-care': 'Palliative Care',
-      'mental-health': 'Mental Health',
-      'dental': 'Dental',
-      'optical': 'Optical',
-      'ophthalmology': 'Ophthalmology',
-      'optometry': 'Optometry',
-      'vision': 'Vision Care'
+      'others': 'Others',
+      'unknown': 'Unknown'
     };
     return displays[code] || code;
   }

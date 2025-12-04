@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "057c5e8c-bcef-4ad9-b13a-07da42319fd2",
+  "id": "bbcd3721-b8e1-4e21-a645-624c7ee1fa45",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-03T15:08:55.468Z",
+  "timestamp": "2025-12-04T15:07:30.346Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:48c83f17-22a1-4091-ada4-413bff22b514",
+      "fullUrl": "urn:uuid:f1eb029a-ada7-43f2-bdd5-0ab2221693e6",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "48c83f17-22a1-4091-ada4-413bff22b514",
+        "id": "f1eb029a-ada7-43f2-bdd5-0ab2221693e6",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -39,7 +39,7 @@
           "type": "Organization",
           "identifier": {
             "system": "http://nphies.sa/license/provider-license",
-            "value": "PR-FHIR"
+            "value": "DC-FHIR"
           }
         },
         "source": {
@@ -47,25 +47,33 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/5e189a73-edc3-4838-bad2-fe37947d067f"
+            "reference": "http://provider.com/Claim/9131f83b-c22c-4b68-9eae-d85ca95f19b1"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/5e189a73-edc3-4838-bad2-fe37947d067f",
+      "fullUrl": "http://provider.com/Claim/9131f83b-c22c-4b68-9eae-d85ca95f19b1",
       "resource": {
         "resourceType": "Claim",
-        "id": "5e189a73-edc3-4838-bad2-fe37947d067f",
+        "id": "9131f83b-c22c-4b68-9eae-d85ca95f19b1",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-priorauth|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-priorauth|1.0.0"
           ]
         },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
+            "valueReference": {
+              "reference": "Encounter/00f2dc4c-a445-4e89-a8ed-ccaf12d33b3e"
+            }
+          }
+        ],
         "identifier": [
           {
-            "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-            "value": "PREVIEW-1764774535465"
+            "system": "http://saudidentalclinic.com.sa/identifiers/authorization",
+            "value": "PA-1764704810758"
           }
         ],
         "status": "active",
@@ -73,7 +81,7 @@
           "coding": [
             {
               "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-              "code": "vision"
+              "code": "oral"
             }
           ]
         },
@@ -89,12 +97,12 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-03T15:08:55.466Z",
+        "created": "2025-12-04T15:07:30.343Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
         "provider": {
-          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
+          "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
         },
         "priority": {
           "coding": [
@@ -114,14 +122,11 @@
             ]
           }
         },
-        "prescription": {
-          "reference": "VisionPrescription/8196f6b6-9c2f-4e0a-9e7c-aa8b77234fec"
-        },
         "careTeam": [
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/860794b2-6085-461d-ac11-e4d61dc68f3d"
+              "reference": "Practitioner/f2b62fe8-3c3b-468a-a121-afc085bf8639"
             },
             "role": {
               "coding": [
@@ -148,8 +153,8 @@
               "coding": [
                 {
                   "system": "http://hl7.org/fhir/sid/icd-10-am",
-                  "code": "Z01.0",
-                  "display": "Examination of eyes and vision"
+                  "code": "K02.0",
+                  "display": "Caries of enamel"
                 }
               ]
             },
@@ -172,218 +177,15 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "vital-sign-systolic"
+                  "code": "investigation-result"
                 }
               ]
             },
-            "timingPeriod": {
-              "start": "2023-11-23T21:00:00.000Z",
-              "end": "2023-11-23T21:00:00.000Z"
-            },
-            "valueQuantity": {
-              "value": 120,
-              "system": "http://unitsofmeasure.org",
-              "code": "mm[Hg]"
-            }
+            "timingDate": "2025-12-04",
+            "valueString": "Clinical examination completed"
           },
           {
             "sequence": 2,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "vital-sign-diastolic"
-                }
-              ]
-            },
-            "timingPeriod": {
-              "start": "2023-11-23T21:00:00.000Z",
-              "end": "2023-11-23T21:00:00.000Z"
-            },
-            "valueQuantity": {
-              "value": 80,
-              "system": "http://unitsofmeasure.org",
-              "code": "mm[Hg]"
-            }
-          },
-          {
-            "sequence": 3,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "vital-sign-height"
-                }
-              ]
-            },
-            "timingPeriod": {
-              "start": "2023-11-23T21:00:00.000Z",
-              "end": "2023-11-23T21:00:00.000Z"
-            },
-            "valueQuantity": {
-              "value": 160,
-              "system": "http://unitsofmeasure.org",
-              "code": "cm"
-            }
-          },
-          {
-            "sequence": 4,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "vital-sign-weight"
-                }
-              ]
-            },
-            "timingPeriod": {
-              "start": "2023-11-23T21:00:00.000Z",
-              "end": "2023-11-23T21:00:00.000Z"
-            },
-            "valueQuantity": {
-              "value": 129,
-              "system": "http://unitsofmeasure.org",
-              "code": "kg"
-            }
-          },
-          {
-            "sequence": 5,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "pulse"
-                }
-              ]
-            },
-            "timingPeriod": {
-              "start": "2023-11-23T21:00:00.000Z",
-              "end": "2023-11-23T21:00:00.000Z"
-            },
-            "valueQuantity": {
-              "value": 100,
-              "system": "http://unitsofmeasure.org",
-              "code": "/min"
-            }
-          },
-          {
-            "sequence": 6,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "temperature"
-                }
-              ]
-            },
-            "timingPeriod": {
-              "start": "2023-11-23T21:00:00.000Z",
-              "end": "2023-11-23T21:00:00.000Z"
-            },
-            "valueQuantity": {
-              "value": 37,
-              "system": "http://unitsofmeasure.org",
-              "code": "Cel"
-            }
-          },
-          {
-            "sequence": 7,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "oxygen-saturation"
-                }
-              ]
-            },
-            "timingPeriod": {
-              "start": "2023-11-23T21:00:00.000Z",
-              "end": "2023-11-23T21:00:00.000Z"
-            },
-            "valueQuantity": {
-              "value": 100,
-              "system": "http://unitsofmeasure.org",
-              "code": "%"
-            }
-          },
-          {
-            "sequence": 8,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "respiratory-rate"
-                }
-              ]
-            },
-            "timingPeriod": {
-              "start": "2023-11-23T21:00:00.000Z",
-              "end": "2023-11-23T21:00:00.000Z"
-            },
-            "valueQuantity": {
-              "value": 70,
-              "system": "http://unitsofmeasure.org",
-              "code": "/min"
-            }
-          },
-          {
-            "sequence": 9,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "chief-complaint"
-                }
-              ]
-            },
-            "code": {
-              "coding": [
-                {
-                  "system": "http://snomed.info/sct",
-                  "code": "28845006",
-                  "display": "Acute appendicitis with generalized peritonitis"
-                }
-              ]
-            }
-          },
-          {
-            "sequence": 10,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "patient-history"
-                }
-              ]
-            },
-            "valueString": "No systemic disease"
-          },
-          {
-            "sequence": 11,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "history-of-present-illness"
-                }
-              ]
-            },
-            "valueString": "No history"
-          },
-          {
-            "sequence": 12,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "physical-examination"
-                }
-              ]
-            },
-            "valueString": "Stable"
-          },
-          {
-            "sequence": 13,
             "category": {
               "coding": [
                 {
@@ -392,27 +194,47 @@
                 }
               ]
             },
-            "valueString": "Appendectomy"
+            "timingDate": "2025-12-04",
+            "valueString": "Dental treatment as per clinical assessment"
           },
           {
-            "sequence": 14,
+            "sequence": 3,
             "category": {
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "investigation-result"
+                  "code": "patient-history"
                 }
               ]
             },
-            "code": {
+            "timingDate": "2025-12-04",
+            "valueString": "No significant medical history"
+          },
+          {
+            "sequence": 4,
+            "category": {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
-                  "code": "INP",
-                  "display": "Investigation(s) not performed"
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "physical-examination"
                 }
               ]
-            }
+            },
+            "timingDate": "2025-12-04",
+            "valueString": "Oral examination performed"
+          },
+          {
+            "sequence": 5,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "history-of-present-illness"
+                }
+              ]
+            },
+            "timingDate": "2025-12-04",
+            "valueString": "Patient presents for dental treatment"
           }
         ],
         "insurance": [
@@ -441,7 +263,7 @@
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share",
                 "valueMoney": {
-                  "value": 0,
+                  "value": 1300,
                   "currency": "SAR"
                 }
               },
@@ -469,23 +291,14 @@
               2,
               3,
               4,
-              5,
-              6,
-              7,
-              8,
-              9,
-              10,
-              11,
-              12,
-              13,
-              14
+              5
             ],
             "productOrService": {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/procedures",
-                  "code": "96092-00-10",
-                  "display": "Fitting of spectacles"
+                  "system": "http://nphies.sa/terminology/CodeSystem/oral-health-op",
+                  "code": "97613-07-00",
+                  "display": "Lithium disilicate ceramic crown (e max), indirect; per crown"
                 }
               ]
             },
@@ -494,18 +307,94 @@
               "value": 1
             },
             "unitPrice": {
-              "value": 800,
+              "value": 1300,
               "currency": "SAR"
             },
             "net": {
-              "value": 800,
+              "value": 1300,
               "currency": "SAR"
-            }
+            },
+            "bodySite": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/fdi-oral-region",
+                  "code": "37",
+                  "display": "LOWER LEFT; PERMANENT TEETH # 7"
+                }
+              ]
+            },
+            "subSite": [
+              {
+                "coding": [
+                  {
+                    "system": "http://nphies.sa/terminology/CodeSystem/fdi-tooth-surface",
+                    "code": "O",
+                    "display": "Occlusal"
+                  }
+                ]
+              }
+            ]
           }
         ],
         "total": {
-          "value": 800,
+          "value": 1300,
           "currency": "SAR"
+        }
+      }
+    },
+    {
+      "fullUrl": "http://provider.com/Encounter/00f2dc4c-a445-4e89-a8ed-ccaf12d33b3e",
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "00f2dc4c-a445-4e89-a8ed-ccaf12d33b3e",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://DC-FHIR.com.sa/identifiers/encounter",
+            "value": "PA-1764704810758"
+          }
+        ],
+        "status": "planned",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "AMB",
+          "display": "ambulatory"
+        },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceEventType",
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/service-event-type",
+                  "code" : "ICSE",
+                  "display" : "Initial client service event"
+                }
+              ]
+            }
+          }
+        ],
+        "serviceType": {
+          "coding": [
+            {
+              "system": "http://nphies.sa/terminology/CodeSystem/service-type",
+              "code": "acute-care",
+              "display": "Acute Care"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
+        },
+        "period": {
+          "start": "2023-12-04"
+        },
+        "serviceProvider": {
+          "reference": "Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333"
         }
       }
     },
@@ -579,10 +468,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/860794b2-6085-461d-ac11-e4d61dc68f3d",
+      "fullUrl": "http://provider.com/Practitioner/f2b62fe8-3c3b-468a-a121-afc085bf8639",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "860794b2-6085-461d-ac11-e4d61dc68f3d",
+        "id": "f2b62fe8-3c3b-468a-a121-afc085bf8639",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -600,7 +489,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-860794b2"
+            "value": "PRACT-f2b62fe8"
           }
         ],
         "active": true,
@@ -630,10 +519,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
+      "fullUrl": "http://provider.com/Organization/f99f16b5-d900-4031-8ea6-1fe50dcc2333",
       "resource": {
         "resourceType": "Organization",
-        "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
+        "id": "f99f16b5-d900-4031-8ea6-1fe50dcc2333",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
@@ -656,7 +545,7 @@
         "identifier": [
           {
             "system": "http://nphies.sa/license/provider-license",
-            "value": "PR-FHIR"
+            "value": "DC-FHIR"
           }
         ],
         "active": true,
@@ -670,13 +559,13 @@
             ]
           }
         ],
-        "name": "Saudi General Hospital",
+        "name": "Saudi Dental Clinic",
         "address": [
           {
             "use": "work",
-            "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
+            "text": "Hajar Valley, Building 104, Riyadh Saudi Arabia",
             "line": [
-              "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
+              "Hajar Valley, Building 104, Riyadh Saudi Arabia"
             ],
             "city": "Riyadh",
             "country": "Saudi Arabia"
@@ -824,69 +713,6 @@
               "code": "U"
             }
           ]
-        }
-      }
-    },
-    {
-      "fullUrl": "http://provider.com/VisionPrescription/8196f6b6-9c2f-4e0a-9e7c-aa8b77234fec",
-      "resource": {
-        "resourceType": "VisionPrescription",
-        "id": "8196f6b6-9c2f-4e0a-9e7c-aa8b77234fec",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0"
-          ]
-        },
-        "identifier": [
-          {
-            "system": "http://saudigeneralhospital.com.sa/identifiers/visionprescription",
-            "value": "VP-8196f6b6"
-          }
-        ],
-        "status": "active",
-        "created": "2023-12-01T21:00:00.000Z",
-        "patient": {
-          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-        },
-        "dateWritten": "2023-12-01T21:00:00.000Z",
-        "lensSpecification": [
-          {
-            "product": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/lens-type",
-                  "code": "lens"
-                }
-              ]
-            },
-            "eye": "right",
-            "sphere": 2.25,
-            "cylinder": 0.75,
-            "axis": 80
-          },
-          {
-            "product": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/lens-type",
-                  "code": "lens"
-                }
-              ]
-            },
-            "eye": "left",
-            "sphere": 1.5,
-            "cylinder": 0.75,
-            "axis": 110,
-            "prism": [
-              {
-                "amount": 2,
-                "base": "up"
-              }
-            ]
-          }
-        ],
-        "prescriber": {
-          "reference": "Practitioner/860794b2-6085-461d-ac11-e4d61dc68f3d"
         }
       }
     }

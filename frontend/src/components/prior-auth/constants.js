@@ -446,3 +446,10 @@ export const INVESTIGATION_RESULT_OPTIONS = [
   { value: 'ABN', label: 'Abnormal results' }
 ];
 
+// NPHIES Service Event Type Options (for dental/oral claims)
+// Reference: http://nphies.sa/terminology/CodeSystem/service-event-type
+export const SERVICE_EVENT_TYPE_OPTIONS = [
+  { value: 'ICSE', label: 'ICSE - Initial client service event (New Visit)' },
+  { value: 'SCSE', label: 'SCSE - Subsequent client service event (Follow-up)' }
+];
+
