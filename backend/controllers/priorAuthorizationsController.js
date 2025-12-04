@@ -1,7 +1,7 @@
 import { BaseController } from './baseController.js';
 import { query } from '../db.js';
 import { validationSchemas } from '../models/schema.js';
-import priorAuthMapper from '../services/priorAuthMapper.js';
+import priorAuthMapper, { getMapper } from '../services/priorAuthMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
 
 class PriorAuthorizationsController extends BaseController {
