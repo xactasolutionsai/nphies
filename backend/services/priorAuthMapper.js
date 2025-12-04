@@ -881,6 +881,7 @@ class PriorAuthMapper {
    */
   getNphiesSupportingInfoCategory(category) {
     // Map of normalized (lowercase) to actual NPHIES category codes
+    // Reference: http://nphies.sa/terminology/CodeSystem/claim-information-category
     const categoryMap = {
       // Vital signs
       'vital-sign-systolic': 'vital-sign-systolic',
@@ -891,27 +892,43 @@ class PriorAuthMapper {
       'temperature': 'temperature',
       'oxygen-saturation': 'oxygen-saturation',
       'respiratory-rate': 'respiratory-rate',
-      'admission-weight': 'admission-weight',
       
-      // Clinical info - Note the exact casing per NPHIES spec
+      // Hospital/Admission specific
+      'admission-weight': 'admission-weight',
+      'estimated-length-of-stay': 'estimated-Length-of-Stay', // Capital L per NPHIES spec!
+      'hospitalized': 'hospitalized',
+      'icu-hours': 'icu-hours',
+      'ventilation-hours': 'ventilation-hours',
+      
+      // Clinical info - Required for oral/dental claims
       'chief-complaint': 'chief-complaint',
-      'estimated-length-of-stay': 'estimated-Length-of-Stay', // Capital L!
       'patient-history': 'patient-history',
       'investigation-result': 'investigation-result',
       'treatment-plan': 'treatment-plan',
       'physical-examination': 'physical-examination',
       'history-of-present-illness': 'history-of-present-illness',
+      'reason-for-visit': 'reason-for-visit',
+      
+      // Dental specific
+      'missingtooth': 'missingtooth', // Per NPHIES: no hyphen
+      'missing-tooth': 'missingtooth', // Alias with hyphen
+      
+      // Maternity
+      'last-menstrual-period': 'last-menstrual-period',
+      'birth-weight': 'birth-weight',
       
       // Other categories
       'onset': 'onset',
-      'hospitalized': 'hospitalized',
       'attachment': 'attachment',
-      'missing-tooth': 'missing-tooth',
-      'prosthesis': 'prosthesis',
       'days-supply': 'days-supply',
       'info': 'info',
-      'reason-for-visit': 'reason-for-visit',
       'lab-test': 'lab-test',
+      'morphology': 'morphology',
+      'employmentimpacted': 'employmentImpacted', // Capital I per NPHIES spec
+      'employment-impacted': 'employmentImpacted', // Alias with hyphen
+      
+      // Legacy/internal aliases (keep for backward compatibility)
+      'prosthesis': 'prosthesis',
       'radiology': 'radiology',
       'discharge': 'discharge'
     };

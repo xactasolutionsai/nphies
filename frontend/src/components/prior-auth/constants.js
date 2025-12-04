@@ -404,13 +404,54 @@ export const TOOTH_SURFACE_OPTIONS = [
   { value: 'MOD', label: 'MOD - Mesioclusodistal' }
 ];
 
+// NPHIES Claim Information Category codes
+// Reference: http://nphies.sa/terminology/CodeSystem/claim-information-category
 export const SUPPORTING_INFO_CATEGORY_OPTIONS = [
-  { value: 'info', label: 'General Info' },
+  // General categories
+  { value: 'info', label: 'Information - General situation/condition info' },
+  { value: 'onset', label: 'Onset - Period/dates of condition' },
+  { value: 'attachment', label: 'Attachment - Images, documents, resources' },
+  
+  // Clinical categories (required for oral/dental claims)
+  { value: 'chief-complaint', label: 'Chief Complaint - Reason for encounter' },
+  { value: 'investigation-result', label: 'Investigation Result' },
+  { value: 'treatment-plan', label: 'Treatment Plan' },
+  { value: 'patient-history', label: 'Patient History - Past surgical/medical history' },
+  { value: 'physical-examination', label: 'Physical Examination' },
+  { value: 'history-of-present-illness', label: 'History of Present Illness' },
+  { value: 'reason-for-visit', label: 'Reason for Visit' },
+  
+  // Vital signs
+  { value: 'vital-sign-weight', label: 'Weight' },
+  { value: 'vital-sign-height', label: 'Height' },
+  { value: 'vital-sign-systolic', label: 'Systolic BP' },
+  { value: 'vital-sign-diastolic', label: 'Diastolic BP' },
+  { value: 'temperature', label: 'Temperature' },
+  { value: 'pulse', label: 'Pulse Rate' },
+  { value: 'oxygen-saturation', label: 'Oxygen Saturation' },
+  { value: 'respiratory-rate', label: 'Respiratory Rate' },
+  
+  // Hospital/admission specific
+  { value: 'hospitalized', label: 'Hospitalized - Hospitalization info' },
+  { value: 'icu-hours', label: 'ICU Hours' },
+  { value: 'ventilation-hours', label: 'Ventilation Hours' },
+  { value: 'admission-weight', label: 'Admission Weight' },
+  { value: 'estimated-Length-of-Stay', label: 'Estimated Length of Stay' },
+  
+  // Dental specific
+  { value: 'missingtooth', label: 'Missing Tooth' },
+  
+  // Pharmacy specific
   { value: 'days-supply', label: 'Days Supply' },
-  { value: 'attachment', label: 'Attachment' },
-  { value: 'clinical-notes', label: 'Clinical Notes' },
-  { value: 'onset', label: 'Onset' },
-  { value: 'related-claim', label: 'Related Claim' }
+  
+  // Maternity
+  { value: 'last-menstrual-period', label: 'Last Menstrual Period' },
+  { value: 'birth-weight', label: 'Birth Weight' },
+  
+  // Other
+  { value: 'lab-test', label: 'Lab Test Code' },
+  { value: 'morphology', label: 'Morphology - Tumor diagnosis' },
+  { value: 'employmentImpacted', label: 'Employment Impacted' }
 ];
 
 // NPHIES Vital Signs Fields (per Claim-483069.json example)
