@@ -78,6 +78,8 @@ export default function PriorAuthorizationForm() {
     currency: 'SAR',
     encounter_class: 'ambulatory',
     service_event_type: 'ICSE', // NPHIES: ICSE (Initial) or SCSE (Subsequent) - for dental claims
+    investigation_result_code: 'IRA', // NPHIES: BV-00786 - Required for dental claims
+    chief_complaint: '', // NPHIES: BV-00751 - Required for dental claims
     patient_id: '',
     provider_id: '',
     insurer_id: '',
@@ -982,7 +984,7 @@ export default function PriorAuthorizationForm() {
               </div>
             )}
 
-            {/* Service Event Type - Required for dental claims per NPHIES */}
+            {/* Dental-specific fields - Required per NPHIES */}
             {formData.auth_type === 'dental' && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -996,6 +998,30 @@ export default function PriorAuthorizationForm() {
                   />
                   <p className="text-xs text-gray-500">
                     ICSE = New visit, SCSE = Follow-up visit
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Investigation Result *</Label>
+                  <Select
+                    value={INVESTIGATION_RESULT_OPTIONS.find(opt => opt.value === formData.investigation_result_code)}
+                    onChange={(option) => handleChange('investigation_result_code', option?.value || 'IRA')}
+                    options={INVESTIGATION_RESULT_OPTIONS}
+                    styles={selectStyles}
+                    menuPortalTarget={document.body}
+                  />
+                  <p className="text-xs text-gray-500">
+                    BV-00786: Required for dental claims
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Chief Complaint *</Label>
+                  <Input
+                    value={formData.chief_complaint}
+                    onChange={(e) => handleChange('chief_complaint', e.target.value)}
+                    placeholder="e.g., Tooth pain, Dental cleaning"
+                  />
+                  <p className="text-xs text-gray-500">
+                    BV-00751: Required for dental claims
                   </p>
                 </div>
               </div>
@@ -1792,24 +1818,27 @@ export default function PriorAuthorizationForm() {
                   )}
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Service/Procedure Code *</Label>
-                    <Input
-                      value={item.product_or_service_code}
-                      onChange={(e) => handleItemChange(index, 'product_or_service_code', e.target.value)}
-                      placeholder="CPT/SNOMED code"
-                    />
+                {/* Generic procedure code fields - hidden for dental (uses specialized dental fields below) */}
+                {formData.auth_type !== 'dental' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Service/Procedure Code *</Label>
+                      <Input
+                        value={item.product_or_service_code}
+                        onChange={(e) => handleItemChange(index, 'product_or_service_code', e.target.value)}
+                        placeholder="CPT/SNOMED code"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Input
+                        value={item.product_or_service_display || ''}
+                        onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
+                        placeholder="Service description"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Input
-                      value={item.product_or_service_display || ''}
-                      onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
-                      placeholder="Service description"
-                    />
-                  </div>
-                </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-2">

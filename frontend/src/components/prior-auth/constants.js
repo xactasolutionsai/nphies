@@ -439,17 +439,21 @@ export const ADMISSION_FIELDS = [
   { key: 'estimated_length_of_stay', category: 'estimated-Length-of-Stay', label: 'Estimated Length of Stay', unit: 'd', unitLabel: 'days', placeholder: '3' }
 ];
 
-// NPHIES Investigation Result Options
-export const INVESTIGATION_RESULT_OPTIONS = [
-  { value: 'INP', label: 'Investigation(s) not performed' },
-  { value: 'NAD', label: 'No abnormality detected' },
-  { value: 'ABN', label: 'Abnormal results' }
-];
-
 // NPHIES Service Event Type Options (for dental/oral claims)
 // Reference: http://nphies.sa/terminology/CodeSystem/service-event-type
 export const SERVICE_EVENT_TYPE_OPTIONS = [
   { value: 'ICSE', label: 'ICSE - Initial client service event (New Visit)' },
   { value: 'SCSE', label: 'SCSE - Subsequent client service event (Follow-up)' }
+];
+
+// NPHIES Investigation Result Options (for dental/oral claims)
+// Reference: http://nphies.sa/terminology/CodeSystem/investigation-result
+// BV-00786: Required for oral claims with valueCodeableConcept
+export const INVESTIGATION_RESULT_OPTIONS = [
+  { value: 'IRA', label: 'IRA - Investigation results attached' },
+  { value: 'INP', label: 'INP - Investigation(s) not performed' },
+  { value: 'IRP', label: 'IRP - Investigation results pending' },
+  { value: 'NA', label: 'NA - Not applicable' },
+  { value: 'other', label: 'Other' }
 ];
 

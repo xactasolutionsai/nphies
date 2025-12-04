@@ -411,11 +411,14 @@ class PriorAuthMapper {
     if (isOralClaim) {
       const requestDate = priorAuth.request_date || new Date();
       
-      // BV-00752: investigation-result is REQUIRED
+      // BV-00752, BV-00786: investigation-result is REQUIRED and must use valueCodeableConcept
+      // Valid codes: IRA (Investigation results attached), INP (not performed), IRP (pending), NA, other
       if (!supportingInfoList.some(info => info.category === 'investigation-result')) {
         supportingInfoList.push({
           category: 'investigation-result',
-          value_string: priorAuth.investigation_result || 'Clinical examination completed',
+          code: priorAuth.investigation_result_code || 'IRA',
+          code_display: priorAuth.investigation_result_display || 'Investigation results attached',
+          code_system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
           timing_date: requestDate
         });
       }
@@ -452,6 +455,15 @@ class PriorAuthMapper {
         supportingInfoList.push({
           category: 'history-of-present-illness',
           value_string: priorAuth.history_of_present_illness || 'Patient presents for dental treatment',
+          timing_date: requestDate
+        });
+      }
+      
+      // BV-00751: chief-complaint is REQUIRED for oral claims
+      if (!supportingInfoList.some(info => info.category === 'chief-complaint')) {
+        supportingInfoList.push({
+          category: 'chief-complaint',
+          value_string: priorAuth.chief_complaint || 'Dental complaint',
           timing_date: requestDate
         });
       }
@@ -930,8 +942,9 @@ class PriorAuthMapper {
     };
 
     // Add code if present (e.g., chief-complaint, investigation-result)
+    // BV-00786: investigation-result requires valueCodeableConcept, not code
     if (info.code) {
-      supportingInfo.code = {
+      const codeableConcept = {
         coding: [
           {
             system: info.code_system || this.getSupportingInfoCodeSystem(info.category),
@@ -940,6 +953,13 @@ class PriorAuthMapper {
           }
         ]
       };
+      
+      // For investigation-result, use valueCodeableConcept instead of code
+      if (categoryCode === 'investigation-result') {
+        supportingInfo.valueCodeableConcept = codeableConcept;
+      } else {
+        supportingInfo.code = codeableConcept;
+      }
     }
 
     // Add timing period (required for vital signs per NPHIES spec)
@@ -1571,10 +1591,11 @@ class PriorAuthMapper {
     // NPHIES format depends on encounter class:
     // - AMB (Ambulatory): date-only format "2023-12-04" (https://portal.nphies.sa/ig/Encounter-10123.json.html)
     // - SS/IMP (Short Stay/Inpatient): dateTime with timezone "2023-12-04T10:25:00+03:00" (https://portal.nphies.sa/ig/Encounter-10124.json.html)
-    const needsDateTime = ['daycase', 'inpatient'].includes(encounterClass);
+    // BV-00811: Oral claims ALSO require datetime format with seconds (even for AMB)
+    const needsDateTime = ['daycase', 'inpatient'].includes(encounterClass) || isOralClaim;
     
     // Debug logging for period format
-    console.log('[PriorAuthMapper] Period formatting - needsDateTime:', needsDateTime, 'encounterClass:', encounterClass);
+    console.log('[PriorAuthMapper] Period formatting - needsDateTime:', needsDateTime, 'encounterClass:', encounterClass, 'isOralClaim:', isOralClaim);
     
     if (needsDateTime) {
       // SS/IMP: Use dateTime format with Saudi timezone (+03:00)
