@@ -84,6 +84,19 @@ class NphiesService {
   async submitPriorAuth(requestBundle) {
     let lastError = null;
     
+    // Debug: Log the request bundle being sent
+    console.log('[NPHIES] ===== OUTGOING REQUEST =====');
+    console.log('[NPHIES] Request Bundle ID:', requestBundle?.id);
+    console.log('[NPHIES] Request Bundle Type:', requestBundle?.type);
+    console.log('[NPHIES] Request Bundle Entries:', requestBundle?.entry?.length);
+    // Log the MessageHeader event type
+    const msgHeader = requestBundle?.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+    console.log('[NPHIES] MessageHeader event:', msgHeader?.eventCoding?.code);
+    // Log the Claim identifier
+    const claim = requestBundle?.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource;
+    console.log('[NPHIES] Claim identifier:', claim?.identifier?.[0]?.value);
+    console.log('[NPHIES] =============================');
+    
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
       try {
         console.log(`[NPHIES] Sending prior authorization request (attempt ${attempt}/${this.retryAttempts})`);
@@ -102,6 +115,19 @@ class NphiesService {
         );
 
         console.log(`[NPHIES] Response received: ${response.status}`);
+        
+        // Debug: Log the response bundle received
+        console.log('[NPHIES] ===== INCOMING RESPONSE =====');
+        console.log('[NPHIES] Response Bundle ID:', response.data?.id);
+        console.log('[NPHIES] Response Bundle Type:', response.data?.type);
+        console.log('[NPHIES] Response Bundle Entries:', response.data?.entry?.length);
+        // Log ClaimResponse details
+        const claimResp = response.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+        console.log('[NPHIES] ClaimResponse ID:', claimResp?.id);
+        console.log('[NPHIES] ClaimResponse outcome:', claimResp?.outcome);
+        console.log('[NPHIES] ClaimResponse preAuthRef:', claimResp?.preAuthRef);
+        console.log('[NPHIES] ClaimResponse has extensions:', !!claimResp?.extension, 'count:', claimResp?.extension?.length);
+        console.log('[NPHIES] ==============================');
         
         // Validate response for prior auth (expects ClaimResponse)
         const validationResult = this.validatePriorAuthResponse(response.data);

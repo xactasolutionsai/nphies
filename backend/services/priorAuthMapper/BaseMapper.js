@@ -1097,6 +1097,12 @@ class BaseMapper {
                tag.code === 'nphies-generated'
       );
 
+      // Debug: Log OperationOutcome if present
+      console.log('[BaseMapper] OperationOutcome found:', !!operationOutcome);
+      if (operationOutcome) {
+        console.log('[BaseMapper] OperationOutcome issues:', JSON.stringify(operationOutcome.issue, null, 2));
+      }
+
       // Handle OperationOutcome errors
       if (operationOutcome) {
         const errors = operationOutcome.issue?.map(issue => ({
@@ -1138,6 +1144,15 @@ class BaseMapper {
       console.log('[BaseMapper] ClaimResponse.id:', claimResponse.id);
       console.log('[BaseMapper] ClaimResponse.outcome:', claimResponse.outcome);
       console.log('[BaseMapper] ClaimResponse has extension:', !!claimResponse.extension, 'count:', claimResponse.extension?.length);
+      
+      // If outcome is error, log the error details from ClaimResponse
+      if (claimResponse.outcome === 'error' && claimResponse.error) {
+        console.log('[BaseMapper] ClaimResponse.error:', JSON.stringify(claimResponse.error, null, 2));
+      }
+      // Check for processNote which might contain error details
+      if (claimResponse.processNote) {
+        console.log('[BaseMapper] ClaimResponse.processNote:', JSON.stringify(claimResponse.processNote, null, 2));
+      }
       
       // Log all extensions for debugging
       if (claimResponse.extension) {
