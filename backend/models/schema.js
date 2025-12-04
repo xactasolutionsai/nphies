@@ -365,6 +365,12 @@ export const validationSchemas = {
     coverage_id: Joi.string().uuid().allow(null, '').optional(),
     practitioner_id: Joi.string().uuid().allow(null, '').optional(),
     
+    // Practice Code / Specialty (NPHIES careTeam.qualification)
+    practice_code: Joi.string().max(20).allow(null, '').optional(),
+    
+    // Service Event Type (NPHIES dental claims: ICSE for initial, SCSE for subsequent)
+    service_event_type: Joi.string().valid('ICSE', 'SCSE').allow(null, '').optional(),
+    
     // Status
     status: Joi.string().valid('draft', 'pending', 'queued', 'approved', 'partial', 'denied', 'cancelled', 'error').allow(null, '').optional(),
     outcome: Joi.string().valid('complete', 'partial', 'queued', 'error').allow(null, '').optional(),
@@ -430,6 +436,7 @@ export const validationSchemas = {
       product_or_service_system: Joi.string().max(255).allow(null, '').optional(),
       product_or_service_display: Joi.string().max(255).allow(null, '').optional(),
       tooth_number: Joi.string().max(10).allow(null, '').optional(),
+      tooth_display: Joi.string().max(100).allow(null, '').optional(),
       tooth_surface: Joi.string().max(50).allow(null, '').optional(),
       eye: Joi.string().valid('left', 'right', 'both').allow(null, '').optional(),
       medication_code: Joi.string().max(50).allow(null, '').optional(),
@@ -446,7 +453,13 @@ export const validationSchemas = {
       body_site_system: Joi.string().max(255).allow(null, '').optional(),
       sub_site_code: Joi.string().max(50).allow(null, '').optional(),
       description: Joi.string().allow(null, '').optional(),
-      notes: Joi.string().allow(null, '').optional()
+      notes: Joi.string().allow(null, '').optional(),
+      // Additional optional fields
+      patient_share: Joi.number().precision(2).allow(null).optional(),
+      payer_share: Joi.number().precision(2).allow(null).optional(),
+      is_maternity: Joi.boolean().allow(null).optional(),
+      diagnosis_sequences: Joi.array().items(Joi.number().integer()).allow(null).optional(),
+      information_sequences: Joi.array().items(Joi.number().integer()).allow(null).optional()
     })).optional(),
     
     supporting_info: Joi.array().items(Joi.object({
