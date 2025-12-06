@@ -19,6 +19,9 @@ import {
 import {
   AUTH_TYPE_OPTIONS,
   PRIORITY_OPTIONS,
+  CLAIM_SUBTYPE_OPTIONS,
+  ALLOWED_CLAIM_SUBTYPES,
+  getClaimSubtypeOptions,
   ENCOUNTER_CLASS_OPTIONS,
   ALLOWED_ENCOUNTER_CLASSES,
   getEncounterClassOptions,
@@ -75,6 +78,7 @@ export default function PriorAuthorizationForm() {
   // Form data
   const [formData, setFormData] = useState({
     auth_type: 'professional',
+    sub_type: 'op', // NPHIES: Claim subType (op=OutPatient, ip=Inpatient, emr=Emergency)
     status: 'draft',
     priority: 'normal',
     currency: 'SAR',
@@ -879,32 +883,30 @@ export default function PriorAuthorizationForm() {
                     const newAuthType = option?.value || 'professional';
                     handleChange('auth_type', newAuthType);
                     
+                    // Get allowed claim subtypes for the new auth type
+                    const allowedSubtypes = ALLOWED_CLAIM_SUBTYPES[newAuthType] || ALLOWED_CLAIM_SUBTYPES.professional;
+                    const currentSubType = formData.sub_type;
+                    
+                    // Auto-update sub_type if current selection is not allowed for new auth type
+                    if (!allowedSubtypes.includes(currentSubType)) {
+                      handleChange('sub_type', allowedSubtypes[0] || 'op');
+                    }
+                    
                     // Get allowed encounter classes for the new auth type
                     const allowed = ALLOWED_ENCOUNTER_CLASSES[newAuthType] || ALLOWED_ENCOUNTER_CLASSES.professional;
                     const currentClass = formData.encounter_class;
                     
                     // Auto-update encounter class if current selection is not allowed for new auth type
-                    // NPHIES Rules:
-                    // - Dental/Vision: Must use 'ambulatory' (AMB)
-                    // - Pharmacy: Must use 'ambulatory' (AMB)
-                    // - Outpatient: Only for 'dental' or 'professional'
-                    // - Inpatient/Daycase: Only for 'institutional'
                     if (!allowed.includes(currentClass)) {
-                      // Default to first allowed option (usually 'ambulatory')
-                      handleChange('encounter_class', allowed[0]);
-                      // Clear end date for ambulatory encounters
+                      handleChange('encounter_class', allowed[0] || 'ambulatory');
                       if (allowed[0] === 'ambulatory') {
                         handleChange('encounter_end', '');
                       }
                     }
                     
-                    // Clear end date for dental/vision/pharmacy (AMB encounters don't need end date)
+                    // Clear end date for dental/vision/pharmacy (no encounter needed)
                     if (newAuthType === 'dental' || newAuthType === 'vision' || newAuthType === 'pharmacy') {
                       handleChange('encounter_end', '');
-                      // Only change encounter_class if current is not allowed
-                      if (!allowed.includes(currentClass)) {
-                        handleChange('encounter_class', allowed[0] || 'ambulatory');
-                      }
                     }
 
                     // Reset items with auth-type specific fields when switching
@@ -917,6 +919,23 @@ export default function PriorAuthorizationForm() {
                   styles={selectStyles}
                   menuPortalTarget={document.body}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label>Claim SubType *</Label>
+                <Select
+                  value={CLAIM_SUBTYPE_OPTIONS.find(opt => opt.value === formData.sub_type)}
+                  onChange={(option) => {
+                    const newSubType = option?.value || 'op';
+                    handleChange('sub_type', newSubType);
+                  }}
+                  options={getClaimSubtypeOptions(formData.auth_type)}
+                  styles={selectStyles}
+                  menuPortalTarget={document.body}
+                  isOptionDisabled={(option) => option.isDisabled}
+                />
+                <p className="text-xs text-gray-500">
+                  NPHIES: OP (OutPatient), IP (Inpatient), EMR (Emergency)
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Priority</Label>
@@ -1134,24 +1153,27 @@ export default function PriorAuthorizationForm() {
               </div>
 
               {/* Practice Code - NPHIES careTeam.qualification */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Stethoscope className="h-4 w-4" />
-                  Practice Code / Specialty *
-                </Label>
-                <Select
-                  value={PRACTICE_CODES_OPTIONS.flatMap(group => group.options).find(opt => opt.value === formData.practice_code)}
-                  onChange={(option) => handleChange('practice_code', option?.value || '08.00')}
-                  options={PRACTICE_CODES_OPTIONS}
-                  styles={selectStyles}
-                  placeholder="Select practice code/specialty..."
-                  isSearchable
-                  menuPortalTarget={document.body}
-                />
-                <p className="text-xs text-gray-500">
-                  NPHIES: Provider's practice specialty for careTeam.qualification
-                </p>
-              </div>
+              {/* NOT shown for pharmacy/vision claims (they don't have careTeam per NPHIES examples) */}
+              {formData.auth_type !== 'pharmacy' && formData.auth_type !== 'vision' && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4" />
+                    Practice Code / Specialty *
+                  </Label>
+                  <Select
+                    value={PRACTICE_CODES_OPTIONS.flatMap(group => group.options).find(opt => opt.value === formData.practice_code)}
+                    onChange={(option) => handleChange('practice_code', option?.value || '08.00')}
+                    options={PRACTICE_CODES_OPTIONS}
+                    styles={selectStyles}
+                    placeholder="Select practice code/specialty..."
+                    isSearchable
+                    menuPortalTarget={document.body}
+                  />
+                  <p className="text-xs text-gray-500">
+                    NPHIES: Provider's practice specialty for careTeam.qualification
+                  </p>
+                </div>
+              )}
 
               {/* Coverage - Shows patient's insurance coverages */}
               <div className="space-y-2">

@@ -253,7 +253,7 @@ class PharmacyMapper extends BaseMapper {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-          code: 'op'
+          code: priorAuth.sub_type || 'op' // Default to 'op' (OutPatient) for pharmacy
         }
       ]
     };

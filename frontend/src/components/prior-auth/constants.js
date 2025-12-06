@@ -14,6 +14,42 @@ export const PRIORITY_OPTIONS = [
   { value: 'deferred', label: 'Deferred' }
 ];
 
+// Claim SubType options per NPHIES
+// Reference: http://nphies.sa/terminology/CodeSystem/claim-subtype
+export const CLAIM_SUBTYPE_OPTIONS = [
+  { value: 'op', label: 'OutPatient (OP)' },
+  { value: 'ip', label: 'Inpatient (IP)' },
+  { value: 'emr', label: 'Emergency (EMR)' }
+];
+
+// Allowed claim subtypes by auth type
+// Reference: NPHIES IG - claim type and subtype combinations
+export const ALLOWED_CLAIM_SUBTYPES = {
+  // Institutional: Can use IP (inpatient) or OP (outpatient)
+  institutional: ['ip', 'op'],
+  
+  // Professional: Can use OP (outpatient) or EMR (emergency)
+  professional: ['op', 'emr'],
+  
+  // Pharmacy: Only OP (outpatient) per NPHIES example Claim-483074
+  pharmacy: ['op'],
+  
+  // Dental (Oral): Only OP (outpatient)
+  dental: ['op'],
+  
+  // Vision: Only OP (outpatient)
+  vision: ['op']
+};
+
+// Helper function to get filtered claim subtype options based on auth type
+export const getClaimSubtypeOptions = (authType) => {
+  const allowed = ALLOWED_CLAIM_SUBTYPES[authType] || ALLOWED_CLAIM_SUBTYPES.professional;
+  return CLAIM_SUBTYPE_OPTIONS.map(option => ({
+    ...option,
+    isDisabled: !allowed.includes(option.value)
+  }));
+};
+
 export const ENCOUNTER_CLASS_OPTIONS = [
   { value: 'inpatient', label: 'Inpatient (IMP)' },
   { value: 'outpatient', label: 'Outpatient' },
