@@ -47,8 +47,9 @@ export const ALLOWED_ENCOUNTER_CLASSES = {
   // Vision Claims only contain: Patient, Provider, Diagnosis, Items, Benefit, Supporting Info
   vision: [],
   
-  // Pharmacy: Similar to professional, uses ambulatory
-  pharmacy: ['ambulatory', 'outpatient', 'emergency', 'home', 'telemedicine']
+  // Pharmacy: subType=OP requires Encounter.class=AMB (Ambulatory/Outpatient)
+  // Both 'ambulatory' and 'outpatient' map to AMB code
+  pharmacy: ['ambulatory', 'outpatient']
 };
 
 // Helper function to get filtered encounter class options based on auth type

@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "4248d4ff-baa2-4c2a-8f68-3d0b334458a8",
+    "id": "4fea0c09-2b30-417c-b7d8-a3934db32296",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-04T20:57:26.530+00:00",
+    "timestamp": "2025-12-04T21:32:17.357+00:00",
     "entry": [
         {
-            "fullUrl": "http://pseudo-payer.com.sa/MessageHeader/7df95857-9d4d-4b49-b37a-dc87405beca5",
+            "fullUrl": "http://pseudo-payer.com.sa/MessageHeader/721e1282-0110-4eca-9f05-78b972a7ccee",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "7df95857-9d4d-4b49-b37a-dc87405beca5",
+                "id": "721e1282-0110-4eca-9f05-78b972a7ccee",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -52,21 +52,21 @@
                     "endpoint": "http://payer.com"
                 },
                 "response": {
-                    "identifier": "29980164-1e35-4112-9e5e-eb187eef7e66",
+                    "identifier": "78824b02-1e41-47cd-a085-f0ce5bf72604",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://pseudo-payer.com.sa/ClaimResponse/35bcd97b-0011-485d-86c3-12d8a0b5d211"
+                        "reference": "http://pseudo-payer.com.sa/ClaimResponse/a6c04044-b07b-47ac-b2cc-3ef0aa503fa2"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://pseudo-payer.com.sa/ClaimResponse/35bcd97b-0011-485d-86c3-12d8a0b5d211",
+            "fullUrl": "http://pseudo-payer.com.sa/ClaimResponse/a6c04044-b07b-47ac-b2cc-3ef0aa503fa2",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "35bcd97b-0011-485d-86c3-12d8a0b5d211",
+                "id": "a6c04044-b07b-47ac-b2cc-3ef0aa503fa2",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/prior-auth-response|1.0.0"
@@ -88,7 +88,7 @@
                 "identifier": [
                     {
                         "system": "http://pseudo-payer.com.sa/claimresponse",
-                        "value": "70c25d9b-cd91-4bab-ac5d-38f7ecc9a56b"
+                        "value": "15982f1c-12bc-4fff-b081-8ec16cd70117"
                     }
                 ],
                 "status": "active",
@@ -112,7 +112,7 @@
                 "patient": {
                     "reference": "http://provider.com/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
                 },
-                "created": "2025-12-04",
+                "created": "2025-12-05",
                 "insurer": {
                     "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
@@ -123,14 +123,14 @@
                     "type": "Claim",
                     "identifier": {
                         "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-                        "value": "DUP-1764881713415"
+                        "value": "DUP-1764883926274"
                     }
                 },
                 "outcome": "complete",
-                "preAuthRef": "77c2eca9-0866-46a5-9304-9447e4cc5914",
+                "preAuthRef": "77055c9e-05ab-4c26-878b-ab15ec10db82",
                 "preAuthPeriod": {
-                    "start": "2025-12-04",
-                    "end": "2025-12-09"
+                    "start": "2025-12-05",
+                    "end": "2025-12-10"
                 },
                 "item": [
                     {
@@ -173,7 +173,7 @@
                                     ]
                                 },
                                 "amount": {
-                                    "value": 18,
+                                    "value": 24,
                                     "currency": "SAR"
                                 }
                             },
@@ -187,7 +187,7 @@
                                     ]
                                 },
                                 "amount": {
-                                    "value": 782,
+                                    "value": 776,
                                     "currency": "SAR"
                                 }
                             },
@@ -230,7 +230,7 @@
                             ]
                         },
                         "amount": {
-                            "value": 782,
+                            "value": 776,
                             "currency": "SAR"
                         }
                     },
@@ -244,7 +244,7 @@
                             ]
                         },
                         "amount": {
-                            "value": 18,
+                            "value": 24,
                             "currency": "SAR"
                         }
                     }

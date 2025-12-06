@@ -14,16 +14,37 @@ export const formatAmount = (amount, currency = 'SAR') => {
 /**
  * Get initial data for a service item
  * @param {number} sequence - Item sequence number
+ * @param {string} authType - Authorization type (e.g., 'pharmacy', 'dental', etc.)
  * @returns {object} Initial item data object
  */
-export const getInitialItemData = (sequence) => ({
-  sequence,
-  product_or_service_code: '',
-  product_or_service_display: '',
-  quantity: 1,
-  unit_price: '',
-  net_amount: ''
-});
+export const getInitialItemData = (sequence, authType = '') => {
+  const baseItem = {
+    sequence,
+    product_or_service_code: '',
+    product_or_service_display: '',
+    quantity: 1,
+    unit_price: '',
+    net_amount: '',
+    patient_share: 0,
+    is_package: false,
+    is_maternity: false
+  };
+
+  // Add pharmacy-specific fields
+  if (authType === 'pharmacy') {
+    return {
+      ...baseItem,
+      medication_code: '',
+      medication_name: '',
+      prescribed_medication_code: '',
+      pharmacist_selection_reason: 'patient-request',
+      pharmacist_substitute: 'Irreplaceable',
+      days_supply: 30
+    };
+  }
+
+  return baseItem;
+};
 
 /**
  * Get initial data for a diagnosis entry

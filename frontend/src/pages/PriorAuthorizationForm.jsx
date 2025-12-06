@@ -350,7 +350,7 @@ export default function PriorAuthorizationForm() {
   const addItem = () => {
     setFormData(prev => ({
       ...prev,
-      items: [...prev.items, getInitialItemData(prev.items.length + 1)]
+      items: [...prev.items, getInitialItemData(prev.items.length + 1, prev.auth_type)]
     }));
   };
 
@@ -876,6 +876,7 @@ export default function PriorAuthorizationForm() {
                     // Auto-update encounter class if current selection is not allowed for new auth type
                     // NPHIES Rules:
                     // - Dental/Vision: Must use 'ambulatory' (AMB)
+                    // - Pharmacy: Must use 'ambulatory' (AMB)
                     // - Outpatient: Only for 'dental' or 'professional'
                     // - Inpatient/Daycase: Only for 'institutional'
                     if (!allowed.includes(currentClass)) {
@@ -887,10 +888,20 @@ export default function PriorAuthorizationForm() {
                       }
                     }
                     
-                    // Clear end date for dental/vision (AMB encounters don't need end date)
-                    if (newAuthType === 'dental' || newAuthType === 'vision') {
+                    // Clear end date for dental/vision/pharmacy (AMB encounters don't need end date)
+                    if (newAuthType === 'dental' || newAuthType === 'vision' || newAuthType === 'pharmacy') {
                       handleChange('encounter_end', '');
+                      // Only change encounter_class if current is not allowed
+                      if (!allowed.includes(currentClass)) {
+                        handleChange('encounter_class', allowed[0] || 'ambulatory');
+                      }
                     }
+
+                    // Reset items with auth-type specific fields when switching
+                    setFormData(prev => ({
+                      ...prev,
+                      items: [getInitialItemData(1, newAuthType)]
+                    }));
                   }}
                   options={AUTH_TYPE_OPTIONS}
                   styles={selectStyles}
@@ -929,6 +940,16 @@ export default function PriorAuthorizationForm() {
                 <AlertCircle className="h-5 w-5 text-blue-500" />
                 <span className="text-sm text-blue-700">
                   Vision claims do not require Encounter information per NPHIES specification.
+                </span>
+              </div>
+            )}
+
+            {/* Pharmacy claims info */}
+            {formData.auth_type === 'pharmacy' && (
+              <div className="flex items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <Pill className="h-5 w-5 text-purple-500" />
+                <span className="text-sm text-purple-700">
+                  Pharmacy claims use subType=OP (OutPatient) with Encounter class AMB (Ambulatory/Outpatient). Days supply and medication-specific information are required per NPHIES.
                 </span>
               </div>
             )}
@@ -1999,23 +2020,127 @@ export default function PriorAuthorizationForm() {
                 )}
 
                 {formData.auth_type === 'pharmacy' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Medication Code</Label>
-                      <Input
-                        value={item.medication_code || ''}
-                        onChange={(e) => handleItemChange(index, 'medication_code', e.target.value)}
-                        placeholder="NPHIES medication code"
-                      />
+                  <div className="space-y-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                    <h4 className="font-medium text-purple-800 flex items-center gap-2">
+                      <Pill className="h-4 w-4" />
+                      Pharmacy-Specific Information (NPHIES Required)
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Medication Code (GTIN) *</Label>
+                        <Input
+                          value={item.medication_code || ''}
+                          onChange={(e) => handleItemChange(index, 'medication_code', e.target.value)}
+                          placeholder="e.g., 07612797198780"
+                        />
+                        <p className="text-xs text-gray-500">NPHIES medication code (GTIN format)</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Medication Name</Label>
+                        <Input
+                          value={item.medication_name || ''}
+                          onChange={(e) => handleItemChange(index, 'medication_name', e.target.value)}
+                          placeholder="e.g., VOLTAREN 50 MG TAB"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Days Supply</Label>
-                      <Input
-                        type="number"
-                        value={item.days_supply || ''}
-                        onChange={(e) => handleItemChange(index, 'days_supply', e.target.value)}
-                        placeholder="Required for pharmacy"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Prescribed Medication Code</Label>
+                        <Input
+                          value={item.prescribed_medication_code || ''}
+                          onChange={(e) => handleItemChange(index, 'prescribed_medication_code', e.target.value)}
+                          placeholder="Original prescription code"
+                        />
+                        <p className="text-xs text-gray-500">Code of originally prescribed medication (if different)</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Days Supply *</Label>
+                        <Input
+                          type="number"
+                          value={item.days_supply || 30}
+                          onChange={(e) => handleItemChange(index, 'days_supply', e.target.value)}
+                          placeholder="30"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Pharmacist Selection Reason *</Label>
+                        <Select
+                          value={[
+                            { value: 'patient-request', label: 'Patient Request' },
+                            { value: 'out-of-stock', label: 'Out of Stock' },
+                            { value: 'formulary-drug', label: 'Formulary Drug' },
+                            { value: 'therapeutic-alternative', label: 'Therapeutic Alternative' },
+                            { value: 'other', label: 'Other' }
+                          ].find(opt => opt.value === (item.pharmacist_selection_reason || 'patient-request'))}
+                          onChange={(option) => handleItemChange(index, 'pharmacist_selection_reason', option?.value || 'patient-request')}
+                          options={[
+                            { value: 'patient-request', label: 'Patient Request' },
+                            { value: 'out-of-stock', label: 'Out of Stock' },
+                            { value: 'formulary-drug', label: 'Formulary Drug' },
+                            { value: 'therapeutic-alternative', label: 'Therapeutic Alternative' },
+                            { value: 'other', label: 'Other' }
+                          ]}
+                          styles={selectStyles}
+                          menuPortalTarget={document.body}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Pharmacist Substitute *</Label>
+                        <Select
+                          value={[
+                            { value: 'Irreplaceable', label: 'SFDA Irreplaceable drugs' },
+                            { value: 'Replaceable', label: 'SFDA Replaceable drugs' },
+                            { value: 'Therapeutic-alternative', label: 'Therapeutic Alternative' },
+                            { value: 'Not-substituted', label: 'Not Substituted' }
+                          ].find(opt => opt.value === (item.pharmacist_substitute || 'Irreplaceable'))}
+                          onChange={(option) => handleItemChange(index, 'pharmacist_substitute', option?.value || 'Irreplaceable')}
+                          options={[
+                            { value: 'Irreplaceable', label: 'SFDA Irreplaceable drugs' },
+                            { value: 'Replaceable', label: 'SFDA Replaceable drugs' },
+                            { value: 'Therapeutic-alternative', label: 'Therapeutic Alternative' },
+                            { value: 'Not-substituted', label: 'Not Substituted' }
+                          ]}
+                          styles={selectStyles}
+                          menuPortalTarget={document.body}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Patient Share (SAR)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={item.patient_share || 0}
+                          onChange={(e) => handleItemChange(index, 'patient_share', e.target.value)}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div className="flex items-center gap-4 pt-6">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={item.is_package || false}
+                            onChange={(e) => handleItemChange(index, 'is_package', e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="text-sm">Package Item</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-4 pt-6">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={item.is_maternity || false}
+                            onChange={(e) => handleItemChange(index, 'is_maternity', e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="text-sm">Maternity Related</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 )}
