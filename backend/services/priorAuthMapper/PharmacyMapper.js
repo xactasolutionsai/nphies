@@ -458,6 +458,19 @@ class PharmacyMapper extends BaseMapper {
     const calculatedNet = (quantity * unitPrice * factor) + tax;
     const patientShare = parseFloat(item.patient_share || 0);
     
+    // Extract and validate medication code FIRST (needed for extensions and productOrService)
+    // Handle empty strings by treating them as undefined
+    const medicationCode = (item.medication_code && item.medication_code.trim()) || 
+                           (item.product_or_service_code && item.product_or_service_code.trim());
+    const medicationDisplay = (item.medication_name && item.medication_name.trim()) || 
+                              (item.product_or_service_display && item.product_or_service_display.trim());
+    
+    // Validate medication code exists (required for pharmacy)
+    if (!medicationCode) {
+      console.error(`[PharmacyMapper] ERROR: Item ${sequence} missing medication_code - this will cause NPHIES rejection`);
+      throw new Error(`Medication code is required for pharmacy item ${sequence}`);
+    }
+    
     // Build pharmacy-specific extensions per NPHIES spec
     const itemExtensions = [];
 
@@ -477,21 +490,22 @@ class PharmacyMapper extends BaseMapper {
     });
 
     // 3. extension-prescribed-Medication (required for pharmacy)
-    // This is the originally prescribed medication code
-    const prescribedMedicationCode = item.prescribed_medication_code || item.medication_code || item.product_or_service_code;
-    if (prescribedMedicationCode) {
-      itemExtensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication',
-        valueCodeableConcept: {
-          coding: [
-            {
-              system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-              code: prescribedMedicationCode
-            }
-          ]
-        }
-      });
-    }
+    // This is the originally prescribed medication code - use same code as productOrService if not specified
+    const prescribedMedicationCode = (item.prescribed_medication_code && item.prescribed_medication_code.trim()) || 
+                                     medicationCode; // Use the validated medicationCode from above
+    
+    // Always include prescribed medication (required per NPHIES)
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication',
+      valueCodeableConcept: {
+        coding: [
+          {
+            system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
+            code: prescribedMedicationCode
+          }
+        ]
+      }
+    });
 
     // 4. extension-pharmacist-Selection-Reason (required for pharmacy)
     const selectionReason = item.pharmacist_selection_reason || 'patient-request';
@@ -538,17 +552,21 @@ class PharmacyMapper extends BaseMapper {
     };
 
     // ProductOrService using NPHIES medication-codes system
-    const medicationCode = item.medication_code || item.product_or_service_code;
-    const medicationDisplay = item.medication_name || item.product_or_service_display;
+    // (medicationCode and medicationDisplay already extracted and validated above)
+    
+    // Build productOrService coding - only include display if it has a value
+    const productOrServiceCoding = {
+      system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
+      code: medicationCode
+    };
+    
+    // Only add display if it has a non-empty value
+    if (medicationDisplay) {
+      productOrServiceCoding.display = medicationDisplay;
+    }
     
     claimItem.productOrService = {
-      coding: [
-        {
-          system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-          code: medicationCode,
-          display: medicationDisplay
-        }
-      ]
+      coding: [productOrServiceCoding]
     };
 
     // Determine serviced date
