@@ -178,6 +178,50 @@ export default function PriorAuthorizationDetails() {
     )?.valueCodeableConcept?.coding?.[0]?.code;
   };
 
+  // Extract Bundle-level details from response bundle
+  const getBundleDetails = () => {
+    if (!priorAuth.response_bundle) return null;
+    
+    return {
+      id: priorAuth.response_bundle.id,
+      type: priorAuth.response_bundle.type,
+      timestamp: priorAuth.response_bundle.timestamp,
+      profile: priorAuth.response_bundle.meta?.profile?.[0],
+      entryCount: priorAuth.response_bundle.entry?.length
+    };
+  };
+
+  // Extract MessageHeader details from response bundle
+  const getMessageHeaderDetails = () => {
+    if (!priorAuth.response_bundle) return null;
+    
+    const messageHeader = priorAuth.response_bundle?.entry?.find(
+      e => e.resource?.resourceType === 'MessageHeader'
+    )?.resource;
+    
+    if (!messageHeader) return null;
+
+    return {
+      id: messageHeader.id,
+      profile: messageHeader.meta?.profile?.[0],
+      eventCode: messageHeader.eventCoding?.code,
+      eventSystem: messageHeader.eventCoding?.system,
+      metaTag: messageHeader.meta?.tag?.[0]?.code,
+      metaTagSystem: messageHeader.meta?.tag?.[0]?.system,
+      destinationEndpoint: messageHeader.destination?.[0]?.endpoint,
+      receiverIdentifier: messageHeader.destination?.[0]?.receiver?.identifier?.value,
+      receiverSystem: messageHeader.destination?.[0]?.receiver?.identifier?.system,
+      receiverType: messageHeader.destination?.[0]?.receiver?.type,
+      senderIdentifier: messageHeader.sender?.identifier?.value,
+      senderSystem: messageHeader.sender?.identifier?.system,
+      senderType: messageHeader.sender?.type,
+      sourceEndpoint: messageHeader.source?.endpoint,
+      responseIdentifier: messageHeader.response?.identifier,
+      responseCode: messageHeader.response?.code,
+      focusReference: messageHeader.focus?.[0]?.reference
+    };
+  };
+
   // Extract ClaimResponse details from response bundle
   const getClaimResponseDetails = () => {
     if (!priorAuth.response_bundle) return null;
@@ -188,9 +232,23 @@ export default function PriorAuthorizationDetails() {
     
     if (!claimResponse) return null;
 
+    // Get insurance details
+    const insurance = claimResponse.insurance?.[0];
+
+    // Helper to extract ID from reference
+    const extractIdFromRef = (ref) => {
+      if (!ref) return null;
+      const parts = ref.split('/');
+      return parts[parts.length - 1];
+    };
+
     return {
       id: claimResponse.id,
+      profile: claimResponse.meta?.profile?.[0],
+      metaTag: claimResponse.meta?.tag?.[0]?.code,
+      metaTagDisplay: claimResponse.meta?.tag?.[0]?.display,
       identifier: claimResponse.identifier?.[0]?.value,
+      identifierSystem: claimResponse.identifier?.[0]?.system,
       status: claimResponse.status,
       type: claimResponse.type?.coding?.[0]?.code,
       subType: claimResponse.subType?.coding?.[0]?.code,
@@ -199,7 +257,22 @@ export default function PriorAuthorizationDetails() {
       preAuthRef: claimResponse.preAuthRef,
       preAuthPeriod: claimResponse.preAuthPeriod,
       created: claimResponse.created,
-      disposition: claimResponse.disposition
+      disposition: claimResponse.disposition,
+      // References
+      patientReference: claimResponse.patient?.reference,
+      patientId: extractIdFromRef(claimResponse.patient?.reference),
+      insurerReference: claimResponse.insurer?.reference,
+      insurerId: extractIdFromRef(claimResponse.insurer?.reference),
+      requestorReference: claimResponse.requestor?.reference,
+      requestorId: extractIdFromRef(claimResponse.requestor?.reference),
+      // Original request details
+      requestType: claimResponse.request?.type,
+      requestIdentifier: claimResponse.request?.identifier?.value,
+      requestIdentifierSystem: claimResponse.request?.identifier?.system,
+      // Insurance details
+      insuranceSequence: insurance?.sequence,
+      insuranceFocal: insurance?.focal,
+      coverageReference: insurance?.coverage?.reference
     };
   };
 
@@ -213,13 +286,34 @@ export default function PriorAuthorizationDetails() {
     
     if (!coverage) return null;
 
+    // Helper to extract ID from reference
+    const extractIdFromRef = (ref) => {
+      if (!ref) return null;
+      const parts = ref.split('/');
+      return parts[parts.length - 1];
+    };
+
     return {
       id: coverage.id,
       memberId: coverage.identifier?.[0]?.value,
+      memberIdSystem: coverage.identifier?.[0]?.system,
       status: coverage.status,
       type: coverage.type?.coding?.[0]?.display || coverage.type?.coding?.[0]?.code,
+      typeCode: coverage.type?.coding?.[0]?.code,
       policyPeriod: coverage.period,
-      planName: coverage.class?.find(c => c.type?.coding?.[0]?.code === 'plan')?.name
+      planName: coverage.class?.find(c => c.type?.coding?.[0]?.code === 'plan')?.name,
+      planValue: coverage.class?.find(c => c.type?.coding?.[0]?.code === 'plan')?.value,
+      relationship: coverage.relationship?.coding?.[0]?.display || coverage.relationship?.coding?.[0]?.code,
+      relationshipCode: coverage.relationship?.coding?.[0]?.code,
+      // References
+      policyHolderRef: coverage.policyHolder?.reference,
+      policyHolderId: extractIdFromRef(coverage.policyHolder?.reference),
+      subscriberRef: coverage.subscriber?.reference,
+      subscriberId: extractIdFromRef(coverage.subscriber?.reference),
+      beneficiaryRef: coverage.beneficiary?.reference,
+      beneficiaryId: extractIdFromRef(coverage.beneficiary?.reference),
+      payorRef: coverage.payor?.[0]?.reference,
+      payorId: extractIdFromRef(coverage.payor?.[0]?.reference)
     };
   };
 
@@ -233,14 +327,91 @@ export default function PriorAuthorizationDetails() {
     
     if (!patient) return null;
 
+    // Get occupation from extension
+    const occupationExt = patient.extension?.find(
+      ext => ext.url?.includes('extension-occupation')
+    );
+    const occupation = occupationExt?.valueCodeableConcept?.coding?.[0]?.code;
+
+    // Get marital status
+    const maritalStatus = patient.maritalStatus?.coding?.[0]?.code;
+    const maritalStatusDisplay = {
+      'A': 'Annulled',
+      'D': 'Divorced',
+      'I': 'Interlocutory',
+      'L': 'Legally Separated',
+      'M': 'Married',
+      'P': 'Polygamous',
+      'S': 'Never Married',
+      'T': 'Domestic Partner',
+      'U': 'Unmarried',
+      'W': 'Widowed',
+      'UNK': 'Unknown'
+    };
+
     return {
       id: patient.id,
       name: patient.name?.[0]?.text || `${patient.name?.[0]?.given?.join(' ')} ${patient.name?.[0]?.family}`,
       identifier: patient.identifier?.[0]?.value,
       identifierType: patient.identifier?.[0]?.type?.coding?.[0]?.display,
+      identifierCountry: patient.identifier?.[0]?.extension?.find(
+        ext => ext.url?.includes('extension-identifier-country')
+      )?.valueCodeableConcept?.coding?.[0]?.display,
       gender: patient.gender,
       birthDate: patient.birthDate,
-      active: patient.active
+      active: patient.active,
+      occupation: occupation,
+      maritalStatus: maritalStatus,
+      maritalStatusDisplay: maritalStatusDisplay[maritalStatus] || maritalStatus,
+      deceased: patient.deceasedBoolean
+    };
+  };
+
+  // Extract Provider Organization details from response bundle
+  const getProviderFromResponse = () => {
+    if (!priorAuth.response_bundle) return null;
+    
+    const provider = priorAuth.response_bundle?.entry?.find(
+      e => e.resource?.resourceType === 'Organization' && 
+           e.resource?.type?.some(t => t.coding?.some(c => c.code === 'prov'))
+    )?.resource;
+    
+    if (!provider) return null;
+
+    // Get provider type from extension
+    const providerTypeExt = provider.extension?.find(
+      ext => ext.url?.includes('extension-provider-type')
+    );
+    const providerType = providerTypeExt?.valueCodeableConcept?.coding?.[0];
+
+    return {
+      id: provider.id,
+      name: provider.name,
+      identifier: provider.identifier?.[0]?.value,
+      providerType: providerType?.display || providerType?.code,
+      active: provider.active,
+      address: provider.address?.[0]
+    };
+  };
+
+  // Extract Insurer Organization details from response bundle
+  const getInsurerFromResponse = () => {
+    if (!priorAuth.response_bundle) return null;
+    
+    const insurer = priorAuth.response_bundle?.entry?.find(
+      e => e.resource?.resourceType === 'Organization' && 
+           e.resource?.type?.some(t => t.coding?.some(c => c.code === 'ins'))
+    )?.resource;
+    
+    if (!insurer) return null;
+
+    return {
+      id: insurer.id,
+      name: insurer.name,
+      identifier: insurer.identifier?.[0]?.value,
+      organizationType: insurer.type?.[0]?.coding?.[0]?.display,
+      active: insurer.active,
+      address: insurer.address?.[0]
     };
   };
 
@@ -895,6 +1066,138 @@ export default function PriorAuthorizationDetails() {
           {/* NPHIES Response Tab */}
           {activeTab === 'nphies' && priorAuth.response_bundle && (
             <div className="space-y-6">
+              {/* Bundle Info */}
+              {(() => {
+                const bundleDetails = getBundleDetails();
+                if (!bundleDetails) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Code className="h-5 w-5" />
+                        Response Bundle
+                      </CardTitle>
+                      <CardDescription>
+                        FHIR Bundle Container Information
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Bundle ID</Label>
+                          <p className="font-mono text-xs break-all">{bundleDetails.id || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Type</Label>
+                          <Badge variant="outline" className="mt-1">
+                            {bundleDetails.type || '-'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Timestamp</Label>
+                          <p className="font-medium text-sm">{formatDateTime(bundleDetails.timestamp)}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Entries</Label>
+                          <Badge variant="secondary" className="mt-1">
+                            {bundleDetails.entryCount || 0} resources
+                          </Badge>
+                        </div>
+                      </div>
+                      {bundleDetails.profile && (
+                        <div className="mt-4 pt-4 border-t">
+                          <Label className="text-gray-500">Profile</Label>
+                          <p className="font-mono text-xs text-gray-500 break-all mt-1">{bundleDetails.profile}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Message Header Details */}
+              {(() => {
+                const messageHeader = getMessageHeaderDetails();
+                if (!messageHeader) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        Message Header
+                      </CardTitle>
+                      <CardDescription>
+                        NPHIES Message Exchange Details
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Message ID</Label>
+                          <p className="font-mono text-xs break-all">{messageHeader.id || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Event</Label>
+                          <Badge variant="outline" className="mt-1">
+                            {messageHeader.eventCode || '-'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Response Code</Label>
+                          <Badge 
+                            variant={messageHeader.responseCode === 'ok' ? 'default' : 'secondary'}
+                            className={messageHeader.responseCode === 'ok' ? 'bg-green-500 mt-1' : 'mt-1'}
+                          >
+                            {messageHeader.responseCode || '-'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Meta Tag</Label>
+                          <p className="font-medium text-sm">{messageHeader.metaTag || '-'}</p>
+                        </div>
+                      </div>
+                      
+                      <hr className="border-gray-200" />
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-3 bg-blue-50 rounded-lg">
+                          <Label className="text-blue-700 text-xs uppercase tracking-wider">Sender ({messageHeader.senderType || 'Payer'})</Label>
+                          <p className="font-mono text-sm mt-1">{messageHeader.senderIdentifier || '-'}</p>
+                          <p className="text-xs text-gray-500 mt-1">Endpoint: {messageHeader.sourceEndpoint || '-'}</p>
+                        </div>
+                        <div className="p-3 bg-green-50 rounded-lg">
+                          <Label className="text-green-700 text-xs uppercase tracking-wider">Receiver ({messageHeader.receiverType || 'Provider'})</Label>
+                          <p className="font-mono text-sm mt-1">{messageHeader.receiverIdentifier || '-'}</p>
+                          <p className="text-xs text-gray-500 mt-1">Endpoint: {messageHeader.destinationEndpoint || '-'}</p>
+                        </div>
+                      </div>
+                      
+                      {(messageHeader.responseIdentifier || messageHeader.focusReference) && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {messageHeader.responseIdentifier && (
+                              <div>
+                                <Label className="text-gray-500">Original Request ID</Label>
+                                <p className="font-mono text-xs break-all mt-1">{messageHeader.responseIdentifier}</p>
+                              </div>
+                            )}
+                            {messageHeader.focusReference && (
+                              <div>
+                                <Label className="text-gray-500">Focus Reference</Label>
+                                <p className="font-mono text-xs break-all mt-1">{messageHeader.focusReference}</p>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
               {/* ClaimResponse Details */}
               {(() => {
                 const claimResponseDetails = getClaimResponseDetails();
@@ -915,7 +1218,7 @@ export default function PriorAuthorizationDetails() {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <Label className="text-gray-500">Response ID</Label>
-                          <p className="font-mono text-sm">{claimResponseDetails.id || '-'}</p>
+                          <p className="font-mono text-xs break-all">{claimResponseDetails.id || '-'}</p>
                         </div>
                         <div>
                           <Label className="text-gray-500">Status</Label>
@@ -937,6 +1240,121 @@ export default function PriorAuthorizationDetails() {
                           <p className="font-medium">{formatDate(claimResponseDetails.created)}</p>
                         </div>
                       </div>
+                      
+                      {/* Meta Tag (NPHIES generated indicator) */}
+                      {claimResponseDetails.metaTag && (
+                        <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-lg inline-block">
+                          <Badge variant="outline" className="text-yellow-700 border-yellow-400">
+                            {claimResponseDetails.metaTagDisplay || claimResponseDetails.metaTag}
+                          </Badge>
+                        </div>
+                      )}
+                      
+                      {/* Identifier */}
+                      {claimResponseDetails.identifier && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">Response Identifier</Label>
+                            <p className="font-mono text-xs break-all mt-1">{claimResponseDetails.identifier}</p>
+                            {claimResponseDetails.identifierSystem && (
+                              <p className="text-xs text-gray-400 mt-1">{claimResponseDetails.identifierSystem}</p>
+                            )}
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* Original Request Details */}
+                      {claimResponseDetails.requestIdentifier && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className="p-3 bg-gray-50 rounded-lg">
+                            <Label className="text-gray-500 text-xs uppercase tracking-wider">Original Request</Label>
+                            <div className="grid grid-cols-2 gap-4 mt-2">
+                              <div>
+                                <p className="text-xs text-gray-500">Request Type</p>
+                                <Badge variant="outline" className="mt-1">
+                                  {claimResponseDetails.requestType || '-'}
+                                </Badge>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">Request Identifier</p>
+                                <p className="font-mono text-xs break-all mt-1">{claimResponseDetails.requestIdentifier}</p>
+                                {claimResponseDetails.requestIdentifierSystem && (
+                                  <p className="text-xs text-gray-400">{claimResponseDetails.requestIdentifierSystem}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* Resource References */}
+                      {(claimResponseDetails.patientId || claimResponseDetails.insurerId || claimResponseDetails.requestorId) && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500 text-xs uppercase tracking-wider mb-3 block">Resource References</Label>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {claimResponseDetails.patientReference && (
+                                <div className="p-2 bg-blue-50 rounded">
+                                  <p className="text-xs text-blue-600 font-medium">Patient</p>
+                                  <p className="font-mono text-xs break-all mt-1">{claimResponseDetails.patientId}</p>
+                                </div>
+                              )}
+                              {claimResponseDetails.insurerReference && (
+                                <div className="p-2 bg-purple-50 rounded">
+                                  <p className="text-xs text-purple-600 font-medium">Insurer</p>
+                                  <p className="font-mono text-xs break-all mt-1">{claimResponseDetails.insurerId}</p>
+                                </div>
+                              )}
+                              {claimResponseDetails.requestorReference && (
+                                <div className="p-2 bg-green-50 rounded">
+                                  <p className="text-xs text-green-600 font-medium">Requestor (Provider)</p>
+                                  <p className="font-mono text-xs break-all mt-1">{claimResponseDetails.requestorId}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* Insurance Details */}
+                      {claimResponseDetails.insuranceSequence && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div>
+                              <Label className="text-gray-500">Insurance Sequence</Label>
+                              <p className="font-medium">{claimResponseDetails.insuranceSequence}</p>
+                            </div>
+                            <div>
+                              <Label className="text-gray-500">Focal</Label>
+                              <Badge variant={claimResponseDetails.insuranceFocal ? 'default' : 'secondary'}
+                                     className={claimResponseDetails.insuranceFocal ? 'bg-blue-500 mt-1' : 'mt-1'}>
+                                {claimResponseDetails.insuranceFocal ? 'Yes' : 'No'}
+                              </Badge>
+                            </div>
+                            {claimResponseDetails.coverageReference && (
+                              <div>
+                                <Label className="text-gray-500">Coverage Reference</Label>
+                                <p className="font-mono text-xs break-all">{claimResponseDetails.coverageReference}</p>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* Profile */}
+                      {claimResponseDetails.profile && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">FHIR Profile</Label>
+                            <p className="font-mono text-xs text-gray-500 break-all mt-1">{claimResponseDetails.profile}</p>
+                          </div>
+                        </>
+                      )}
 
                       <hr className="border-gray-200" />
 
@@ -1093,7 +1511,7 @@ export default function PriorAuthorizationDetails() {
                         Coverage Information
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <Label className="text-gray-500">Member ID</Label>
@@ -1109,19 +1527,86 @@ export default function PriorAuthorizationDetails() {
                         <div>
                           <Label className="text-gray-500">Coverage Type</Label>
                           <p className="font-medium">{coverage.type || '-'}</p>
+                          {coverage.typeCode && coverage.typeCode !== coverage.type && (
+                            <p className="text-xs text-gray-500 font-mono">{coverage.typeCode}</p>
+                          )}
                         </div>
+                        <div>
+                          <Label className="text-gray-500">Subscriber Relationship</Label>
+                          <p className="font-medium capitalize">{coverage.relationship || '-'}</p>
+                        </div>
+                      </div>
+                      
+                      <hr className="border-gray-200" />
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <Label className="text-gray-500">Plan Name</Label>
                           <p className="font-medium">{coverage.planName || '-'}</p>
                         </div>
-                      </div>
-                      {coverage.policyPeriod && (
-                        <div className="mt-4 pt-4 border-t">
-                          <Label className="text-gray-500">Policy Period</Label>
-                          <p className="font-medium mt-1">
-                            {formatDate(coverage.policyPeriod.start)} — {formatDate(coverage.policyPeriod.end)}
-                          </p>
+                        <div>
+                          <Label className="text-gray-500">Plan ID</Label>
+                          <p className="font-mono text-sm">{coverage.planValue || '-'}</p>
                         </div>
+                        {coverage.policyPeriod && (
+                          <>
+                            <div>
+                              <Label className="text-gray-500">Policy Start</Label>
+                              <p className="font-medium">{formatDate(coverage.policyPeriod.start)}</p>
+                            </div>
+                            <div>
+                              <Label className="text-gray-500">Policy End</Label>
+                              <p className="font-medium">{formatDate(coverage.policyPeriod.end)}</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      
+                      {/* Coverage References */}
+                      {(coverage.policyHolderId || coverage.subscriberId || coverage.beneficiaryId || coverage.payorId) && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500 text-xs uppercase tracking-wider mb-3 block">Coverage References</Label>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              {coverage.policyHolderId && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Policy Holder</p>
+                                  <p className="font-mono text-xs break-all">{coverage.policyHolderId}</p>
+                                </div>
+                              )}
+                              {coverage.subscriberId && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Subscriber</p>
+                                  <p className="font-mono text-xs break-all">{coverage.subscriberId}</p>
+                                </div>
+                              )}
+                              {coverage.beneficiaryId && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Beneficiary</p>
+                                  <p className="font-mono text-xs break-all">{coverage.beneficiaryId}</p>
+                                </div>
+                              )}
+                              {coverage.payorId && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Payor</p>
+                                  <p className="font-mono text-xs break-all">{coverage.payorId}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* Member ID System */}
+                      {coverage.memberIdSystem && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">Member ID System</Label>
+                            <p className="font-mono text-xs text-gray-500 mt-1">{coverage.memberIdSystem}</p>
+                          </div>
+                        </>
                       )}
                     </CardContent>
                   </Card>
@@ -1141,7 +1626,7 @@ export default function PriorAuthorizationDetails() {
                         Patient (from Response)
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <Label className="text-gray-500">Name</Label>
@@ -1153,6 +1638,9 @@ export default function PriorAuthorizationDetails() {
                           {patient.identifierType && (
                             <p className="text-xs text-gray-500">{patient.identifierType}</p>
                           )}
+                          {patient.identifierCountry && (
+                            <p className="text-xs text-gray-500">{patient.identifierCountry}</p>
+                          )}
                         </div>
                         <div>
                           <Label className="text-gray-500">Gender</Label>
@@ -1163,6 +1651,136 @@ export default function PriorAuthorizationDetails() {
                           <p className="font-medium">{formatDate(patient.birthDate)}</p>
                         </div>
                       </div>
+                      
+                      <hr className="border-gray-200" />
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Occupation</Label>
+                          <p className="font-medium capitalize">{patient.occupation || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Marital Status</Label>
+                          <p className="font-medium">{patient.maritalStatusDisplay || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Status</Label>
+                          <Badge variant={patient.active ? 'default' : 'secondary'} 
+                                 className={patient.active ? 'bg-green-500' : ''}>
+                            {patient.active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Deceased</Label>
+                          <p className="font-medium">{patient.deceased === true ? 'Yes' : patient.deceased === false ? 'No' : '-'}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Provider Organization Details from Response */}
+              {(() => {
+                const provider = getProviderFromResponse();
+                if (!provider) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Building className="h-5 w-5" />
+                        Provider Organization (from Response)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Name</Label>
+                          <p className="font-medium">{provider.name || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">License ID</Label>
+                          <p className="font-mono">{provider.identifier || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Provider Type</Label>
+                          <p className="font-medium">{provider.providerType || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Status</Label>
+                          <Badge variant={provider.active ? 'default' : 'secondary'} 
+                                 className={provider.active ? 'bg-green-500' : ''}>
+                            {provider.active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {provider.address && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">Address</Label>
+                            <p className="font-medium mt-1">{provider.address.text || provider.address.line?.join(', ') || '-'}</p>
+                            <p className="text-sm text-gray-500">
+                              {[provider.address.city, provider.address.state, provider.address.country].filter(Boolean).join(', ')}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Insurer Organization Details from Response */}
+              {(() => {
+                const insurer = getInsurerFromResponse();
+                if (!insurer) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Insurer Organization (from Response)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Name</Label>
+                          <p className="font-medium">{insurer.name || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">License ID</Label>
+                          <p className="font-mono">{insurer.identifier || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Organization Type</Label>
+                          <p className="font-medium">{insurer.organizationType || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Status</Label>
+                          <Badge variant={insurer.active ? 'default' : 'secondary'} 
+                                 className={insurer.active ? 'bg-green-500' : ''}>
+                            {insurer.active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {insurer.address && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">Address</Label>
+                            <p className="font-medium mt-1">{insurer.address.text || insurer.address.line?.join(', ') || '-'}</p>
+                            <p className="text-sm text-gray-500">
+                              {[insurer.address.city, insurer.address.state, insurer.address.country].filter(Boolean).join(', ')}
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 );
