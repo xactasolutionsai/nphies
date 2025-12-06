@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "4fea0c09-2b30-417c-b7d8-a3934db32296",
+    "id": "f3ccc39f-18ec-4c80-b45d-e9484ebe8b06",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-04T21:32:17.357+00:00",
+    "timestamp": "2025-12-06T22:37:18.430+03:00",
     "entry": [
         {
-            "fullUrl": "http://pseudo-payer.com.sa/MessageHeader/721e1282-0110-4eca-9f05-78b972a7ccee",
+            "fullUrl": "http://nphies.sa/MessageHeader/93010e22-89d0-4c7f-8dc9-c64f4f264121",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "721e1282-0110-4eca-9f05-78b972a7ccee",
+                "id": "93010e22-89d0-4c7f-8dc9-c64f4f264121",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -44,51 +44,44 @@
                 "sender": {
                     "type": "Organization",
                     "identifier": {
-                        "system": "http://nphies.sa/license/payer-license",
-                        "value": "INS-FHIR"
+                        "system": "http://nphies.sa/license/nphies",
+                        "value": "NPHIES"
                     }
                 },
                 "source": {
-                    "endpoint": "http://payer.com"
+                    "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "78824b02-1e41-47cd-a085-f0ce5bf72604",
+                    "identifier": "09b3847a-cad7-4f17-b9bd-dbdd7220e5a3",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://pseudo-payer.com.sa/ClaimResponse/a6c04044-b07b-47ac-b2cc-3ef0aa503fa2"
+                        "reference": "http://nphies.sa/ClaimResponse/939"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://pseudo-payer.com.sa/ClaimResponse/a6c04044-b07b-47ac-b2cc-3ef0aa503fa2",
+            "fullUrl": "http://nphies.sa/ClaimResponse/939",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "a6c04044-b07b-47ac-b2cc-3ef0aa503fa2",
+                "id": "939",
                 "meta": {
                     "profile": [
-                        "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/prior-auth-response|1.0.0"
+                        "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
+                    ],
+                    "tag": [
+                        {
+                            "code": "NPHIES generated",
+                            "display": "NPHIES generated"
+                        }
                     ]
                 },
-                "extension": [
-                    {
-                        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
-                        "valueCodeableConcept": {
-                            "coding": [
-                                {
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
-                                    "code": "approved"
-                                }
-                            ]
-                        }
-                    }
-                ],
                 "identifier": [
                     {
-                        "system": "http://pseudo-payer.com.sa/claimresponse",
-                        "value": "15982f1c-12bc-4fff-b081-8ec16cd70117"
+                        "system": "http://nphies.sa/ClaimResponse",
+                        "value": "DUP-1765043442962"
                     }
                 ],
                 "status": "active",
@@ -96,172 +89,78 @@
                     "coding": [
                         {
                             "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-                            "code": "vision"
-                        }
-                    ]
-                },
-                "subType": {
-                    "coding": [
-                        {
-                            "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype",
-                            "code": "op"
+                            "code": "pharmacy"
                         }
                     ]
                 },
                 "use": "preauthorization",
                 "patient": {
-                    "reference": "http://provider.com/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
+                    "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
                 },
-                "created": "2025-12-05",
+                "created": "2025-12-06T22:37:10+03:00",
                 "insurer": {
-                    "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+                    "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
                 "requestor": {
-                    "reference": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
+                    "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
                 },
                 "request": {
                     "type": "Claim",
                     "identifier": {
                         "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-                        "value": "DUP-1764883926274"
+                        "value": "DUP-1765043442962"
                     }
                 },
-                "outcome": "complete",
-                "preAuthRef": "77055c9e-05ab-4c26-878b-ab15ec10db82",
-                "preAuthPeriod": {
-                    "start": "2025-12-05",
-                    "end": "2025-12-10"
-                },
-                "item": [
-                    {
-                        "extension": [
-                            {
-                                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
-                                "valueCodeableConcept": {
-                                    "coding": [
-                                        {
-                                            "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
-                                            "code": "approved"
-                                        }
-                                    ]
-                                }
-                            }
-                        ],
-                        "itemSequence": 1,
-                        "adjudication": [
-                            {
-                                "category": {
-                                    "coding": [
-                                        {
-                                            "system": "http://terminology.hl7.org/CodeSystem/adjudication",
-                                            "code": "eligible"
-                                        }
-                                    ]
-                                },
-                                "amount": {
-                                    "value": 800,
-                                    "currency": "SAR"
-                                }
-                            },
-                            {
-                                "category": {
-                                    "coding": [
-                                        {
-                                            "system": "http://terminology.hl7.org/CodeSystem/adjudication",
-                                            "code": "copay"
-                                        }
-                                    ]
-                                },
-                                "amount": {
-                                    "value": 24,
-                                    "currency": "SAR"
-                                }
-                            },
-                            {
-                                "category": {
-                                    "coding": [
-                                        {
-                                            "system": "http://terminology.hl7.org/CodeSystem/adjudication",
-                                            "code": "benefit"
-                                        }
-                                    ]
-                                },
-                                "amount": {
-                                    "value": 776,
-                                    "currency": "SAR"
-                                }
-                            },
-                            {
-                                "category": {
-                                    "coding": [
-                                        {
-                                            "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication",
-                                            "code": "approved-quantity"
-                                        }
-                                    ]
-                                },
-                                "value": 1
-                            }
-                        ]
-                    }
-                ],
-                "total": [
-                    {
-                        "category": {
-                            "coding": [
-                                {
-                                    "system": "http://terminology.hl7.org/CodeSystem/adjudication",
-                                    "code": "eligible"
-                                }
-                            ]
-                        },
-                        "amount": {
-                            "value": 800,
-                            "currency": "SAR"
-                        }
-                    },
-                    {
-                        "category": {
-                            "coding": [
-                                {
-                                    "system": "http://terminology.hl7.org/CodeSystem/adjudication",
-                                    "code": "benefit"
-                                }
-                            ]
-                        },
-                        "amount": {
-                            "value": 776,
-                            "currency": "SAR"
-                        }
-                    },
-                    {
-                        "category": {
-                            "coding": [
-                                {
-                                    "system": "http://terminology.hl7.org/CodeSystem/adjudication",
-                                    "code": "copay"
-                                }
-                            ]
-                        },
-                        "amount": {
-                            "value": 24,
-                            "currency": "SAR"
-                        }
-                    }
-                ],
+                "outcome": "error",
                 "insurance": [
                     {
                         "sequence": 1,
                         "focal": true,
                         "coverage": {
-                            "reference": "http://provider.com/Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
+                            "reference": "Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
+                        }
+                    }
+                ],
+                "error": [
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[1].resource.item[0].informationSequence"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00376",
+                                    "display": "Claim supportingInfo of type 'days-supply' is not linked or provided more than once in item when productOrService  is medication code in a 'pharmacy' claim or authorization"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[1].resource.item[0].informationSequence"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00376",
+                                    "display": "Claim supportingInfo of type 'days-supply' is not linked or provided more than once in item when productOrService  is medication code in a 'pharmacy' claim or authorization"
+                                }
+                            ]
                         }
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://provider.com/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
+            "fullUrl": "http://nphies.sa/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
             "resource": {
                 "resourceType": "Patient",
                 "id": "09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
@@ -353,7 +252,7 @@
             }
         },
         {
-            "fullUrl": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
+            "fullUrl": "http://nphies.sa/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
             "resource": {
                 "resourceType": "Organization",
                 "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
@@ -408,7 +307,7 @@
             }
         },
         {
-            "fullUrl": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
+            "fullUrl": "http://nphies.sa/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
             "resource": {
                 "resourceType": "Organization",
                 "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
@@ -459,7 +358,7 @@
             }
         },
         {
-            "fullUrl": "http://provider.com/Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
+            "fullUrl": "http://nphies.sa/Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
             "resource": {
                 "resourceType": "Coverage",
                 "id": "32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
@@ -508,7 +407,7 @@
                 },
                 "payor": [
                     {
-                        "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+                        "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                     }
                 ],
                 "class": [

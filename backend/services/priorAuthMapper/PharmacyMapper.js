@@ -346,16 +346,47 @@ class PharmacyMapper extends BaseMapper {
       }));
     }
 
-    // SupportingInfo - NOT present in NPHIES example Claim-483074.json
-    // Only include if explicitly provided
-    let supportingInfoSequences = [];
+    // SupportingInfo - days-supply is REQUIRED for pharmacy claims per BV-00376
+    // The item.informationSequence MUST reference the days-supply supportingInfo
+    let supportingInfoList = [];
+    let daysSupplySequence = null;
+    let currentSequence = 1;
+    
+    // First, add days-supply (REQUIRED for pharmacy)
+    // Get days_supply from items or use default
+    const daysSupplyValue = priorAuth.items?.[0]?.days_supply || priorAuth.days_supply || 30;
+    supportingInfoList.push({
+      sequence: currentSequence,
+      category: {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+          code: 'days-supply'
+        }]
+      },
+      timingDate: this.formatDate(priorAuth.request_date || new Date()),
+      valueQuantity: {
+        value: parseInt(daysSupplyValue),
+        unit: 'd',
+        system: 'http://unitsofmeasure.org',
+        code: 'd'
+      }
+    });
+    daysSupplySequence = currentSequence;
+    currentSequence++;
+    
+    // Add other supporting info if provided (but NOT days-supply again)
     if (priorAuth.supporting_info && priorAuth.supporting_info.length > 0) {
-      claim.supportingInfo = priorAuth.supporting_info.map((info, idx) => {
-        const seq = idx + 1;
-        supportingInfoSequences.push(seq);
-        return this.buildSupportingInfo({ ...info, sequence: seq });
+      priorAuth.supporting_info.forEach(info => {
+        // Skip if it's days-supply (already added above)
+        if (info.category === 'days-supply' || info.category === 'days_supply') {
+          return;
+        }
+        supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence: currentSequence }));
+        currentSequence++;
       });
     }
+    
+    claim.supportingInfo = supportingInfoList;
 
     // Insurance (required)
     claim.insurance = [
@@ -373,8 +404,9 @@ class PharmacyMapper extends BaseMapper {
     };
     
     if (priorAuth.items && priorAuth.items.length > 0) {
+      // Pass daysSupplySequence to link items to days-supply supportingInfo (REQUIRED per BV-00376)
       claim.item = priorAuth.items.map((item, idx) => 
-        this.buildPharmacyClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod)
+        this.buildPharmacyClaimItem(item, idx + 1, daysSupplySequence, encounterPeriod)
       );
     }
 
@@ -412,8 +444,10 @@ class PharmacyMapper extends BaseMapper {
    * - extension-pharmacist-Selection-Reason (CodeableConcept) - reason for pharmacist selection
    * - extension-pharmacist-substitute (CodeableConcept) - substitution status
    * - extension-maternity (boolean) - maternity related
+   * 
+   * IMPORTANT: informationSequence MUST reference the days-supply supportingInfo (BV-00376)
    */
-  buildPharmacyClaimItem(item, itemIndex, supportingInfoSequences, encounterPeriod) {
+  buildPharmacyClaimItem(item, itemIndex, daysSupplySequence, encounterPeriod) {
     const sequence = item.sequence || itemIndex;
     
     const quantity = parseFloat(item.quantity || 1);
@@ -495,11 +529,12 @@ class PharmacyMapper extends BaseMapper {
     });
 
     // Build the claim item
+    // IMPORTANT: informationSequence MUST reference the days-supply supportingInfo per BV-00376
     const claimItem = {
       extension: itemExtensions,
       sequence: sequence,
       diagnosisSequence: item.diagnosis_sequences || [1],
-      informationSequence: item.information_sequences || supportingInfoSequences
+      informationSequence: [daysSupplySequence] // MUST reference days-supply (required for pharmacy)
     };
 
     // ProductOrService using NPHIES medication-codes system

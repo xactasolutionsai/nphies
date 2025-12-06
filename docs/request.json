@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "03e5dee0-73ce-42aa-acad-4319aeadc19b",
+  "id": "677b4fb6-4f32-49da-a9e3-f7d801f5281c",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-04T21:03:22.731Z",
+  "timestamp": "2025-12-06T19:37:10.796Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:e012eba3-896e-402e-9695-ff479134ee9e",
+      "fullUrl": "urn:uuid:09b3847a-cad7-4f17-b9bd-dbdd7220e5a3",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "e012eba3-896e-402e-9695-ff479134ee9e",
+        "id": "09b3847a-cad7-4f17-b9bd-dbdd7220e5a3",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,33 +47,25 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/d68517cd-ffff-4525-b89d-d81bb9e13bc2"
+            "reference": "http://provider.com/Claim/78fb526b-8537-4c47-b635-30bf218c86c1"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/d68517cd-ffff-4525-b89d-d81bb9e13bc2",
+      "fullUrl": "http://provider.com/Claim/78fb526b-8537-4c47-b635-30bf218c86c1",
       "resource": {
         "resourceType": "Claim",
-        "id": "d68517cd-ffff-4525-b89d-d81bb9e13bc2",
+        "id": "78fb526b-8537-4c47-b635-30bf218c86c1",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-priorauth|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-priorauth|1.0.0"
           ]
         },
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescription",
-            "valueReference": {
-              "reference": "VisionPrescription/330490e6-bc61-458f-8243-ccd57029d754"
-            }
-          }
-        ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-            "value": "DUP-1764882182505"
+            "value": "DUP-1765043442962"
           }
         ],
         "status": "active",
@@ -81,7 +73,7 @@
           "coding": [
             {
               "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-              "code": "vision"
+              "code": "pharmacy"
             }
           ]
         },
@@ -97,7 +89,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-04T21:03:22.730Z",
+        "created": "2025-12-06T22:37:10+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -122,33 +114,6 @@
             ]
           }
         },
-        "prescription": {
-          "reference": "VisionPrescription/330490e6-bc61-458f-8243-ccd57029d754"
-        },
-        "careTeam": [
-          {
-            "sequence": 1,
-            "provider": {
-              "reference": "Practitioner/d7e4b939-7720-4bf9-a298-e2d8b7e17924"
-            },
-            "role": {
-              "coding": [
-                {
-                  "system": "http://terminology.hl7.org/CodeSystem/claimcareteamrole",
-                  "code": "primary"
-                }
-              ]
-            },
-            "qualification": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
-                  "code": "11.00"
-                }
-              ]
-            }
-          }
-        ],
         "diagnosis": [
           {
             "sequence": 1,
@@ -156,8 +121,8 @@
               "coding": [
                 {
                   "system": "http://hl7.org/fhir/sid/icd-10-am",
-                  "code": "Z01.0",
-                  "display": "Examination of eyes and vision"
+                  "code": "R51",
+                  "display": "Headache"
                 }
               ]
             },
@@ -167,6 +132,28 @@
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type",
                     "code": "principal"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "sequence": 2,
+            "diagnosisCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://hl7.org/fhir/sid/icd-10-am",
+                  "code": "G44.4",
+                  "display": "Drug-induced headache, not elsewhere classified"
+                }
+              ]
+            },
+            "type": [
+              {
+                "coding": [
+                  {
+                    "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type",
+                    "code": "secondary"
                   }
                 ]
               }
@@ -208,7 +195,7 @@
                 }
               ]
             },
-            "valueString": "Stable"
+            "valueString": "No history"
           },
           {
             "sequence": 4,
@@ -267,28 +254,45 @@
                 }
               },
               {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share",
-                "valueMoney": {
-                  "value": 800,
-                  "currency": "SAR"
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
+                      "code": "07612797198780"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason",
+                      "code": "patient-request"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-substitute",
+                      "code": "Irreplaceable",
+                      "display": "SFDA Irreplaceable drugs"
+                    }
+                  ]
                 }
               },
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
                 "valueBoolean": false
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax",
-                "valueMoney": {
-                  "value": 0,
-                  "currency": "SAR"
-                }
               }
             ],
             "sequence": 1,
-            "careTeamSequence": [
-              1
-            ],
             "diagnosisSequence": [
               1
             ],
@@ -302,93 +306,30 @@
             "productOrService": {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/procedures",
-                  "code": "96092-00-10",
-                  "display": "Fitting of spectacles"
+                  "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
+                  "code": "07612797198780",
+                  "display": "VOLTAREN 50 MG TAB"
                 }
               ]
             },
-            "servicedDate": "2023-11-29",
+            "servicedDate": "2023-12-04",
             "quantity": {
               "value": 1
             },
             "unitPrice": {
-              "value": 800,
+              "value": 60,
               "currency": "SAR"
             },
             "net": {
-              "value": 800,
+              "value": 60,
               "currency": "SAR"
             }
           }
         ],
         "total": {
-          "value": 800,
+          "value": 60,
           "currency": "SAR"
         }
-      }
-    },
-    {
-      "fullUrl": "http://provider.com/VisionPrescription/330490e6-bc61-458f-8243-ccd57029d754",
-      "resource": {
-        "resourceType": "VisionPrescription",
-        "id": "330490e6-bc61-458f-8243-ccd57029d754",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0"
-          ]
-        },
-        "identifier": [
-          {
-            "system": "http://PR-FHIR.com.sa/identifiers/prescription",
-            "value": "RX-330490e6"
-          }
-        ],
-        "status": "active",
-        "created": "2023-12-01T21:00:00.000Z",
-        "patient": {
-          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-        },
-        "dateWritten": "2023-12-01",
-        "prescriber": {
-          "reference": "Practitioner/d7e4b939-7720-4bf9-a298-e2d8b7e17924"
-        },
-        "lensSpecification": [
-          {
-            "product": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/lens-type",
-                  "code": "lens"
-                }
-              ]
-            },
-            "eye": "right",
-            "sphere": 2.25,
-            "cylinder": 0.75,
-            "axis": 80
-          },
-          {
-            "product": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/lens-type",
-                  "code": "lens"
-                }
-              ]
-            },
-            "eye": "left",
-            "sphere": 1.5,
-            "cylinder": 0.75,
-            "axis": 110,
-            "prism": [
-              {
-                "amount": 2,
-                "base": "up"
-              }
-            ]
-          }
-        ]
       }
     },
     {
@@ -458,57 +399,6 @@
           "start": "2021-03-15",
           "end": "2028-03-15"
         }
-      }
-    },
-    {
-      "fullUrl": "http://provider.com/Practitioner/d7e4b939-7720-4bf9-a298-e2d8b7e17924",
-      "resource": {
-        "resourceType": "Practitioner",
-        "id": "d7e4b939-7720-4bf9-a298-e2d8b7e17924",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
-          ]
-        },
-        "identifier": [
-          {
-            "type": {
-              "coding": [
-                {
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                  "code": "MD",
-                  "display": "Medical License Number"
-                }
-              ]
-            },
-            "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-d7e4b939"
-          }
-        ],
-        "active": true,
-        "name": [
-          {
-            "use": "official",
-            "text": "Default Practitioner",
-            "family": "Practitioner",
-            "given": [
-              "Default"
-            ]
-          }
-        ],
-        "qualification": [
-          {
-            "code": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
-                  "code": "11.00",
-                  "display": "Healthcare Professional"
-                }
-              ]
-            }
-          }
-        ]
       }
     },
     {
