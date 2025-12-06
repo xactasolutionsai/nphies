@@ -554,8 +554,18 @@ export default function PriorAuthorizationForm() {
     if (!formData.insurer_id) validationErrors.push({ field: 'insurer_id', message: 'Insurer is required' });
     if (!formData.items || formData.items.length === 0) validationErrors.push({ field: 'items', message: 'At least one service item is required' });
     
-    const invalidItems = formData.items.filter(item => !item.product_or_service_code);
-    if (invalidItems.length > 0) validationErrors.push({ field: 'items', message: 'All items must have a service code' });
+    // Validate item codes based on auth type
+    // Pharmacy uses medication_code, others use product_or_service_code
+    const invalidItems = formData.items.filter(item => {
+      if (formData.auth_type === 'pharmacy') {
+        return !item.medication_code;
+      }
+      return !item.product_or_service_code;
+    });
+    if (invalidItems.length > 0) {
+      const codeType = formData.auth_type === 'pharmacy' ? 'medication code' : 'service code';
+      validationErrors.push({ field: 'items', message: `All items must have a ${codeType}` });
+    }
     
     return { valid: validationErrors.length === 0, errors: validationErrors };
   };
@@ -918,8 +928,8 @@ export default function PriorAuthorizationForm() {
                   menuPortalTarget={document.body}
                 />
               </div>
-              {/* Encounter Class - NOT shown for Vision claims (Vision doesn't use Encounter) */}
-              {formData.auth_type !== 'vision' && (
+              {/* Encounter Class - NOT shown for Vision/Pharmacy claims (they don't use Encounter per NPHIES examples) */}
+              {formData.auth_type !== 'vision' && formData.auth_type !== 'pharmacy' && (
                 <div className="space-y-2">
                   <Label>Encounter Class</Label>
                   <Select
@@ -949,7 +959,7 @@ export default function PriorAuthorizationForm() {
               <div className="flex items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                 <Pill className="h-5 w-5 text-purple-500" />
                 <span className="text-sm text-purple-700">
-                  Pharmacy claims use subType=OP (OutPatient) with Encounter class AMB (Ambulatory/Outpatient). Days supply and medication-specific information are required per NPHIES.
+                  Pharmacy claims do not require Encounter information per NPHIES specification. Required: Patient, Provider, Diagnosis, Items with medication codes, and Insurance.
                 </span>
               </div>
             )}
@@ -971,8 +981,8 @@ export default function PriorAuthorizationForm() {
               </div>
             )}
 
-            {/* Encounter Period - Only for non-Vision claims */}
-            {formData.auth_type !== 'vision' && (
+            {/* Encounter Period - Only for claims that use Encounter (not Vision/Pharmacy) */}
+            {formData.auth_type !== 'vision' && formData.auth_type !== 'pharmacy' && (
               <>
                 <hr className="border-gray-200" />
 
@@ -1837,8 +1847,8 @@ export default function PriorAuthorizationForm() {
                   )}
                 </div>
                 
-                {/* Generic procedure code fields - hidden for dental (uses specialized dental fields below) */}
-                {formData.auth_type !== 'dental' && (
+                {/* Generic procedure code fields - hidden for dental/pharmacy (they use specialized fields below) */}
+                {formData.auth_type !== 'dental' && formData.auth_type !== 'pharmacy' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Service/Procedure Code *</Label>

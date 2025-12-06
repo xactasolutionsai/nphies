@@ -4,20 +4,22 @@
  * Reference: https://portal.nphies.sa/ig/StructureDefinition-pharmacy-priorauth.html
  * Example: https://portal.nphies.sa/ig/Claim-483074.json.html
  * 
- * Bundle Structure:
+ * Bundle Structure (per NPHIES example Claim-483074):
  * - MessageHeader (eventCoding = priorauth-request)
  * - Claim (pharmacy-priorauth profile)
  * - Coverage
  * - Patient
  * - Organization (Provider)
  * - Organization (Insurer)
- * - Practitioner
- * - Encounter (AMB profile only for pharmacy)
+ * 
+ * NOTE: Per NPHIES example Claim-483074.json:
+ * - NO Encounter required for pharmacy claims
+ * - NO careTeam/Practitioner required for pharmacy claims
+ * - NO supportingInfo in the example (days-supply may be optional)
  * 
  * Special Requirements per NPHIES:
  * - Must use 'pharmacy' claim type (http://terminology.hl7.org/CodeSystem/claim-type)
  * - Must use 'op' subType (outpatient only for pharmacy)
- * - days-supply supportingInfo is REQUIRED
  * - ProductOrService uses medication-codes CodeSystem (http://nphies.sa/terminology/CodeSystem/medication-codes)
  * - Item extensions REQUIRED:
  *   - extension-package (boolean)
@@ -26,14 +28,11 @@
  *   - extension-pharmacist-Selection-Reason (CodeableConcept) - for pharmacy claims
  *   - extension-pharmacist-substitute (CodeableConcept) - for pharmacy claims
  *   - extension-maternity (boolean)
- * - Encounter class must be AMB (ambulatory)
  * 
  * Constraints:
  * - BV-00002: claim type must be pharmacy
  * - BV-00036: subType must be op for pharmacy
- * - BV-00042: days-supply is required for pharmacy
  * - BV-00043: productOrService must use medication-codes
- * - BV-00044: encounter class must be AMB
  */
 
 import BaseMapper from './BaseMapper.js';
@@ -95,9 +94,13 @@ class PharmacyMapper extends BaseMapper {
 
   /**
    * Build complete Prior Authorization Request Bundle for Pharmacy type
+   * Per NPHIES example Claim-483074.json:
+   * - NO Encounter resource
+   * - NO Practitioner resource
+   * - NO careTeam in Claim
    */
   buildPriorAuthRequestBundle(data) {
-    const { priorAuth, patient, provider, insurer, coverage, policyHolder, practitioner } = data;
+    const { priorAuth, patient, provider, insurer, coverage, policyHolder } = data;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -105,8 +108,6 @@ class PharmacyMapper extends BaseMapper {
       provider: provider.provider_id || this.generateId(),
       insurer: insurer.insurer_id || this.generateId(),
       coverage: coverage?.id || coverage?.coverage_id || this.generateId(),
-      encounter: this.generateId(),
-      practitioner: practitioner?.practitioner_id || this.generateId(),
       policyHolder: policyHolder?.id || this.generateId()
     };
 
@@ -114,12 +115,9 @@ class PharmacyMapper extends BaseMapper {
     const providerResource = this.buildProviderOrganizationWithId(provider, bundleResourceIds.provider);
     const insurerResource = this.buildInsurerOrganizationWithId(insurer, bundleResourceIds.insurer);
     const coverageResource = this.buildCoverageResourceWithId(coverage, patient, insurer, policyHolder, bundleResourceIds);
-    const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: '08.00' }, // Internal Medicine (pharmacy prescriber)
-      bundleResourceIds.practitioner
-    );
-    const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
-    const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounterResource?.resource, practitioner, bundleResourceIds);
+    
+    // Build Claim resource (no encounter, no practitioner per NPHIES example)
+    const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, null, null, bundleResourceIds);
     
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
 
@@ -130,12 +128,11 @@ class PharmacyMapper extends BaseMapper {
       });
     }
 
+    // Bundle entries per NPHIES example - NO Encounter, NO Practitioner
     const entries = [
       messageHeader,
       claimResource,
-      encounterResource,
       coverageResource,
-      practitionerResource,
       providerResource,
       insurerResource,
       patientResource,
@@ -159,12 +156,13 @@ class PharmacyMapper extends BaseMapper {
    * Reference: https://portal.nphies.sa/ig/StructureDefinition-pharmacy-priorauth.html
    * Example: https://portal.nphies.sa/ig/Claim-483074.json.html
    * 
-   * Key differences from other claim types:
+   * Per NPHIES example Claim-483074.json:
    * - type: 'pharmacy' (required)
    * - subType: 'op' (outpatient only, required)
-   * - No careTeam required for pharmacy claims
-   * - No onAdmission for diagnosis
-   * - days-supply supportingInfo is REQUIRED
+   * - NO encounter extension
+   * - NO careTeam
+   * - NO supportingInfo (not in example)
+   * - NO onAdmission for diagnosis
    * - Item extensions specific to pharmacy
    */
   buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds) {
@@ -173,24 +171,13 @@ class PharmacyMapper extends BaseMapper {
     const providerRef = bundleResourceIds.provider;
     const insurerRef = bundleResourceIds.insurer;
     const coverageRef = bundleResourceIds.coverage;
-    const encounterRef = bundleResourceIds.encounter;
-    const practitionerRef = bundleResourceIds.practitioner;
 
     const providerIdentifierSystem = provider.identifier_system || 
       `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
     // Build claim-level extensions (optional for pharmacy)
+    // NOTE: Per NPHIES example Claim-483074.json, NO extensions are present
     const extensions = [];
-
-    // Encounter extension (optional but recommended)
-    if (encounterRef) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
-        valueReference: {
-          reference: `Encounter/${encounterRef}`
-        }
-      });
-    }
 
     // Eligibility offline reference (optional)
     if (priorAuth.eligibility_offline_ref) {
@@ -330,33 +317,7 @@ class PharmacyMapper extends BaseMapper {
       ];
     }
 
-    // CareTeam (optional for pharmacy - include if practitioner data available)
-    if (practitioner || priorAuth.practitioner) {
-      const pract = practitioner || priorAuth.practitioner || {};
-      const practiceCode = priorAuth.practice_code || pract.practice_code || pract.specialty_code || '08.00';
-      claim.careTeam = [
-        {
-          sequence: 1,
-          provider: { reference: `Practitioner/${practitionerRef}` },
-          role: {
-            coding: [
-              {
-                system: 'http://terminology.hl7.org/CodeSystem/claimcareteamrole',
-                code: 'primary'
-              }
-            ]
-          },
-          qualification: {
-            coding: [
-              {
-                system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
-                code: practiceCode
-              }
-            ]
-          }
-        }
-      ];
-    }
+    // NOTE: Per NPHIES example Claim-483074.json, NO careTeam for pharmacy claims
 
     // Diagnosis (required - at least one)
     if (priorAuth.diagnoses && priorAuth.diagnoses.length > 0) {
@@ -385,25 +346,11 @@ class PharmacyMapper extends BaseMapper {
       }));
     }
 
-    // SupportingInfo - days-supply is REQUIRED for pharmacy
+    // SupportingInfo - NOT present in NPHIES example Claim-483074.json
+    // Only include if explicitly provided
     let supportingInfoSequences = [];
-    let supportingInfoList = [...(priorAuth.supporting_info || [])];
-    
-    // Ensure days-supply is present (REQUIRED for pharmacy per BV-00042)
-    const hasDaysSupply = supportingInfoList.some(info => 
-      info.category === 'days-supply' || info.category === 'days_supply'
-    );
-    if (!hasDaysSupply) {
-      supportingInfoList.unshift({
-        category: 'days-supply',
-        value_quantity: priorAuth.days_supply || 30,
-        value_quantity_unit: 'd',
-        timing_date: priorAuth.request_date || new Date()
-      });
-    }
-    
-    if (supportingInfoList.length > 0) {
-      claim.supportingInfo = supportingInfoList.map((info, idx) => {
+    if (priorAuth.supporting_info && priorAuth.supporting_info.length > 0) {
+      claim.supportingInfo = priorAuth.supporting_info.map((info, idx) => {
         const seq = idx + 1;
         supportingInfoSequences.push(seq);
         return this.buildSupportingInfo({ ...info, sequence: seq });
@@ -619,10 +566,14 @@ class PharmacyMapper extends BaseMapper {
 
   /**
    * Build Encounter resource for Pharmacy auth type
-   * Reference: https://portal.nphies.sa/ig/StructureDefinition-encounter-auth-AMB.html
    * 
-   * Pharmacy MUST use AMB (ambulatory) encounter class only per NPHIES spec (BV-00044)
+   * NOTE: Per NPHIES example Claim-483074.json, Encounter is NOT included
+   * in pharmacy prior authorization requests. This method is kept for
+   * backwards compatibility but is NOT called in buildPriorAuthRequestBundle.
+   * 
+   * Reference: https://portal.nphies.sa/ig/StructureDefinition-encounter-auth-AMB.html
    * Profile: http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB
+   * @deprecated Not used for pharmacy claims per NPHIES example
    */
   buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds) {
     const encounterId = bundleResourceIds.encounter;

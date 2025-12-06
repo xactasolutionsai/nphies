@@ -47,15 +47,15 @@ export const ALLOWED_ENCOUNTER_CLASSES = {
   // Vision Claims only contain: Patient, Provider, Diagnosis, Items, Benefit, Supporting Info
   vision: [],
   
-  // Pharmacy: subType=OP requires Encounter.class=AMB (Ambulatory/Outpatient)
-  // Both 'ambulatory' and 'outpatient' map to AMB code
-  pharmacy: ['ambulatory', 'outpatient']
+  // Pharmacy: NO ENCOUNTER REQUIRED per NPHIES example Claim-483074.json
+  // Pharmacy claims only contain: Patient, Provider, Diagnosis, Items, Insurance, Total
+  pharmacy: []
 };
 
 // Helper function to get filtered encounter class options based on auth type
 export const getEncounterClassOptions = (authType) => {
-  // Vision doesn't use Encounter at all
-  if (authType === 'vision') {
+  // Vision and Pharmacy don't use Encounter at all per NPHIES examples
+  if (authType === 'vision' || authType === 'pharmacy') {
     return [];
   }
   const allowed = ALLOWED_ENCOUNTER_CLASSES[authType] || ALLOWED_ENCOUNTER_CLASSES.professional;
