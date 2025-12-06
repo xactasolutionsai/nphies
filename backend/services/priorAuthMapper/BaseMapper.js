@@ -1181,18 +1181,32 @@ class BaseMapper {
           ext => ext.url?.includes('extension-adjudication-outcome')
         )?.valueCodeableConcept?.coding?.[0]?.code;
 
+        // Parse all adjudication details
+        const adjudicationList = item.adjudication?.map(adj => ({
+          category: adj.category?.coding?.[0]?.code,
+          categoryDisplay: adj.category?.coding?.[0]?.display,
+          amount: adj.amount?.value,
+          value: adj.value,
+          currency: adj.amount?.currency,
+          reason: adj.reason?.coding?.[0]?.code,
+          reasonDisplay: adj.reason?.coding?.[0]?.display
+        }));
+
+        // Extract specific adjudication amounts for easy access
+        const eligibleAmount = adjudicationList?.find(a => a.category === 'eligible')?.amount;
+        const benefitAmount = adjudicationList?.find(a => a.category === 'benefit')?.amount;
+        const copayAmount = adjudicationList?.find(a => a.category === 'copay')?.amount;
+        const approvedQuantity = adjudicationList?.find(a => a.category === 'approved-quantity')?.value;
+
         return {
           itemSequence: item.itemSequence,
           outcome: itemOutcome,
-          adjudication: item.adjudication?.map(adj => ({
-            category: adj.category?.coding?.[0]?.code,
-            categoryDisplay: adj.category?.coding?.[0]?.display,
-            amount: adj.amount?.value,
-            value: adj.value,
-            currency: adj.amount?.currency,
-            reason: adj.reason?.coding?.[0]?.code,
-            reasonDisplay: adj.reason?.coding?.[0]?.display
-          }))
+          adjudication: adjudicationList,
+          // Pre-extracted amounts for easier access
+          eligibleAmount,
+          benefitAmount,
+          copayAmount,
+          approvedQuantity
         };
       });
 
@@ -1264,6 +1278,12 @@ class BaseMapper {
         nphiesId: insurerResource.identifier?.find(i => i.system?.includes('payer-license'))?.value
       } : null;
 
+      // Extract insurance details from ClaimResponse
+      const insuranceDetails = claimResponse.insurance?.[0];
+      
+      // Extract original request identifier
+      const originalRequestIdentifier = claimResponse.request?.identifier?.value;
+
       return {
         success,
         outcome,
@@ -1277,11 +1297,24 @@ class BaseMapper {
         nphiesResponseId: claimResponse.identifier?.[0]?.value || claimResponse.id,
         responseCode: messageHeader?.response?.code,
         isNphiesGenerated,
+        // ClaimResponse metadata
+        claimResponseStatus: claimResponse.status,
+        claimResponseUse: claimResponse.use,
+        claimResponseCreated: claimResponse.created,
+        // Legacy fields (keeping for backward compatibility)
         status: claimResponse.status,
         type: claimResponse.type?.coding?.[0]?.code,
         subType: claimResponse.subType?.coding?.[0]?.code,
         use: claimResponse.use,
         created: claimResponse.created,
+        // MessageHeader details
+        messageHeaderId: messageHeader?.id,
+        // Insurance details
+        insuranceSequence: insuranceDetails?.sequence,
+        insuranceFocal: insuranceDetails?.focal,
+        // Original request reference
+        originalRequestIdentifier,
+        // Results
         itemResults,
         totals,
         patient,

@@ -186,7 +186,9 @@ export default function PriorAuthorizationForm() {
         measurement_time: null
       };
       const clinicalInfo = {
+        chief_complaint_format: 'snomed', // Default format
         chief_complaint_code: '', chief_complaint_display: '',
+        chief_complaint_text: '', // Free text option
         patient_history: '', history_of_present_illness: '',
         physical_examination: '', treatment_plan: '',
         investigation_result: ''
@@ -1074,7 +1076,7 @@ export default function PriorAuthorizationForm() {
                     id="total_amount"
                     type="number"
                     step="0.01"
-                    value={formData.total_amount}
+                    value={formData.total_amount ?? ''}
                     onChange={(e) => handleChange('total_amount', e.target.value)}
                     placeholder="0.00"
                   />
@@ -1363,7 +1365,7 @@ export default function PriorAuthorizationForm() {
                         id={field.key}
                         type="number"
                         step="0.1"
-                        value={formData.vital_signs[field.key]}
+                        value={formData.vital_signs?.[field.key] ?? ''}
                         onChange={(e) => handleVitalSignChange(field.key, e.target.value)}
                         placeholder={field.placeholder}
                         className="pr-16"
@@ -1445,7 +1447,7 @@ export default function PriorAuthorizationForm() {
                       <div className="space-y-2 md:col-span-2">
                         <Label>Chief Complaint (Free Text) *</Label>
                         <Input
-                          value={formData.clinical_info.chief_complaint_text}
+                          value={formData.clinical_info?.chief_complaint_text ?? ''}
                           onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
                           placeholder="e.g., Periodic oral examination"
                         />
@@ -1460,7 +1462,7 @@ export default function PriorAuthorizationForm() {
                     <Label htmlFor="chief_complaint_code">Chief Complaint Code (SNOMED)</Label>
                     <Input
                       id="chief_complaint_code"
-                      value={formData.clinical_info.chief_complaint_code}
+                      value={formData.clinical_info?.chief_complaint_code ?? ''}
                       onChange={(e) => handleClinicalInfoChange('chief_complaint_code', e.target.value)}
                       placeholder="e.g., 21522001"
                     />
@@ -1469,7 +1471,7 @@ export default function PriorAuthorizationForm() {
                     <Label htmlFor="chief_complaint_display">Chief Complaint Description</Label>
                     <Input
                       id="chief_complaint_display"
-                      value={formData.clinical_info.chief_complaint_display}
+                      value={formData.clinical_info?.chief_complaint_display ?? ''}
                       onChange={(e) => handleClinicalInfoChange('chief_complaint_display', e.target.value)}
                       placeholder="e.g., Abdominal pain"
                     />
@@ -1484,14 +1486,14 @@ export default function PriorAuthorizationForm() {
                     <Label htmlFor={field.key}>{field.label}</Label>
                     <textarea
                       id={field.key}
-                      value={formData.clinical_info[field.key]}
+                      value={formData.clinical_info?.[field.key] ?? ''}
                       onChange={(e) => handleClinicalInfoChange(field.key, e.target.value)}
                       placeholder={field.placeholder}
                       rows={3}
                       className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30 resize-none"
                     />
                     <p className="text-xs text-gray-400 text-right">
-                      {formData.clinical_info[field.key]?.length || 0} characters
+                      {formData.clinical_info?.[field.key]?.length || 0} characters
                     </p>
                   </div>
                 ))}
@@ -1535,7 +1537,7 @@ export default function PriorAuthorizationForm() {
                           id={field.key}
                           type="number"
                           step={field.key === 'estimated_length_of_stay' ? '1' : '0.1'}
-                          value={formData.admission_info[field.key]}
+                          value={formData.admission_info?.[field.key] ?? ''}
                           onChange={(e) => handleAdmissionInfoChange(field.key, e.target.value)}
                           placeholder={field.placeholder}
                           className="pr-16"

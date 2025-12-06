@@ -169,6 +169,9 @@ class PriorAuthorizationsController extends BaseController {
         pa.currency, pa.request_bundle, pa.response_bundle, pa.request_date, pa.response_date,
         pa.pre_auth_period_start, pa.pre_auth_period_end, pa.created_at, pa.updated_at,
         pa.encounter_identifier, pa.service_type, pa.sub_type, pa.vision_prescription,
+        pa.nphies_message_id, pa.nphies_response_code, pa.original_request_identifier,
+        pa.insurance_sequence, pa.insurance_focal,
+        pa.claim_response_status, pa.claim_response_use, pa.claim_response_created,
         p.name as patient_name,
         p.identifier as patient_identifier,
         p.gender as patient_gender,
@@ -602,8 +605,16 @@ class PriorAuthorizationsController extends BaseController {
               eligible_amount = $12,
               benefit_amount = $13,
               copay_amount = $14,
+              nphies_message_id = $15,
+              nphies_response_code = $16,
+              original_request_identifier = $17,
+              insurance_sequence = $18,
+              insurance_focal = $19,
+              claim_response_status = $20,
+              claim_response_use = $21,
+              claim_response_created = $22,
               updated_at = CURRENT_TIMESTAMP
-          WHERE id = $15
+          WHERE id = $23
         `, [
           newStatus,
           parsedResponse.outcome,
@@ -619,6 +630,15 @@ class PriorAuthorizationsController extends BaseController {
           eligibleTotal,
           benefitTotal,
           copayTotal,
+          // New fields
+          parsedResponse.messageHeaderId,
+          parsedResponse.responseCode,
+          parsedResponse.originalRequestIdentifier,
+          parsedResponse.insuranceSequence,
+          parsedResponse.insuranceFocal,
+          parsedResponse.claimResponseStatus,
+          parsedResponse.claimResponseUse,
+          parsedResponse.claimResponseCreated,
           id
         ]);
 
@@ -652,15 +672,35 @@ class PriorAuthorizationsController extends BaseController {
             const adjStatus = itemResult.outcome || 
                              (itemResult.adjudication?.find(a => a.category === 'eligible') ? 'approved' :
                               itemResult.adjudication?.find(a => a.category === 'denied') ? 'denied' : 'pending');
-            const adjAmount = itemResult.adjudication?.find(a => a.category === 'benefit')?.amount;
+            const adjAmount = itemResult.benefitAmount || 
+                             itemResult.adjudication?.find(a => a.category === 'benefit')?.amount;
             const adjReason = itemResult.adjudication?.find(a => a.reason)?.reasonDisplay || 
                              itemResult.adjudication?.find(a => a.reason)?.reason;
             
+            // Extract additional item-level adjudication amounts
+            const adjEligibleAmount = itemResult.eligibleAmount;
+            const adjCopayAmount = itemResult.copayAmount;
+            const adjApprovedQuantity = itemResult.approvedQuantity;
+            
             await query(`
               UPDATE prior_authorization_items 
-              SET adjudication_status = $1, adjudication_amount = $2, adjudication_reason = $3
-              WHERE prior_auth_id = $4 AND sequence = $5
-            `, [adjStatus, adjAmount, adjReason, id, itemResult.itemSequence]);
+              SET adjudication_status = $1, 
+                  adjudication_amount = $2, 
+                  adjudication_reason = $3,
+                  adjudication_eligible_amount = $4,
+                  adjudication_copay_amount = $5,
+                  adjudication_approved_quantity = $6
+              WHERE prior_auth_id = $7 AND sequence = $8
+            `, [
+              adjStatus, 
+              adjAmount, 
+              adjReason, 
+              adjEligibleAmount,
+              adjCopayAmount,
+              adjApprovedQuantity,
+              id, 
+              itemResult.itemSequence
+            ]);
           }
         }
 
