@@ -996,8 +996,8 @@ export default function PriorAuthorizationForm() {
               </div>
             )}
 
-            {/* Service Event Type - For dental and professional claims */}
-            {(formData.auth_type === 'dental' || formData.auth_type === 'professional') && (
+            {/* Service Event Type - For dental claims (always shown) and professional non-emergency */}
+            {(formData.auth_type === 'dental' || (formData.auth_type === 'professional' && formData.encounter_class !== 'emergency')) && (
               <div className="space-y-2">
                 <Label>Service Event Type {formData.auth_type === 'dental' ? '*' : ''}</Label>
                 <Select
@@ -1073,11 +1073,29 @@ export default function PriorAuthorizationForm() {
                       placeholder="Select service type..."
                     />
                   </div>
+                  {/* Service Event Type - inside emergency box for professional emergency */}
+                  {formData.auth_type === 'professional' && (
+                    <div className="space-y-2">
+                      <Label>Service Event Type</Label>
+                      <Select
+                        value={SERVICE_EVENT_TYPE_OPTIONS.find(opt => opt.value === formData.service_event_type)}
+                        onChange={(option) => handleChange('service_event_type', option?.value || 'ICSE')}
+                        options={SERVICE_EVENT_TYPE_OPTIONS}
+                        styles={selectStyles}
+                        menuPortalTarget={document.body}
+                        isClearable
+                        placeholder="Select event type..."
+                      />
+                      <p className="text-xs text-gray-500">
+                        ICSE = New visit, SCSE = Follow-up
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Service Type for non-emergency encounters */}
+            {/* Service Type for non-emergency encounters (not Vision/Pharmacy) */}
             {formData.auth_type !== 'vision' && formData.auth_type !== 'pharmacy' && formData.encounter_class !== 'emergency' && (
               <div className="space-y-2">
                 <Label>Service Type</Label>
