@@ -1013,21 +1013,58 @@ export default function PriorAuthorizationForm() {
               </div>
             )}
 
-            {/* Service Event Type - For dental claims (always shown) and professional non-emergency */}
-            {(formData.auth_type === 'dental' || (formData.auth_type === 'professional' && formData.encounter_class !== 'emergency')) && (
+            {/* Service Event Type - For dental claims only (standalone) */}
+            {formData.auth_type === 'dental' && (
               <div className="space-y-2">
-                <Label>Service Event Type {formData.auth_type === 'dental' ? '*' : ''}</Label>
+                <Label>Service Event Type *</Label>
                 <Select
                   value={SERVICE_EVENT_TYPE_OPTIONS.find(opt => opt.value === formData.service_event_type)}
                   onChange={(option) => handleChange('service_event_type', option?.value || 'ICSE')}
                   options={SERVICE_EVENT_TYPE_OPTIONS}
                   styles={selectStyles}
                   menuPortalTarget={document.body}
-                  isClearable={formData.auth_type !== 'dental'}
                 />
                 <p className="text-xs text-gray-500">
                   ICSE = New visit, SCSE = Follow-up visit
                 </p>
+              </div>
+            )}
+
+            {/* Professional Non-Emergency Encounter Details - Grouped in a card */}
+            {formData.auth_type === 'professional' && formData.encounter_class !== 'emergency' && (
+              <div className="space-y-4 p-4 bg-gradient-to-r from-indigo-50/50 to-purple-50/50 border border-indigo-200 rounded-lg">
+                <div className="flex items-center gap-2 text-indigo-700 font-medium">
+                  <Activity className="h-5 w-5" />
+                  Professional Encounter Details
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Service Event Type</Label>
+                    <Select
+                      value={SERVICE_EVENT_TYPE_OPTIONS.find(opt => opt.value === formData.service_event_type)}
+                      onChange={(option) => handleChange('service_event_type', option?.value || 'ICSE')}
+                      options={SERVICE_EVENT_TYPE_OPTIONS}
+                      styles={selectStyles}
+                      menuPortalTarget={document.body}
+                      isClearable
+                    />
+                    <p className="text-xs text-gray-500">
+                      ICSE = New visit, SCSE = Follow-up visit
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Service Type</Label>
+                    <Select
+                      value={ENCOUNTER_SERVICE_TYPE_OPTIONS.find(opt => opt.value === formData.service_type)}
+                      onChange={(option) => handleChange('service_type', option?.value || '')}
+                      options={ENCOUNTER_SERVICE_TYPE_OPTIONS}
+                      styles={selectStyles}
+                      menuPortalTarget={document.body}
+                      isClearable
+                      placeholder="Select service type..."
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1112,8 +1149,8 @@ export default function PriorAuthorizationForm() {
               </div>
             )}
 
-            {/* Service Type for non-emergency encounters (not Vision/Pharmacy) */}
-            {formData.auth_type !== 'vision' && formData.auth_type !== 'pharmacy' && formData.encounter_class !== 'emergency' && (
+            {/* Service Type for non-emergency encounters (Institutional only - Professional has its own card, Dental/Vision/Pharmacy don't need it) */}
+            {formData.auth_type === 'institutional' && formData.encounter_class !== 'emergency' && (
               <div className="space-y-2">
                 <Label>Service Type</Label>
                 <Select
@@ -1221,51 +1258,56 @@ export default function PriorAuthorizationForm() {
                   menuPortalTarget={document.body}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="eligibility_ref">Eligibility Reference (Legacy)</Label>
-                <Input
-                  id="eligibility_ref"
-                  value={formData.eligibility_ref || ''}
-                  onChange={(e) => handleChange('eligibility_ref', e.target.value)}
-                  placeholder="CoverageEligibilityResponse/uuid"
-                />
-                <p className="text-xs text-gray-500">
-                  Direct reference format (e.g., CoverageEligibilityResponse/12345)
-                </p>
-              </div>
+              {/* Eligibility Reference - Show legacy format for non-professional types */}
+              {formData.auth_type !== 'professional' && (
+                <div className="space-y-2">
+                  <Label htmlFor="eligibility_ref">Eligibility Reference</Label>
+                  <Input
+                    id="eligibility_ref"
+                    value={formData.eligibility_ref || ''}
+                    onChange={(e) => handleChange('eligibility_ref', e.target.value)}
+                    placeholder="CoverageEligibilityResponse/uuid"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Direct reference format (e.g., CoverageEligibilityResponse/12345)
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* Eligibility Response Identifier - Preferred per NPHIES Claim-173086 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
-              <div className="col-span-2 flex items-center gap-2 text-blue-700 font-medium text-sm">
-                <CheckCircle className="h-4 w-4" />
-                Eligibility Response Identifier (Preferred Format)
+            {/* Eligibility Response Identifier - Only for Professional claims per NPHIES Claim-173086 */}
+            {formData.auth_type === 'professional' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
+                <div className="col-span-2 flex items-center gap-2 text-blue-700 font-medium text-sm">
+                  <CheckCircle className="h-4 w-4" />
+                  Eligibility Response Identifier
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="eligibility_response_id">Eligibility Response ID</Label>
+                  <Input
+                    id="eligibility_response_id"
+                    value={formData.eligibility_response_id || ''}
+                    onChange={(e) => handleChange('eligibility_response_id', e.target.value)}
+                    placeholder="e.g., Elig_199719982262"
+                  />
+                  <p className="text-xs text-gray-500">
+                    The eligibility response identifier value from the payer
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="eligibility_response_system">Identifier System (Optional)</Label>
+                  <Input
+                    id="eligibility_response_system"
+                    value={formData.eligibility_response_system || ''}
+                    onChange={(e) => handleChange('eligibility_response_system', e.target.value)}
+                    placeholder="http://payer.com/identifiers/coverageeligibilityresponse"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Leave empty to use payer's default system
+                  </p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="eligibility_response_id">Eligibility Response ID</Label>
-                <Input
-                  id="eligibility_response_id"
-                  value={formData.eligibility_response_id || ''}
-                  onChange={(e) => handleChange('eligibility_response_id', e.target.value)}
-                  placeholder="e.g., Elig_199719982262"
-                />
-                <p className="text-xs text-gray-500">
-                  The eligibility response identifier value from the payer
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="eligibility_response_system">Identifier System (Optional)</Label>
-                <Input
-                  id="eligibility_response_system"
-                  value={formData.eligibility_response_system || ''}
-                  onChange={(e) => handleChange('eligibility_response_system', e.target.value)}
-                  placeholder="http://payer.com/identifiers/coverageeligibilityresponse"
-                />
-                <p className="text-xs text-gray-500">
-                  Leave empty to use payer's default system
-                </p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       )}
