@@ -295,9 +295,31 @@ class ProfessionalMapper extends BaseMapper {
       }));
     }
 
-    // SupportingInfo
+    // SupportingInfo with REQUIRED chief-complaint for professional claims
+    // BV-00779: Chief Complaint SHALL be provided in professional claim or authorization
     let supportingInfoSequences = [];
     let supportingInfoList = [...(priorAuth.supporting_info || [])];
+    
+    // Ensure chief-complaint is present (required per BV-00779)
+    const hasChiefComplaint = supportingInfoList.some(info => info.category === 'chief-complaint');
+    if (!hasChiefComplaint) {
+      const clinicalInfo = priorAuth.clinical_info || {};
+      const chiefComplaintText = clinicalInfo.chief_complaint || priorAuth.chief_complaint;
+      
+      if (chiefComplaintText) {
+        // Free text format - use code.text per NPHIES Claim-173086.json example
+        supportingInfoList.unshift({
+          category: 'chief-complaint',
+          code_text: chiefComplaintText
+        });
+      } else {
+        // Default chief complaint if none provided
+        supportingInfoList.unshift({
+          category: 'chief-complaint',
+          code_text: 'Patient presenting for evaluation'
+        });
+      }
+    }
     
     if (supportingInfoList.length > 0) {
       claim.supportingInfo = supportingInfoList.map((info, idx) => {
@@ -408,43 +430,41 @@ class ProfessionalMapper extends BaseMapper {
     const extensions = [];
 
     // For Emergency encounters (EMER), add triage and service event extensions
+    // BV-00733, BV-00734: Triage date and category are REQUIRED for emergency
     if (encounterClass === 'emergency') {
-      // Triage Category - required for EMER
-      if (priorAuth.triage_category) {
-        extensions.push({
-          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageCategory',
-          valueCodeableConcept: {
-            coding: [{
-              system: 'http://nphies.sa/terminology/CodeSystem/triage-category',
-              code: priorAuth.triage_category,
-              display: this.getTriageCategoryDisplay(priorAuth.triage_category)
-            }]
-          }
-        });
-      }
-
-      // Triage Date - required for EMER
-      if (priorAuth.triage_date) {
-        extensions.push({
-          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageDate',
-          valueDateTime: this.formatDateTime(priorAuth.triage_date)
-        });
-      }
-    }
-
-    // Service Event Type - for all professional encounters
-    if (priorAuth.service_event_type) {
+      // Triage Category - REQUIRED for EMER (BV-00734)
+      const triageCategory = priorAuth.triage_category || 'U'; // Default to Urgent if not provided
       extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceEventType',
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageCategory',
         valueCodeableConcept: {
           coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/service-event-type',
-            code: priorAuth.service_event_type,
-            display: this.getServiceEventTypeDisplay(priorAuth.service_event_type)
+            system: 'http://nphies.sa/terminology/CodeSystem/triage-category',
+            code: triageCategory,
+            display: this.getTriageCategoryDisplay(triageCategory)
           }]
         }
       });
+
+      // Triage Date - REQUIRED for EMER (BV-00733)
+      const triageDate = priorAuth.triage_date || priorAuth.encounter_start || new Date();
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageDate',
+        valueDateTime: this.formatDateTimeWithTimezone(triageDate)
+      });
     }
+
+    // Service Event Type - REQUIRED for professional encounters (BV-00736)
+    const serviceEventType = priorAuth.service_event_type || 'ICSE'; // Default to Initial if not provided
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceEventType',
+      valueCodeableConcept: {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/service-event-type',
+          code: serviceEventType,
+          display: this.getServiceEventTypeDisplay(serviceEventType)
+        }]
+      }
+    });
 
     const encounter = {
       resourceType: 'Encounter',
@@ -503,7 +523,10 @@ class ProfessionalMapper extends BaseMapper {
     encounter.subject = { reference: `Patient/${patientId}` };
 
     // Period - format depends on encounter class
-    const needsDateTime = ['daycase', 'inpatient'].includes(encounterClass);
+    // BV-00811: Emergency (EMER) requires datetime with timezone format
+    // AMB: date-only format per NPHIES Encounter-10123.json
+    // EMER/IMP/SS: datetime with timezone per NPHIES Encounter-10122.json and BV-00811
+    const needsDateTime = ['daycase', 'inpatient', 'emergency'].includes(encounterClass);
     
     if (needsDateTime) {
       encounter.period = {
@@ -513,7 +536,7 @@ class ProfessionalMapper extends BaseMapper {
         encounter.period.end = this.formatDateTimeWithTimezone(priorAuth.encounter_end);
       }
     } else {
-      // AMB/EMER: date-only format per NPHIES Encounter-10122.json
+      // AMB only: date-only format per NPHIES Encounter-10123.json
       const startDateRaw = priorAuth.encounter_start || new Date();
       let dateOnlyStart;
       if (typeof startDateRaw === 'string' && startDateRaw.includes('T')) {

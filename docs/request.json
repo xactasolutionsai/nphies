@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "677b4fb6-4f32-49da-a9e3-f7d801f5281c",
+  "id": "6be35268-8936-405b-ba1a-f68603fbb102",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-06T19:37:10.796Z",
+  "timestamp": "2025-12-07T18:15:44.882Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:09b3847a-cad7-4f17-b9bd-dbdd7220e5a3",
+      "fullUrl": "urn:uuid:cef2f883-ebd5-472a-8a69-be6628a8cb60",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "09b3847a-cad7-4f17-b9bd-dbdd7220e5a3",
+        "id": "cef2f883-ebd5-472a-8a69-be6628a8cb60",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,25 +47,42 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/78fb526b-8537-4c47-b635-30bf218c86c1"
+            "reference": "http://provider.com/Claim/27498c23-d0a2-4574-8f2b-6c2e4d1d1b35"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/78fb526b-8537-4c47-b635-30bf218c86c1",
+      "fullUrl": "http://provider.com/Claim/27498c23-d0a2-4574-8f2b-6c2e4d1d1b35",
       "resource": {
         "resourceType": "Claim",
-        "id": "78fb526b-8537-4c47-b635-30bf218c86c1",
+        "id": "27498c23-d0a2-4574-8f2b-6c2e4d1d1b35",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-priorauth|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/professional-priorauth|1.0.0"
           ]
         },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
+            "valueReference": {
+              "reference": "Encounter/677c1ded-0676-4d4b-a630-c6e3e3e87ac6"
+            }
+          },
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response",
+                 "valueReference" : {
+        "identifier" : {
+          "system" : "http://sni.com.sa/identifiers/coverageeligibilityresponse",
+          "value" : "Elig_199719982262"
+        }
+      }
+          }
+        ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-            "value": "DUP-1765043442962"
+            "value": "DUP-1765131219475"
           }
         ],
         "status": "active",
@@ -73,7 +90,7 @@
           "coding": [
             {
               "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-              "code": "pharmacy"
+              "code": "professional"
             }
           ]
         },
@@ -81,7 +98,7 @@
           "coding": [
             {
               "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype",
-              "code": "op"
+              "code": "emr"
             }
           ]
         },
@@ -89,7 +106,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-06T22:37:10+03:00",
+        "created": "2025-12-07T18:15:44.881Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -114,6 +131,30 @@
             ]
           }
         },
+        "careTeam": [
+          {
+            "sequence": 1,
+            "provider": {
+              "reference": "Practitioner/5b7a6cea-96a0-47ba-94ae-39d72a28aa15"
+            },
+            "role": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/claimcareteamrole",
+                  "code": "primary"
+                }
+              ]
+            },
+            "qualification": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
+                  "code": "08.00"
+                }
+              ]
+            }
+          }
+        ],
         "diagnosis": [
           {
             "sequence": 1,
@@ -121,8 +162,8 @@
               "coding": [
                 {
                   "system": "http://hl7.org/fhir/sid/icd-10-am",
-                  "code": "R51",
-                  "display": "Headache"
+                  "code": "I21.9",
+                  "display": "Acute myocardial infarction, unspecified"
                 }
               ]
             },
@@ -136,33 +177,171 @@
                 ]
               }
             ]
-          },
-          {
-            "sequence": 2,
-            "diagnosisCodeableConcept": {
-              "coding": [
-                {
-                  "system": "http://hl7.org/fhir/sid/icd-10-am",
-                  "code": "G44.4",
-                  "display": "Drug-induced headache, not elsewhere classified"
-                }
-              ]
-            },
-            "type": [
-              {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type",
-                    "code": "secondary"
-                  }
-                ]
-              }
-            ]
           }
         ],
         "supportingInfo": [
           {
             "sequence": 1,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "vital-sign-systolic"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-12-01T21:00:00.000Z",
+              "end": "2023-12-01T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 160,
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
+          },
+          {
+            "sequence": 2,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "vital-sign-diastolic"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-12-01T21:00:00.000Z",
+              "end": "2023-12-01T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 100,
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
+          },
+          {
+            "sequence": 3,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "vital-sign-height"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-12-01T21:00:00.000Z",
+              "end": "2023-12-01T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 133,
+              "system": "http://unitsofmeasure.org",
+              "code": "cm"
+            }
+          },
+          {
+            "sequence": 4,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "vital-sign-weight"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-12-01T21:00:00.000Z",
+              "end": "2023-12-01T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 120,
+              "system": "http://unitsofmeasure.org",
+              "code": "kg"
+            }
+          },
+          {
+            "sequence": 5,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "pulse"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-12-01T21:00:00.000Z",
+              "end": "2023-12-01T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 140,
+              "system": "http://unitsofmeasure.org",
+              "code": "/min"
+            }
+          },
+          {
+            "sequence": 6,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "temperature"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-12-01T21:00:00.000Z",
+              "end": "2023-12-01T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 37,
+              "system": "http://unitsofmeasure.org",
+              "code": "Cel"
+            }
+          },
+          {
+            "sequence": 7,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "oxygen-saturation"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-12-01T21:00:00.000Z",
+              "end": "2023-12-01T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 100,
+              "system": "http://unitsofmeasure.org",
+              "code": "%"
+            }
+          },
+          {
+            "sequence": 8,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "respiratory-rate"
+                }
+              ]
+            },
+            "timingPeriod": {
+              "start": "2023-12-01T21:00:00.000Z",
+              "end": "2023-12-01T21:00:00.000Z"
+            },
+            "valueQuantity": {
+              "value": 70,
+              "system": "http://unitsofmeasure.org",
+              "code": "/min"
+            }
+          },
+          {
+            "sequence": 9,
             "category": {
               "coding": [
                 {
@@ -174,7 +353,7 @@
             "valueString": "No systemic disease"
           },
           {
-            "sequence": 2,
+            "sequence": 10,
             "category": {
               "coding": [
                 {
@@ -186,7 +365,7 @@
             "valueString": "No history"
           },
           {
-            "sequence": 3,
+            "sequence": 11,
             "category": {
               "coding": [
                 {
@@ -198,7 +377,7 @@
             "valueString": "No history"
           },
           {
-            "sequence": 4,
+            "sequence": 12,
             "category": {
               "coding": [
                 {
@@ -207,10 +386,10 @@
                 }
               ]
             },
-            "valueString": "Appendectomy"
+            "valueString": "administration of thrombolytic agent"
           },
           {
-            "sequence": 5,
+            "sequence": 13,
             "category": {
               "coding": [
                 {
@@ -254,45 +433,28 @@
                 }
               },
               {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
-                      "code": "07612797198780"
-                    }
-                  ]
-                }
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason",
-                      "code": "patient-request"
-                    }
-                  ]
-                }
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-substitute",
-                      "code": "Irreplaceable",
-                      "display": "SFDA Irreplaceable drugs"
-                    }
-                  ]
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share",
+                "valueMoney": {
+                  "value": 120,
+                  "currency": "SAR"
                 }
               },
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
                 "valueBoolean": false
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax",
+                "valueMoney": {
+                  "value": 0,
+                  "currency": "SAR"
+                }
               }
             ],
             "sequence": 1,
+            "careTeamSequence": [
+              1
+            ],
             "diagnosisSequence": [
               1
             ],
@@ -301,14 +463,22 @@
               2,
               3,
               4,
-              5
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
             ],
             "productOrService": {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
-                  "code": "07612797198780",
-                  "display": "VOLTAREN 50 MG TAB"
+                  "system": "http://nphies.sa/terminology/CodeSystem/procedures",
+                  "code": "96196-01-00",
+                  "display": "Intra-arterial administration of pharmacological agent, thrombolytic agent"
                 }
               ]
             },
@@ -317,18 +487,69 @@
               "value": 1
             },
             "unitPrice": {
-              "value": 60,
+              "value": 120,
               "currency": "SAR"
             },
             "net": {
-              "value": 60,
+              "value": 120,
               "currency": "SAR"
             }
           }
         ],
         "total": {
-          "value": 60,
+          "value": 120,
           "currency": "SAR"
+        }
+      }
+    },
+    {
+      "fullUrl": "http://provider.com/Encounter/677c1ded-0676-4d4b-a630-c6e3e3e87ac6",
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "677c1ded-0676-4d4b-a630-c6e3e3e87ac6",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://PR-FHIR.com.sa/identifiers/encounter",
+            "value": "DUP-1765131219475"
+          }
+        ],
+        "status": "in-progress",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "EMER",
+          "display": "emergency"
+        },
+        "serviceType": {
+          "coding": [
+            {
+              "system": "http://nphies.sa/terminology/CodeSystem/service-type",
+              "code": "acute-care",
+              "display": "Acute Care"
+            }
+          ]
+        },
+        "priority": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActPriority",
+              "code": "EM",
+              "display": "emergency"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
+        },
+        "period": {
+          "start": "2023-12-04"
+        },
+        "serviceProvider": {
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
         }
       }
     },
@@ -399,6 +620,57 @@
           "start": "2021-03-15",
           "end": "2028-03-15"
         }
+      }
+    },
+    {
+      "fullUrl": "http://provider.com/Practitioner/5b7a6cea-96a0-47ba-94ae-39d72a28aa15",
+      "resource": {
+        "resourceType": "Practitioner",
+        "id": "5b7a6cea-96a0-47ba-94ae-39d72a28aa15",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
+          ]
+        },
+        "identifier": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "MD",
+                  "display": "Medical License Number"
+                }
+              ]
+            },
+            "system": "http://nphies.sa/license/practitioner-license",
+            "value": "PRACT-5b7a6cea"
+          }
+        ],
+        "active": true,
+        "name": [
+          {
+            "use": "official",
+            "text": "Default Practitioner",
+            "family": "Practitioner",
+            "given": [
+              "Default"
+            ]
+          }
+        ],
+        "qualification": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
+                  "code": "08.00",
+                  "display": "Healthcare Professional"
+                }
+              ]
+            }
+          }
+        ]
       }
     },
     {
