@@ -517,11 +517,49 @@ export const ADMISSION_FIELDS = [
   { key: 'estimated_length_of_stay', category: 'estimated-Length-of-Stay', label: 'Estimated Length of Stay', unit: 'd', unitLabel: 'days', placeholder: '3' }
 ];
 
-// NPHIES Service Event Type Options (for dental/oral claims)
+// NPHIES Service Event Type Options (for dental/oral and professional claims)
 // Reference: http://nphies.sa/terminology/CodeSystem/service-event-type
 export const SERVICE_EVENT_TYPE_OPTIONS = [
   { value: 'ICSE', label: 'ICSE - Initial client service event (New Visit)' },
   { value: 'SCSE', label: 'SCSE - Subsequent client service event (Follow-up)' }
+];
+
+// NPHIES Triage Category Options (for emergency encounters)
+// Reference: http://nphies.sa/terminology/CodeSystem/triage-category
+// Reference: https://portal.nphies.sa/ig/Encounter-10122.json.html
+export const TRIAGE_CATEGORY_OPTIONS = [
+  { value: 'I', label: 'I - Immediate (Life threatening)' },
+  { value: 'VU', label: 'VU - Very Urgent (Serious)' },
+  { value: 'U', label: 'U - Urgent (Significant)' },
+  { value: 'S', label: 'S - Standard (Routine)' },
+  { value: 'NS', label: 'NS - Non-Standard (Minor)' }
+];
+
+// NPHIES Service Type Options (for encounter)
+// Reference: http://nphies.sa/terminology/CodeSystem/service-type
+export const ENCOUNTER_SERVICE_TYPE_OPTIONS = [
+  { value: 'acute-care', label: 'Acute Care' },
+  { value: 'sub-acute-care', label: 'Sub-Acute Care' },
+  { value: 'rehabilitation', label: 'Rehabilitation' },
+  { value: 'mental-behavioral', label: 'Mental & Behavioral' },
+  { value: 'geriatric-care', label: 'Geriatric Care' },
+  { value: 'newborn', label: 'Newborn' },
+  { value: 'family-planning', label: 'Family Planning' },
+  { value: 'dental-care', label: 'Dental Care' },
+  { value: 'palliative-care', label: 'Palliative Care' },
+  { value: 'others', label: 'Others' },
+  { value: 'unknown', label: 'Unknown' }
+];
+
+// NPHIES Encounter Priority Options (for emergency encounters)
+// Reference: http://terminology.hl7.org/CodeSystem/v3-ActPriority
+export const ENCOUNTER_PRIORITY_OPTIONS = [
+  { value: 'EM', label: 'Emergency' },
+  { value: 'UR', label: 'Urgent' },
+  { value: 'S', label: 'Stat' },
+  { value: 'A', label: 'ASAP' },
+  { value: 'R', label: 'Routine' },
+  { value: 'EL', label: 'Elective' }
 ];
 
 // NPHIES Investigation Result Options (for dental/oral claims)

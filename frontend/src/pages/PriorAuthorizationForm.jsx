@@ -41,7 +41,10 @@ import {
   SERVICE_EVENT_TYPE_OPTIONS,
   PRACTICE_CODES_OPTIONS,
   DENTAL_CHIEF_COMPLAINT_OPTIONS,
-  CHIEF_COMPLAINT_FORMAT_OPTIONS
+  CHIEF_COMPLAINT_FORMAT_OPTIONS,
+  TRIAGE_CATEGORY_OPTIONS,
+  ENCOUNTER_SERVICE_TYPE_OPTIONS,
+  ENCOUNTER_PRIORITY_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -83,7 +86,15 @@ export default function PriorAuthorizationForm() {
     priority: 'normal',
     currency: 'SAR',
     encounter_class: 'ambulatory',
-    service_event_type: 'ICSE', // NPHIES: ICSE (Initial) or SCSE (Subsequent) - for dental claims
+    service_event_type: 'ICSE', // NPHIES: ICSE (Initial) or SCSE (Subsequent)
+    // Emergency encounter fields (per NPHIES Encounter-10122.json)
+    triage_category: '', // Required for EMER: I, VU, U, S, NS
+    triage_date: '', // Required for EMER: datetime of triage assessment
+    service_type: '', // Service type: acute-care, sub-acute-care, etc.
+    encounter_priority: '', // For EMER: EM, UR, S, etc.
+    // Eligibility response (per NPHIES Claim-173086.json)
+    eligibility_response_id: '', // Identifier-based reference (preferred)
+    eligibility_response_system: '', // System for the identifier
     patient_id: '',
     provider_id: '',
     practice_code: '08.00', // NPHIES: Practice code for careTeam.qualification (default: Internal Medicine)
@@ -985,20 +996,100 @@ export default function PriorAuthorizationForm() {
               </div>
             )}
 
-            {/* Dental-specific fields - Required per NPHIES */}
-            {formData.auth_type === 'dental' && (
+            {/* Service Event Type - For dental and professional claims */}
+            {(formData.auth_type === 'dental' || formData.auth_type === 'professional') && (
               <div className="space-y-2">
-                <Label>Service Event Type *</Label>
+                <Label>Service Event Type {formData.auth_type === 'dental' ? '*' : ''}</Label>
                 <Select
                   value={SERVICE_EVENT_TYPE_OPTIONS.find(opt => opt.value === formData.service_event_type)}
                   onChange={(option) => handleChange('service_event_type', option?.value || 'ICSE')}
                   options={SERVICE_EVENT_TYPE_OPTIONS}
                   styles={selectStyles}
                   menuPortalTarget={document.body}
+                  isClearable={formData.auth_type !== 'dental'}
                 />
                 <p className="text-xs text-gray-500">
                   ICSE = New visit, SCSE = Follow-up visit
                 </p>
+              </div>
+            )}
+
+            {/* Emergency Encounter Fields - Required for EMER class per NPHIES Encounter-10122 */}
+            {formData.encounter_class === 'emergency' && (
+              <div className="space-y-4 p-4 bg-red-50/50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 text-red-700 font-medium">
+                  <AlertCircle className="h-5 w-5" />
+                  Emergency Encounter Information
+                </div>
+                <p className="text-xs text-red-600">
+                  These fields are required for Emergency (EMER) encounters per NPHIES specification.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Triage Category *</Label>
+                    <Select
+                      value={TRIAGE_CATEGORY_OPTIONS.find(opt => opt.value === formData.triage_category)}
+                      onChange={(option) => handleChange('triage_category', option?.value || '')}
+                      options={TRIAGE_CATEGORY_OPTIONS}
+                      styles={selectStyles}
+                      menuPortalTarget={document.body}
+                      placeholder="Select triage category..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Triage Date & Time *</Label>
+                    <div className="datepicker-wrapper">
+                      <DatePicker
+                        selected={formData.triage_date ? new Date(formData.triage_date) : null}
+                        onChange={(date) => handleChange('triage_date', date ? date.toISOString() : '')}
+                        showTimeSelect
+                        dateFormat="yyyy-MM-dd HH:mm"
+                        className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+                        placeholderText="Select triage date & time"
+                      />
+                      <Calendar className="datepicker-icon h-4 w-4" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Encounter Priority *</Label>
+                    <Select
+                      value={ENCOUNTER_PRIORITY_OPTIONS.find(opt => opt.value === formData.encounter_priority)}
+                      onChange={(option) => handleChange('encounter_priority', option?.value || 'EM')}
+                      options={ENCOUNTER_PRIORITY_OPTIONS}
+                      styles={selectStyles}
+                      menuPortalTarget={document.body}
+                      placeholder="Select priority..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Service Type</Label>
+                    <Select
+                      value={ENCOUNTER_SERVICE_TYPE_OPTIONS.find(opt => opt.value === formData.service_type)}
+                      onChange={(option) => handleChange('service_type', option?.value || '')}
+                      options={ENCOUNTER_SERVICE_TYPE_OPTIONS}
+                      styles={selectStyles}
+                      menuPortalTarget={document.body}
+                      isClearable
+                      placeholder="Select service type..."
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Service Type for non-emergency encounters */}
+            {formData.auth_type !== 'vision' && formData.auth_type !== 'pharmacy' && formData.encounter_class !== 'emergency' && (
+              <div className="space-y-2">
+                <Label>Service Type</Label>
+                <Select
+                  value={ENCOUNTER_SERVICE_TYPE_OPTIONS.find(opt => opt.value === formData.service_type)}
+                  onChange={(option) => handleChange('service_type', option?.value || '')}
+                  options={ENCOUNTER_SERVICE_TYPE_OPTIONS}
+                  styles={selectStyles}
+                  menuPortalTarget={document.body}
+                  isClearable
+                  placeholder="Select service type (optional)..."
+                />
               </div>
             )}
 
@@ -1096,13 +1187,48 @@ export default function PriorAuthorizationForm() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="eligibility_ref">Eligibility Reference</Label>
+                <Label htmlFor="eligibility_ref">Eligibility Reference (Legacy)</Label>
                 <Input
                   id="eligibility_ref"
                   value={formData.eligibility_ref || ''}
                   onChange={(e) => handleChange('eligibility_ref', e.target.value)}
-                  placeholder="Optional eligibility reference"
+                  placeholder="CoverageEligibilityResponse/uuid"
                 />
+                <p className="text-xs text-gray-500">
+                  Direct reference format (e.g., CoverageEligibilityResponse/12345)
+                </p>
+              </div>
+            </div>
+
+            {/* Eligibility Response Identifier - Preferred per NPHIES Claim-173086 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
+              <div className="col-span-2 flex items-center gap-2 text-blue-700 font-medium text-sm">
+                <CheckCircle className="h-4 w-4" />
+                Eligibility Response Identifier (Preferred Format)
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="eligibility_response_id">Eligibility Response ID</Label>
+                <Input
+                  id="eligibility_response_id"
+                  value={formData.eligibility_response_id || ''}
+                  onChange={(e) => handleChange('eligibility_response_id', e.target.value)}
+                  placeholder="e.g., Elig_199719982262"
+                />
+                <p className="text-xs text-gray-500">
+                  The eligibility response identifier value from the payer
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="eligibility_response_system">Identifier System (Optional)</Label>
+                <Input
+                  id="eligibility_response_system"
+                  value={formData.eligibility_response_system || ''}
+                  onChange={(e) => handleChange('eligibility_response_system', e.target.value)}
+                  placeholder="http://payer.com/identifiers/coverageeligibilityresponse"
+                />
+                <p className="text-xs text-gray-500">
+                  Leave empty to use payer's default system
+                </p>
               </div>
             </div>
           </CardContent>

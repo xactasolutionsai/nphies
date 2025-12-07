@@ -134,15 +134,31 @@ class ProfessionalMapper extends BaseMapper {
       });
     }
 
-    // Only add eligibility reference if it's a valid FHIR reference format
-    // Must be in format "ResourceType/id" (e.g., "CoverageEligibilityResponse/uuid")
-    if (priorAuth.eligibility_ref && priorAuth.eligibility_ref.includes('/')) {
-      extensions.push({
+    // Add eligibility response extension
+    // NPHIES supports two formats:
+    // 1. Identifier-based (preferred per Claim-173086.json): { identifier: { system, value } }
+    // 2. Reference-based: { reference: "CoverageEligibilityResponse/uuid" }
+    if (priorAuth.eligibility_response_id || priorAuth.eligibility_ref) {
+      const eligibilityExtension = {
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
-        valueReference: {
-          reference: priorAuth.eligibility_ref
-        }
-      });
+        valueReference: {}
+      };
+
+      // Prefer identifier-based format (per NPHIES Claim-173086.json example)
+      if (priorAuth.eligibility_response_id) {
+        const identifierSystem = priorAuth.eligibility_response_system || 
+          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+        
+        eligibilityExtension.valueReference.identifier = {
+          system: identifierSystem,
+          value: priorAuth.eligibility_response_id
+        };
+      } else if (priorAuth.eligibility_ref && priorAuth.eligibility_ref.includes('/')) {
+        // Fallback to reference-based format
+        eligibilityExtension.valueReference.reference = priorAuth.eligibility_ref;
+      }
+
+      extensions.push(eligibilityExtension);
     }
 
     // Build claim in NPHIES-mandated order
@@ -371,6 +387,12 @@ class ProfessionalMapper extends BaseMapper {
 
   /**
    * Build Encounter resource for Professional auth type
+   * Reference: https://portal.nphies.sa/ig/Encounter-10122.json.html
+   * 
+   * Required fields per NPHIES:
+   * - For EMER encounters: triageCategory, triageDate, serviceEventType extensions
+   * - serviceType (acute-care, sub-acute-care, etc.)
+   * - priority (for emergency encounters)
    */
   buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds) {
     const encounterId = bundleResourceIds.encounter;
@@ -382,25 +404,100 @@ class ProfessionalMapper extends BaseMapper {
                                 priorAuth.request_number || 
                                 `ENC-${encounterId.substring(0, 8)}`;
 
+    // Build extensions based on encounter class
+    const extensions = [];
+
+    // For Emergency encounters (EMER), add triage and service event extensions
+    if (encounterClass === 'emergency') {
+      // Triage Category - required for EMER
+      if (priorAuth.triage_category) {
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageCategory',
+          valueCodeableConcept: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/triage-category',
+              code: priorAuth.triage_category,
+              display: this.getTriageCategoryDisplay(priorAuth.triage_category)
+            }]
+          }
+        });
+      }
+
+      // Triage Date - required for EMER
+      if (priorAuth.triage_date) {
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageDate',
+          valueDateTime: this.formatDateTime(priorAuth.triage_date)
+        });
+      }
+    }
+
+    // Service Event Type - for all professional encounters
+    if (priorAuth.service_event_type) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceEventType',
+        valueCodeableConcept: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/service-event-type',
+            code: priorAuth.service_event_type,
+            display: this.getServiceEventTypeDisplay(priorAuth.service_event_type)
+          }]
+        }
+      });
+    }
+
     const encounter = {
       resourceType: 'Encounter',
       id: encounterId,
       meta: {
         profile: [this.getEncounterProfileUrl(encounterClass)]
-      },
-      identifier: [
-        {
-          system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/encounter`,
-          value: encounterIdentifier
-        }
-      ],
-      status: 'planned',
-      class: {
-        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-        code: this.getEncounterClassCode(encounterClass),
-        display: this.getEncounterClassDisplay(encounterClass)
       }
     };
+
+    // Add extensions if any
+    if (extensions.length > 0) {
+      encounter.extension = extensions;
+    }
+
+    encounter.identifier = [
+      {
+        system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/encounter`,
+        value: encounterIdentifier
+      }
+    ];
+
+    // Status - 'in-progress' for active encounters, 'planned' for future
+    encounter.status = priorAuth.encounter_status || 'in-progress';
+
+    // Class
+    encounter.class = {
+      system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+      code: this.getEncounterClassCode(encounterClass),
+      display: this.getEncounterClassDisplay(encounterClass)
+    };
+
+    // Service Type - required per NPHIES
+    if (priorAuth.service_type) {
+      encounter.serviceType = {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/service-type',
+          code: priorAuth.service_type,
+          display: this.getServiceTypeDisplay(priorAuth.service_type)
+        }]
+      };
+    }
+
+    // Priority - required for emergency encounters
+    if (encounterClass === 'emergency' || priorAuth.encounter_priority) {
+      const priorityCode = priorAuth.encounter_priority || 'EM';
+      encounter.priority = {
+        coding: [{
+          system: 'http://terminology.hl7.org/CodeSystem/v3-ActPriority',
+          code: priorityCode,
+          display: this.getEncounterPriorityDisplay(priorityCode)
+        }]
+      };
+    }
 
     // Subject
     encounter.subject = { reference: `Patient/${patientId}` };
@@ -416,7 +513,7 @@ class ProfessionalMapper extends BaseMapper {
         encounter.period.end = this.formatDateTimeWithTimezone(priorAuth.encounter_end);
       }
     } else {
-      // AMB: date-only format
+      // AMB/EMER: date-only format per NPHIES Encounter-10122.json
       const startDateRaw = priorAuth.encounter_start || new Date();
       let dateOnlyStart;
       if (typeof startDateRaw === 'string' && startDateRaw.includes('T')) {
@@ -435,6 +532,58 @@ class ProfessionalMapper extends BaseMapper {
       fullUrl: `http://provider.com/Encounter/${encounterId}`,
       resource: encounter
     };
+  }
+
+  /**
+   * Get triage category display text
+   * Reference: http://nphies.sa/terminology/CodeSystem/triage-category
+   */
+  getTriageCategoryDisplay(code) {
+    const displays = {
+      'I': 'Immediate',
+      'VU': 'Very Urgent',
+      'U': 'Urgent',
+      'S': 'Standard',
+      'NS': 'Non-Standard'
+    };
+    return displays[code] || code;
+  }
+
+  /**
+   * Get service event type display text
+   * Reference: http://nphies.sa/terminology/CodeSystem/service-event-type
+   */
+  getServiceEventTypeDisplay(code) {
+    const displays = {
+      'ICSE': 'Initial client service event',
+      'SCSE': 'Subsequent client service event'
+    };
+    return displays[code] || code;
+  }
+
+  /**
+   * Get encounter priority display text
+   * Reference: http://terminology.hl7.org/CodeSystem/v3-ActPriority
+   */
+  getEncounterPriorityDisplay(code) {
+    const displays = {
+      'A': 'ASAP',
+      'CR': 'callback results',
+      'CS': 'callback for scheduling',
+      'CSP': 'callback placer for scheduling',
+      'CSR': 'contact recipient for scheduling',
+      'EL': 'elective',
+      'EM': 'emergency',
+      'P': 'preop',
+      'PRN': 'as needed',
+      'R': 'routine',
+      'RR': 'rush reporting',
+      'S': 'stat',
+      'T': 'timing critical',
+      'UD': 'use as directed',
+      'UR': 'urgent'
+    };
+    return displays[code] || code;
   }
 }
 
