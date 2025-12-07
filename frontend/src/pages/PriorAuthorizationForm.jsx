@@ -229,10 +229,27 @@ export default function PriorAuthorizationForm() {
           parsedCategories.add(info.category);
         }
         
-        // Chief complaint
-        if (info.category === 'chief-complaint' && info.code) {
-          clinicalInfo.chief_complaint_code = info.code;
-          clinicalInfo.chief_complaint_display = info.code_display || '';
+        // Chief complaint - supports both SNOMED code and free text formats
+        if (info.category === 'chief-complaint') {
+          if (info.code_text) {
+            // Free text format
+            clinicalInfo.chief_complaint_format = 'text';
+            clinicalInfo.chief_complaint_text = info.code_text;
+            clinicalInfo.chief_complaint_code = '';
+            clinicalInfo.chief_complaint_display = '';
+          } else if (info.code) {
+            // SNOMED code format
+            clinicalInfo.chief_complaint_format = 'snomed';
+            clinicalInfo.chief_complaint_code = info.code;
+            clinicalInfo.chief_complaint_display = info.code_display || '';
+            clinicalInfo.chief_complaint_text = '';
+          } else if (info.value_string) {
+            // Legacy: value_string format
+            clinicalInfo.chief_complaint_format = 'text';
+            clinicalInfo.chief_complaint_text = info.value_string;
+            clinicalInfo.chief_complaint_code = '';
+            clinicalInfo.chief_complaint_display = '';
+          }
           parsedCategories.add(info.category);
         }
         

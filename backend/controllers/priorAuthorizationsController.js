@@ -1357,6 +1357,11 @@ class PriorAuthorizationsController extends BaseController {
          reason_code, reason_system)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       `;
+      
+      // For chief-complaint with code_text (free text format), store in value_string
+      // This allows round-trip of free text chief complaints
+      const valueString = info.code_text || info.value_string || null;
+      
       await query(infoQuery, [
         priorAuthId,
         info.sequence,
@@ -1365,7 +1370,7 @@ class PriorAuthorizationsController extends BaseController {
         info.code || null,
         info.code_system || null,
         info.code_display || null,
-        info.value_string || null,
+        valueString,
         info.value_quantity || null,
         info.value_quantity_unit || null,
         info.value_boolean !== undefined ? info.value_boolean : null,

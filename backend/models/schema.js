@@ -488,6 +488,7 @@ export const validationSchemas = {
       code: Joi.string().max(50).allow(null, '').optional(),
       code_system: Joi.string().max(255).allow(null, '').optional(),
       code_display: Joi.string().max(255).allow(null, '').optional(),
+      code_text: Joi.string().allow(null, '').optional(), // Free text for chief-complaint
       value_string: Joi.string().allow(null, '').optional(),
       value_quantity: Joi.number().precision(2).allow(null).optional(),
       value_quantity_unit: Joi.string().max(50).allow(null, '').optional(),
