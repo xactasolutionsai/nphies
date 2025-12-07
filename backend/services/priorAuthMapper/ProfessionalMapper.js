@@ -138,27 +138,45 @@ class ProfessionalMapper extends BaseMapper {
     // NPHIES supports two formats:
     // 1. Identifier-based (preferred per Claim-173086.json): { identifier: { system, value } }
     // 2. Reference-based: { reference: "CoverageEligibilityResponse/uuid" }
-    if (priorAuth.eligibility_response_id || priorAuth.eligibility_ref) {
-      const eligibilityExtension = {
+    // GE-00013: valueReference must have valid structure - either identifier OR reference, not empty
+    if (priorAuth.eligibility_response_id) {
+      // Identifier-based format (preferred per NPHIES Claim-173086.json example)
+      const identifierSystem = priorAuth.eligibility_response_system || 
+        `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+      
+      extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
-        valueReference: {}
-      };
-
-      // Prefer identifier-based format (per NPHIES Claim-173086.json example)
-      if (priorAuth.eligibility_response_id) {
-        const identifierSystem = priorAuth.eligibility_response_system || 
-          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
-        
-        eligibilityExtension.valueReference.identifier = {
-          system: identifierSystem,
-          value: priorAuth.eligibility_response_id
-        };
-      } else if (priorAuth.eligibility_ref && priorAuth.eligibility_ref.includes('/')) {
-        // Fallback to reference-based format
-        eligibilityExtension.valueReference.reference = priorAuth.eligibility_ref;
+        valueReference: {
+          identifier: {
+            system: identifierSystem,
+            value: priorAuth.eligibility_response_id
+          }
+        }
+      });
+    } else if (priorAuth.eligibility_ref) {
+      // Reference-based format - eligibility_ref can be:
+      // 1. Full reference: "CoverageEligibilityResponse/uuid"
+      // 2. Just the ID: "uuid" (we'll treat as identifier value)
+      if (priorAuth.eligibility_ref.includes('/')) {
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+          valueReference: {
+            reference: priorAuth.eligibility_ref
+          }
+        });
+      } else {
+        // Treat as identifier value
+        const identifierSystem = `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+          valueReference: {
+            identifier: {
+              system: identifierSystem,
+              value: priorAuth.eligibility_ref
+            }
+          }
+        });
       }
-
-      extensions.push(eligibilityExtension);
     }
 
     // Build claim in NPHIES-mandated order
