@@ -74,18 +74,12 @@ class BaseMapper {
 
   /**
    * Get the NPHIES Encounter profile URL based on encounter class
+   * All encounter types use the generic encounter profile per NPHIES documentation
    */
   getEncounterProfileUrl(encounterClass) {
-    const profiles = {
-      'ambulatory': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0',
-      'outpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0',
-      'emergency': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-EMER|1.0.0',
-      'home': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-HH|1.0.0',
-      'inpatient': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-IMP|1.0.0',
-      'daycase': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0',
-      'telemedicine': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-VR|1.0.0'
-    };
-    return profiles[encounterClass] || profiles['ambulatory'];
+    // All encounter classes use the same generic encounter profile
+    // Per NPHIES examples: http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0
+    return 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0';
   }
 
   /**
