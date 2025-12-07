@@ -382,12 +382,31 @@ export const validationSchemas = {
     nphies_response_id: Joi.string().max(100).allow(null, '').optional(),
     is_nphies_generated: Joi.boolean().allow(null).optional(),
     
+    // NPHIES Response Fields (from ClaimResponse)
+    nphies_message_id: Joi.string().max(255).allow(null, '').optional(),
+    nphies_response_code: Joi.string().max(50).allow(null, '').optional(),
+    original_request_identifier: Joi.string().max(255).allow(null, '').optional(),
+    insurance_sequence: Joi.number().integer().allow(null).optional(),
+    insurance_focal: Joi.boolean().allow(null).optional(),
+    claim_response_status: Joi.string().max(50).allow(null, '').optional(),
+    claim_response_use: Joi.string().max(50).allow(null, '').optional(),
+    claim_response_created: Joi.date().allow(null, '').optional(),
+    
     // Encounter
     encounter_class: Joi.string().valid('inpatient', 'outpatient', 'daycase', 'emergency', 'ambulatory', 'home', 'telemedicine').allow(null, '').optional(),
     encounter_start: Joi.date().allow(null, '').optional(),
     encounter_end: Joi.date().allow(null, '').optional(),
     encounter_identifier: Joi.string().max(255).allow(null, '').optional(),
     service_type: Joi.string().max(100).allow(null, '').optional(),
+    
+    // Emergency Encounter Fields (per NPHIES Encounter-10122)
+    triage_category: Joi.string().valid('I', 'VU', 'U', 'S', 'NS').allow(null, '').optional(),
+    triage_date: Joi.date().allow(null, '').optional(),
+    encounter_priority: Joi.string().valid('EM', 'UR', 'S', 'A', 'R', 'EL', 'CR', 'CS', 'CSP', 'CSR', 'P', 'PRN', 'RR', 'T', 'UD').allow(null, '').optional(),
+    
+    // Eligibility Response Identifier (per NPHIES Claim-173086)
+    eligibility_response_id: Joi.string().max(255).allow(null, '').optional(),
+    eligibility_response_system: Joi.string().max(500).allow(null, '').optional(),
     
     // Workflow
     is_update: Joi.boolean().allow(null).optional(),
