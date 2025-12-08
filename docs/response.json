@@ -1,23 +1,23 @@
 {
-  "claimId": 8,
+  "claimId": 9,
   "success": true,
   "nphiesResponse": {
     "success": false,
     "outcome": "error",
     "preAuthPeriod": null,
-    "nphiesResponseId": "CLM-1765213495461",
+    "nphiesResponseId": "CLM-1765213823341",
     "responseCode": "ok",
     "claimResponseStatus": "active",
     "claimResponseUse": "claim",
-    "claimResponseCreated": "2025-12-08T20:04:55+03:00",
+    "claimResponseCreated": "2025-12-08T20:10:23+03:00",
     "status": "active",
     "type": "vision",
     "use": "claim",
-    "created": "2025-12-08T20:04:55+03:00",
-    "messageHeaderId": "8f04751e-8b2f-4045-b797-592eb1dbbd77",
+    "created": "2025-12-08T20:10:23+03:00",
+    "messageHeaderId": "df3926dc-e3f0-4ae2-b0fb-e234071c37c6",
     "insuranceSequence": 1,
     "insuranceFocal": true,
-    "originalRequestIdentifier": "CLM-1765213495461",
+    "originalRequestIdentifier": "CLM-1765213823341",
     "patient": {
       "id": "09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
       "name": "Sara Abbas Female",
@@ -73,8 +73,8 @@
     ]
   },
   "data": {
-    "id": 8,
-    "claim_number": "CLM-1765213495461",
+    "id": 9,
+    "claim_number": "CLM-1765213823341",
     "claim_type": "vision",
     "sub_type": "ip",
     "patient_id": "09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
@@ -89,7 +89,7 @@
     "adjudication_outcome": null,
     "disposition": null,
     "nphies_claim_id": null,
-    "nphies_request_id": "clm-req-1765213495712",
+    "nphies_request_id": "clm-req-1765213823764",
     "nphies_response_id": null,
     "nphies_message_id": null,
     "nphies_response_code": null,
@@ -120,7 +120,7 @@
     "tax_amount": null,
     "currency": "SAR",
     "request_bundle": {
-      "id": "20f2e7d3-9fb3-419e-b8a0-b8dddcd8a2eb",
+      "id": "eec9d60e-46be-41cf-a1a4-d4ca1f1a560e",
       "meta": {
         "profile": [
           "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -129,9 +129,9 @@
       "type": "message",
       "entry": [
         {
-          "fullUrl": "urn:uuid:5f763958-0f44-49bc-abcb-bb71c8da88be",
+          "fullUrl": "urn:uuid:4b0afbc8-2c13-4569-9d44-549964aed62b",
           "resource": {
-            "id": "5f763958-0f44-49bc-abcb-bb71c8da88be",
+            "id": "4b0afbc8-2c13-4569-9d44-549964aed62b",
             "meta": {
               "profile": [
                 "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -139,7 +139,7 @@
             },
             "focus": [
               {
-                "reference": "http://provider.com/Claim/f6b4a4ea-463d-448d-bfa0-c1df95b5a7b2"
+                "reference": "http://provider.com/Claim/f6f6b088-a66d-41b3-a73a-1be2b19c437c"
               }
             ],
             "sender": {
@@ -172,9 +172,9 @@
           }
         },
         {
-          "fullUrl": "http://provider.com/Claim/f6b4a4ea-463d-448d-bfa0-c1df95b5a7b2",
+          "fullUrl": "http://provider.com/Claim/f6f6b088-a66d-41b3-a73a-1be2b19c437c",
           "resource": {
-            "id": "f6b4a4ea-463d-448d-bfa0-c1df95b5a7b2",
+            "id": "f6f6b088-a66d-41b3-a73a-1be2b19c437c",
             "use": "claim",
             "item": [
               {
@@ -266,7 +266,7 @@
               "currency": "SAR"
             },
             "status": "active",
-            "created": "2025-12-08T20:04:55+03:00",
+            "created": "2025-12-08T20:10:23+03:00",
             "insurer": {
               "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
             },
@@ -292,7 +292,7 @@
                   ]
                 },
                 "provider": {
-                  "reference": "Practitioner/943a50a1-62a4-456e-bc24-8e21262d068d"
+                  "reference": "Practitioner/cfd3eb93-5a16-4fd2-abd9-f5bf104dee55"
                 },
                 "sequence": 1,
                 "qualification": {
@@ -348,7 +348,7 @@
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
                 "valueIdentifier": {
-                  "value": "EpisodeID_20251208_CLM-1765213495461",
+                  "value": "EpisodeID_20251208_CLM-1765213823341",
                   "system": "http://saudigeneralhospital.com.sa/identifiers/episode"
                 }
               }
@@ -364,7 +364,7 @@
             ],
             "identifier": [
               {
-                "value": "CLM-1765213495461",
+                "value": "CLM-1765213823341",
                 "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
               }
             ],
@@ -523,9 +523,9 @@
           }
         },
         {
-          "fullUrl": "http://provider.com/Practitioner/943a50a1-62a4-456e-bc24-8e21262d068d",
+          "fullUrl": "http://provider.com/Practitioner/cfd3eb93-5a16-4fd2-abd9-f5bf104dee55",
           "resource": {
-            "id": "943a50a1-62a4-456e-bc24-8e21262d068d",
+            "id": "cfd3eb93-5a16-4fd2-abd9-f5bf104dee55",
             "meta": {
               "profile": [
                 "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -553,7 +553,7 @@
                     }
                   ]
                 },
-                "value": "PRACT-943a50a1",
+                "value": "PRACT-cfd3eb93",
                 "system": "http://nphies.sa/license/practitioner-license"
               }
             ],
@@ -772,11 +772,11 @@
           }
         }
       ],
-      "timestamp": "2025-12-08T17:04:55.712Z",
+      "timestamp": "2025-12-08T17:10:23.764Z",
       "resourceType": "Bundle"
     },
     "response_bundle": {
-      "id": "2e267277-364c-426c-830c-ae7fbd52bfd5",
+      "id": "9f4640f0-22d8-46b8-9953-6a8b51a1eaf3",
       "meta": {
         "profile": [
           "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -785,9 +785,9 @@
       "type": "message",
       "entry": [
         {
-          "fullUrl": "http://nphies.sa/MessageHeader/8f04751e-8b2f-4045-b797-592eb1dbbd77",
+          "fullUrl": "http://nphies.sa/MessageHeader/df3926dc-e3f0-4ae2-b0fb-e234071c37c6",
           "resource": {
-            "id": "8f04751e-8b2f-4045-b797-592eb1dbbd77",
+            "id": "df3926dc-e3f0-4ae2-b0fb-e234071c37c6",
             "meta": {
               "tag": [
                 {
@@ -801,7 +801,7 @@
             },
             "focus": [
               {
-                "reference": "http://nphies.sa/ClaimResponse/728"
+                "reference": "http://nphies.sa/ClaimResponse/72"
               }
             ],
             "sender": {
@@ -816,7 +816,7 @@
             },
             "response": {
               "code": "ok",
-              "identifier": "5f763958-0f44-49bc-abcb-bb71c8da88be"
+              "identifier": "4b0afbc8-2c13-4569-9d44-549964aed62b"
             },
             "destination": [
               {
@@ -838,9 +838,9 @@
           }
         },
         {
-          "fullUrl": "http://nphies.sa/ClaimResponse/728",
+          "fullUrl": "http://nphies.sa/ClaimResponse/72",
           "resource": {
-            "id": "728",
+            "id": "72",
             "use": "claim",
             "meta": {
               "tag": [
@@ -932,7 +932,7 @@
               }
             ],
             "status": "active",
-            "created": "2025-12-08T20:04:55+03:00",
+            "created": "2025-12-08T20:10:23+03:00",
             "insurer": {
               "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
             },
@@ -943,7 +943,7 @@
             "request": {
               "type": "Claim",
               "identifier": {
-                "value": "CLM-1765213495461",
+                "value": "CLM-1765213823341",
                 "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
               }
             },
@@ -961,7 +961,7 @@
             },
             "identifier": [
               {
-                "value": "CLM-1765213495461",
+                "value": "CLM-1765213823341",
                 "system": "http://nphies.sa/ClaimResponse"
               }
             ],
@@ -1236,15 +1236,15 @@
           }
         }
       ],
-      "timestamp": "2025-12-08T20:04:55.884+03:00",
+      "timestamp": "2025-12-08T20:10:23.952+03:00",
       "resourceType": "Bundle"
     },
     "service_date": "2025-12-07T21:00:00.000Z",
-    "request_date": "2025-12-08T17:04:55.713Z",
-    "response_date": "2025-12-08T17:04:56.120Z",
+    "request_date": "2025-12-08T17:10:23.765Z",
+    "response_date": "2025-12-08T17:10:24.164Z",
     "payment_date": null,
-    "created_at": "2025-12-08T17:04:55.463Z",
-    "updated_at": "2025-12-08T17:04:56.120Z",
+    "created_at": "2025-12-08T17:10:23.344Z",
+    "updated_at": "2025-12-08T17:10:24.164Z",
     "patient_name": "Sara Abbas Female",
     "patient_identifier": "2000000003",
     "patient_gender": "female",
@@ -1256,8 +1256,8 @@
     "insurer_nphies_id": "INS-FHIR",
     "items": [
       {
-        "id": 8,
-        "claim_id": 8,
+        "id": 9,
+        "claim_id": 9,
         "sequence": 1,
         "product_or_service_code": "96092-00-10",
         "product_or_service_system": null,
@@ -1293,13 +1293,13 @@
         "adjudication_reason": null,
         "description": null,
         "notes": null,
-        "created_at": "2025-12-08T17:04:55.484Z"
+        "created_at": "2025-12-08T17:10:23.392Z"
       }
     ],
     "supporting_info": [
       {
-        "id": 53,
-        "claim_id": 8,
+        "id": 58,
+        "claim_id": 9,
         "sequence": 1,
         "category": "patient-history",
         "category_system": null,
@@ -1320,11 +1320,11 @@
         "timing_period_end": null,
         "reason_code": null,
         "reason_system": null,
-        "created_at": "2025-12-08T17:04:55.516Z"
+        "created_at": "2025-12-08T17:10:23.427Z"
       },
       {
-        "id": 54,
-        "claim_id": 8,
+        "id": 59,
+        "claim_id": 9,
         "sequence": 2,
         "category": "history-of-present-illness",
         "category_system": null,
@@ -1345,11 +1345,11 @@
         "timing_period_end": null,
         "reason_code": null,
         "reason_system": null,
-        "created_at": "2025-12-08T17:04:55.524Z"
+        "created_at": "2025-12-08T17:10:23.444Z"
       },
       {
-        "id": 55,
-        "claim_id": 8,
+        "id": 60,
+        "claim_id": 9,
         "sequence": 3,
         "category": "physical-examination",
         "category_system": null,
@@ -1370,11 +1370,11 @@
         "timing_period_end": null,
         "reason_code": null,
         "reason_system": null,
-        "created_at": "2025-12-08T17:04:55.540Z"
+        "created_at": "2025-12-08T17:10:23.450Z"
       },
       {
-        "id": 56,
-        "claim_id": 8,
+        "id": 61,
+        "claim_id": 9,
         "sequence": 4,
         "category": "treatment-plan",
         "category_system": null,
@@ -1395,11 +1395,11 @@
         "timing_period_end": null,
         "reason_code": null,
         "reason_system": null,
-        "created_at": "2025-12-08T17:04:55.546Z"
+        "created_at": "2025-12-08T17:10:23.461Z"
       },
       {
-        "id": 57,
-        "claim_id": 8,
+        "id": 62,
+        "claim_id": 9,
         "sequence": 5,
         "category": "investigation-result",
         "category_system": null,
@@ -1420,13 +1420,13 @@
         "timing_period_end": null,
         "reason_code": null,
         "reason_system": null,
-        "created_at": "2025-12-08T17:04:55.557Z"
+        "created_at": "2025-12-08T17:10:23.466Z"
       }
     ],
     "diagnoses": [
       {
-        "id": 8,
-        "claim_id": 8,
+        "id": 9,
+        "claim_id": 9,
         "sequence": 1,
         "diagnosis_code": "Z01.0",
         "diagnosis_system": "http://hl7.org/fhir/sid/icd-10",
@@ -1434,13 +1434,13 @@
         "diagnosis_type": "principal",
         "on_admission": null,
         "condition_onset": "NR",
-        "created_at": "2025-12-08T17:04:55.507Z"
+        "created_at": "2025-12-08T17:10:23.418Z"
       }
     ],
     "responses": [
       {
-        "id": 8,
-        "claim_id": 8,
+        "id": 9,
+        "claim_id": 9,
         "response_type": "initial",
         "outcome": "error",
         "disposition": null,
@@ -1470,13 +1470,13 @@
         ],
         "is_nphies_generated": false,
         "nphies_response_id": null,
-        "received_at": "2025-12-08T17:04:56.136Z"
+        "received_at": "2025-12-08T17:10:24.194Z"
       }
     ],
     "attachments": []
   },
   "requestBundle": {
-    "id": "20f2e7d3-9fb3-419e-b8a0-b8dddcd8a2eb",
+    "id": "eec9d60e-46be-41cf-a1a4-d4ca1f1a560e",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -1485,9 +1485,9 @@
     "type": "message",
     "entry": [
       {
-        "fullUrl": "urn:uuid:5f763958-0f44-49bc-abcb-bb71c8da88be",
+        "fullUrl": "urn:uuid:4b0afbc8-2c13-4569-9d44-549964aed62b",
         "resource": {
-          "id": "5f763958-0f44-49bc-abcb-bb71c8da88be",
+          "id": "4b0afbc8-2c13-4569-9d44-549964aed62b",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -1495,7 +1495,7 @@
           },
           "focus": [
             {
-              "reference": "http://provider.com/Claim/f6b4a4ea-463d-448d-bfa0-c1df95b5a7b2"
+              "reference": "http://provider.com/Claim/f6f6b088-a66d-41b3-a73a-1be2b19c437c"
             }
           ],
           "sender": {
@@ -1528,9 +1528,9 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Claim/f6b4a4ea-463d-448d-bfa0-c1df95b5a7b2",
+        "fullUrl": "http://provider.com/Claim/f6f6b088-a66d-41b3-a73a-1be2b19c437c",
         "resource": {
-          "id": "f6b4a4ea-463d-448d-bfa0-c1df95b5a7b2",
+          "id": "f6f6b088-a66d-41b3-a73a-1be2b19c437c",
           "use": "claim",
           "item": [
             {
@@ -1622,7 +1622,7 @@
             "currency": "SAR"
           },
           "status": "active",
-          "created": "2025-12-08T20:04:55+03:00",
+          "created": "2025-12-08T20:10:23+03:00",
           "insurer": {
             "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
           },
@@ -1648,7 +1648,7 @@
                 ]
               },
               "provider": {
-                "reference": "Practitioner/943a50a1-62a4-456e-bc24-8e21262d068d"
+                "reference": "Practitioner/cfd3eb93-5a16-4fd2-abd9-f5bf104dee55"
               },
               "sequence": 1,
               "qualification": {
@@ -1704,7 +1704,7 @@
             {
               "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
               "valueIdentifier": {
-                "value": "EpisodeID_20251208_CLM-1765213495461",
+                "value": "EpisodeID_20251208_CLM-1765213823341",
                 "system": "http://saudigeneralhospital.com.sa/identifiers/episode"
               }
             }
@@ -1720,7 +1720,7 @@
           ],
           "identifier": [
             {
-              "value": "CLM-1765213495461",
+              "value": "CLM-1765213823341",
               "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
             }
           ],
@@ -1879,9 +1879,9 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Practitioner/943a50a1-62a4-456e-bc24-8e21262d068d",
+        "fullUrl": "http://provider.com/Practitioner/cfd3eb93-5a16-4fd2-abd9-f5bf104dee55",
         "resource": {
-          "id": "943a50a1-62a4-456e-bc24-8e21262d068d",
+          "id": "cfd3eb93-5a16-4fd2-abd9-f5bf104dee55",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -1909,7 +1909,7 @@
                   }
                 ]
               },
-              "value": "PRACT-943a50a1",
+              "value": "PRACT-cfd3eb93",
               "system": "http://nphies.sa/license/practitioner-license"
             }
           ],
@@ -2128,11 +2128,11 @@
         }
       }
     ],
-    "timestamp": "2025-12-08T17:04:55.712Z",
+    "timestamp": "2025-12-08T17:10:23.764Z",
     "resourceType": "Bundle"
   },
   "responseBundle": {
-    "id": "2e267277-364c-426c-830c-ae7fbd52bfd5",
+    "id": "9f4640f0-22d8-46b8-9953-6a8b51a1eaf3",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -2141,9 +2141,9 @@
     "type": "message",
     "entry": [
       {
-        "fullUrl": "http://nphies.sa/MessageHeader/8f04751e-8b2f-4045-b797-592eb1dbbd77",
+        "fullUrl": "http://nphies.sa/MessageHeader/df3926dc-e3f0-4ae2-b0fb-e234071c37c6",
         "resource": {
-          "id": "8f04751e-8b2f-4045-b797-592eb1dbbd77",
+          "id": "df3926dc-e3f0-4ae2-b0fb-e234071c37c6",
           "meta": {
             "tag": [
               {
@@ -2157,7 +2157,7 @@
           },
           "focus": [
             {
-              "reference": "http://nphies.sa/ClaimResponse/728"
+              "reference": "http://nphies.sa/ClaimResponse/72"
             }
           ],
           "sender": {
@@ -2172,7 +2172,7 @@
           },
           "response": {
             "code": "ok",
-            "identifier": "5f763958-0f44-49bc-abcb-bb71c8da88be"
+            "identifier": "4b0afbc8-2c13-4569-9d44-549964aed62b"
           },
           "destination": [
             {
@@ -2194,9 +2194,9 @@
         }
       },
       {
-        "fullUrl": "http://nphies.sa/ClaimResponse/728",
+        "fullUrl": "http://nphies.sa/ClaimResponse/72",
         "resource": {
-          "id": "728",
+          "id": "72",
           "use": "claim",
           "meta": {
             "tag": [
@@ -2288,7 +2288,7 @@
             }
           ],
           "status": "active",
-          "created": "2025-12-08T20:04:55+03:00",
+          "created": "2025-12-08T20:10:23+03:00",
           "insurer": {
             "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
           },
@@ -2299,7 +2299,7 @@
           "request": {
             "type": "Claim",
             "identifier": {
-              "value": "CLM-1765213495461",
+              "value": "CLM-1765213823341",
               "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
             }
           },
@@ -2317,7 +2317,7 @@
           },
           "identifier": [
             {
-              "value": "CLM-1765213495461",
+              "value": "CLM-1765213823341",
               "system": "http://nphies.sa/ClaimResponse"
             }
           ],
@@ -2592,7 +2592,7 @@
         }
       }
     ],
-    "timestamp": "2025-12-08T20:04:55.884+03:00",
+    "timestamp": "2025-12-08T20:10:23.952+03:00",
     "resourceType": "Bundle"
   }
 }

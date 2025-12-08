@@ -8,17 +8,17 @@
  * - eventCoding: 'claim-request' (instead of 'priorauth-request')
  * - profile: vision-claim (instead of vision-priorauth)
  * 
- * Required Extensions (per NPHIES validation):
- * - extension-accountingPeriod (required - must be FIRST extension per IC-01620)
- *   NOTE: Day must be "01" per BV-01010 (e.g., "2025-12-01" not "2025-12-08")
+ * Extensions (per NPHIES validation):
+ * - extension-accountingPeriod (required per IC-01620, day must be "01" per BV-01010)
  * - extension-episode (required)
+ * NOTE: NPHIES example Claim-123773.json only shows episode extension!
  * 
- * Required SupportingInfo (per NPHIES validation BV-00752, BV-00803-806):
- * - investigation-result
- * - treatment-plan
- * - patient-history
- * - physical-examination
- * - history-of-present-illness
+ * SupportingInfo:
+ * - Per NPHIES example (Claim-123773.json), supportingInfo is OPTIONAL
+ * - If included, must follow BV-00530: non-chief-complaint categories with "code" 
+ *   element must have code.coding[] (not just code.text)
+ * - For free-text categories: use valueString ONLY (no code element)
+ * - For investigation-result: must use proper coded value from CodeSystem
  * 
  * Item Extensions (per NPHIES example):
  * - extension-patient-share (required)
@@ -276,18 +276,24 @@ class VisionClaimMapper extends VisionPAMapper {
       }));
     }
 
-    // SupportingInfo - Vision claims REQUIRE specific categories (BV-00752, BV-00803-806)
-    // Required categories: investigation-result, treatment-plan, patient-history, 
-    //                      physical-examination, history-of-present-illness
+    // SupportingInfo - Per NPHIES example (Claim-123773.json), supportingInfo is OPTIONAL
+    // Only include if claim has actual supporting info data from the PA
+    // Do NOT add default/placeholder values - this causes BV-00530 errors
     let supportingInfoSequences = [];
-    const requiredSupportingInfo = this.buildRequiredVisionSupportingInfo(claim.supporting_info || []);
-    if (requiredSupportingInfo.length > 0) {
-      claimResource.supportingInfo = requiredSupportingInfo.map((info, idx) => {
-        const seq = idx + 1;
-        supportingInfoSequences.push(seq);
-        return this.buildSupportingInfo({ ...info, sequence: seq });
-      });
+    const existingSupportingInfo = claim.supporting_info || [];
+    
+    if (existingSupportingInfo.length > 0) {
+      // Process existing supporting info, ensuring proper structure for each category
+      const processedSupportingInfo = this.processVisionSupportingInfo(existingSupportingInfo);
+      if (processedSupportingInfo.length > 0) {
+        claimResource.supportingInfo = processedSupportingInfo.map((info, idx) => {
+          const seq = idx + 1;
+          supportingInfoSequences.push(seq);
+          return this.buildSupportingInfo({ ...info, sequence: seq });
+        });
+      }
     }
+    // If no supporting info exists, don't add any - per NPHIES example
 
     // Insurance
     claimResource.insurance = [{ 
@@ -330,49 +336,52 @@ class VisionClaimMapper extends VisionPAMapper {
   }
 
   /**
-   * Build required supportingInfo for Vision Claims
-   * NPHIES requires: investigation-result, treatment-plan, patient-history,
-   *                  physical-examination, history-of-present-illness
+   * Process existing supportingInfo for Vision Claims
+   * Per NPHIES example (Claim-123773.json), supportingInfo is OPTIONAL.
    * 
    * BV-00530: If supportingInfo "code" element is provided and category is not 
    * 'chief-complaint', then code.coding[] with actual coded values is required.
    * 
-   * Solution: For free-text categories, use ONLY valueString (no code element).
-   * For investigation-result, use a proper code from the investigation-result CodeSystem.
+   * This method ensures existing supporting info has the correct structure:
+   * - investigation-result: must have code.coding with actual coded value
+   * - other categories: use valueString only (remove code_text to avoid BV-00530)
    */
-  buildRequiredVisionSupportingInfo(existingSupportingInfo = []) {
-    // Required categories with their values
-    // - investigation-result: needs code.coding with actual coded value
-    // - others: use valueString only (no code element to avoid BV-00530)
-    const requiredCategories = [
-      // investigation-result requires a proper code from NPHIES CodeSystem
-      { 
-        category: 'investigation-result', 
-        code: 'INP',  // INP = Investigation(s) not performed
-        code_system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
-        code_display: 'INP - Investigation(s) not performed'
-      },
-      // These use valueString only - NO code element
-      { category: 'treatment-plan', value_string: 'Optical correction prescribed' },
-      { category: 'patient-history', value_string: 'No significant ocular history' },
-      { category: 'physical-examination', value_string: 'Visual acuity assessment performed' },
-      { category: 'history-of-present-illness', value_string: 'Patient presents for vision correction' }
-    ];
-
-    // Start with existing supporting info
-    const result = [...existingSupportingInfo];
-    const existingCategories = new Set(existingSupportingInfo.map(info => 
-      (info.category || '').toLowerCase()
-    ));
-
-    // Add missing required categories
-    for (const required of requiredCategories) {
-      if (!existingCategories.has(required.category)) {
-        result.push(required);
+  processVisionSupportingInfo(existingSupportingInfo = []) {
+    return existingSupportingInfo.map(info => {
+      const category = (info.category || '').toLowerCase();
+      
+      // For investigation-result, ensure proper code structure
+      if (category === 'investigation-result') {
+        // If it already has a proper code, use it; otherwise set default INP
+        if (info.code) {
+          return {
+            ...info,
+            code_text: undefined, // Remove code_text to avoid BV-00530
+            value_string: undefined // Remove valueString when using code
+          };
+        } else {
+          return {
+            category: 'investigation-result',
+            code: info.code || 'INP',
+            code_system: info.code_system || 'http://nphies.sa/terminology/CodeSystem/investigation-result',
+            code_display: info.code_display || 'INP - Investigation(s) not performed'
+          };
+        }
       }
-    }
-
-    return result;
+      
+      // For all other categories, use valueString ONLY (no code element)
+      // This avoids BV-00530 error
+      return {
+        category: info.category,
+        value_string: info.value_string || info.code_text || info.code_display || ''
+        // Explicitly NOT including code, code_text, code_system, code_display
+      };
+    }).filter(info => {
+      // Filter out entries with empty values
+      if (info.code) return true;
+      if (info.value_string && info.value_string.trim()) return true;
+      return false;
+    });
   }
 
   /**
