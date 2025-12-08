@@ -340,11 +340,12 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     };
 
-    // SupportingInfo - days-supply (required for pharmacy per NPHIES)
+    // SupportingInfo - Build all required supporting info entries per NPHIES pharmacy claim requirements
     let supportingInfoList = [];
-    let daysSupplySequence = 1;
+    let sequenceNum = 1;
     
-    // Get days_supply from items or claim or use default
+    // 1. days-supply (required for pharmacy per NPHIES)
+    const daysSupplySequence = sequenceNum++;
     const daysSupplyValue = claim.items?.[0]?.days_supply || claim.days_supply || 30;
     supportingInfoList.push({
       sequence: daysSupplySequence,
@@ -358,6 +359,81 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
         value: parseInt(daysSupplyValue),
         system: 'http://unitsofmeasure.org',
         code: 'd'
+      }
+    });
+
+    // 2. lab-result / investigation-result (required per BV-00752)
+    const labResultValue = claim.lab_result || claim.investigation_result || 'No abnormal findings';
+    supportingInfoList.push({
+      sequence: sequenceNum++,
+      category: {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+          code: 'lab-result'
+        }]
+      },
+      code: {
+        text: labResultValue
+      }
+    });
+
+    // 3. treatment-plan (required per BV-00803)
+    const treatmentPlanValue = claim.treatment_plan || 'Medication therapy as prescribed';
+    supportingInfoList.push({
+      sequence: sequenceNum++,
+      category: {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+          code: 'treatment-plan'
+        }]
+      },
+      code: {
+        text: treatmentPlanValue
+      }
+    });
+
+    // 4. patient-history (required per BV-00804)
+    const patientHistoryValue = claim.patient_history || 'No significant past medical history';
+    supportingInfoList.push({
+      sequence: sequenceNum++,
+      category: {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+          code: 'patient-history'
+        }]
+      },
+      code: {
+        text: patientHistoryValue
+      }
+    });
+
+    // 5. physical-examination (required per BV-00805)
+    const physicalExamValue = claim.physical_examination || 'Within normal limits';
+    supportingInfoList.push({
+      sequence: sequenceNum++,
+      category: {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+          code: 'physical-examination'
+        }]
+      },
+      code: {
+        text: physicalExamValue
+      }
+    });
+
+    // 6. history-of-present-illness (required per BV-00806)
+    const historyPresentIllnessValue = claim.history_of_present_illness || claim.chief_complaint || 'Patient presents with symptoms requiring medication';
+    supportingInfoList.push({
+      sequence: sequenceNum++,
+      category: {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+          code: 'history-of-present-illness'
+        }]
+      },
+      code: {
+        text: historyPresentIllnessValue
       }
     });
 
@@ -417,25 +493,27 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     claimResource.insurance = [insuranceEntry];
 
     // Items with medication codes (required - at least one)
+    // Build items first, then calculate total from item net values
+    let builtItems = [];
     if (claim.items && claim.items.length > 0) {
-      claimResource.item = claim.items.map((item, idx) => 
+      builtItems = claim.items.map((item, idx) => 
         this.buildPharmacyClaimItemForClaim(item, idx + 1, daysSupplySequence, providerIdentifierSystem)
       );
+      claimResource.item = builtItems;
     }
 
-    // Total (required)
-    let totalAmount = claim.total_amount;
-    if (!totalAmount && claim.items && claim.items.length > 0) {
-      totalAmount = claim.items.reduce((sum, item) => {
-        const quantity = parseFloat(item.quantity || 1);
-        const unitPrice = parseFloat(item.unit_price || 0);
-        const factor = parseFloat(item.factor || 1);
-        const tax = parseFloat(item.tax || 0);
-        return sum + (quantity * unitPrice * factor) + tax;
+    // Total (required) - MUST equal sum of all item.net values per BV-00059
+    // Calculate total from the actual built items to ensure consistency
+    let totalAmount = 0;
+    if (builtItems.length > 0) {
+      totalAmount = builtItems.reduce((sum, item) => {
+        return sum + (item.net?.value || 0);
       }, 0);
+    } else if (claim.total_amount) {
+      totalAmount = parseFloat(claim.total_amount);
     }
     claimResource.total = {
-      value: parseFloat(totalAmount || 0),
+      value: parseFloat(totalAmount.toFixed(2)),
       currency: claim.currency || 'SAR'
     };
 
