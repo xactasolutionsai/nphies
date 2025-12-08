@@ -474,6 +474,40 @@ export default function PriorAuthorizationDetails() {
     navigate(`/prior-authorizations/${id}/edit?update=true`);
   };
 
+  const handleSubmitAsClaim = async () => {
+    if (!window.confirm('Create and submit a claim to NPHIES from this approved prior authorization?')) return;
+    
+    try {
+      setActionLoading(true);
+      
+      // Step 1: Create the claim from the prior authorization
+      const createResponse = await api.createClaimFromPriorAuth(id);
+      const claimId = createResponse.data?.id;
+      
+      if (!claimId) {
+        alert('Failed to create claim. Please try again.');
+        return;
+      }
+      
+      // Step 2: Send the claim to NPHIES
+      const sendResponse = await api.sendClaimSubmissionToNphies(claimId);
+      
+      if (sendResponse.success) {
+        const claimRef = sendResponse.nphiesResponse?.nphiesClaimId || sendResponse.data?.nphies_claim_id || 'Pending';
+        alert(`Claim created and submitted to NPHIES successfully!\nClaim ID: ${claimId}\nNPHIES Claim Ref: ${claimRef}`);
+        navigate(`/claim-submissions/${claimId}`);
+      } else {
+        alert(`Claim created but NPHIES submission failed: ${sendResponse.error?.message || 'Unknown error'}\nYou can retry from the Claims list.`);
+        navigate(`/claim-submissions/${claimId}`);
+      }
+    } catch (error) {
+      console.error('Error creating/submitting claim:', error);
+      alert(`Error: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const configs = {
       draft: { variant: 'outline', icon: FileText, className: 'text-gray-600 border-gray-300' },
@@ -571,6 +605,14 @@ export default function PriorAuthorizationDetails() {
           
           {priorAuth.status === 'approved' && (
             <>
+              <Button 
+                onClick={handleSubmitAsClaim} 
+                disabled={actionLoading}
+                className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+              >
+                <Receipt className="h-4 w-4 mr-2" />
+                Submit as Claim
+              </Button>
               <Button variant="outline" onClick={handleCreateUpdate} disabled={actionLoading}>
                 <Edit className="h-4 w-4 mr-2" />
                 Create Update

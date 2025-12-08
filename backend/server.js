@@ -28,6 +28,7 @@ import medicationSafetyRoutes from './routes/medicationSafety.js';
 import chatRoutes from './routes/chat.js';
 import nphiesCodesRoutes from './routes/nphiesCodes.js';
 import priorAuthorizationsRoutes from './routes/priorAuthorizations.js';
+import claimSubmissionsRoutes from './routes/claimSubmissions.js';
 
 // Load environment variables
 dotenv.config();
@@ -113,6 +114,7 @@ app.use('/api/medication-safety', medicationSafetyRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/nphies-codes', nphiesCodesRoutes);
 app.use('/api/prior-authorizations', priorAuthorizationsRoutes);
+app.use('/api/claim-submissions', claimSubmissionsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -142,6 +144,7 @@ app.get('/', (req, res) => {
       chat: '/api/chat',
       chatHealth: '/api/chat/health',
       priorAuthorizations: '/api/prior-authorizations',
+      claimSubmissions: '/api/claim-submissions',
       health: '/health'
     }
   });

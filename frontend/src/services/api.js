@@ -469,6 +469,59 @@ class ApiService {
       body: JSON.stringify(formData)
     });
   }
+
+  // Claim Submissions (NPHIES Claims - use: "claim")
+  async getClaimSubmissions(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/claim-submissions${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getClaimSubmission(id) {
+    return this.request(`/claim-submissions/${id}`);
+  }
+
+  async createClaimSubmission(data) {
+    return this.request('/claim-submissions', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async createClaimFromPriorAuth(paId) {
+    return this.request(`/claim-submissions/from-pa/${paId}`, {
+      method: 'POST'
+    });
+  }
+
+  async updateClaimSubmission(id, data) {
+    return this.request(`/claim-submissions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteClaimSubmission(id) {
+    return this.request(`/claim-submissions/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async sendClaimSubmissionToNphies(id) {
+    return this.request(`/claim-submissions/${id}/send`, {
+      method: 'POST'
+    });
+  }
+
+  async getClaimSubmissionBundle(id) {
+    return this.request(`/claim-submissions/${id}/bundle`);
+  }
+
+  async previewClaimSubmissionBundle(formData) {
+    return this.request('/claim-submissions/preview', {
+      method: 'POST',
+      body: JSON.stringify(formData)
+    });
+  }
 }
 
 export default new ApiService();

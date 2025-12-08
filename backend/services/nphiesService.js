@@ -169,6 +169,90 @@ class NphiesService {
   }
 
   /**
+   * Submit claim request to NPHIES (use: "claim")
+   * Same endpoint as prior auth, but with eventCoding = claim-request
+   */
+  async submitClaim(requestBundle) {
+    let lastError = null;
+    
+    // Debug: Log the request bundle being sent
+    console.log('[NPHIES] ===== OUTGOING CLAIM REQUEST =====');
+    console.log('[NPHIES] Request Bundle ID:', requestBundle?.id);
+    console.log('[NPHIES] Request Bundle Type:', requestBundle?.type);
+    console.log('[NPHIES] Request Bundle Entries:', requestBundle?.entry?.length);
+    const msgHeader = requestBundle?.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+    console.log('[NPHIES] MessageHeader event:', msgHeader?.eventCoding?.code);
+    const claim = requestBundle?.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource;
+    console.log('[NPHIES] Claim identifier:', claim?.identifier?.[0]?.value);
+    console.log('[NPHIES] Claim use:', claim?.use); // Should be "claim"
+    console.log('[NPHIES] ====================================');
+    
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      try {
+        console.log(`[NPHIES] Sending claim request (attempt ${attempt}/${this.retryAttempts})`);
+        
+        const response = await axios.post(
+          `${this.baseURL}/$process-message`,
+          requestBundle,
+          {
+            headers: {
+              'Content-Type': 'application/fhir+json',
+              'Accept': 'application/fhir+json'
+            },
+            timeout: this.timeout,
+            validateStatus: (status) => status < 500
+          }
+        );
+
+        console.log(`[NPHIES] Claim response received: ${response.status}`);
+        
+        // Debug: Log the response bundle received
+        console.log('[NPHIES] ===== INCOMING CLAIM RESPONSE =====');
+        console.log('[NPHIES] Response Bundle ID:', response.data?.id);
+        console.log('[NPHIES] Response Bundle Type:', response.data?.type);
+        console.log('[NPHIES] Response Bundle Entries:', response.data?.entry?.length);
+        const claimResp = response.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+        console.log('[NPHIES] ClaimResponse ID:', claimResp?.id);
+        console.log('[NPHIES] ClaimResponse outcome:', claimResp?.outcome);
+        console.log('[NPHIES] ======================================');
+        
+        // Validate response (expects ClaimResponse - same as prior auth)
+        const validationResult = this.validatePriorAuthResponse(response.data);
+        if (!validationResult.valid) {
+          console.error('[NPHIES] Invalid claim response structure:', validationResult.errors);
+          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
+        }
+
+        return {
+          success: true,
+          status: response.status,
+          data: response.data
+        };
+
+      } catch (error) {
+        lastError = error;
+        console.error(`[NPHIES] Claim attempt ${attempt} failed:`, error.message);
+
+        if (error.response && error.response.status >= 400 && error.response.status < 500) {
+          console.log('[NPHIES] Client error detected, not retrying');
+          break;
+        }
+
+        if (attempt < this.retryAttempts) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
+          await this.sleep(waitTime);
+        }
+      }
+    }
+
+    return {
+      success: false,
+      error: this.formatError(lastError)
+    };
+  }
+
+  /**
    * Validate FHIR response bundle structure for Eligibility
    */
   validateResponse(response) {

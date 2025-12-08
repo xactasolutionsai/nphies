@@ -572,6 +572,117 @@ export const validationSchemas = {
     sub_site_code: Joi.string().max(50).allow(null, '').optional(),
     description: Joi.string().allow(null, '').optional(),
     notes: Joi.string().allow(null, '').optional()
+  }),
+
+  // Claim Submission validation schema (NPHIES Claims - use: "claim")
+  claimSubmission: Joi.object({
+    claim_number: Joi.string().max(50).allow(null, '').optional(),
+    claim_type: Joi.string().valid('institutional', 'professional', 'pharmacy', 'dental', 'vision').required(),
+    sub_type: Joi.string().max(50).allow(null, '').optional(),
+    
+    // Foreign Keys (UUID format)
+    patient_id: Joi.string().uuid().allow(null, '').optional(),
+    provider_id: Joi.string().uuid().allow(null, '').optional(),
+    insurer_id: Joi.string().uuid().allow(null, '').optional(),
+    coverage_id: Joi.string().uuid().allow(null, '').optional(),
+    practitioner_id: Joi.string().uuid().allow(null, '').optional(),
+    prior_auth_id: Joi.number().integer().allow(null).optional(),
+    
+    // Prior Authorization Reference
+    pre_auth_ref: Joi.string().max(100).allow(null, '').optional(),
+    pre_auth_period_start: Joi.date().allow(null, '').optional(),
+    pre_auth_period_end: Joi.date().allow(null, '').optional(),
+    
+    // Status
+    status: Joi.string().valid('draft', 'pending', 'queued', 'approved', 'partial', 'denied', 'error').allow(null, '').optional(),
+    outcome: Joi.string().valid('complete', 'partial', 'queued', 'error').allow(null, '').optional(),
+    adjudication_outcome: Joi.string().valid('approved', 'rejected', 'partial', 'pended').allow(null, '').optional(),
+    disposition: Joi.string().allow(null, '').optional(),
+    
+    // NPHIES Fields
+    nphies_claim_id: Joi.string().max(100).allow(null, '').optional(),
+    nphies_request_id: Joi.string().max(100).allow(null, '').optional(),
+    nphies_response_id: Joi.string().max(100).allow(null, '').optional(),
+    is_nphies_generated: Joi.boolean().allow(null).optional(),
+    
+    // Encounter
+    encounter_class: Joi.string().valid('inpatient', 'outpatient', 'daycase', 'emergency', 'ambulatory', 'home', 'telemedicine').allow(null, '').optional(),
+    encounter_start: Joi.date().allow(null, '').optional(),
+    encounter_end: Joi.date().allow(null, '').optional(),
+    encounter_identifier: Joi.string().max(255).allow(null, '').optional(),
+    service_type: Joi.string().max(100).allow(null, '').optional(),
+    
+    // Eligibility Reference
+    eligibility_ref: Joi.string().max(100).allow(null, '').optional(),
+    eligibility_offline_date: Joi.date().allow(null, '').optional(),
+    eligibility_offline_ref: Joi.string().max(255).allow(null, '').optional(),
+    
+    // Service
+    service_date: Joi.date().allow(null, '').optional(),
+    practice_code: Joi.string().max(20).allow(null, '').optional(),
+    admit_source: Joi.string().max(20).allow(null, '').optional(),
+    episode_identifier: Joi.string().max(100).allow(null, '').optional(),
+    
+    // Priority
+    priority: Joi.string().valid('stat', 'normal', 'deferred').allow(null, '').optional(),
+    
+    // Financial
+    total_amount: Joi.number().precision(2).allow(null).optional(),
+    approved_amount: Joi.number().precision(2).allow(null).optional(),
+    currency: Joi.string().max(3).allow(null, '').optional(),
+    
+    // Nested arrays
+    items: Joi.array().items(Joi.object({
+      sequence: Joi.number().integer().min(1).required(),
+      product_or_service_code: Joi.string().max(50).required(),
+      product_or_service_system: Joi.string().max(255).allow(null, '').optional(),
+      product_or_service_display: Joi.string().max(255).allow(null, '').optional(),
+      quantity: Joi.number().precision(2).allow(null).optional(),
+      unit_price: Joi.number().precision(2).allow(null).optional(),
+      factor: Joi.number().precision(4).allow(null).optional(),
+      tax: Joi.number().precision(2).allow(null).optional(),
+      patient_share: Joi.number().precision(2).allow(null).optional(),
+      payer_share: Joi.number().precision(2).allow(null).optional(),
+      net_amount: Joi.number().precision(2).allow(null).optional(),
+      currency: Joi.string().max(3).allow(null, '').optional(),
+      serviced_date: Joi.date().allow(null, '').optional(),
+      is_package: Joi.boolean().allow(null).optional(),
+      is_maternity: Joi.boolean().allow(null).optional(),
+      patient_invoice: Joi.string().max(100).allow(null, '').optional()
+    })).optional(),
+    
+    supporting_info: Joi.array().items(Joi.object({
+      sequence: Joi.number().integer().min(1).required(),
+      category: Joi.string().max(50).required(),
+      code: Joi.string().max(50).allow(null, '').optional(),
+      code_system: Joi.string().max(255).allow(null, '').optional(),
+      code_display: Joi.string().max(255).allow(null, '').optional(),
+      code_text: Joi.string().allow(null, '').optional(),
+      value_string: Joi.string().allow(null, '').optional(),
+      value_quantity: Joi.number().precision(2).allow(null).optional(),
+      value_quantity_unit: Joi.string().max(50).allow(null, '').optional(),
+      timing_date: Joi.date().allow(null, '').optional()
+    })).optional(),
+    
+    diagnoses: Joi.array().items(Joi.object({
+      sequence: Joi.number().integer().min(1).required(),
+      diagnosis_code: Joi.string().max(50).required(),
+      diagnosis_system: Joi.string().max(255).allow(null, '').optional(),
+      diagnosis_display: Joi.string().max(255).allow(null, '').optional(),
+      diagnosis_type: Joi.string().valid('principal', 'secondary', 'admitting', 'discharge').allow(null, '').optional(),
+      on_admission: Joi.boolean().allow(null).optional(),
+      condition_onset: Joi.string().max(10).allow(null, '').optional()
+    })).optional(),
+    
+    attachments: Joi.array().items(Joi.object({
+      file_name: Joi.string().max(255).required(),
+      content_type: Joi.string().max(100).required(),
+      file_size: Joi.number().integer().allow(null).optional(),
+      base64_content: Joi.string().required(),
+      title: Joi.string().max(255).allow(null, '').optional(),
+      description: Joi.string().allow(null, '').optional(),
+      category: Joi.string().max(50).allow(null, '').optional()
+    })).optional()
   })
 };
 

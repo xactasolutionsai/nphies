@@ -30,6 +30,8 @@ import NphiesEligibility from './pages/NphiesEligibility';
 import PriorAuthorizations from './pages/PriorAuthorizations';
 import PriorAuthorizationForm from './pages/PriorAuthorizationForm';
 import PriorAuthorizationDetails from './pages/PriorAuthorizationDetails';
+import ClaimSubmissionsList from './pages/ClaimSubmissionsList';
+import ClaimSubmissionForm from './pages/ClaimSubmissionForm';
 import ChatAssistant from './components/chat/ChatAssistant';
 
 function App() {
@@ -71,6 +73,10 @@ function App() {
           <Route path="/prior-authorizations/new" element={<PriorAuthorizationForm />} />
           <Route path="/prior-authorizations/:id" element={<PriorAuthorizationDetails />} />
           <Route path="/prior-authorizations/:id/edit" element={<PriorAuthorizationForm />} />
+          <Route path="/claim-submissions" element={<ClaimSubmissionsList />} />
+          <Route path="/claim-submissions/new" element={<ClaimSubmissionForm />} />
+          <Route path="/claim-submissions/:id" element={<ClaimSubmissionForm />} />
+          <Route path="/claim-submissions/:id/edit" element={<ClaimSubmissionForm />} />
         </Routes>
       </Layout>
       <ChatAssistant />
