@@ -5,9 +5,10 @@
  * Claim mappers extend the Prior Authorization mappers and add claim-specific fields:
  * - use: 'claim' (instead of 'preauthorization')
  * - eventCoding: 'claim-request' (instead of 'priorauth-request')
- * - Additional required extensions vary by claim type:
- *   - Institutional: episode, accountingPeriod (for IP), patientInvoice on items
- *   - Vision: episode, patientInvoice on items (NO encounter, NO accountingPeriod)
+ * - Additional required extensions (per NPHIES validation, not always shown in examples):
+ *   - ALL claim types: accountingPeriod (required per IC-01620), episode, patientInvoice on items
+ *   - Institutional: encounter extension, condition-onset on diagnosis, onAdmission
+ *   - Vision: NO encounter, NO condition-onset, NO onAdmission
  * 
  * Usage:
  *   import claimMapper, { getClaimMapper } from './services/claimMapper/index.js';

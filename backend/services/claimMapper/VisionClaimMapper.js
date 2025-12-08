@@ -8,8 +8,12 @@
  * - eventCoding: 'claim-request' (instead of 'priorauth-request')
  * - profile: vision-claim (instead of vision-priorauth)
  * 
- * Required Extensions (per NPHIES example):
+ * Required Extensions (per NPHIES validation - IC-01620):
+ * - extension-accountingPeriod (required - must be FIRST extension per NPHIES validation)
  * - extension-episode (required)
+ * 
+ * NOTE: Although the NPHIES documentation example (Claim-123773.json) does not show
+ * accountingPeriod, NPHIES validation explicitly requires it (error IC-01620).
  * 
  * Item Extensions (per NPHIES example):
  * - extension-patient-share (required)
@@ -19,7 +23,6 @@
  * Vision Claims DO NOT have:
  * - Encounter resource (BV-00354)
  * - extension-encounter
- * - extension-accountingPeriod
  * - extension-condition-onset on diagnosis
  * - onAdmission on diagnosis
  * - extension-package on items
@@ -155,11 +158,20 @@ class VisionClaimMapper extends VisionPAMapper {
     const providerIdentifierSystem = provider.identifier_system || 
       `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
-    // Build extensions per NPHIES Vision Claim example
-    // Only extension-episode is required (no encounter, no accountingPeriod)
+    // Build extensions per NPHIES validation requirements
+    // Note: Although Claim-123773.json example doesn't show accountingPeriod,
+    // NPHIES validation (IC-01620) explicitly requires it as the FIRST extension
     const extensions = [];
     
-    // Episode extension (required)
+    // 1. AccountingPeriod extension (required per NPHIES validation IC-01620)
+    // Must be FIRST extension as per error: "Bundle.entry[1].resource.extension[0].AccountingPeriod"
+    const accountingPeriodDate = this.formatDate(claim.service_date || claim.request_date || new Date());
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
+      valueDate: accountingPeriodDate
+    });
+    
+    // 2. Episode extension (required)
     const episodeId = claim.episode_identifier || `EpisodeID_${this.formatDate(new Date()).replace(/-/g, '')}_${claim.claim_number || Date.now()}`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
