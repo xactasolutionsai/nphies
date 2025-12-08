@@ -528,7 +528,7 @@ class OralClaimMapper extends DentalMapper {
       resourceType: 'Encounter',
       id: encounterId,
       meta: {
-        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/ambulatory-encounter|1.0.0']
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0']
       },
       // serviceEventType extension is REQUIRED for oral claims
       extension: [
