@@ -167,6 +167,7 @@ class ClaimSubmissionsController extends BaseController {
   async createFromPriorAuth(req, res) {
     try {
       const { paId } = req.params;
+      const { itemOverrides } = req.body || {}; // Optional service code overrides for professional claims
 
       const paResult = await query(`
         SELECT pa.*, p.name as patient_name, pr.provider_name, i.insurer_name
@@ -220,10 +221,21 @@ class ClaimSubmissionsController extends BaseController {
       const claimId = result.rows[0].id;
 
       if (paItemsResult.rows.length > 0) {
-        const items = paItemsResult.rows.map(item => ({
-          ...item,
-          serviced_date: new Date()
-        }));
+        // Apply service code overrides for professional claims if provided
+        const items = paItemsResult.rows.map((item, idx) => {
+          const override = itemOverrides?.find(o => o.sequence === idx + 1);
+          return {
+            ...item,
+            serviced_date: new Date(),
+            // For professional claims, override the service code and system if provided
+            product_or_service_code: override?.service_code || item.product_or_service_code,
+            product_or_service_display: override?.service_display || item.product_or_service_display,
+            // Use services CodeSystem for professional claims when override is provided
+            product_or_service_system: override?.service_code 
+              ? 'http://nphies.sa/terminology/CodeSystem/services' 
+              : item.product_or_service_system
+          };
+        });
         await this.insertItems(claimId, items);
       }
 

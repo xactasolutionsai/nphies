@@ -487,10 +487,14 @@ class ApiService {
     });
   }
 
-  async createClaimFromPriorAuth(paId) {
-    return this.request(`/claim-submissions/from-pa/${paId}`, {
+  async createClaimFromPriorAuth(paId, data = null) {
+    const options = {
       method: 'POST'
-    });
+    };
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+    return this.request(`/claim-submissions/from-pa/${paId}`, options);
   }
 
   async updateClaimSubmission(id, data) {

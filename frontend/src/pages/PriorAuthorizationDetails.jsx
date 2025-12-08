@@ -118,6 +118,10 @@ export default function PriorAuthorizationDetails() {
   const [showClaimResponseDialog, setShowClaimResponseDialog] = useState(false);
   const [claimBundleLoading, setClaimBundleLoading] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  
+  // Professional claim service code dialog state
+  const [showServiceCodeDialog, setShowServiceCodeDialog] = useState(false);
+  const [serviceCodeOverrides, setServiceCodeOverrides] = useState([]);
 
   useEffect(() => {
     loadPriorAuthorization();
@@ -572,15 +576,64 @@ export default function PriorAuthorizationDetails() {
     }
   };
 
-  // Submit claim and store response for viewing
+  // Initialize service code overrides from PA items for professional claims
+  const initializeServiceCodeOverrides = () => {
+    if (priorAuth?.items) {
+      const overrides = priorAuth.items.map((item, idx) => ({
+        sequence: idx + 1,
+        original_code: item.product_or_service_code || item.service_code,
+        original_display: item.product_or_service_display || item.service_display,
+        service_code: '', // User will enter the new service code
+        service_display: item.product_or_service_display || item.service_display || ''
+      }));
+      setServiceCodeOverrides(overrides);
+    }
+  };
+
+  // Handle Submit as Claim button click
   const handleSubmitAsClaimWithResponse = async () => {
+    // For professional claims, show the service code dialog first
+    if (priorAuth?.auth_type === 'professional') {
+      initializeServiceCodeOverrides();
+      setShowServiceCodeDialog(true);
+      return;
+    }
+    
+    // For non-professional claims, proceed directly
+    await submitClaimToNphies();
+  };
+
+  // Update service code override for an item
+  const handleServiceCodeChange = (index, field, value) => {
+    setServiceCodeOverrides(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  // Submit claim with service code overrides
+  const handleSubmitWithServiceCodes = async () => {
+    // Validate that all service codes are filled
+    const missingCodes = serviceCodeOverrides.filter(item => !item.service_code?.trim());
+    if (missingCodes.length > 0) {
+      alert(`Please enter service codes for all items. Missing codes for items: ${missingCodes.map(i => i.sequence).join(', ')}`);
+      return;
+    }
+    
+    setShowServiceCodeDialog(false);
+    await submitClaimToNphies(serviceCodeOverrides);
+  };
+
+  // Core claim submission logic
+  const submitClaimToNphies = async (itemOverrides = null) => {
     if (!window.confirm('Create and submit a claim to NPHIES from this approved prior authorization?')) return;
     
     try {
       setActionLoading(true);
       
-      // Step 1: Create the claim from the prior authorization
-      const createResponse = await api.createClaimFromPriorAuth(id);
+      // Step 1: Create the claim from the prior authorization with optional overrides
+      const createResponse = await api.createClaimFromPriorAuth(id, itemOverrides ? { itemOverrides } : null);
       const claimId = createResponse.data?.id;
       
       if (!claimId) {
@@ -2463,6 +2516,101 @@ export default function PriorAuthorizationDetails() {
             <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-[400px] text-xs font-mono">
               {JSON.stringify(claimResponse, null, 2)}
             </pre>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Service Code Dialog for Professional Claims */}
+      <Modal
+        open={showServiceCodeDialog}
+        onClose={() => setShowServiceCodeDialog(false)}
+        title="Enter Service Codes for Professional Claim"
+        description="Professional claims require service codes from the NPHIES Services CodeSystem. Please enter the correct service code for each item."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowServiceCodeDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSubmitWithServiceCodes}
+              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+              disabled={actionLoading}
+            >
+              <Receipt className="h-4 w-4 mr-2" />
+              {actionLoading ? 'Submitting...' : 'Submit Claim'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {/* Info Alert */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <p className="font-medium">Important:</p>
+                <p className="mt-1">
+                  Prior Authorization uses <code className="bg-blue-100 px-1 rounded">procedures</code> codes, 
+                  but Claims require <code className="bg-blue-100 px-1 rounded">services</code> codes. 
+                  Enter the corresponding service code for each procedure below.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Service Code Input Table */}
+          <div className="border rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item #</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Original Procedure Code</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service Code (Required)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {serviceCodeOverrides.map((item, index) => (
+                  <tr key={item.sequence} className="bg-white">
+                    <td className="px-4 py-3 text-sm text-gray-600">{item.sequence}</td>
+                    <td className="px-4 py-3">
+                      <div>
+                        <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">
+                          {item.original_code || '-'}
+                        </code>
+                        {item.original_display && (
+                          <p className="text-xs text-gray-500 mt-1">{item.original_display}</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="space-y-2">
+                        <Input
+                          type="text"
+                          placeholder="e.g., 83600-00-10"
+                          value={item.service_code}
+                          onChange={(e) => handleServiceCodeChange(index, 'service_code', e.target.value)}
+                          className={`font-mono ${!item.service_code?.trim() ? 'border-red-300 focus:border-red-500' : 'border-gray-300'}`}
+                        />
+                        <Input
+                          type="text"
+                          placeholder="Service description (optional)"
+                          value={item.service_display}
+                          onChange={(e) => handleServiceCodeChange(index, 'service_display', e.target.value)}
+                          className="text-sm"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Help Text */}
+          <div className="text-xs text-gray-500 space-y-1">
+            <p>• Service codes must be valid codes from the NPHIES Services CodeSystem</p>
+            <p>• You can find service codes in your hospital's service catalog or NPHIES documentation</p>
+            <p>• Example format: <code className="bg-gray-100 px-1 rounded">83600-00-10</code></p>
           </div>
         </div>
       </Modal>
