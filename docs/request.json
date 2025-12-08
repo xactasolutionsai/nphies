@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "f9e4ed10-950f-4713-b218-33e4a5c81b66",
+  "id": "60b12cf1-3af0-47ed-a438-61eacde899bc",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-08T15:53:43.052Z",
+  "timestamp": "2025-12-08T16:01:02.907Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:0a75a73b-4974-46ae-b66b-20d6ad398864",
+      "fullUrl": "urn:uuid:0911deb0-3d2e-41e1-a1df-9b9b5c19e1c3",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "0a75a73b-4974-46ae-b66b-20d6ad398864",
+        "id": "0911deb0-3d2e-41e1-a1df-9b9b5c19e1c3",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/99449a1c-83ad-4a38-9824-31af8912f78f"
+            "reference": "http://provider.com/Claim/23fbb778-7cc2-450d-af80-637e390ca0c5"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/99449a1c-83ad-4a38-9824-31af8912f78f",
+      "fullUrl": "http://provider.com/Claim/23fbb778-7cc2-450d-af80-637e390ca0c5",
       "resource": {
         "resourceType": "Claim",
-        "id": "99449a1c-83ad-4a38-9824-31af8912f78f",
+        "id": "23fbb778-7cc2-450d-af80-637e390ca0c5",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/institutional-claim|1.0.0"
@@ -66,28 +66,21 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/0224be78-f072-4f3b-9a43-0ea233d9f534"
+              "reference": "Encounter/b78ab00a-aa1b-484d-a53f-7fcf02a75b51"
             }
           },
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
             "valueIdentifier": {
               "system": "http://saudigeneralhospital.com.sa/identifiers/episode",
-              "value": "provider_EpisodeID_PREVIEW-1765209223047"
-            }
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod",
-            "valuePeriod": {
-              "start": "2025-12-08",
-              "end": "2025-12-08"
+              "value": "provider_EpisodeID_PREVIEW-1765209662903"
             }
           }
         ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-            "value": "PREVIEW-1765209223047"
+            "value": "PREVIEW-1765209662903"
           }
         ],
         "status": "active",
@@ -111,7 +104,7 @@
         "patient": {
           "reference": "Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
         },
-        "created": "2025-12-08T18:53:43+03:00",
+        "created": "2025-12-08T19:01:02+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -140,7 +133,7 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/11d3a642-e76b-4db6-b425-695faae5230c"
+              "reference": "Practitioner/05d71906-95b6-4450-9624-be2428293457"
             },
             "role": {
               "coding": [
@@ -521,7 +514,7 @@
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice",
                 "valueIdentifier": {
                   "system": "http://saudigeneralhospital.com.sa/identifiers/patientInvoice",
-                  "value": "Invc-20251208/PREVIEW-1765209223047"
+                  "value": "Invc-20251208/PREVIEW-1765209662903"
                 }
               },
               {
@@ -584,10 +577,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/0224be78-f072-4f3b-9a43-0ea233d9f534",
+      "fullUrl": "http://provider.com/Encounter/b78ab00a-aa1b-484d-a53f-7fcf02a75b51",
       "resource": {
         "resourceType": "Encounter",
-        "id": "0224be78-f072-4f3b-9a43-0ea233d9f534",
+        "id": "b78ab00a-aa1b-484d-a53f-7fcf02a75b51",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -596,7 +589,7 @@
         "identifier": [
           {
             "system": "http://prfhir.com.sa/identifiers/encounter",
-            "value": "PREVIEW-1765209223047"
+            "value": "PREVIEW-1765209662903"
           }
         ],
         "status": "finished",
@@ -721,10 +714,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/11d3a642-e76b-4db6-b425-695faae5230c",
+      "fullUrl": "http://provider.com/Practitioner/05d71906-95b6-4450-9624-be2428293457",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "11d3a642-e76b-4db6-b425-695faae5230c",
+        "id": "05d71906-95b6-4450-9624-be2428293457",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -742,7 +735,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-11d3a642"
+            "value": "PRACT-05d71906"
           }
         ],
         "active": true,

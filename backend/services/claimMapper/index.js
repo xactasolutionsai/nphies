@@ -5,7 +5,9 @@
  * Claim mappers extend the Prior Authorization mappers and add claim-specific fields:
  * - use: 'claim' (instead of 'preauthorization')
  * - eventCoding: 'claim-request' (instead of 'priorauth-request')
- * - Additional required extensions: episode, accountingPeriod, patientInvoice
+ * - Additional required extensions vary by claim type:
+ *   - Institutional: episode, accountingPeriod (for IP), patientInvoice on items
+ *   - Vision: episode, patientInvoice on items (NO encounter, NO accountingPeriod)
  * 
  * Usage:
  *   import claimMapper, { getClaimMapper } from './services/claimMapper/index.js';
@@ -14,7 +16,7 @@
  */
 
 import InstitutionalClaimMapper from './InstitutionalClaimMapper.js';
-// Note: BaseClaimMapper is deprecated - use PA's BaseMapper via InstitutionalClaimMapper
+import VisionClaimMapper from './VisionClaimMapper.js';
 
 const mapperInstances = {
   institutional: null,
@@ -45,10 +47,12 @@ export function getClaimMapper(claimType) {
       case 'institutional':
         mapperInstances.institutional = new InstitutionalClaimMapper();
         break;
+      case 'vision':
+        mapperInstances.vision = new VisionClaimMapper();
+        break;
       // TODO: Add other mappers when implemented
       case 'professional':
       case 'dental':
-      case 'vision':
       case 'pharmacy':
         // For now, use institutional as fallback
         mapperInstances[mappedType] = new InstitutionalClaimMapper();
@@ -63,9 +67,15 @@ export function getClaimMapper(claimType) {
 }
 
 function detectClaimType(data) {
+  // Check explicit claim_type first
   if (data?.claim?.claim_type) return data.claim.claim_type;
   if (data?.claim_type) return data.claim_type;
   
+  // Check prior auth type (when creating claim from PA)
+  const paType = data?.priorAuth?.authorization_type || data?.prior_auth?.authorization_type;
+  if (paType) return paType;
+  
+  // Detect by encounter class
   const encounterClass = data?.claim?.encounter_class || data?.encounter_class;
   if (['inpatient', 'daycase'].includes(encounterClass)) return 'institutional';
   
@@ -101,5 +111,5 @@ class ClaimMapperProxy {
 
 const claimMapperProxy = new ClaimMapperProxy();
 
-export { InstitutionalClaimMapper, detectClaimType };
+export { InstitutionalClaimMapper, VisionClaimMapper, detectClaimType };
 export default claimMapperProxy;
