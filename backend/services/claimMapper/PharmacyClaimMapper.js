@@ -242,7 +242,9 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
 
     // AccountingPeriod (REQUIRED per error IC-01620)
     // Per NPHIES error DT-01287, this extension requires valueDate (NOT valuePeriod)
-    const accountingPeriodDate = this.formatDate(claim.accounting_period_start || claim.service_date || new Date());
+    // Per NPHIES error BV-01010, the day must be "01" (first day of month)
+    const accountingDate = new Date(claim.accounting_period_start || claim.service_date || new Date());
+    const accountingPeriodDate = `${accountingDate.getFullYear()}-${String(accountingDate.getMonth() + 1).padStart(2, '0')}-01`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
       valueDate: accountingPeriodDate

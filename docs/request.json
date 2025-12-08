@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "01a1ce04-5967-4644-9b69-ab01fcc91fb7",
+  "id": "0e94151a-1cb8-4a79-bcbb-07b2babdf63a",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-08T19:29:25.785Z",
+  "timestamp": "2025-12-08T19:37:55.631Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:27cf6863-39c0-4492-950c-fe2448fc9429",
+      "fullUrl": "urn:uuid:6f37872e-2ab9-463f-b79f-d30f92e44732",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "27cf6863-39c0-4492-950c-fe2448fc9429",
+        "id": "6f37872e-2ab9-463f-b79f-d30f92e44732",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/ecbdfc96-f58e-44e0-8071-5a63a2bae127"
+            "reference": "http://provider.com/Claim/8120a642-4a91-455b-be08-35a0b0b8cb76"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/ecbdfc96-f58e-44e0-8071-5a63a2bae127",
+      "fullUrl": "http://provider.com/Claim/8120a642-4a91-455b-be08-35a0b0b8cb76",
       "resource": {
         "resourceType": "Claim",
-        "id": "ecbdfc96-f58e-44e0-8071-5a63a2bae127",
+        "id": "8120a642-4a91-455b-be08-35a0b0b8cb76",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-claim|1.0.0"
@@ -67,7 +67,7 @@
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
             "valueIdentifier": {
               "system": "http://saudigeneralhospital.com.sa/identifiers/batch",
-              "value": "batch-PREVIEW-1765222165776"
+              "value": "batch-PREVIEW-1765222675624"
             }
           },
           {
@@ -89,21 +89,18 @@
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
             "valueIdentifier": {
               "system": "http://saudigeneralhospital.com.sa/identifiers/episode",
-              "value": "EpisodeID-PREVIEW-1765222165776"
+              "value": "EpisodeID-PREVIEW-1765222675624"
             }
           },
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod",
-            "valuePeriod": {
-              "start": "2025-12-08",
-              "end": "2025-12-08"
-            }
+            "valueDate": "2025-12-08"
           }
         ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-            "value": "PREVIEW-1765222165776"
+            "value": "PREVIEW-1765222675624"
           }
         ],
         "status": "active",
@@ -127,7 +124,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-08T22:29:25+03:00",
+        "created": "2025-12-08T22:37:55+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
