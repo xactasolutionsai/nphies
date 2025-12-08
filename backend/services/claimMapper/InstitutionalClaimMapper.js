@@ -2,16 +2,52 @@
  * NPHIES Institutional Claim Mapper
  * Profile: http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/institutional-claim
  * Reference: https://portal.nphies.sa/ig/Claim-483070.html
+ * 
+ * This mapper extends the Prior Auth InstitutionalMapper and adds claim-specific fields:
+ * - use: 'claim' (instead of 'preauthorization')
+ * - eventCoding: 'claim-request' (instead of 'priorauth-request')
+ * - profile: institutional-claim (instead of institutional-priorauth)
+ * - encounter.status: 'finished' (instead of 'planned')
+ * 
+ * Additional Required Extensions for Claims:
+ * - extension-episode (REQUIRED - IC-01453)
+ * - extension-accountingPeriod (REQUIRED - IC-01620)
+ * - extension-patientInvoice on items (REQUIRED - IC-01454)
+ * - extension-condition-onset on diagnosis
+ * 
+ * Item Extensions:
+ * - extension-package (required)
+ * - extension-tax (required)
+ * - extension-patient-share (required)
+ * - extension-patientInvoice (required)
+ * - extension-maternity (required)
  */
 
-import BaseClaimMapper from './BaseClaimMapper.js';
+import InstitutionalPAMapper from '../priorAuthMapper/InstitutionalMapper.js';
 
-class InstitutionalClaimMapper extends BaseClaimMapper {
+class InstitutionalClaimMapper extends InstitutionalPAMapper {
   constructor() {
     super();
     this.claimType = 'institutional';
   }
 
+  /**
+   * Get the NPHIES Claim profile URL (override PA profile)
+   */
+  getClaimProfileUrl(claimType) {
+    const profiles = {
+      'institutional': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/institutional-claim|1.0.0',
+      'professional': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/professional-claim|1.0.0',
+      'pharmacy': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-claim|1.0.0',
+      'dental': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-claim|1.0.0',
+      'vision': 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-claim|1.0.0'
+    };
+    return profiles[claimType] || profiles['institutional'];
+  }
+
+  /**
+   * Build complete Claim Request Bundle for Institutional type
+   */
   buildClaimRequestBundle(data) {
     const { claim, patient, provider, insurer, coverage, policyHolder, practitioner } = data;
 
@@ -31,13 +67,13 @@ class InstitutionalClaimMapper extends BaseClaimMapper {
     const insurerResource = this.buildInsurerOrganizationWithId(insurer, bundleResourceIds.insurer);
     const coverageResource = this.buildCoverageResourceWithId(coverage, patient, insurer, policyHolder, bundleResourceIds);
     const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: '08.00' },
+      practitioner || { name: 'Default Practitioner', specialty_code: claim.practice_code || '08.00' },
       bundleResourceIds.practitioner
     );
-    const encounterResource = this.buildEncounterResourceWithId(claim, patient, provider, bundleResourceIds);
+    const encounterResource = this.buildClaimEncounterResource(claim, patient, provider, bundleResourceIds);
     const claimResource = this.buildClaimResource(claim, patient, provider, insurer, coverage, encounterResource?.resource, practitioner, bundleResourceIds);
     
-    const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
+    const messageHeader = this.buildClaimMessageHeader(provider, insurer, claimResource.fullUrl);
 
     const entries = [
       messageHeader, claimResource, encounterResource, coverageResource,
@@ -58,16 +94,96 @@ class InstitutionalClaimMapper extends BaseClaimMapper {
     };
   }
 
+  /**
+   * Build MessageHeader for Claim Request (override PA message header)
+   */
+  buildClaimMessageHeader(provider, insurer, focusFullUrl) {
+    const messageHeaderId = this.generateId();
+    const senderNphiesId = provider.nphies_id || 'PR-FHIR';
+    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+
+    return {
+      fullUrl: `urn:uuid:${messageHeaderId}`,
+      resource: {
+        resourceType: 'MessageHeader',
+        id: messageHeaderId,
+        meta: {
+          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+        },
+        eventCoding: {
+          system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+          code: 'claim-request'  // Changed from 'priorauth-request'
+        },
+        destination: [
+          {
+            endpoint: `http://nphies.sa/license/payer-license/${destinationNphiesId}`,
+            receiver: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/payer-license',
+                value: destinationNphiesId
+              }
+            }
+          }
+        ],
+        sender: {
+          type: 'Organization',
+          identifier: {
+            system: 'http://nphies.sa/license/provider-license',
+            value: senderNphiesId
+          }
+        },
+        source: {
+          endpoint: 'http://provider.com'
+        },
+        focus: [
+          {
+            reference: focusFullUrl
+          }
+        ]
+      }
+    };
+  }
+
+  /**
+   * Build FHIR Claim resource for Institutional Claim
+   * Extends PA claim with claim-specific fields
+   */
   buildClaimResource(claim, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds) {
     const claimId = bundleResourceIds.claim;
     const providerIdentifierSystem = provider.identifier_system || 
       `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
-    const extensions = [{
+    // Build extensions - All required for institutional claims per NPHIES
+    const extensions = [];
+    
+    // 1. Encounter extension (required)
+    extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
       valueReference: { reference: `Encounter/${bundleResourceIds.encounter}` }
-    }];
+    });
 
+    // 2. Episode extension (REQUIRED for institutional claims - IC-01453)
+    const episodeId = claim.episode_identifier || `provider_EpisodeID_${claim.claim_number || Date.now()}`;
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
+      valueIdentifier: { 
+        system: `${providerIdentifierSystem}/episode`, 
+        value: episodeId 
+      }
+    });
+
+    // 3. AccountingPeriod extension (REQUIRED for institutional claims - IC-01620)
+    const accountingPeriodDate = this.formatDate(claim.service_date || claim.encounter_start || new Date());
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
+      valuePeriod: {
+        start: accountingPeriodDate,
+        end: accountingPeriodDate
+      }
+    });
+
+    // 4. Eligibility offline reference (optional)
     if (claim.eligibility_offline_ref) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-reference',
@@ -75,17 +191,11 @@ class InstitutionalClaimMapper extends BaseClaimMapper {
       });
     }
 
+    // 5. Eligibility offline date (optional)
     if (claim.eligibility_offline_date) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-date',
         valueDateTime: this.formatDate(claim.eligibility_offline_date)
-      });
-    }
-
-    if (claim.episode_identifier) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
-        valueIdentifier: { system: `${providerIdentifierSystem}/episode`, value: claim.episode_identifier }
       });
     }
 
@@ -94,28 +204,65 @@ class InstitutionalClaimMapper extends BaseClaimMapper {
       id: claimId,
       meta: { profile: [this.getClaimProfileUrl('institutional')] },
       extension: extensions,
-      identifier: [{ system: `${providerIdentifierSystem}/claim`, value: claim.claim_number || `req_${Date.now()}` }],
+      identifier: [{ 
+        system: `${providerIdentifierSystem}/claim`, 
+        value: claim.claim_number || `req_${Date.now()}` 
+      }],
       status: 'active',
-      type: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/claim-type', code: 'institutional' }] },
-      subType: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype', code: claim.sub_type || 'ip' }] },
-      use: 'claim',
+      type: { 
+        coding: [{ 
+          system: 'http://terminology.hl7.org/CodeSystem/claim-type', 
+          code: 'institutional' 
+        }] 
+      },
+      subType: { 
+        coding: [{ 
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype', 
+          code: claim.sub_type || 'ip' 
+        }] 
+      },
+      use: 'claim',  // Changed from 'preauthorization'
       patient: { reference: `Patient/${bundleResourceIds.patient}` },
       created: this.formatDateTimeWithTimezone(claim.request_date || new Date()),
       insurer: { reference: `Organization/${bundleResourceIds.insurer}` },
       provider: { reference: `Organization/${bundleResourceIds.provider}` },
-      priority: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/processpriority', code: claim.priority || 'normal' }] },
-      payee: { type: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/payeetype', code: 'provider' }] } }
+      priority: { 
+        coding: [{ 
+          system: 'http://terminology.hl7.org/CodeSystem/processpriority', 
+          code: claim.priority || 'normal' 
+        }] 
+      },
+      payee: { 
+        type: { 
+          coding: [{ 
+            system: 'http://terminology.hl7.org/CodeSystem/payeetype', 
+            code: 'provider' 
+          }] 
+        } 
+      }
     };
 
+    // CareTeam
     const pract = practitioner || claim.practitioner || {};
-    const practiceCode = claim.practice_code || pract.practice_code || '08.00';
+    const practiceCode = claim.practice_code || pract.practice_code || pract.specialty_code || '08.00';
     claimResource.careTeam = [{
       sequence: 1,
       provider: { reference: `Practitioner/${bundleResourceIds.practitioner}` },
-      role: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/claimcareteamrole', code: 'primary' }] },
-      qualification: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/practice-codes', code: practiceCode }] }
+      role: { 
+        coding: [{ 
+          system: 'http://terminology.hl7.org/CodeSystem/claimcareteamrole', 
+          code: 'primary' 
+        }] 
+      },
+      qualification: { 
+        coding: [{ 
+          system: 'http://nphies.sa/terminology/CodeSystem/practice-codes', 
+          code: practiceCode 
+        }] 
+      }
     }];
 
+    // SupportingInfo
     let supportingInfoSequences = [];
     if (claim.supporting_info?.length > 0) {
       claimResource.supportingInfo = claim.supporting_info.map((info, idx) => {
@@ -125,63 +272,223 @@ class InstitutionalClaimMapper extends BaseClaimMapper {
       });
     }
 
+    // Diagnosis with condition-onset extension (required for claims)
     if (claim.diagnoses?.length > 0) {
-      claimResource.diagnosis = claim.diagnoses.map((diag, idx) => ({
-        extension: [{
-          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-condition-onset',
-          valueCodeableConcept: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/condition-onset', code: diag.condition_onset || 'NR' }] }
-        }],
-        sequence: diag.sequence || idx + 1,
-        diagnosisCodeableConcept: { coding: [{ system: diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am', code: diag.diagnosis_code, display: diag.diagnosis_display }] },
-        type: [{ coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-type', code: diag.diagnosis_type || 'principal' }] }],
-        onAdmission: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-on-admission', code: diag.on_admission === false ? 'n' : 'y' }] }
-      }));
+      claimResource.diagnosis = claim.diagnoses.map((diag, idx) => {
+        // NPHIES requires icd-10-am system, not icd-10 (IB-00242)
+        let diagnosisSystem = diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am';
+        if (diagnosisSystem === 'http://hl7.org/fhir/sid/icd-10') {
+          diagnosisSystem = 'http://hl7.org/fhir/sid/icd-10-am';
+        }
+        
+        return {
+          extension: [{
+            url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-condition-onset',
+            valueCodeableConcept: { 
+              coding: [{ 
+                system: 'http://nphies.sa/terminology/CodeSystem/condition-onset', 
+                code: diag.condition_onset || 'NR' 
+              }] 
+            }
+          }],
+          sequence: diag.sequence || idx + 1,
+          diagnosisCodeableConcept: { 
+            coding: [{ 
+              system: diagnosisSystem, 
+              code: diag.diagnosis_code, 
+              display: diag.diagnosis_display 
+            }] 
+          },
+          type: [{ 
+            coding: [{ 
+              system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-type', 
+              code: diag.diagnosis_type || 'principal' 
+            }] 
+          }],
+          onAdmission: { 
+            coding: [{ 
+              system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-on-admission', 
+              code: diag.on_admission === false ? 'n' : 'y' 
+            }] 
+          }
+        };
+      });
     }
 
-    claimResource.insurance = [{ sequence: 1, focal: true, coverage: { reference: `Coverage/${bundleResourceIds.coverage}` } }];
+    // Insurance
+    claimResource.insurance = [{ 
+      sequence: 1, 
+      focal: true, 
+      coverage: { reference: `Coverage/${bundleResourceIds.coverage}` } 
+    }];
 
-    const encounterPeriod = { start: claim.encounter_start || claim.service_date || new Date(), end: claim.encounter_end };
+    // Items with claim-specific extensions (patientInvoice required)
+    const encounterPeriod = { 
+      start: claim.encounter_start || claim.service_date || new Date(), 
+      end: claim.encounter_end 
+    };
     if (claim.items?.length > 0) {
-      claimResource.item = claim.items.map((item, idx) => this.buildClaimItem(item, 'institutional', idx + 1, supportingInfoSequences, encounterPeriod));
+      claimResource.item = claim.items.map((item, idx) => 
+        this.buildClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim)
+      );
     }
 
+    // Total
     let totalAmount = claim.total_amount;
     if (!totalAmount && claim.items?.length > 0) {
       totalAmount = claim.items.reduce((sum, item) => {
         return sum + (parseFloat(item.quantity || 1) * parseFloat(item.unit_price || 0) * parseFloat(item.factor || 1)) + parseFloat(item.tax || 0);
       }, 0);
     }
-    claimResource.total = { value: parseFloat(totalAmount || 0), currency: claim.currency || 'SAR' };
+    claimResource.total = { 
+      value: parseFloat(totalAmount || 0), 
+      currency: claim.currency || 'SAR' 
+    };
 
-    return { fullUrl: `http://provider.com/Claim/${claimId}`, resource: claimResource };
+    return { 
+      fullUrl: `http://provider.com/Claim/${claimId}`, 
+      resource: claimResource 
+    };
   }
 
-  buildEncounterResourceWithId(claim, patient, provider, bundleResourceIds) {
+  /**
+   * Build claim item with all required extensions for institutional claims
+   * Per NPHIES spec, patientInvoice is REQUIRED (IC-01454)
+   */
+  buildClaimItem(item, sequence, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim) {
+    const quantity = parseFloat(item.quantity || 1);
+    const unitPrice = parseFloat(item.unit_price || 0);
+    const factor = parseFloat(item.factor || 1);
+    const tax = parseFloat(item.tax || 0);
+    const calculatedNet = (quantity * unitPrice * factor) + tax;
+
+    // All extensions are required for institutional claims
+    const itemExtensions = [
+      // Package extension (required)
+      { 
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package', 
+        valueBoolean: item.is_package || false 
+      },
+      // Tax extension (required)
+      { 
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax', 
+        valueMoney: { value: tax, currency: item.currency || claim?.currency || 'SAR' } 
+      },
+      // Patient share extension (required)
+      { 
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share', 
+        valueMoney: { value: parseFloat(item.patient_share || 0), currency: item.currency || claim?.currency || 'SAR' } 
+      },
+      // PatientInvoice extension (REQUIRED for claims - IC-01454)
+      {
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice',
+        valueIdentifier: { 
+          system: `${providerIdentifierSystem}/patientInvoice`, 
+          value: item.patient_invoice || `Invc-${this.formatDate(new Date()).replace(/-/g, '')}/${claim?.claim_number || 'IP-' + Date.now()}`
+        }
+      },
+      // Maternity extension (required)
+      { 
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity', 
+        valueBoolean: item.is_maternity || false 
+      }
+    ];
+
+    let servicedDate = item.serviced_date ? new Date(item.serviced_date) : 
+                       (encounterPeriod?.start ? new Date(encounterPeriod.start) : new Date());
+
+    return {
+      extension: itemExtensions,
+      sequence,
+      careTeamSequence: [1],
+      diagnosisSequence: item.diagnosis_sequences || [1],
+      informationSequence: item.information_sequences || supportingInfoSequences,
+      productOrService: {
+        coding: [{
+          system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+          code: item.product_or_service_code,
+          display: item.product_or_service_display
+        }]
+      },
+      servicedDate: this.formatDate(servicedDate),
+      quantity: { value: quantity },
+      unitPrice: { value: unitPrice, currency: item.currency || claim?.currency || 'SAR' },
+      net: { value: calculatedNet, currency: item.currency || claim?.currency || 'SAR' }
+    };
+  }
+
+  /**
+   * Build Encounter resource for Claims (status: finished instead of planned)
+   */
+  buildClaimEncounterResource(claim, patient, provider, bundleResourceIds) {
     const encounterId = bundleResourceIds.encounter;
-    const encounterClass = claim.encounter_class || 'inpatient';
+    const encounterClass = claim.encounter_class || 'daycase';
     const encounterIdentifier = claim.encounter_identifier || claim.claim_number || `ENC-${encounterId.substring(0, 8)}`;
     const providerNphiesId = provider?.nphies_id || 'provider';
 
     const encounter = {
       resourceType: 'Encounter',
       id: encounterId,
-      meta: { profile: [this.getEncounterProfileUrl()] },
-      identifier: [{ system: `http://${providerNphiesId.toLowerCase().replace(/[^a-z0-9]/g, '')}.com.sa/identifiers/encounter`, value: encounterIdentifier }],
-      status: 'finished',
-      class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: this.getEncounterClassCode(encounterClass), display: this.getEncounterClassDisplay(encounterClass) },
-      serviceType: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/service-type', code: claim.service_type || 'acute-care', display: this.getServiceTypeDisplay(claim.service_type || 'acute-care') }] },
+      meta: { profile: [this.getEncounterProfileUrl(encounterClass)] },
+      identifier: [{ 
+        system: `http://${providerNphiesId.toLowerCase().replace(/[^a-z0-9]/g, '')}.com.sa/identifiers/encounter`, 
+        value: encounterIdentifier 
+      }],
+      status: 'finished',  // Changed from 'planned' for claims
+      class: { 
+        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', 
+        code: this.getEncounterClassCode(encounterClass), 
+        display: this.getEncounterClassDisplay(encounterClass) 
+      },
+      serviceType: { 
+        coding: [{ 
+          system: 'http://nphies.sa/terminology/CodeSystem/service-type', 
+          code: claim.service_type || 'sub-acute-care', 
+          display: this.getServiceTypeDisplay(claim.service_type || 'sub-acute-care') 
+        }] 
+      },
       subject: { reference: `Patient/${bundleResourceIds.patient}` },
-      period: { start: this.formatDateTimeWithTimezone(claim.encounter_start || claim.service_date || new Date()) },
+      period: { 
+        start: this.formatDateTimeWithTimezone(claim.encounter_start || claim.service_date || new Date()) 
+      },
       hospitalization: {
-        extension: [{ url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-admissionSpecialty', valueCodeableConcept: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/practice-codes', code: claim.practice_code || '08.00' }] } }],
-        admitSource: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/admit-source', code: claim.admit_source || 'WKIN' }] }
+        extension: [{ 
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-admissionSpecialty', 
+          valueCodeableConcept: { 
+            coding: [{ 
+              system: 'http://nphies.sa/terminology/CodeSystem/practice-codes', 
+              code: claim.admission_specialty || claim.practice_code || '08.00',
+              display: this.getPracticeCodeDisplay(claim.admission_specialty || claim.practice_code || '08.00')
+            }] 
+          } 
+        }],
+        admitSource: { 
+          coding: [{ 
+            system: 'http://nphies.sa/terminology/CodeSystem/admit-source', 
+            code: claim.admit_source || 'WKIN',
+            display: this.getAdmitSourceDisplay(claim.admit_source || 'WKIN')
+          }] 
+        }
       },
       serviceProvider: { reference: `Organization/${bundleResourceIds.provider}` }
     };
 
-    if (claim.encounter_end) encounter.period.end = this.formatDateTimeWithTimezone(claim.encounter_end);
+    if (claim.encounter_end) {
+      encounter.period.end = this.formatDateTimeWithTimezone(claim.encounter_end);
+    }
 
-    return { fullUrl: `http://provider.com/Encounter/${encounterId}`, resource: encounter };
+    return { 
+      fullUrl: `http://provider.com/Encounter/${encounterId}`, 
+      resource: encounter 
+    };
+  }
+
+  /**
+   * Parse Claim Response Bundle
+   */
+  parseClaimResponse(responseBundle) {
+    // Reuse the PA response parser - structure is the same
+    return this.parsePriorAuthResponse(responseBundle);
   }
 }
 

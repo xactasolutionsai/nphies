@@ -1402,7 +1402,7 @@ class PriorAuthorizationsController extends BaseController {
         priorAuthId,
         diag.sequence,
         diag.diagnosis_code,
-        diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10',
+        diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am',
         diag.diagnosis_display || null,
         diag.diagnosis_type || 'principal',
         diag.on_admission !== undefined ? diag.on_admission : null

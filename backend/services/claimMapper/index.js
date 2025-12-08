@@ -2,14 +2,19 @@
  * NPHIES Claim Mapper Factory
  * For Claims (use: "claim") - billing after services delivered
  * 
+ * Claim mappers extend the Prior Authorization mappers and add claim-specific fields:
+ * - use: 'claim' (instead of 'preauthorization')
+ * - eventCoding: 'claim-request' (instead of 'priorauth-request')
+ * - Additional required extensions: episode, accountingPeriod, patientInvoice
+ * 
  * Usage:
  *   import claimMapper, { getClaimMapper } from './services/claimMapper/index.js';
  *   const mapper = getClaimMapper('institutional');
  *   const bundle = mapper.buildClaimRequestBundle(data);
  */
 
-import BaseClaimMapper from './BaseClaimMapper.js';
 import InstitutionalClaimMapper from './InstitutionalClaimMapper.js';
+// Note: BaseClaimMapper is deprecated - use PA's BaseMapper via InstitutionalClaimMapper
 
 const mapperInstances = {
   institutional: null,
@@ -96,5 +101,5 @@ class ClaimMapperProxy {
 
 const claimMapperProxy = new ClaimMapperProxy();
 
-export { BaseClaimMapper, InstitutionalClaimMapper, detectClaimType };
+export { InstitutionalClaimMapper, detectClaimType };
 export default claimMapperProxy;
