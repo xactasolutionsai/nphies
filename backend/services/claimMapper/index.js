@@ -21,6 +21,7 @@ import InstitutionalClaimMapper from './InstitutionalClaimMapper.js';
 import VisionClaimMapper from './VisionClaimMapper.js';
 import OralClaimMapper from './OralClaimMapper.js';
 import PharmacyClaimMapper from './PharmacyClaimMapper.js';
+import ProfessionalClaimMapper from './ProfessionalClaimMapper.js';
 
 const mapperInstances = {
   institutional: null,
@@ -60,10 +61,8 @@ export function getClaimMapper(claimType) {
       case 'pharmacy':
         mapperInstances.pharmacy = new PharmacyClaimMapper();
         break;
-      // TODO: Add professional mapper when implemented
       case 'professional':
-        // For now, use institutional as fallback
-        mapperInstances[mappedType] = new InstitutionalClaimMapper();
+        mapperInstances.professional = new ProfessionalClaimMapper();
         break;
       default:
         mapperInstances.institutional = new InstitutionalClaimMapper();
@@ -119,5 +118,5 @@ class ClaimMapperProxy {
 
 const claimMapperProxy = new ClaimMapperProxy();
 
-export { InstitutionalClaimMapper, VisionClaimMapper, OralClaimMapper, PharmacyClaimMapper, detectClaimType };
+export { InstitutionalClaimMapper, VisionClaimMapper, OralClaimMapper, PharmacyClaimMapper, ProfessionalClaimMapper, detectClaimType };
 export default claimMapperProxy;
