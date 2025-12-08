@@ -340,15 +340,37 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     };
 
-    // SupportingInfo - Build all required supporting info entries per NPHIES pharmacy claim requirements
+    // SupportingInfo - Use existing supporting_info from claim data (from PA or claim form)
+    // Then add any missing required categories with defaults
     // Per NPHIES errors BV-00752, BV-00803, BV-00804, BV-00805, BV-00806 - these are all required
-    // Note: The correct category code is 'investigation-result' NOT 'lab-result' (IB-00044)
+    const existingSupportingInfo = claim.supporting_info || [];
     let supportingInfoList = [];
     let sequenceNum = 1;
     const daysSupplySequence = sequenceNum;
+
+    // Valid investigation-result codes per https://portal.nphies.sa/ig/CodeSystem-investigation-result.html
+    const validInvestigationCodes = ['INP', 'IRA', 'other', 'NA', 'IRP'];
+    const investigationCodeDisplayMap = {
+      'INP': 'Investigation(s) not performed',
+      'IRA': 'Investigation results attached',
+      'other': 'Other',
+      'NA': 'Not applicable',
+      'IRP': 'Investigation results pending'
+    };
+
+    // Helper to check if a category exists in existing supporting info
+    const hasCategory = (cat) => existingSupportingInfo.some(info => 
+      (info.category || '').toLowerCase() === cat.toLowerCase()
+    );
     
+    // Helper to get existing supporting info by category
+    const getExisting = (cat) => existingSupportingInfo.find(info => 
+      (info.category || '').toLowerCase() === cat.toLowerCase()
+    );
+
     // 1. days-supply (required for pharmacy per NPHIES)
-    const daysSupplyValue = claim.items?.[0]?.days_supply || claim.days_supply || 30;
+    const existingDaysSupply = getExisting('days-supply');
+    const daysSupplyValue = existingDaysSupply?.value_quantity || claim.items?.[0]?.days_supply || claim.days_supply || 30;
     supportingInfoList.push({
       sequence: sequenceNum++,
       category: {
@@ -364,21 +386,10 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     });
 
-    // 2. investigation-result (required per BV-00752) - NOT 'lab-result'!
-    // Per BV-00786: requires code from NPHIES investigation-result CodeSystem
-    // Per DT-01293: must use 'code' element, NOT valueCodeableConcept or valueString
+    // 2. investigation-result (required per BV-00752)
     // Per IB-00045: Valid codes are: INP, IRA, other, NA, IRP
-    // Reference: https://portal.nphies.sa/ig/CodeSystem-investigation-result.html
-    const validInvestigationCodes = ['INP', 'IRA', 'other', 'NA', 'IRP'];
-    const investigationCodeDisplayMap = {
-      'INP': 'Investigation(s) not performed',
-      'IRA': 'Investigation results attached',
-      'other': 'Other',
-      'NA': 'Not applicable',
-      'IRP': 'Investigation results pending'
-    };
-    // Default to 'NA' (Not applicable) for pharmacy claims if no specific code provided
-    let investigationResultCode = claim.investigation_result_code || 'NA';
+    const existingInvestigation = getExisting('investigation-result');
+    let investigationResultCode = existingInvestigation?.code || claim.investigation_result_code || 'NA';
     // Validate the code is in the allowed list
     if (!validInvestigationCodes.includes(investigationResultCode)) {
       investigationResultCode = 'NA';
@@ -395,12 +406,13 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
         coding: [{
           system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
           code: investigationResultCode,
-          display: claim.investigation_result_display || investigationCodeDisplayMap[investigationResultCode]
+          display: existingInvestigation?.code_display || investigationCodeDisplayMap[investigationResultCode]
         }]
       }
     });
 
     // 3. treatment-plan (required per BV-00803)
+    const existingTreatmentPlan = getExisting('treatment-plan');
     supportingInfoList.push({
       sequence: sequenceNum++,
       category: {
@@ -409,10 +421,11 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
           code: 'treatment-plan'
         }]
       },
-      valueString: claim.treatment_plan || 'Medication therapy as prescribed'
+      valueString: existingTreatmentPlan?.value_string || claim.treatment_plan || 'Medication therapy as prescribed'
     });
 
     // 4. patient-history (required per BV-00804)
+    const existingPatientHistory = getExisting('patient-history');
     supportingInfoList.push({
       sequence: sequenceNum++,
       category: {
@@ -421,10 +434,11 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
           code: 'patient-history'
         }]
       },
-      valueString: claim.patient_history || 'No significant past medical history'
+      valueString: existingPatientHistory?.value_string || claim.patient_history || 'No significant past medical history'
     });
 
     // 5. physical-examination (required per BV-00805)
+    const existingPhysicalExam = getExisting('physical-examination');
     supportingInfoList.push({
       sequence: sequenceNum++,
       category: {
@@ -433,10 +447,11 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
           code: 'physical-examination'
         }]
       },
-      valueString: claim.physical_examination || 'Within normal limits'
+      valueString: existingPhysicalExam?.value_string || claim.physical_examination || 'Within normal limits'
     });
 
     // 6. history-of-present-illness (required per BV-00806)
+    const existingHistoryPresentIllness = getExisting('history-of-present-illness');
     supportingInfoList.push({
       sequence: sequenceNum++,
       category: {
@@ -445,7 +460,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
           code: 'history-of-present-illness'
         }]
       },
-      valueString: claim.history_of_present_illness || claim.chief_complaint || 'Patient presents with symptoms requiring medication'
+      valueString: existingHistoryPresentIllness?.value_string || claim.history_of_present_illness || claim.chief_complaint || 'Patient presents with symptoms requiring medication'
     });
 
     claimResource.supportingInfo = supportingInfoList;
