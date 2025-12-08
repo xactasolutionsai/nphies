@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "e8f3e7f5-2e86-4544-a415-2374876567e2",
+  "id": "21475fae-6055-4429-8c98-e676bf4185e0",
   "meta": {
       "profile": [
           "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
       ]
   },
   "type": "message",
-  "timestamp": "2025-12-08T22:21:54.764+03:00",
+  "timestamp": "2025-12-08T22:29:31.794+03:00",
   "entry": [
       {
-          "fullUrl": "http://nphies.sa/MessageHeader/d978ac54-68dc-4bd8-b248-b56fb4999fb7",
+          "fullUrl": "http://nphies.sa/MessageHeader/dd5558f4-d278-4361-91a5-2a449bdb4a07",
           "resource": {
               "resourceType": "MessageHeader",
-              "id": "d978ac54-68dc-4bd8-b248-b56fb4999fb7",
+              "id": "dd5558f4-d278-4361-91a5-2a449bdb4a07",
               "meta": {
                   "profile": [
                       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -52,21 +52,21 @@
                   "endpoint": "http://nphies.sa/"
               },
               "response": {
-                  "identifier": "6cf9ac51-f70a-412d-944b-71b7573e2069",
+                  "identifier": "27cf6863-39c0-4492-950c-fe2448fc9429",
                   "code": "ok"
               },
               "focus": [
                   {
-                      "reference": "http://nphies.sa/ClaimResponse/564"
+                      "reference": "http://nphies.sa/ClaimResponse/223"
                   }
               ]
           }
       },
       {
-          "fullUrl": "http://nphies.sa/ClaimResponse/564",
+          "fullUrl": "http://nphies.sa/ClaimResponse/223",
           "resource": {
               "resourceType": "ClaimResponse",
-              "id": "564",
+              "id": "223",
               "meta": {
                   "profile": [
                       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -81,7 +81,7 @@
               "identifier": [
                   {
                       "system": "http://nphies.sa/ClaimResponse",
-                      "value": "PREVIEW-1765221707130"
+                      "value": "PREVIEW-1765222165776"
                   }
               ],
               "status": "active",
@@ -97,7 +97,7 @@
               "patient": {
                   "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
               },
-              "created": "2025-12-08T22:21:47+03:00",
+              "created": "2025-12-08T22:29:25+03:00",
               "insurer": {
                   "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
               },
@@ -108,7 +108,7 @@
                   "type": "Claim",
                   "identifier": {
                       "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-                      "value": "PREVIEW-1765221707130"
+                      "value": "PREVIEW-1765222165776"
                   }
               },
               "outcome": "error",
@@ -129,80 +129,29 @@
                                   "extension": [
                                       {
                                           "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "Bundle.entry[1].resource.extension"
+                                          "valueString": "Bundle.entry[1].resource.extension[5].value"
+                                      }
+                                  ],
+                                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                  "code": "DT-01287",
+                                  "display": "Incorrect element data type used"
+                              }
+                          ]
+                      }
+                  },
+                  {
+                      "code": {
+                          "coding": [
+                              {
+                                  "extension": [
+                                      {
+                                          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                          "valueString": "Bundle.entry[1].resource.extension[5].value[x]:valueDate"
                                       }
                                   ],
                                   "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
                                   "code": "IC-01428",
                                   "display": "The element SHALL follow the cardinality specified in the NPHIES profile"
-                              }
-                          ]
-                      }
-                  },
-                  {
-                      "code": {
-                          "coding": [
-                              {
-                                  "extension": [
-                                      {
-                                          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "Bundle.entry[1].resource.extension[0].episode"
-                                      }
-                                  ],
-                                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                  "code": "IC-01453",
-                                  "display": "The episode number is not following the correct cardinality"
-                              }
-                          ]
-                      }
-                  },
-                  {
-                      "code": {
-                          "coding": [
-                              {
-                                  "extension": [
-                                      {
-                                          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "Bundle.entry[1].resource.extension[0].AccountingPeriod"
-                                      }
-                                  ],
-                                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                  "code": "IC-01620",
-                                  "display": "Claim.extension.accountingPeriod  is not following the specified cardinality within the message profile"
-                              }
-                          ]
-                      }
-                  },
-                  {
-                      "code": {
-                          "coding": [
-                              {
-                                  "extension": [
-                                      {
-                                          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "Bundle.entry[1].resource.diagnosis[0].diagnosis"
-                                      }
-                                  ],
-                                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                  "code": "IB-00242",
-                                  "display": "Element value binding is not using a value from the specified ValueSet"
-                              }
-                          ]
-                      }
-                  },
-                  {
-                      "code": {
-                          "coding": [
-                              {
-                                  "extension": [
-                                      {
-                                          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "Bundle.entry[1].resource.diagnosis[1].diagnosis"
-                                      }
-                                  ],
-                                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                  "code": "IB-00242",
-                                  "display": "Element value binding is not using a value from the specified ValueSet"
                               }
                           ]
                       }

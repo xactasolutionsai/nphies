@@ -241,15 +241,11 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     });
 
     // AccountingPeriod (REQUIRED per error IC-01620)
-    // This extension specifies the accounting period for the claim
-    const accountingPeriodStart = this.formatDate(claim.accounting_period_start || claim.service_date || new Date());
-    const accountingPeriodEnd = this.formatDate(claim.accounting_period_end || claim.service_date || new Date());
+    // Per NPHIES error DT-01287, this extension requires valueDate (NOT valuePeriod)
+    const accountingPeriodDate = this.formatDate(claim.accounting_period_start || claim.service_date || new Date());
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
-      valuePeriod: {
-        start: accountingPeriodStart,
-        end: accountingPeriodEnd
-      }
+      valueDate: accountingPeriodDate
     });
 
     // Eligibility offline reference (optional)

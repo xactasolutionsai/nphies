@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "b852df4f-58ba-4037-acc0-9144c5dee687",
+  "id": "01a1ce04-5967-4644-9b69-ab01fcc91fb7",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-08T19:21:47.135Z",
+  "timestamp": "2025-12-08T19:29:25.785Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:6cf9ac51-f70a-412d-944b-71b7573e2069",
+      "fullUrl": "urn:uuid:27cf6863-39c0-4492-950c-fe2448fc9429",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "6cf9ac51-f70a-412d-944b-71b7573e2069",
+        "id": "27cf6863-39c0-4492-950c-fe2448fc9429",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,25 +47,63 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/85f18b09-c23b-4864-8c22-9d4a7ea03f3c"
+            "reference": "http://provider.com/Claim/ecbdfc96-f58e-44e0-8071-5a63a2bae127"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/85f18b09-c23b-4864-8c22-9d4a7ea03f3c",
+      "fullUrl": "http://provider.com/Claim/ecbdfc96-f58e-44e0-8071-5a63a2bae127",
       "resource": {
         "resourceType": "Claim",
-        "id": "85f18b09-c23b-4864-8c22-9d4a7ea03f3c",
+        "id": "ecbdfc96-f58e-44e0-8071-5a63a2bae127",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-claim|1.0.0"
           ]
         },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
+            "valueIdentifier": {
+              "system": "http://saudigeneralhospital.com.sa/identifiers/batch",
+              "value": "batch-PREVIEW-1765222165776"
+            }
+          },
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-number",
+            "valuePositiveInt": 1
+          },
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period",
+            "valuePeriod": {
+              "start": "2025-12-08",
+              "end": "2025-12-08"
+            }
+          },
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date",
+            "valueDateTime": "2025-12-08T03:00:00+03:00"
+          },
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
+            "valueIdentifier": {
+              "system": "http://saudigeneralhospital.com.sa/identifiers/episode",
+              "value": "EpisodeID-PREVIEW-1765222165776"
+            }
+          },
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod",
+            "valuePeriod": {
+              "start": "2025-12-08",
+              "end": "2025-12-08"
+            }
+          }
+        ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-            "value": "PREVIEW-1765221707130"
+            "value": "PREVIEW-1765222165776"
           }
         ],
         "status": "active",
@@ -89,7 +127,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-08T22:21:47+03:00",
+        "created": "2025-12-08T22:29:25+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -138,7 +176,7 @@
             "diagnosisCodeableConcept": {
               "coding": [
                 {
-                  "system": "http://hl7.org/fhir/sid/icd-10",
+                  "system": "http://hl7.org/fhir/sid/icd-10-am",
                   "code": "R51",
                   "display": "Headache"
                 }
@@ -160,7 +198,7 @@
             "diagnosisCodeableConcept": {
               "coding": [
                 {
-                  "system": "http://hl7.org/fhir/sid/icd-10",
+                  "system": "http://hl7.org/fhir/sid/icd-10-am",
                   "code": "G44.4",
                   "display": "Drug-induced headache, not elsewhere classified"
                 }
