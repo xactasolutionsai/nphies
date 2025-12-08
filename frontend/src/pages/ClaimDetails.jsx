@@ -659,6 +659,46 @@ export default function ClaimDetails() {
                     </div>
                   </>
                 )}
+
+                {/* Error Summary - Show if there are errors in responses */}
+                {claim.responses?.some(r => r.has_errors && r.errors) && (
+                  <>
+                    <hr className="border-gray-200" />
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center gap-2 text-red-600 font-semibold mb-3">
+                        <AlertCircle className="h-5 w-5" />
+                        <span>NPHIES Validation Errors</span>
+                      </div>
+                      {claim.responses.filter(r => r.has_errors && r.errors).map((resp, respIndex) => {
+                        let parsedErrors = [];
+                        try {
+                          parsedErrors = typeof resp.errors === 'string' ? JSON.parse(resp.errors) : resp.errors;
+                          if (!Array.isArray(parsedErrors)) parsedErrors = [parsedErrors];
+                        } catch (e) {
+                          parsedErrors = [{ message: resp.errors }];
+                        }
+                        return (
+                          <div key={respIndex} className="space-y-2">
+                            {parsedErrors.map((error, errIndex) => (
+                              <div key={errIndex} className="flex items-start gap-2 text-sm">
+                                <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                                <div>
+                                  {error.code && (
+                                    <span className="font-mono text-red-600 mr-2">[{error.code}]</span>
+                                  )}
+                                  <span className="text-red-700">{error.message || error.diagnostics || JSON.stringify(error)}</span>
+                                  {error.location && (
+                                    <p className="text-xs text-red-500 mt-0.5 font-mono">{error.location}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
@@ -1151,30 +1191,84 @@ export default function ClaimDetails() {
               <CardContent>
                 {claim.responses && claim.responses.length > 0 ? (
                   <div className="space-y-4">
-                    {claim.responses.map((resp, index) => (
-                      <div key={index} className="p-4 border rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Badge variant="outline">{resp.response_type}</Badge>
-                            <Badge 
-                              variant={resp.outcome === 'complete' ? 'default' : 'secondary'}
-                              className={resp.outcome === 'complete' ? 'bg-green-500' : ''}
-                            >
-                              {resp.outcome}
-                            </Badge>
+                    {claim.responses.map((resp, index) => {
+                      // Parse errors if it's a string
+                      let parsedErrors = [];
+                      if (resp.errors) {
+                        try {
+                          parsedErrors = typeof resp.errors === 'string' ? JSON.parse(resp.errors) : resp.errors;
+                          if (!Array.isArray(parsedErrors)) parsedErrors = [parsedErrors];
+                        } catch (e) {
+                          parsedErrors = [{ message: resp.errors }];
+                        }
+                      }
+                      
+                      return (
+                        <div key={index} className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Badge variant="outline">{resp.response_type}</Badge>
+                              <Badge 
+                                variant={resp.outcome === 'complete' ? 'default' : resp.outcome === 'error' ? 'destructive' : 'secondary'}
+                                className={resp.outcome === 'complete' ? 'bg-green-500' : resp.outcome === 'error' ? 'bg-red-500' : ''}
+                              >
+                                {resp.outcome}
+                              </Badge>
+                            </div>
+                            <span className="text-sm text-gray-500">{formatDateTime(resp.received_at)}</span>
                           </div>
-                          <span className="text-sm text-gray-500">{formatDateTime(resp.received_at)}</span>
+                          
+                          {resp.disposition && (
+                            <p className="mt-2 text-gray-600">{resp.disposition}</p>
+                          )}
+                          
+                          {/* NPHIES Claim ID */}
+                          {resp.nphies_claim_id && (
+                            <div className="mt-2 flex items-center gap-2 text-sm">
+                              <span className="text-gray-500">NPHIES Claim ID:</span>
+                              <code className="bg-gray-100 px-2 py-0.5 rounded text-xs">{resp.nphies_claim_id}</code>
+                            </div>
+                          )}
+                          
+                          {/* Error Details */}
+                          {resp.has_errors && parsedErrors.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              <div className="flex items-center gap-2 text-red-600 font-medium text-sm">
+                                <AlertCircle className="h-4 w-4" />
+                                <span>Errors ({parsedErrors.length})</span>
+                              </div>
+                              <div className="space-y-2">
+                                {parsedErrors.map((error, errIndex) => (
+                                  <div key={errIndex} className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                                    <div className="flex items-start gap-2">
+                                      <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1 min-w-0">
+                                        {error.code && (
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <Badge variant="outline" className="text-red-600 border-red-300 text-xs">
+                                              {error.code}
+                                            </Badge>
+                                          </div>
+                                        )}
+                                        <p className="text-sm text-red-700">{error.message || error.diagnostics || JSON.stringify(error)}</p>
+                                        {error.location && (
+                                          <p className="text-xs text-red-500 mt-1 font-mono">{error.location}</p>
+                                        )}
+                                        {error.expression && (
+                                          <p className="text-xs text-red-500 mt-1 font-mono">
+                                            {Array.isArray(error.expression) ? error.expression.join(' → ') : error.expression}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        {resp.disposition && (
-                          <p className="mt-2 text-gray-600">{resp.disposition}</p>
-                        )}
-                        {resp.has_errors && resp.errors && (
-                          <div className="mt-2 p-2 bg-red-50 rounded text-red-700 text-sm">
-                            {typeof resp.errors === 'string' ? resp.errors : JSON.stringify(resp.errors)}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-center text-gray-500 py-4">No responses yet</p>
