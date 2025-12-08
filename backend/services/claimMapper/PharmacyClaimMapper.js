@@ -340,12 +340,14 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     };
 
-    // SupportingInfo - Build all required supporting info entries per NPHIES pharmacy claim requirements
+    // SupportingInfo - For Pharmacy Claims, only days-supply is required
+    // Note: lab-result, treatment-plan, patient-history, physical-examination, history-of-present-illness
+    // are NOT valid categories for pharmacy claims per NPHIES IB-00044 error
+    // Those categories are for institutional/professional claims only
     let supportingInfoList = [];
-    let sequenceNum = 1;
+    const daysSupplySequence = 1;
     
-    // 1. days-supply (required for pharmacy per NPHIES)
-    const daysSupplySequence = sequenceNum++;
+    // days-supply (required for pharmacy per NPHIES)
     const daysSupplyValue = claim.items?.[0]?.days_supply || claim.days_supply || 30;
     supportingInfoList.push({
       sequence: daysSupplySequence,
@@ -359,81 +361,6 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
         value: parseInt(daysSupplyValue),
         system: 'http://unitsofmeasure.org',
         code: 'd'
-      }
-    });
-
-    // 2. lab-result / investigation-result (required per BV-00752)
-    const labResultValue = claim.lab_result || claim.investigation_result || 'No abnormal findings';
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'lab-result'
-        }]
-      },
-      code: {
-        text: labResultValue
-      }
-    });
-
-    // 3. treatment-plan (required per BV-00803)
-    const treatmentPlanValue = claim.treatment_plan || 'Medication therapy as prescribed';
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'treatment-plan'
-        }]
-      },
-      code: {
-        text: treatmentPlanValue
-      }
-    });
-
-    // 4. patient-history (required per BV-00804)
-    const patientHistoryValue = claim.patient_history || 'No significant past medical history';
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'patient-history'
-        }]
-      },
-      code: {
-        text: patientHistoryValue
-      }
-    });
-
-    // 5. physical-examination (required per BV-00805)
-    const physicalExamValue = claim.physical_examination || 'Within normal limits';
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'physical-examination'
-        }]
-      },
-      code: {
-        text: physicalExamValue
-      }
-    });
-
-    // 6. history-of-present-illness (required per BV-00806)
-    const historyPresentIllnessValue = claim.history_of_present_illness || claim.chief_complaint || 'Patient presents with symptoms requiring medication';
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'history-of-present-illness'
-        }]
-      },
-      code: {
-        text: historyPresentIllnessValue
       }
     });
 
