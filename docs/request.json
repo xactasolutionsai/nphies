@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "d8bcc3ad-58c5-49a9-8e56-6a8ba69e0a66",
+  "id": "6cb40d8f-c0b2-45d6-aa6d-fbade614b74b",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-08T19:48:07.592Z",
+  "timestamp": "2025-12-08T20:03:42.582Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:cac8fdba-6d5b-4b63-b498-2f2bbfaba6a6",
+      "fullUrl": "urn:uuid:a8b305f8-9cc9-4ac4-bd72-bd3eb39b3502",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "cac8fdba-6d5b-4b63-b498-2f2bbfaba6a6",
+        "id": "a8b305f8-9cc9-4ac4-bd72-bd3eb39b3502",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/019307a0-fd9b-4dd3-8d8b-cabf3c924cdb"
+            "reference": "http://provider.com/Claim/c9313d53-dce9-4c79-9e18-f1146acc70f5"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/019307a0-fd9b-4dd3-8d8b-cabf3c924cdb",
+      "fullUrl": "http://provider.com/Claim/c9313d53-dce9-4c79-9e18-f1146acc70f5",
       "resource": {
         "resourceType": "Claim",
-        "id": "019307a0-fd9b-4dd3-8d8b-cabf3c924cdb",
+        "id": "c9313d53-dce9-4c79-9e18-f1146acc70f5",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-claim|1.0.0"
@@ -67,7 +67,7 @@
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
             "valueIdentifier": {
               "system": "http://saudigeneralhospital.com.sa/identifiers/batch",
-              "value": "batch-PREVIEW-1765223287583"
+              "value": "batch-PREVIEW-1765224222574"
             }
           },
           {
@@ -89,7 +89,7 @@
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
             "valueIdentifier": {
               "system": "http://saudigeneralhospital.com.sa/identifiers/episode",
-              "value": "EpisodeID-PREVIEW-1765223287583"
+              "value": "EpisodeID-PREVIEW-1765224222574"
             }
           },
           {
@@ -100,7 +100,7 @@
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-            "value": "PREVIEW-1765223287583"
+            "value": "PREVIEW-1765224222574"
           }
         ],
         "status": "active",
@@ -124,7 +124,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-08T22:48:07+03:00",
+        "created": "2025-12-08T23:03:42+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -172,12 +172,18 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "lab-result"
+                  "code": "investigation-result"
                 }
               ]
             },
-            "code": {
-              "text": "No abnormal findings"
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
+                  "code": "normal",
+                  "display": "Normal"
+                }
+              ]
             }
           },
           {
@@ -190,9 +196,7 @@
                 }
               ]
             },
-            "code": {
-              "text": "Medication therapy as prescribed"
-            }
+            "valueString": "Medication therapy as prescribed"
           },
           {
             "sequence": 4,
@@ -204,9 +208,7 @@
                 }
               ]
             },
-            "code": {
-              "text": "No significant past medical history"
-            }
+            "valueString": "No significant past medical history"
           },
           {
             "sequence": 5,
@@ -218,9 +220,7 @@
                 }
               ]
             },
-            "code": {
-              "text": "Within normal limits"
-            }
+            "valueString": "Within normal limits"
           },
           {
             "sequence": 6,
@@ -232,9 +232,7 @@
                 }
               ]
             },
-            "code": {
-              "text": "Patient presents with symptoms requiring medication"
-            }
+            "valueString": "Patient presents with symptoms requiring medication"
           }
         ],
         "diagnosis": [

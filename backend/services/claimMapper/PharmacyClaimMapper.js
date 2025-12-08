@@ -365,7 +365,8 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     });
 
     // 2. investigation-result (required per BV-00752) - NOT 'lab-result'!
-    // Per BV-00786: requires valueCodeableConcept with code from NPHIES investigation-result CodeSystem
+    // Per BV-00786: requires code from NPHIES investigation-result CodeSystem
+    // Per DT-01293: must use 'code' element, NOT valueCodeableConcept or valueString
     const investigationResultCode = claim.investigation_result_code || 'normal';
     supportingInfoList.push({
       sequence: sequenceNum++,
@@ -375,7 +376,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
           code: 'investigation-result'
         }]
       },
-      valueCodeableConcept: {
+      code: {
         coding: [{
           system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
           code: investigationResultCode,
