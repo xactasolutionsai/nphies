@@ -32,6 +32,7 @@ import PriorAuthorizationForm from './pages/PriorAuthorizationForm';
 import PriorAuthorizationDetails from './pages/PriorAuthorizationDetails';
 import ClaimSubmissionsList from './pages/ClaimSubmissionsList';
 import ClaimSubmissionForm from './pages/ClaimSubmissionForm';
+import ClaimDetails from './pages/ClaimDetails';
 import ChatAssistant from './components/chat/ChatAssistant';
 
 function App() {
@@ -75,7 +76,7 @@ function App() {
           <Route path="/prior-authorizations/:id/edit" element={<PriorAuthorizationForm />} />
           <Route path="/claim-submissions" element={<ClaimSubmissionsList />} />
           <Route path="/claim-submissions/new" element={<ClaimSubmissionForm />} />
-          <Route path="/claim-submissions/:id" element={<ClaimSubmissionForm />} />
+          <Route path="/claim-submissions/:id" element={<ClaimDetails />} />
           <Route path="/claim-submissions/:id/edit" element={<ClaimSubmissionForm />} />
         </Routes>
       </Layout>
