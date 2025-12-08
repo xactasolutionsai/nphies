@@ -626,6 +626,44 @@ class ProfessionalMapper extends BaseMapper {
     };
     return displays[code] || code;
   }
+
+  /**
+   * Get emergency arrival code display text
+   * Reference: https://portal.nphies.sa/ig/CodeSystem-emergency-arrival-code.html
+   * Valid codes per NPHIES ValueSet: unknown, PV, ACDA, OGV, GCDA, other, MOHA, EMSAA, GMA, AMA, GEMSA, GPA, POV
+   */
+  getEmergencyArrivalCodeDisplay(code) {
+    const displays = {
+      'unknown': 'Not stated/unknown',
+      'PV': 'Personal Vehicle',
+      'ACDA': 'Air Civil Defense Ambulance',
+      'OGV': 'Other Government Vehicles',
+      'GCDA': 'Ground Civil Defense Ambulance',
+      'other': 'Other',
+      'MOHA': 'Ground MOH Ambulance',
+      'EMSAA': 'EMS Air Ambulance',
+      'GMA': 'Ground Military Ambulance',
+      'AMA': 'Air Military Ambulance',
+      'GEMSA': 'Ground EMS Ambulance',
+      'GPA': 'Ground Private Ambulance',
+      'POV': 'Police Vehicle'
+    };
+    return displays[code] || code;
+  }
+
+  /**
+   * Get transport type display text
+   * Reference: http://nphies.sa/terminology/CodeSystem/transport-type
+   */
+  getTransportTypeDisplay(code) {
+    const displays = {
+      'GEMA': 'Ground EMS Ambulance',
+      'AEMA': 'Air EMS Ambulance',
+      'WEMA': 'Water EMS Ambulance',
+      'OTHR': 'Other'
+    };
+    return displays[code] || code;
+  }
 }
 
 export default ProfessionalMapper;

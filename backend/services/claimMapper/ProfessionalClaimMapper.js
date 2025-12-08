@@ -985,8 +985,9 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       });
 
       // Emergency Arrival Code - REQUIRED for EMER (BV-00732)
-      // Per NPHIES: Emergency arrival mode (walk-in, ambulance, etc.)
-      const arrivalCode = claim.emergency_arrival_code || claim.arrival_code || 'WKIN';
+      // Per NPHIES ValueSet: https://portal.nphies.sa/ig/ValueSet-encounter-emergency-arrival.html
+      // Valid codes: unknown, PV, ACDA, OGV, GCDA, other, MOHA, EMSAA, GMA, AMA, GEMSA, GPA, POV
+      const arrivalCode = claim.emergency_arrival_code || claim.arrival_code || 'PV'; // Default to Personal Vehicle
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-emergencyArrivalCode',
         valueCodeableConcept: {
@@ -1173,15 +1174,24 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
 
   /**
    * Get emergency arrival code display text
-   * Reference: http://nphies.sa/terminology/CodeSystem/emergency-arrival-code
+   * Reference: https://portal.nphies.sa/ig/CodeSystem-emergency-arrival-code.html
+   * Valid codes per NPHIES ValueSet: unknown, PV, ACDA, OGV, GCDA, other, MOHA, EMSAA, GMA, AMA, GEMSA, GPA, POV
    */
   getEmergencyArrivalCodeDisplay(code) {
     const displays = {
-      'WKIN': 'Walk-in',
-      'AMBL': 'Ambulance',
-      'POL': 'Police',
-      'TRNS': 'Transfer from another facility',
-      'OTHR': 'Other'
+      'unknown': 'Not stated/unknown',
+      'PV': 'Personal Vehicle',
+      'ACDA': 'Air Civil Defense Ambulance',
+      'OGV': 'Other Government Vehicles',
+      'GCDA': 'Ground Civil Defense Ambulance',
+      'other': 'Other',
+      'MOHA': 'Ground MOH Ambulance',
+      'EMSAA': 'EMS Air Ambulance',
+      'GMA': 'Ground Military Ambulance',
+      'AMA': 'Air Military Ambulance',
+      'GEMSA': 'Ground EMS Ambulance',
+      'GPA': 'Ground Private Ambulance',
+      'POV': 'Police Vehicle'
     };
     return displays[code] || code;
   }
