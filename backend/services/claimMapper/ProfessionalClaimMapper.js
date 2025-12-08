@@ -236,7 +236,17 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       }
     });
 
-    // 4. Eligibility offline reference (optional)
+    // 4. AccountingPeriod (REQUIRED per error IC-01620)
+    // Per NPHIES spec, this extension requires valueDate (NOT valuePeriod)
+    // Per NPHIES error BV-01010, the day must be "01" (first day of month)
+    const accountingDate = new Date(claim.accounting_period_start || claim.service_date || new Date());
+    const accountingPeriodDate = `${accountingDate.getFullYear()}-${String(accountingDate.getMonth() + 1).padStart(2, '0')}-01`;
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
+      valueDate: accountingPeriodDate
+    });
+
+    // 6. Eligibility offline reference (optional)
     if (claim.eligibility_offline_ref) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-reference',
@@ -244,7 +254,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       });
     }
 
-    // 5. Eligibility offline date (optional)
+    // 7. Eligibility offline date (optional)
     if (claim.eligibility_offline_date) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-date',
@@ -882,18 +892,28 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       diagnosisSequence: item.diagnosis_sequences || [1]
     };
 
-    // ProductOrService (required) - use NPHIES services CodeSystem
+    // ProductOrService (required) - MUST use NPHIES services CodeSystem per IB-00030
+    // Valid codes must be from http://nphies.sa/terminology/CodeSystem/services ValueSet
     const productCode = item.product_or_service_code || item.service_code;
     const productDisplay = item.product_or_service_display || item.service_display;
     
+    if (!productCode) {
+      console.error(`[ProfessionalClaimMapper] ERROR: Item ${sequence} missing product_or_service_code`);
+      throw new Error(`Service code (product_or_service_code) is required for professional claim item ${sequence}`);
+    }
+    
+    // Force the correct NPHIES services system - IB-00030 requires codes from this ValueSet
+    const productOrServiceCoding = {
+      system: 'http://nphies.sa/terminology/CodeSystem/services',
+      code: productCode
+    };
+    
+    if (productDisplay) {
+      productOrServiceCoding.display = productDisplay;
+    }
+    
     claimItem.productOrService = {
-      coding: [
-        {
-          system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/services',
-          code: productCode,
-          display: productDisplay
-        }
-      ]
+      coding: [productOrServiceCoding]
     };
 
     // Serviced date
