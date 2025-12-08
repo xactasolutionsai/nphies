@@ -6,9 +6,10 @@
  * - use: 'claim' (instead of 'preauthorization')
  * - eventCoding: 'claim-request' (instead of 'priorauth-request')
  * - Additional required extensions (per NPHIES validation, not always shown in examples):
- *   - ALL claim types: accountingPeriod (required per IC-01620), episode, patientInvoice on items
- *   - Institutional: encounter extension, condition-onset on diagnosis, onAdmission
- *   - Vision: NO encounter, NO condition-onset, NO onAdmission
+ *   - ALL claim types: episode, patientInvoice on items
+ *   - Institutional: encounter extension, accountingPeriod, condition-onset on diagnosis, onAdmission
+ *   - Vision: accountingPeriod, NO encounter, NO condition-onset, NO onAdmission
+ *   - Oral/Dental: encounter extension, episode, NO onAdmission, chief-complaint required
  * 
  * Usage:
  *   import claimMapper, { getClaimMapper } from './services/claimMapper/index.js';
@@ -18,6 +19,7 @@
 
 import InstitutionalClaimMapper from './InstitutionalClaimMapper.js';
 import VisionClaimMapper from './VisionClaimMapper.js';
+import OralClaimMapper from './OralClaimMapper.js';
 
 const mapperInstances = {
   institutional: null,
@@ -51,9 +53,11 @@ export function getClaimMapper(claimType) {
       case 'vision':
         mapperInstances.vision = new VisionClaimMapper();
         break;
+      case 'dental':
+        mapperInstances.dental = new OralClaimMapper();
+        break;
       // TODO: Add other mappers when implemented
       case 'professional':
-      case 'dental':
       case 'pharmacy':
         // For now, use institutional as fallback
         mapperInstances[mappedType] = new InstitutionalClaimMapper();
@@ -112,5 +116,5 @@ class ClaimMapperProxy {
 
 const claimMapperProxy = new ClaimMapperProxy();
 
-export { InstitutionalClaimMapper, VisionClaimMapper, detectClaimType };
+export { InstitutionalClaimMapper, VisionClaimMapper, OralClaimMapper, detectClaimType };
 export default claimMapperProxy;
