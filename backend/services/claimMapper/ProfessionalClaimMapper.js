@@ -218,11 +218,12 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       }
     });
 
-    // 2. Authorization offline date (optional)
-    if (claim.authorization_offline_date) {
+    // 2. Authorization offline date (REQUIRED when preAuthRef is used per BV-00462)
+    // If preAuthRef is provided, authorizationOffLineDate MUST be provided
+    if (claim.authorization_offline_date || claim.pre_auth_ref) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date)
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
       });
     }
 
@@ -961,7 +962,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     // Build extensions based on encounter class
     const extensions = [];
 
-    // For Emergency encounters (EMER), add triage and service event extensions
+    // For Emergency encounters (EMER), add required emergency-specific extensions
     if (encounterClass === 'emergency') {
       // Triage Category - REQUIRED for EMER (BV-00734)
       const triageCategory = claim.triage_category || 'U';
@@ -982,6 +983,69 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageDate',
         valueDateTime: this.formatDateTimeWithTimezone(triageDate)
       });
+
+      // Emergency Arrival Code - REQUIRED for EMER (BV-00732)
+      // Per NPHIES: Emergency arrival mode (walk-in, ambulance, etc.)
+      const arrivalCode = claim.emergency_arrival_code || claim.arrival_code || 'WKIN';
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-emergencyArrivalCode',
+        valueCodeableConcept: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/emergency-arrival-code',
+            code: arrivalCode,
+            display: this.getEmergencyArrivalCodeDisplay(arrivalCode)
+          }]
+        }
+      });
+
+      // Emergency Service Start - REQUIRED for EMER (BV-00735)
+      // Per NPHIES: Time when emergency service started
+      const emergencyServiceStart = claim.emergency_service_start || claim.encounter_start || new Date();
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-emergencyServiceStart',
+        valueDateTime: this.formatDateTimeWithTimezone(emergencyServiceStart)
+      });
+
+      // Transport Type for Emergency (optional)
+      const transportType = claim.transport_type || 'GEMA'; // Default to Ground EMS Ambulance
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transportType',
+        valueCodeableConcept: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/transport-type',
+            code: transportType,
+            display: this.getTransportTypeDisplay(transportType)
+          }]
+        }
+      });
+
+      // Discharge Disposition for Emergency (optional but typically included)
+      const dischargeDisposition = claim.discharge_disposition || 'DED'; // Default to "Died in ED" if not provided, adjust as needed
+      if (claim.discharge_disposition) {
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-dischargeDisposition',
+          valueCodeableConcept: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/discharge-disposition',
+              code: claim.discharge_disposition
+            }]
+          }
+        });
+      }
+
+      // Diagnosis on Discharge for Emergency (optional)
+      if (claim.discharge_diagnosis_code) {
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosisOnDischarge',
+          valueCodeableConcept: {
+            coding: [{
+              system: 'http://hl7.org/fhir/sid/icd-10-am',
+              code: claim.discharge_diagnosis_code,
+              display: claim.discharge_diagnosis_display
+            }]
+          }
+        });
+      }
     }
 
     // Service Event Type - REQUIRED for professional encounters (BV-00736)
@@ -997,52 +1061,11 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       }
     });
 
-    // Transport Type for Emergency
-    if (encounterClass === 'emergency' && claim.transport_type) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transportType',
-        valueCodeableConcept: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/transport-type',
-            code: claim.transport_type,
-            display: this.getTransportTypeDisplay(claim.transport_type)
-          }]
-        }
-      });
-    }
-
     // Discharge Date for claims (encounter is finished)
     if (claim.encounter_end || claim.discharge_date) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-dischargeDate',
         valueDateTime: this.formatDateTimeWithTimezone(claim.encounter_end || claim.discharge_date)
-      });
-    }
-
-    // Discharge Disposition for Emergency
-    if (encounterClass === 'emergency' && claim.discharge_disposition) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-dischargeDisposition',
-        valueCodeableConcept: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/discharge-disposition',
-            code: claim.discharge_disposition
-          }]
-        }
-      });
-    }
-
-    // Diagnosis on Discharge for Emergency (optional)
-    if (encounterClass === 'emergency' && claim.discharge_diagnosis_code) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosisOnDischarge',
-        valueCodeableConcept: {
-          coding: [{
-            system: 'http://hl7.org/fhir/sid/icd-10-am',
-            code: claim.discharge_diagnosis_code,
-            display: claim.discharge_diagnosis_display
-          }]
-        }
       });
     }
 
@@ -1136,12 +1159,28 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
 
   /**
    * Get transport type display text
+   * Reference: http://nphies.sa/terminology/CodeSystem/transport-type
    */
   getTransportTypeDisplay(code) {
     const displays = {
       'GEMA': 'Ground EMS Ambulance',
       'AEMA': 'Air EMS Ambulance',
       'WEMA': 'Water EMS Ambulance',
+      'OTHR': 'Other'
+    };
+    return displays[code] || code;
+  }
+
+  /**
+   * Get emergency arrival code display text
+   * Reference: http://nphies.sa/terminology/CodeSystem/emergency-arrival-code
+   */
+  getEmergencyArrivalCodeDisplay(code) {
+    const displays = {
+      'WKIN': 'Walk-in',
+      'AMBL': 'Ambulance',
+      'POL': 'Police',
+      'TRNS': 'Transfer from another facility',
       'OTHR': 'Other'
     };
     return displays[code] || code;
