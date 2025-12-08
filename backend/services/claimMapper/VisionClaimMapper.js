@@ -333,14 +333,19 @@ class VisionClaimMapper extends VisionPAMapper {
    * Build required supportingInfo for Vision Claims
    * NPHIES requires: investigation-result, treatment-plan, patient-history,
    *                  physical-examination, history-of-present-illness
+   * 
+   * BV-00530: If supportingInfo code element is provided and category is not 
+   * 'chief-complaint', then a code is required. We use code_text for free text.
    */
   buildRequiredVisionSupportingInfo(existingSupportingInfo = []) {
+    // Required categories with their default code_text values
+    // Using code_text instead of value_string to satisfy BV-00530
     const requiredCategories = [
-      { category: 'investigation-result', defaultValue: 'Vision examination completed' },
-      { category: 'treatment-plan', defaultValue: 'Optical correction prescribed' },
-      { category: 'patient-history', defaultValue: 'No significant ocular history' },
-      { category: 'physical-examination', defaultValue: 'Visual acuity assessment performed' },
-      { category: 'history-of-present-illness', defaultValue: 'Patient presents for vision correction' }
+      { category: 'investigation-result', code_text: 'Vision examination completed' },
+      { category: 'treatment-plan', code_text: 'Optical correction prescribed' },
+      { category: 'patient-history', code_text: 'No significant ocular history' },
+      { category: 'physical-examination', code_text: 'Visual acuity assessment performed' },
+      { category: 'history-of-present-illness', code_text: 'Patient presents for vision correction' }
     ];
 
     // Start with existing supporting info
@@ -349,12 +354,12 @@ class VisionClaimMapper extends VisionPAMapper {
       (info.category || '').toLowerCase()
     ));
 
-    // Add missing required categories with default values
+    // Add missing required categories with code_text (not value_string)
     for (const required of requiredCategories) {
       if (!existingCategories.has(required.category)) {
         result.push({
           category: required.category,
-          value_string: required.defaultValue
+          code_text: required.code_text
         });
       }
     }
