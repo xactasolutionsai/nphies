@@ -334,18 +334,29 @@ class VisionClaimMapper extends VisionPAMapper {
    * NPHIES requires: investigation-result, treatment-plan, patient-history,
    *                  physical-examination, history-of-present-illness
    * 
-   * BV-00530: If supportingInfo code element is provided and category is not 
-   * 'chief-complaint', then a code is required. We use code_text for free text.
+   * BV-00530: If supportingInfo "code" element is provided and category is not 
+   * 'chief-complaint', then code.coding[] with actual coded values is required.
+   * 
+   * Solution: For free-text categories, use ONLY valueString (no code element).
+   * For investigation-result, use a proper code from the investigation-result CodeSystem.
    */
   buildRequiredVisionSupportingInfo(existingSupportingInfo = []) {
-    // Required categories with their default code_text values
-    // Using code_text instead of value_string to satisfy BV-00530
+    // Required categories with their values
+    // - investigation-result: needs code.coding with actual coded value
+    // - others: use valueString only (no code element to avoid BV-00530)
     const requiredCategories = [
-      { category: 'investigation-result', code_text: 'Vision examination completed' },
-      { category: 'treatment-plan', code_text: 'Optical correction prescribed' },
-      { category: 'patient-history', code_text: 'No significant ocular history' },
-      { category: 'physical-examination', code_text: 'Visual acuity assessment performed' },
-      { category: 'history-of-present-illness', code_text: 'Patient presents for vision correction' }
+      // investigation-result requires a proper code from NPHIES CodeSystem
+      { 
+        category: 'investigation-result', 
+        code: 'INP',  // INP = Investigation(s) not performed
+        code_system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
+        code_display: 'INP - Investigation(s) not performed'
+      },
+      // These use valueString only - NO code element
+      { category: 'treatment-plan', value_string: 'Optical correction prescribed' },
+      { category: 'patient-history', value_string: 'No significant ocular history' },
+      { category: 'physical-examination', value_string: 'Visual acuity assessment performed' },
+      { category: 'history-of-present-illness', value_string: 'Patient presents for vision correction' }
     ];
 
     // Start with existing supporting info
@@ -354,13 +365,10 @@ class VisionClaimMapper extends VisionPAMapper {
       (info.category || '').toLowerCase()
     ));
 
-    // Add missing required categories with code_text (not value_string)
+    // Add missing required categories
     for (const required of requiredCategories) {
       if (!existingCategories.has(required.category)) {
-        result.push({
-          category: required.category,
-          code_text: required.code_text
-        });
+        result.push(required);
       }
     }
 

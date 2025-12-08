@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "0098eb74-aee4-4cc4-abee-a187dac4e663",
+  "id": "921c971d-65a8-495a-80d7-03c490176fdc",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-08T16:25:38.766Z",
+  "timestamp": "2025-12-08T17:04:35.355Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:1e0e8b1e-29c9-41a4-beb3-5e0cf0c250b2",
+      "fullUrl": "urn:uuid:48f7ba1e-4dc5-40eb-8693-5aa87efc72fc",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "1e0e8b1e-29c9-41a4-beb3-5e0cf0c250b2",
+        "id": "48f7ba1e-4dc5-40eb-8693-5aa87efc72fc",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/9ee73a1f-de30-47dc-8e2d-6a7cde6a55a7"
+            "reference": "http://provider.com/Claim/d8064970-0c53-41d3-b416-a61623ff7af5"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/9ee73a1f-de30-47dc-8e2d-6a7cde6a55a7",
+      "fullUrl": "http://provider.com/Claim/d8064970-0c53-41d3-b416-a61623ff7af5",
       "resource": {
         "resourceType": "Claim",
-        "id": "9ee73a1f-de30-47dc-8e2d-6a7cde6a55a7",
+        "id": "d8064970-0c53-41d3-b416-a61623ff7af5",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-claim|1.0.0"
@@ -64,17 +64,21 @@
         },
         "extension": [
           {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod",
+            "valueDate": "2025-12-01"
+          },
+          {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
             "valueIdentifier": {
               "system": "http://saudigeneralhospital.com.sa/identifiers/episode",
-              "value": "EpisodeID_20251208_PREVIEW-1765211138765"
+              "value": "EpisodeID_20251208_PREVIEW-1765213475353"
             }
           }
         ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-            "value": "PREVIEW-1765211138765"
+            "value": "PREVIEW-1765213475353"
           }
         ],
         "status": "active",
@@ -98,7 +102,7 @@
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-08T19:25:38+03:00",
+        "created": "2025-12-08T20:04:35+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -127,7 +131,7 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/3fae8e90-1d2d-4436-99fa-a4655353c50f"
+              "reference": "Practitioner/899e9c3c-3869-4811-90b7-fc87887e8598"
             },
             "role": {
               "coding": [
@@ -171,6 +175,76 @@
             ]
           }
         ],
+        "supportingInfo": [
+          {
+            "sequence": 1,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "patient-history"
+                }
+              ]
+            },
+            "valueString": "No systemic disease"
+          },
+          {
+            "sequence": 2,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "history-of-present-illness"
+                }
+              ]
+            },
+            "valueString": "No history"
+          },
+          {
+            "sequence": 3,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "physical-examination"
+                }
+              ]
+            },
+            "valueString": "Stable"
+          },
+          {
+            "sequence": 4,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "treatment-plan"
+                }
+              ]
+            },
+            "valueString": "Appendectomy"
+          },
+          {
+            "sequence": 5,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "investigation-result"
+                }
+              ]
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
+                  "code": "INP",
+                  "display": "INP - Investigation(s) not performed"
+                }
+              ]
+            }
+          }
+        ],
         "insurance": [
           {
             "sequence": 1,
@@ -212,6 +286,13 @@
             "diagnosisSequence": [
               1
             ],
+            "informationSequence": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
             "productOrService": {
               "coding": [
                 {
@@ -236,7 +317,7 @@
           }
         ],
         "total": {
-          "value": 794,
+          "value": 800,
           "currency": "SAR"
         }
       }
@@ -311,10 +392,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/3fae8e90-1d2d-4436-99fa-a4655353c50f",
+      "fullUrl": "http://provider.com/Practitioner/899e9c3c-3869-4811-90b7-fc87887e8598",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "3fae8e90-1d2d-4436-99fa-a4655353c50f",
+        "id": "899e9c3c-3869-4811-90b7-fc87887e8598",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -332,7 +413,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-3fae8e90"
+            "value": "PRACT-899e9c3c"
           }
         ],
         "active": true,
