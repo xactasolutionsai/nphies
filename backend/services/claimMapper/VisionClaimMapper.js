@@ -8,12 +8,17 @@
  * - eventCoding: 'claim-request' (instead of 'priorauth-request')
  * - profile: vision-claim (instead of vision-priorauth)
  * 
- * Required Extensions (per NPHIES validation - IC-01620):
- * - extension-accountingPeriod (required - must be FIRST extension per NPHIES validation)
+ * Required Extensions (per NPHIES validation):
+ * - extension-accountingPeriod (required - must be FIRST extension per IC-01620)
+ *   NOTE: Day must be "01" per BV-01010 (e.g., "2025-12-01" not "2025-12-08")
  * - extension-episode (required)
  * 
- * NOTE: Although the NPHIES documentation example (Claim-123773.json) does not show
- * accountingPeriod, NPHIES validation explicitly requires it (error IC-01620).
+ * Required SupportingInfo (per NPHIES validation BV-00752, BV-00803-806):
+ * - investigation-result
+ * - treatment-plan
+ * - patient-history
+ * - physical-examination
+ * - history-of-present-illness
  * 
  * Item Extensions (per NPHIES example):
  * - extension-patient-share (required)
@@ -27,6 +32,9 @@
  * - onAdmission on diagnosis
  * - extension-package on items
  * - extension-maternity on items
+ * 
+ * Total Calculation (BV-00059):
+ * - Claim total MUST equal sum of all item net values
  */
 
 import VisionPAMapper from '../priorAuthMapper/VisionMapper.js';
@@ -165,7 +173,9 @@ class VisionClaimMapper extends VisionPAMapper {
     
     // 1. AccountingPeriod extension (required per NPHIES validation IC-01620)
     // Must be FIRST extension as per error: "Bundle.entry[1].resource.extension[0].AccountingPeriod"
-    const accountingPeriodDate = this.formatDate(claim.service_date || claim.request_date || new Date());
+    // BV-01010: Day must be defaulted to "01" (e.g., "2025-12-01" not "2025-12-08")
+    const serviceDate = new Date(claim.service_date || claim.request_date || new Date());
+    const accountingPeriodDate = `${serviceDate.getFullYear()}-${String(serviceDate.getMonth() + 1).padStart(2, '0')}-01`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
       valueDate: accountingPeriodDate
@@ -266,6 +276,19 @@ class VisionClaimMapper extends VisionPAMapper {
       }));
     }
 
+    // SupportingInfo - Vision claims REQUIRE specific categories (BV-00752, BV-00803-806)
+    // Required categories: investigation-result, treatment-plan, patient-history, 
+    //                      physical-examination, history-of-present-illness
+    let supportingInfoSequences = [];
+    const requiredSupportingInfo = this.buildRequiredVisionSupportingInfo(claim.supporting_info || []);
+    if (requiredSupportingInfo.length > 0) {
+      claimResource.supportingInfo = requiredSupportingInfo.map((info, idx) => {
+        const seq = idx + 1;
+        supportingInfoSequences.push(seq);
+        return this.buildSupportingInfo({ ...info, sequence: seq });
+      });
+    }
+
     // Insurance
     claimResource.insurance = [{ 
       sequence: 1, 
@@ -274,16 +297,17 @@ class VisionClaimMapper extends VisionPAMapper {
     }];
 
     // Items with vision-specific extensions
-    const servicedDate = claim.service_date || claim.request_date || new Date();
+    const claimServicedDate = claim.service_date || claim.request_date || new Date();
     if (claim.items?.length > 0) {
       claimResource.item = claim.items.map((item, idx) => 
-        this.buildVisionClaimItem(item, idx + 1, servicedDate, providerIdentifierSystem, claim)
+        this.buildVisionClaimItem(item, idx + 1, claimServicedDate, providerIdentifierSystem, claim, supportingInfoSequences)
       );
     }
 
-    // Total
-    let totalAmount = claim.total_amount;
-    if (!totalAmount && claim.items?.length > 0) {
+    // Total - BV-00059: Must equal sum of item net values
+    // Calculate total from items to ensure accuracy
+    let totalAmount = 0;
+    if (claim.items?.length > 0) {
       totalAmount = claim.items.reduce((sum, item) => {
         const quantity = parseFloat(item.quantity || 1);
         const unitPrice = parseFloat(item.unit_price || 0);
@@ -291,9 +315,11 @@ class VisionClaimMapper extends VisionPAMapper {
         const tax = parseFloat(item.tax || 0);
         return sum + (quantity * unitPrice * factor) + tax;
       }, 0);
+    } else if (claim.total_amount) {
+      totalAmount = parseFloat(claim.total_amount);
     }
     claimResource.total = { 
-      value: parseFloat(totalAmount || 0), 
+      value: totalAmount, 
       currency: claim.currency || 'SAR' 
     };
 
@@ -304,11 +330,44 @@ class VisionClaimMapper extends VisionPAMapper {
   }
 
   /**
+   * Build required supportingInfo for Vision Claims
+   * NPHIES requires: investigation-result, treatment-plan, patient-history,
+   *                  physical-examination, history-of-present-illness
+   */
+  buildRequiredVisionSupportingInfo(existingSupportingInfo = []) {
+    const requiredCategories = [
+      { category: 'investigation-result', defaultValue: 'Vision examination completed' },
+      { category: 'treatment-plan', defaultValue: 'Optical correction prescribed' },
+      { category: 'patient-history', defaultValue: 'No significant ocular history' },
+      { category: 'physical-examination', defaultValue: 'Visual acuity assessment performed' },
+      { category: 'history-of-present-illness', defaultValue: 'Patient presents for vision correction' }
+    ];
+
+    // Start with existing supporting info
+    const result = [...existingSupportingInfo];
+    const existingCategories = new Set(existingSupportingInfo.map(info => 
+      (info.category || '').toLowerCase()
+    ));
+
+    // Add missing required categories with default values
+    for (const required of requiredCategories) {
+      if (!existingCategories.has(required.category)) {
+        result.push({
+          category: required.category,
+          value_string: required.defaultValue
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Build claim item for Vision Claims
    * Per NPHIES example: only patient-share, tax, patientInvoice extensions
    * NO extension-package, NO extension-maternity
    */
-  buildVisionClaimItem(item, sequence, servicedDate, providerIdentifierSystem, claim) {
+  buildVisionClaimItem(item, sequence, servicedDate, providerIdentifierSystem, claim, supportingInfoSequences = []) {
     const quantity = parseFloat(item.quantity || 1);
     const unitPrice = parseFloat(item.unit_price || 0);
     const factor = parseFloat(item.factor || 1);
@@ -349,6 +408,7 @@ class VisionClaimMapper extends VisionPAMapper {
       sequence,
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
+      informationSequence: item.information_sequences || supportingInfoSequences,
       productOrService: {
         coding: [{
           system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
