@@ -873,7 +873,13 @@ class BaseMapper {
     };
 
     // Add code if present
-    if (info.code_text) {
+    // IMPORTANT: Per NPHIES BV-00530, code.text is ONLY allowed for 'chief-complaint' category
+    // For other categories, if you include a 'code' element, it MUST have code.coding with a proper system/code
+    const category = (info.category || '').toLowerCase();
+    const categoriesAllowingCodeText = ['chief-complaint'];
+    
+    if (info.code_text && categoriesAllowingCodeText.includes(category)) {
+      // Only add code.text for categories that allow free text (like chief-complaint)
       supportingInfo.code = {
         text: info.code_text
       };

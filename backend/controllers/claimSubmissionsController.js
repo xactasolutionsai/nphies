@@ -450,7 +450,7 @@ class ClaimSubmissionsController extends BaseController {
       await query(`
         INSERT INTO claim_submission_supporting_info (claim_id, sequence, category, category_system, code, code_system, code_display, code_text, value_string, value_quantity, value_quantity_unit, value_boolean, value_date, value_period_start, value_period_end, value_reference, timing_date, timing_period_start, timing_period_end, reason_code, reason_system)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-      `, [claimId, info.sequence, info.category, info.category_system, info.code, info.code_system, info.code_display, info.code_text || info.value_string, info.value_string, info.value_quantity, info.value_quantity_unit, info.value_boolean, info.value_date, info.value_period_start, info.value_period_end, info.value_reference, info.timing_date, info.timing_period_start, info.timing_period_end, info.reason_code, info.reason_system]);
+      `, [claimId, info.sequence, info.category, info.category_system, info.code, info.code_system, info.code_display, info.code_text, info.value_string, info.value_quantity, info.value_quantity_unit, info.value_boolean, info.value_date, info.value_period_start, info.value_period_end, info.value_reference, info.timing_date, info.timing_period_start, info.timing_period_end, info.reason_code, info.reason_system]);
     }
   }
 
