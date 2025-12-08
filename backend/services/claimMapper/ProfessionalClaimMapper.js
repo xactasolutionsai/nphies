@@ -893,8 +893,11 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       diagnosisSequence: item.diagnosis_sequences || [1]
     };
 
-    // ProductOrService (required) - MUST use NPHIES services CodeSystem per IB-00030
-    // Valid codes must be from http://nphies.sa/terminology/CodeSystem/services ValueSet
+    // ProductOrService (required) - Use provided system or default to NPHIES services CodeSystem
+    // Per NPHIES IB-00030: Professional Claims require codes from services ValueSet
+    // Prior Authorization uses procedures CodeSystem, Claims use services CodeSystem
+    // Reference: https://portal.nphies.sa/ig/Claim-173386.json.html (services)
+    // Reference: https://portal.nphies.sa/ig/Claim-173086.json.html (procedures for PA)
     const productCode = item.product_or_service_code || item.service_code;
     const productDisplay = item.product_or_service_display || item.service_display;
     
@@ -903,9 +906,18 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       throw new Error(`Service code (product_or_service_code) is required for professional claim item ${sequence}`);
     }
     
-    // Force the correct NPHIES services system - IB-00030 requires codes from this ValueSet
+    // Use provided system or default to services for professional claims
+    // Users should provide the correct service code when creating claims
+    const defaultSystem = 'http://nphies.sa/terminology/CodeSystem/services';
+    const providedSystem = item.product_or_service_system;
+    
+    // Warn if using procedures system in a claim context (likely wrong)
+    if (providedSystem && providedSystem.includes('procedures')) {
+      console.warn(`[ProfessionalClaimMapper] WARNING: Item ${sequence} uses 'procedures' CodeSystem. Professional claims typically require 'services' CodeSystem. Code: ${productCode}`);
+    }
+    
     const productOrServiceCoding = {
-      system: 'http://nphies.sa/terminology/CodeSystem/services',
+      system: providedSystem || defaultSystem,
       code: productCode
     };
     
