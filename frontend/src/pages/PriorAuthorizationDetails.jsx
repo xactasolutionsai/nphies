@@ -10,7 +10,7 @@ import {
   ArrowLeft, Edit, Send, RefreshCw, XCircle, ArrowRightLeft,
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
-  Code, Activity, Paperclip, History, Eye, X
+  Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck
 } from 'lucide-react';
 
 // Helper functions
@@ -110,6 +110,14 @@ export default function PriorAuthorizationDetails() {
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  
+  // Claim submission state
+  const [claimBundle, setClaimBundle] = useState(null);
+  const [claimResponse, setClaimResponse] = useState(null);
+  const [showClaimBundleDialog, setShowClaimBundleDialog] = useState(false);
+  const [showClaimResponseDialog, setShowClaimResponseDialog] = useState(false);
+  const [claimBundleLoading, setClaimBundleLoading] = useState(false);
+  const [copiedToClipboard, setCopiedToClipboard] = useState(false);
 
   useEffect(() => {
     loadPriorAuthorization();
@@ -508,6 +516,110 @@ export default function PriorAuthorizationDetails() {
     }
   };
 
+  // Preview Claim Bundle (what will be sent to NPHIES)
+  const handlePreviewClaimBundle = async () => {
+    try {
+      setClaimBundleLoading(true);
+      
+      // Build claim preview data from the prior authorization
+      const claimPreviewData = {
+        claim_type: priorAuth.auth_type,
+        sub_type: priorAuth.sub_type || 'ip',
+        patient_id: priorAuth.patient_id,
+        provider_id: priorAuth.provider_id,
+        insurer_id: priorAuth.insurer_id,
+        pre_auth_ref: priorAuth.pre_auth_ref,
+        priority: priorAuth.priority || 'normal',
+        encounter_class: priorAuth.encounter_class,
+        encounter_start: priorAuth.encounter_start,
+        encounter_end: priorAuth.encounter_end,
+        service_date: new Date().toISOString().split('T')[0],
+        total_amount: priorAuth.approved_amount || priorAuth.total_amount,
+        currency: priorAuth.currency || 'SAR',
+        practice_code: priorAuth.practice_code,
+        service_type: priorAuth.service_type,
+        eligibility_offline_ref: priorAuth.eligibility_offline_ref,
+        items: priorAuth.items?.map((item, idx) => ({
+          ...item,
+          sequence: idx + 1,
+          serviced_date: new Date().toISOString().split('T')[0]
+        })) || [],
+        diagnoses: priorAuth.diagnoses || [],
+        supporting_info: priorAuth.supporting_info || []
+      };
+      
+      const response = await api.previewClaimSubmissionBundle(claimPreviewData);
+      setClaimBundle(response.fhirBundle || response);
+      setShowClaimBundleDialog(true);
+    } catch (error) {
+      console.error('Error previewing claim bundle:', error);
+      alert(`Error: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setClaimBundleLoading(false);
+    }
+  };
+
+  // Copy JSON to clipboard
+  const handleCopyToClipboard = async (jsonData) => {
+    try {
+      const jsonString = JSON.stringify(jsonData, null, 2);
+      await navigator.clipboard.writeText(jsonString);
+      setCopiedToClipboard(true);
+      setTimeout(() => setCopiedToClipboard(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      alert('Failed to copy to clipboard');
+    }
+  };
+
+  // Submit claim and store response for viewing
+  const handleSubmitAsClaimWithResponse = async () => {
+    if (!window.confirm('Create and submit a claim to NPHIES from this approved prior authorization?')) return;
+    
+    try {
+      setActionLoading(true);
+      
+      // Step 1: Create the claim from the prior authorization
+      const createResponse = await api.createClaimFromPriorAuth(id);
+      const claimId = createResponse.data?.id;
+      
+      if (!claimId) {
+        alert('Failed to create claim. Please try again.');
+        return;
+      }
+      
+      // Step 2: Send the claim to NPHIES
+      const sendResponse = await api.sendClaimSubmissionToNphies(claimId);
+      
+      // Store the full response for viewing
+      setClaimResponse({
+        claimId,
+        success: sendResponse.success,
+        nphiesResponse: sendResponse.nphiesResponse,
+        data: sendResponse.data,
+        error: sendResponse.error,
+        requestBundle: sendResponse.data?.request_bundle,
+        responseBundle: sendResponse.data?.response_bundle
+      });
+      
+      if (sendResponse.success) {
+        const claimRef = sendResponse.nphiesResponse?.nphiesClaimId || sendResponse.data?.nphies_claim_id || 'Pending';
+        setShowClaimResponseDialog(true);
+      } else {
+        setShowClaimResponseDialog(true);
+      }
+    } catch (error) {
+      console.error('Error creating/submitting claim:', error);
+      setClaimResponse({
+        success: false,
+        error: { message: error.response?.data?.error || error.message }
+      });
+      setShowClaimResponseDialog(true);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const configs = {
       draft: { variant: 'outline', icon: FileText, className: 'text-gray-600 border-gray-300' },
@@ -605,8 +717,17 @@ export default function PriorAuthorizationDetails() {
           
           {priorAuth.status === 'approved' && (
             <>
-              <Button 
-                onClick={handleSubmitAsClaim} 
+              <Button
+                variant="outline"
+                onClick={handlePreviewClaimBundle}
+                disabled={actionLoading || claimBundleLoading}
+                className="text-blue-600 border-blue-300 hover:bg-blue-50"
+              >
+                <Code className="h-4 w-4 mr-2" />
+                {claimBundleLoading ? 'Loading...' : 'Preview Claim JSON'}
+              </Button>
+              <Button
+                onClick={handleSubmitAsClaimWithResponse}
                 disabled={actionLoading}
                 className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
               >
@@ -2220,6 +2341,128 @@ export default function PriorAuthorizationDetails() {
               rows={3}
               className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
             />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Claim Bundle Preview Modal */}
+      <Modal
+        open={showClaimBundleDialog}
+        onClose={() => setShowClaimBundleDialog(false)}
+        title="Claim FHIR Bundle Preview"
+        description="This is the FHIR bundle that will be sent to NPHIES when you submit this as a claim"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowClaimBundleDialog(false)}>Close</Button>
+            <Button 
+              onClick={() => handleCopyToClipboard(claimBundle)}
+              className="bg-blue-500 hover:bg-blue-600"
+            >
+              {copiedToClipboard ? (
+                <>
+                  <ClipboardCheck className="h-4 w-4 mr-2" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy JSON
+                </>
+              )}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {claimBundle && (
+            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-[500px] text-xs font-mono">
+              {JSON.stringify(claimBundle, null, 2)}
+            </pre>
+          )}
+        </div>
+      </Modal>
+
+      {/* Claim Response Modal */}
+      <Modal
+        open={showClaimResponseDialog}
+        onClose={() => {
+          setShowClaimResponseDialog(false);
+          if (claimResponse?.claimId) {
+            navigate(`/claim-submissions/${claimResponse.claimId}`);
+          }
+        }}
+        title={claimResponse?.success ? "Claim Submitted Successfully" : "Claim Submission Result"}
+        description={claimResponse?.success 
+          ? "The claim has been created and submitted to NPHIES" 
+          : "There was an issue with the claim submission"}
+        footer={
+          <>
+            <Button 
+              variant="outline" 
+              onClick={() => handleCopyToClipboard(claimResponse)}
+            >
+              {copiedToClipboard ? (
+                <>
+                  <ClipboardCheck className="h-4 w-4 mr-2" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Full Response
+                </>
+              )}
+            </Button>
+            <Button 
+              onClick={() => {
+                setShowClaimResponseDialog(false);
+                if (claimResponse?.claimId) {
+                  navigate(`/claim-submissions/${claimResponse.claimId}`);
+                }
+              }}
+              className={claimResponse?.success ? "bg-green-500 hover:bg-green-600" : "bg-blue-500 hover:bg-blue-600"}
+            >
+              {claimResponse?.claimId ? 'View Claim Details' : 'Close'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {/* Status Summary */}
+          <div className={`p-4 rounded-lg ${claimResponse?.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+            <div className="flex items-center gap-2">
+              {claimResponse?.success ? (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-red-600" />
+              )}
+              <span className={`font-medium ${claimResponse?.success ? 'text-green-800' : 'text-red-800'}`}>
+                {claimResponse?.success ? 'Submission Successful' : 'Submission Failed'}
+              </span>
+            </div>
+            {claimResponse?.claimId && (
+              <p className="mt-2 text-sm text-gray-600">Claim ID: <span className="font-mono">{claimResponse.claimId}</span></p>
+            )}
+            {claimResponse?.nphiesResponse?.nphiesClaimId && (
+              <p className="text-sm text-gray-600">NPHIES Claim Ref: <span className="font-mono text-green-600">{claimResponse.nphiesResponse.nphiesClaimId}</span></p>
+            )}
+            {claimResponse?.nphiesResponse?.outcome && (
+              <p className="text-sm text-gray-600">Outcome: <span className="font-semibold">{claimResponse.nphiesResponse.outcome}</span></p>
+            )}
+            {claimResponse?.nphiesResponse?.disposition && (
+              <p className="text-sm text-gray-600">Disposition: {claimResponse.nphiesResponse.disposition}</p>
+            )}
+            {claimResponse?.error?.message && (
+              <p className="mt-2 text-sm text-red-600">Error: {claimResponse.error.message}</p>
+            )}
+          </div>
+
+          {/* Full Response JSON */}
+          <div className="space-y-2">
+            <h4 className="font-medium text-gray-700">Full NPHIES Response:</h4>
+            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-[400px] text-xs font-mono">
+              {JSON.stringify(claimResponse, null, 2)}
+            </pre>
           </div>
         </div>
       </Modal>
