@@ -193,56 +193,64 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
     // Build claim-level extensions per NPHIES example Claim-483078
+    // IMPORTANT: Per NPHIES IC-01428, IC-01453, IC-01620 errors, certain extensions are REQUIRED
     const extensions = [];
 
-    // Batch identifier (optional)
-    if (claim.batch_identifier) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier',
-        valueIdentifier: {
-          system: `${providerIdentifierSystem}/batch`,
-          value: claim.batch_identifier
-        }
-      });
-    }
+    // Batch identifier (optional but recommended)
+    const batchId = claim.batch_identifier || `batch-${claim.claim_number || Date.now()}`;
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier',
+      valueIdentifier: {
+        system: `${providerIdentifierSystem}/batch`,
+        value: batchId
+      }
+    });
 
-    // Batch number (optional)
-    if (claim.batch_number) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-number',
-        valuePositiveInt: parseInt(claim.batch_number)
-      });
-    }
+    // Batch number (optional but recommended)
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-number',
+      valuePositiveInt: parseInt(claim.batch_number) || 1
+    });
 
-    // Batch period (optional)
-    if (claim.batch_period_start) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period',
-        valuePeriod: {
-          start: this.formatDate(claim.batch_period_start),
-          end: this.formatDate(claim.batch_period_end || claim.batch_period_start)
-        }
-      });
-    }
+    // Batch period (optional but recommended)
+    const batchDate = this.formatDate(claim.batch_period_start || claim.service_date || new Date());
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period',
+      valuePeriod: {
+        start: batchDate,
+        end: this.formatDate(claim.batch_period_end || claim.batch_period_start || claim.service_date || new Date())
+      }
+    });
 
-    // Authorization offline date (optional)
-    if (claim.authorization_offline_date) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date)
-      });
-    }
+    // Authorization offline date (REQUIRED per error IC-01620 - accountingPeriod related)
+    // This is the date when the authorization was done offline
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+      valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+    });
 
-    // Episode (optional)
-    if (claim.episode_id) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
-        valueIdentifier: {
-          system: `${providerIdentifierSystem}/episode`,
-          value: claim.episode_id
-        }
-      });
-    }
+    // Episode (REQUIRED per error IC-01453)
+    // Per NPHIES example Claim-483078, episode is required for pharmacy claims
+    const episodeId = claim.episode_id || `EpisodeID-${claim.claim_number || Date.now()}`;
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
+      valueIdentifier: {
+        system: `${providerIdentifierSystem}/episode`,
+        value: episodeId
+      }
+    });
+
+    // AccountingPeriod (REQUIRED per error IC-01620)
+    // This extension specifies the accounting period for the claim
+    const accountingPeriodStart = this.formatDate(claim.accounting_period_start || claim.service_date || new Date());
+    const accountingPeriodEnd = this.formatDate(claim.accounting_period_end || claim.service_date || new Date());
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
+      valuePeriod: {
+        start: accountingPeriodStart,
+        end: accountingPeriodEnd
+      }
+    });
 
     // Eligibility offline reference (optional)
     if (claim.eligibility_offline_ref) {
@@ -358,30 +366,42 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     claimResource.supportingInfo = supportingInfoList;
 
     // Diagnosis (required - at least one)
+    // IMPORTANT: Per NPHIES error IB-00242, diagnosis system MUST be icd-10-am, NOT icd-10
     if (claim.diagnoses && claim.diagnoses.length > 0) {
-      claimResource.diagnosis = claim.diagnoses.map((diag, idx) => ({
-        sequence: diag.sequence || idx + 1,
-        diagnosisCodeableConcept: {
-          coding: [
-            {
-              system: diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am',
-              code: diag.diagnosis_code,
-              display: diag.diagnosis_display
-            }
-          ]
-        },
-        type: [
-          {
+      claimResource.diagnosis = claim.diagnoses.map((diag, idx) => {
+        // Force correct ICD-10-AM system - NPHIES rejects plain icd-10
+        let diagSystem = diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am';
+        // Fix common incorrect system values
+        if (diagSystem === 'http://hl7.org/fhir/sid/icd-10' || 
+            diagSystem === 'icd-10' || 
+            diagSystem === 'ICD-10') {
+          diagSystem = 'http://hl7.org/fhir/sid/icd-10-am';
+        }
+        
+        return {
+          sequence: diag.sequence || idx + 1,
+          diagnosisCodeableConcept: {
             coding: [
               {
-                system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-type',
-                code: diag.diagnosis_type || 'principal'
+                system: diagSystem,
+                code: diag.diagnosis_code,
+                display: diag.diagnosis_display
               }
             ]
-          }
-        ]
-        // Note: NO onAdmission for pharmacy claims per NPHIES spec
-      }));
+          },
+          type: [
+            {
+              coding: [
+                {
+                  system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-type',
+                  code: diag.diagnosis_type || 'principal'
+                }
+              ]
+            }
+          ]
+          // Note: NO onAdmission for pharmacy claims per NPHIES spec
+        };
+      });
     }
 
     // Insurance (required) - with preAuthRef for claims
