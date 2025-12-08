@@ -1,7 +1,7 @@
 /**
  * NPHIES Institutional Claim Mapper
  * Profile: http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/institutional-claim
- * Reference: https://portal.nphies.sa/ig/Claim-483070.html
+ * Reference: https://portal.nphies.sa/ig/Claim-483070.json.html
  * 
  * This mapper extends the Prior Auth InstitutionalMapper and adds claim-specific fields:
  * - use: 'claim' (instead of 'preauthorization')
@@ -9,11 +9,13 @@
  * - profile: institutional-claim (instead of institutional-priorauth)
  * - encounter.status: 'finished' (instead of 'planned')
  * 
- * Additional Required Extensions for Claims:
- * - extension-episode (REQUIRED - IC-01453)
- * - extension-accountingPeriod (REQUIRED - IC-01620)
- * - extension-patientInvoice on items (REQUIRED - IC-01454)
+ * Required Extensions (per NPHIES example):
+ * - extension-encounter (required)
+ * - extension-eligibility-offline-reference (optional)
+ * - extension-eligibility-offline-date (optional)
+ * - extension-episode (required)
  * - extension-condition-onset on diagnosis
+ * - extension-patientInvoice on items (required)
  * 
  * Item Extensions:
  * - extension-package (required)
@@ -154,7 +156,8 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     const providerIdentifierSystem = provider.identifier_system || 
       `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
-    // Build extensions - All required for institutional claims per NPHIES
+    // Build extensions per NPHIES example: https://portal.nphies.sa/ig/Claim-483070.json.html
+    // Order: encounter, eligibility-offline-reference, eligibility-offline-date, episode
     const extensions = [];
     
     // 1. Encounter extension (required)
@@ -163,7 +166,23 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       valueReference: { reference: `Encounter/${bundleResourceIds.encounter}` }
     });
 
-    // 2. Episode extension (REQUIRED for institutional claims - IC-01453)
+    // 2. Eligibility offline reference (optional - add before episode per NPHIES example)
+    if (claim.eligibility_offline_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-reference',
+        valueString: claim.eligibility_offline_ref
+      });
+    }
+
+    // 3. Eligibility offline date (optional - add before episode per NPHIES example)
+    if (claim.eligibility_offline_date) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-date',
+        valueDateTime: this.formatDate(claim.eligibility_offline_date)
+      });
+    }
+
+    // 4. Episode extension (required for institutional claims)
     const episodeId = claim.episode_identifier || `provider_EpisodeID_${claim.claim_number || Date.now()}`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
@@ -172,32 +191,6 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
         value: episodeId 
       }
     });
-
-    // 3. AccountingPeriod extension (REQUIRED for institutional claims - IC-01620)
-    const accountingPeriodDate = this.formatDate(claim.service_date || claim.encounter_start || new Date());
-    extensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
-      valuePeriod: {
-        start: accountingPeriodDate,
-        end: accountingPeriodDate
-      }
-    });
-
-    // 4. Eligibility offline reference (optional)
-    if (claim.eligibility_offline_ref) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-reference',
-        valueString: claim.eligibility_offline_ref
-      });
-    }
-
-    // 5. Eligibility offline date (optional)
-    if (claim.eligibility_offline_date) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-date',
-        valueDateTime: this.formatDate(claim.eligibility_offline_date)
-      });
-    }
 
     const claimResource = {
       resourceType: 'Claim',
