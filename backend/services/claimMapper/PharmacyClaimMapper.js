@@ -367,7 +367,22 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     // 2. investigation-result (required per BV-00752) - NOT 'lab-result'!
     // Per BV-00786: requires code from NPHIES investigation-result CodeSystem
     // Per DT-01293: must use 'code' element, NOT valueCodeableConcept or valueString
-    const investigationResultCode = claim.investigation_result_code || 'normal';
+    // Per IB-00045: Valid codes are: INP, IRA, other, NA, IRP
+    // Reference: https://portal.nphies.sa/ig/CodeSystem-investigation-result.html
+    const validInvestigationCodes = ['INP', 'IRA', 'other', 'NA', 'IRP'];
+    const investigationCodeDisplayMap = {
+      'INP': 'Investigation(s) not performed',
+      'IRA': 'Investigation results attached',
+      'other': 'Other',
+      'NA': 'Not applicable',
+      'IRP': 'Investigation results pending'
+    };
+    // Default to 'NA' (Not applicable) for pharmacy claims if no specific code provided
+    let investigationResultCode = claim.investigation_result_code || 'NA';
+    // Validate the code is in the allowed list
+    if (!validInvestigationCodes.includes(investigationResultCode)) {
+      investigationResultCode = 'NA';
+    }
     supportingInfoList.push({
       sequence: sequenceNum++,
       category: {
@@ -380,7 +395,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
         coding: [{
           system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
           code: investigationResultCode,
-          display: claim.investigation_result_display || 'Normal'
+          display: claim.investigation_result_display || investigationCodeDisplayMap[investigationResultCode]
         }]
       }
     });
