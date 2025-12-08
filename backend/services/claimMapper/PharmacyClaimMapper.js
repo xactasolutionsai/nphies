@@ -1,0 +1,593 @@
+/**
+ * NPHIES Pharmacy Claim Mapper
+ * Profile: http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-claim
+ * Reference: https://portal.nphies.sa/ig/Claim-483078.json.html
+ * 
+ * This mapper extends the Prior Auth PharmacyMapper and adds claim-specific fields:
+ * - use: 'claim' (instead of 'preauthorization')
+ * - eventCoding: 'claim-request' (instead of 'priorauth-request')
+ * - profile: pharmacy-claim (instead of pharmacy-priorauth)
+ * - preAuthRef: Required reference to prior authorization
+ * 
+ * Bundle Structure (per NPHIES example Claim-483078):
+ * - MessageHeader (eventCoding = claim-request)
+ * - Claim (pharmacy-claim profile)
+ * - Coverage
+ * - Patient
+ * - Organization (Provider)
+ * - Organization (Insurer)
+ * - NO Encounter required for pharmacy claims
+ * - NO Practitioner required for pharmacy claims
+ * 
+ * Claim-Level Extensions (per NPHIES example):
+ * - extension-batch-identifier (optional)
+ * - extension-batch-number (optional)
+ * - extension-batch-period (optional)
+ * - extension-authorization-offline-date (optional)
+ * - extension-episode (optional)
+ * 
+ * Item Extensions (required):
+ * - extension-patient-share (Money)
+ * - extension-package (boolean)
+ * - extension-tax (Money)
+ * - extension-patientInvoice (Identifier) - REQUIRED for claims
+ * - extension-prescribed-Medication (CodeableConcept)
+ * - extension-pharmacist-Selection-Reason (CodeableConcept)
+ * - extension-maternity (boolean)
+ * 
+ * Key Differences from Prior Auth:
+ * - type.use = 'claim' (not 'preauthorization')
+ * - insurance.preAuthRef is REQUIRED (reference to approved PA)
+ * - extension-patientInvoice on items is REQUIRED
+ * - extension-tax on items is REQUIRED
+ */
+
+import PharmacyPAMapper from '../priorAuthMapper/PharmacyMapper.js';
+
+class PharmacyClaimMapper extends PharmacyPAMapper {
+  constructor() {
+    super();
+    this.claimType = 'pharmacy';
+  }
+
+  /**
+   * Get the NPHIES Pharmacy Claim profile URL (override PA profile)
+   */
+  getClaimProfileUrl() {
+    return 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-claim|1.0.0';
+  }
+
+  /**
+   * Build complete Claim Request Bundle for Pharmacy type
+   * Per NPHIES example Claim-483078.json:
+   * - NO Encounter resource
+   * - NO Practitioner resource
+   * - preAuthRef is required in insurance
+   */
+  buildClaimRequestBundle(data) {
+    const { claim, patient, provider, insurer, coverage, policyHolder } = data;
+
+    const bundleResourceIds = {
+      claim: this.generateId(),
+      patient: patient.patient_id || this.generateId(),
+      provider: provider.provider_id || this.generateId(),
+      insurer: insurer.insurer_id || this.generateId(),
+      coverage: coverage?.id || coverage?.coverage_id || this.generateId(),
+      policyHolder: policyHolder?.id || this.generateId()
+    };
+
+    const patientResource = this.buildPatientResourceWithId(patient, bundleResourceIds.patient);
+    const providerResource = this.buildProviderOrganizationWithId(provider, bundleResourceIds.provider);
+    const insurerResource = this.buildInsurerOrganizationWithId(insurer, bundleResourceIds.insurer);
+    const coverageResource = this.buildCoverageResourceWithId(coverage, patient, insurer, policyHolder, bundleResourceIds);
+    
+    // Build Claim resource (no encounter, no practitioner per NPHIES example)
+    const claimResource = this.buildPharmacyClaimResource(claim, patient, provider, insurer, coverage, bundleResourceIds);
+    
+    const messageHeader = this.buildClaimMessageHeader(provider, insurer, claimResource.fullUrl);
+
+    // Build binary resources for attachments
+    const binaryResources = [];
+    if (claim.attachments && claim.attachments.length > 0) {
+      claim.attachments.forEach(attachment => {
+        binaryResources.push(this.buildBinaryResource(attachment));
+      });
+    }
+
+    // Bundle entries per NPHIES example - NO Encounter, NO Practitioner
+    const entries = [
+      messageHeader,
+      claimResource,
+      coverageResource,
+      providerResource,
+      insurerResource,
+      patientResource,
+      ...binaryResources
+    ];
+
+    return {
+      resourceType: 'Bundle',
+      id: this.generateId(),
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: this.formatDateTime(new Date()),
+      entry: entries
+    };
+  }
+
+  /**
+   * Build MessageHeader for Claim Request (override PA message header)
+   */
+  buildClaimMessageHeader(provider, insurer, focusFullUrl) {
+    const messageHeaderId = this.generateId();
+    const senderNphiesId = provider.nphies_id || 'PR-FHIR';
+    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+
+    return {
+      fullUrl: `urn:uuid:${messageHeaderId}`,
+      resource: {
+        resourceType: 'MessageHeader',
+        id: messageHeaderId,
+        meta: {
+          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+        },
+        eventCoding: {
+          system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+          code: 'claim-request'  // Changed from 'priorauth-request'
+        },
+        destination: [
+          {
+            endpoint: `http://nphies.sa/license/payer-license/${destinationNphiesId}`,
+            receiver: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/payer-license',
+                value: destinationNphiesId
+              }
+            }
+          }
+        ],
+        sender: {
+          type: 'Organization',
+          identifier: {
+            system: 'http://nphies.sa/license/provider-license',
+            value: senderNphiesId
+          }
+        },
+        source: {
+          endpoint: 'http://provider.com'
+        },
+        focus: [
+          {
+            reference: focusFullUrl
+          }
+        ]
+      }
+    };
+  }
+
+  /**
+   * Build FHIR Claim resource for Pharmacy Claim
+   * Reference: https://portal.nphies.sa/ig/Claim-483078.json.html
+   * 
+   * Key differences from Prior Auth:
+   * - use: 'claim' (not 'preauthorization')
+   * - profile: pharmacy-claim
+   * - insurance.preAuthRef required
+   * - extension-patientInvoice on items required
+   * - extension-tax on items required
+   * - Batch extensions (batch-identifier, batch-number, batch-period)
+   * - extension-authorization-offline-date
+   * - extension-episode
+   */
+  buildPharmacyClaimResource(claim, patient, provider, insurer, coverage, bundleResourceIds) {
+    const claimId = bundleResourceIds.claim;
+    const patientRef = bundleResourceIds.patient;
+    const providerRef = bundleResourceIds.provider;
+    const insurerRef = bundleResourceIds.insurer;
+    const coverageRef = bundleResourceIds.coverage;
+
+    const providerIdentifierSystem = provider.identifier_system || 
+      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+
+    // Build claim-level extensions per NPHIES example Claim-483078
+    const extensions = [];
+
+    // Batch identifier (optional)
+    if (claim.batch_identifier) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier',
+        valueIdentifier: {
+          system: `${providerIdentifierSystem}/batch`,
+          value: claim.batch_identifier
+        }
+      });
+    }
+
+    // Batch number (optional)
+    if (claim.batch_number) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-number',
+        valuePositiveInt: parseInt(claim.batch_number)
+      });
+    }
+
+    // Batch period (optional)
+    if (claim.batch_period_start) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period',
+        valuePeriod: {
+          start: this.formatDate(claim.batch_period_start),
+          end: this.formatDate(claim.batch_period_end || claim.batch_period_start)
+        }
+      });
+    }
+
+    // Authorization offline date (optional)
+    if (claim.authorization_offline_date) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date)
+      });
+    }
+
+    // Episode (optional)
+    if (claim.episode_id) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
+        valueIdentifier: {
+          system: `${providerIdentifierSystem}/episode`,
+          value: claim.episode_id
+        }
+      });
+    }
+
+    // Eligibility offline reference (optional)
+    if (claim.eligibility_offline_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-reference',
+        valueString: claim.eligibility_offline_ref
+      });
+    }
+
+    // Build claim resource following NPHIES pharmacy-claim profile
+    const claimResource = {
+      resourceType: 'Claim',
+      id: claimId,
+      meta: {
+        profile: [this.getClaimProfileUrl()]
+      }
+    };
+
+    // Add extensions if any
+    if (extensions.length > 0) {
+      claimResource.extension = extensions;
+    }
+
+    // Identifier (required)
+    claimResource.identifier = [
+      {
+        system: `${providerIdentifierSystem}/claim`,
+        value: claim.claim_number || `clm_${Date.now()}`
+      }
+    ];
+
+    // Status (required) - always 'active' for new claims
+    claimResource.status = 'active';
+
+    // Type (required) - must be 'pharmacy' for pharmacy claims
+    claimResource.type = {
+      coding: [
+        {
+          system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+          code: 'pharmacy'
+        }
+      ]
+    };
+
+    // SubType (required) - must be 'op' (outpatient) for pharmacy claims
+    claimResource.subType = {
+      coding: [
+        {
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
+          code: claim.sub_type || 'op' // Default to 'op' (OutPatient) for pharmacy
+        }
+      ]
+    };
+
+    // Use (required) - 'claim' for claims (not 'preauthorization')
+    claimResource.use = 'claim';
+
+    // Patient reference (required)
+    claimResource.patient = { reference: `Patient/${patientRef}` };
+
+    // Created date (required) - format with timezone per NPHIES spec
+    claimResource.created = this.formatDateTimeWithTimezone(claim.request_date || new Date());
+
+    // Insurer reference (required)
+    claimResource.insurer = { reference: `Organization/${insurerRef}` };
+
+    // Provider reference (required)
+    claimResource.provider = { reference: `Organization/${providerRef}` };
+
+    // Priority (required)
+    claimResource.priority = {
+      coding: [
+        {
+          system: 'http://terminology.hl7.org/CodeSystem/processpriority',
+          code: claim.priority || 'normal'
+        }
+      ]
+    };
+
+    // Payee (optional but typically included)
+    claimResource.payee = {
+      type: {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/payeetype',
+            code: claim.payee_type || 'provider'
+          }
+        ]
+      }
+    };
+
+    // SupportingInfo - days-supply (required for pharmacy per NPHIES)
+    let supportingInfoList = [];
+    let daysSupplySequence = 1;
+    
+    // Get days_supply from items or claim or use default
+    const daysSupplyValue = claim.items?.[0]?.days_supply || claim.days_supply || 30;
+    supportingInfoList.push({
+      sequence: daysSupplySequence,
+      category: {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+          code: 'days-supply'
+        }]
+      },
+      valueQuantity: {
+        value: parseInt(daysSupplyValue),
+        system: 'http://unitsofmeasure.org',
+        code: 'd'
+      }
+    });
+
+    claimResource.supportingInfo = supportingInfoList;
+
+    // Diagnosis (required - at least one)
+    if (claim.diagnoses && claim.diagnoses.length > 0) {
+      claimResource.diagnosis = claim.diagnoses.map((diag, idx) => ({
+        sequence: diag.sequence || idx + 1,
+        diagnosisCodeableConcept: {
+          coding: [
+            {
+              system: diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am',
+              code: diag.diagnosis_code,
+              display: diag.diagnosis_display
+            }
+          ]
+        },
+        type: [
+          {
+            coding: [
+              {
+                system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-type',
+                code: diag.diagnosis_type || 'principal'
+              }
+            ]
+          }
+        ]
+        // Note: NO onAdmission for pharmacy claims per NPHIES spec
+      }));
+    }
+
+    // Insurance (required) - with preAuthRef for claims
+    const insuranceEntry = {
+      sequence: 1,
+      focal: true,
+      coverage: { reference: `Coverage/${coverageRef}` }
+    };
+
+    // PreAuthRef is REQUIRED for claims (reference to approved prior authorization)
+    if (claim.pre_auth_ref) {
+      insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+    }
+
+    claimResource.insurance = [insuranceEntry];
+
+    // Items with medication codes (required - at least one)
+    if (claim.items && claim.items.length > 0) {
+      claimResource.item = claim.items.map((item, idx) => 
+        this.buildPharmacyClaimItemForClaim(item, idx + 1, daysSupplySequence, providerIdentifierSystem)
+      );
+    }
+
+    // Total (required)
+    let totalAmount = claim.total_amount;
+    if (!totalAmount && claim.items && claim.items.length > 0) {
+      totalAmount = claim.items.reduce((sum, item) => {
+        const quantity = parseFloat(item.quantity || 1);
+        const unitPrice = parseFloat(item.unit_price || 0);
+        const factor = parseFloat(item.factor || 1);
+        const tax = parseFloat(item.tax || 0);
+        return sum + (quantity * unitPrice * factor) + tax;
+      }, 0);
+    }
+    claimResource.total = {
+      value: parseFloat(totalAmount || 0),
+      currency: claim.currency || 'SAR'
+    };
+
+    return {
+      fullUrl: `http://provider.com/Claim/${claimId}`,
+      resource: claimResource
+    };
+  }
+
+  /**
+   * Build claim item for Pharmacy Claim with all required extensions
+   * Reference: https://portal.nphies.sa/ig/Claim-483078.json.html
+   * 
+   * Required Extensions for Pharmacy Claim Items:
+   * - extension-patient-share (Money) - patient's share amount
+   * - extension-package (boolean) - whether item is a package
+   * - extension-tax (Money) - tax amount (REQUIRED for claims)
+   * - extension-patientInvoice (Identifier) - REQUIRED for claims
+   * - extension-prescribed-Medication (CodeableConcept) - originally prescribed medication
+   * - extension-pharmacist-Selection-Reason (CodeableConcept) - reason for pharmacist selection
+   * - extension-maternity (boolean) - maternity related
+   * 
+   * NOTE: extension-pharmacist-substitute is NOT in the claim example, only in prior auth
+   */
+  buildPharmacyClaimItemForClaim(item, itemIndex, daysSupplySequence, providerIdentifierSystem) {
+    const sequence = item.sequence || itemIndex;
+    
+    const quantity = parseFloat(item.quantity || 1);
+    const unitPrice = parseFloat(item.unit_price || 0);
+    const factor = parseFloat(item.factor || 1);
+    const tax = parseFloat(item.tax || 0);
+    
+    const calculatedNet = (quantity * unitPrice * factor) + tax;
+    const patientShare = parseFloat(item.patient_share || 0);
+    
+    // Extract and validate medication code
+    const medicationCode = (item.medication_code && item.medication_code.trim()) || 
+                           (item.product_or_service_code && item.product_or_service_code.trim());
+    const medicationDisplay = (item.medication_name && item.medication_name.trim()) || 
+                              (item.product_or_service_display && item.product_or_service_display.trim());
+    
+    // Validate medication code exists (required for pharmacy)
+    if (!medicationCode) {
+      console.error(`[PharmacyClaimMapper] ERROR: Item ${sequence} missing medication_code`);
+      throw new Error(`Medication code is required for pharmacy item ${sequence}`);
+    }
+    
+    // Build pharmacy-specific extensions per NPHIES claim example
+    const itemExtensions = [];
+
+    // 1. extension-patient-share (required)
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share',
+      valueMoney: {
+        value: patientShare,
+        currency: item.currency || 'SAR'
+      }
+    });
+
+    // 2. extension-package (required)
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package',
+      valueBoolean: item.is_package || false
+    });
+
+    // 3. extension-tax (required for claims)
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax',
+      valueMoney: {
+        value: tax,
+        currency: item.currency || 'SAR'
+      }
+    });
+
+    // 4. extension-patientInvoice (REQUIRED for claims)
+    const patientInvoice = item.patient_invoice || `Invc-${this.formatDate(new Date()).replace(/-/g, '')}-${sequence}`;
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice',
+      valueIdentifier: {
+        system: `${providerIdentifierSystem}/patientInvoice`,
+        value: patientInvoice
+      }
+    });
+
+    // 5. extension-prescribed-Medication (required for pharmacy)
+    const prescribedMedicationCode = (item.prescribed_medication_code && item.prescribed_medication_code.trim()) || 
+                                     medicationCode;
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication',
+      valueCodeableConcept: {
+        coding: [
+          {
+            system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
+            code: prescribedMedicationCode
+          }
+        ]
+      }
+    });
+
+    // 6. extension-pharmacist-Selection-Reason (required for pharmacy)
+    const selectionReason = item.pharmacist_selection_reason || 'patient-request';
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason',
+      valueCodeableConcept: {
+        coding: [
+          {
+            system: 'http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason',
+            code: selectionReason
+          }
+        ]
+      }
+    });
+
+    // 7. extension-maternity (required)
+    itemExtensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity',
+      valueBoolean: item.is_maternity || false
+    });
+
+    // Build the claim item
+    const claimItem = {
+      extension: itemExtensions,
+      sequence: sequence,
+      diagnosisSequence: item.diagnosis_sequences || [1],
+      informationSequence: [daysSupplySequence] // Reference days-supply supportingInfo
+    };
+
+    // ProductOrService using NPHIES medication-codes system
+    const productOrServiceCoding = {
+      system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
+      code: medicationCode
+    };
+    
+    if (medicationDisplay) {
+      productOrServiceCoding.display = medicationDisplay;
+    }
+    
+    claimItem.productOrService = {
+      coding: [productOrServiceCoding]
+    };
+
+    // Serviced date
+    const servicedDate = item.serviced_date ? new Date(item.serviced_date) : new Date();
+    claimItem.servicedDate = this.formatDate(servicedDate);
+
+    // Quantity (required)
+    claimItem.quantity = { value: quantity };
+
+    // UnitPrice (required)
+    claimItem.unitPrice = {
+      value: unitPrice,
+      currency: item.currency || 'SAR'
+    };
+
+    // Net (required)
+    claimItem.net = {
+      value: calculatedNet,
+      currency: item.currency || 'SAR'
+    };
+
+    return claimItem;
+  }
+
+  /**
+   * Parse Claim Response
+   * Inherits from parent but can be extended for pharmacy-specific parsing
+   */
+  parseClaimResponse(responseBundle) {
+    return this.parsePriorAuthResponse(responseBundle);
+  }
+}
+
+export default PharmacyClaimMapper;
