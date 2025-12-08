@@ -10,7 +10,8 @@
  * - eventCoding: 'claim-request' (instead of 'priorauth-request')
  * - profile: oral-claim (instead of oral-priorauth)
  * 
- * Required Extensions (per NPHIES examples):
+ * Required Extensions (per NPHIES validation):
+ * - extension-accountingPeriod (REQUIRED per IC-01620, day must be "01" per BV-01010)
  * - extension-encounter (reference to Encounter resource - REQUIRED)
  * - extension-episode (identifier - REQUIRED)
  * - extension-priorauthresponse (if claim is from approved prior auth - optional)
@@ -171,10 +172,20 @@ class OralClaimMapper extends DentalMapper {
     const providerIdentifierSystem = provider.identifier_system || 
       `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
-    // Build extensions per NPHIES examples
+    // Build extensions per NPHIES validation requirements
+    // Note: AccountingPeriod may be required by NPHIES validation even if not shown in examples
     const extensions = [];
+
+    // 1. AccountingPeriod extension (required per NPHIES validation IC-01620)
+    // BV-01010: Day must be defaulted to "01" (e.g., "2025-12-01" not "2025-12-08")
+    const serviceDate = new Date(claim.service_date || claim.request_date || new Date());
+    const accountingPeriodDate = `${serviceDate.getFullYear()}-${String(serviceDate.getMonth() + 1).padStart(2, '0')}-01`;
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
+      valueDate: accountingPeriodDate
+    });
     
-    // 1. Encounter extension (required for oral claims)
+    // 2. Encounter extension (required for oral claims)
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
       valueReference: {
@@ -182,7 +193,7 @@ class OralClaimMapper extends DentalMapper {
       }
     });
 
-    // 2. Prior Auth Response extension (if claim has pre_auth_ref - per Claim-173094)
+    // 3. Prior Auth Response extension (if claim has pre_auth_ref - per Claim-173094)
     if (claim.pre_auth_ref) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
@@ -195,7 +206,7 @@ class OralClaimMapper extends DentalMapper {
       });
     }
     
-    // 3. Episode extension (required)
+    // 4. Episode extension (required)
     const episodeId = claim.episode_identifier || `${provider.nphies_id || 'SDC'}_EpisodeID_${claim.claim_number || Date.now()}`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
