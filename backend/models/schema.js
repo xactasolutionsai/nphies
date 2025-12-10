@@ -398,6 +398,7 @@ export const validationSchemas = {
     encounter_end: Joi.date().allow(null, '').optional(),
     encounter_identifier: Joi.string().max(255).allow(null, '').optional(),
     service_type: Joi.string().max(100).allow(null, '').optional(),
+    admit_source: Joi.string().max(20).allow(null, '').optional(), // NPHIES: hospitalization.admitSource code
     
     // Emergency Encounter Fields (per NPHIES Encounter-10122)
     triage_category: Joi.string().valid('I', 'VU', 'U', 'S', 'NS').allow(null, '').optional(),
