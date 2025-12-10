@@ -1019,18 +1019,62 @@ This patient is ELDERLY (${patientAge}). Consider:
 - Fall risk and frailty considerations`;
     }
 
-    return `You are a medical AI assistant reviewing a prior authorization request for NPHIES (Saudi Arabia healthcare system). Analyze the clinical data and identify potential rejection risks.
-
-=== AUTHORIZATION TYPE ===
-${authType.toUpperCase()}
-
-=== PATIENT DEMOGRAPHICS ===
-Name: ${patientName}
-Age: ${patientAge}
-Gender: ${patientGender}
-Birth Date: ${patient.birth_date || patient.birthDate || formData.birth_date || 'Not provided'}
-${ageSpecificGuidance}
-
+    // Build auth type specific context
+    let authTypeContext = '';
+    let vitalsSection = '';
+    let clinicalSection = '';
+    
+    if (authType === 'vision') {
+      authTypeContext = `
+IMPORTANT: This is a VISION authorization request.
+- Vision claims do NOT require encounter information per NPHIES IG
+- Vision claims do NOT require vital signs or clinical notes
+- Only diagnosis and vision services/items are required
+- Focus validation on: diagnosis appropriateness, service codes, and coverage
+- Do NOT flag missing vitals or clinical notes as issues`;
+      
+      vitalsSection = `
+=== VITAL SIGNS ===
+(Not required for vision authorization type)`;
+      
+      clinicalSection = `
+=== CLINICAL INFORMATION ===
+(Detailed clinical notes not required for vision authorization type)
+Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
+    } else if (authType === 'pharmacy') {
+      authTypeContext = `
+IMPORTANT: This is a PHARMACY authorization request.
+- Pharmacy claims do NOT require encounter information per NPHIES IG
+- Pharmacy claims do NOT require vital signs or clinical notes
+- Only diagnosis and medication items are required
+- Focus validation on: diagnosis-medication alignment, drug interactions, dosage appropriateness
+- Do NOT flag missing vitals or clinical notes as issues`;
+      
+      vitalsSection = `
+=== VITAL SIGNS ===
+(Not required for pharmacy authorization type)`;
+      
+      clinicalSection = `
+=== CLINICAL INFORMATION ===
+(Detailed clinical notes not required for pharmacy authorization type)
+Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
+    } else {
+      // For institutional, professional, dental - include full vitals and clinical info
+      if (authType === 'dental') {
+        authTypeContext = `
+IMPORTANT: This is a DENTAL authorization request.
+- Dental claims require ambulatory encounter class
+- Focus on dental-specific diagnoses (ICD-10 K00-K14)
+- Verify tooth numbers and dental procedure codes are appropriate`;
+      } else if (authType === 'institutional') {
+        authTypeContext = `
+IMPORTANT: This is an INSTITUTIONAL authorization request.
+- Requires inpatient or daycase encounter class
+- Full vital signs and clinical documentation are required
+- Admission information is mandatory`;
+      }
+      
+      vitalsSection = `
 === VITAL SIGNS ===
 Systolic BP: ${vitalSigns.systolic || 'Not recorded'} mmHg
 Diastolic BP: ${vitalSigns.diastolic || 'Not recorded'} mmHg
@@ -1040,8 +1084,9 @@ ${bmiInfo}
 Pulse: ${vitalSigns.pulse || 'Not recorded'} bpm
 Temperature: ${vitalSigns.temperature || 'Not recorded'} °C
 O2 Saturation: ${vitalSigns.oxygen_saturation || 'Not recorded'} %
-Respiratory Rate: ${vitalSigns.respiratory_rate || 'Not recorded'} /min
-
+Respiratory Rate: ${vitalSigns.respiratory_rate || 'Not recorded'} /min`;
+      
+      clinicalSection = `
 === CLINICAL INFORMATION ===
 Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}
 Chief Complaint Code: ${clinicalInfo.chief_complaint_code || 'Not coded'}
@@ -1058,7 +1103,23 @@ ${clinicalInfo.physical_examination || 'Not documented'}
 Treatment Plan:
 ${clinicalInfo.treatment_plan || 'Not documented'}
 
-Investigation Result: ${clinicalInfo.investigation_result || 'Not specified'}
+Investigation Result: ${clinicalInfo.investigation_result || 'Not specified'}`;
+    }
+
+    return `You are a medical AI assistant reviewing a prior authorization request for NPHIES (Saudi Arabia healthcare system). Analyze the clinical data and identify potential rejection risks.
+
+=== AUTHORIZATION TYPE ===
+${authType.toUpperCase()}
+${authTypeContext}
+
+=== PATIENT DEMOGRAPHICS ===
+Name: ${patientName}
+Age: ${patientAge}
+Gender: ${patientGender}
+Birth Date: ${patient.birth_date || patient.birthDate || formData.birth_date || 'Not provided'}
+${ageSpecificGuidance}
+${vitalsSection}
+${clinicalSection}
 
 === DIAGNOSES ===
 ${diagnoses
@@ -1081,9 +1142,9 @@ Analyze this prior authorization request and provide:
 
 1. MEDICAL_NECESSITY_SCORE: A score from 0.0 to 1.0 indicating how well the clinical documentation supports the requested services
 
-2. CONSISTENCY_CHECK: Are the chief complaint, diagnoses, and requested services logically consistent?
+2. CONSISTENCY_CHECK: Are the diagnoses and requested services logically consistent?
 
-3. DOCUMENTATION_GAPS: List any missing documentation that could lead to rejection
+3. DOCUMENTATION_GAPS: List any missing documentation that could lead to rejection (considering the auth type requirements)
 
 4. REJECTION_RISKS: List specific rejection risks with NPHIES codes (MN-*, SE-*, CV-*)
 

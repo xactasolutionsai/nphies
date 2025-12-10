@@ -14,31 +14,42 @@ class PriorAuthValidationService {
     this.enabled = process.env.AI_VALIDATION_ENABLED !== 'false';
     
     // Validation rules by auth type
+    // Reference: NPHIES Implementation Guide - Each claim type has different requirements
     this.validationRules = {
       institutional: {
         requiredVitals: ['systolic', 'diastolic', 'height', 'weight', 'pulse', 'temperature', 'oxygen_saturation', 'respiratory_rate'],
         requiredClinical: ['chief_complaint', 'history_of_present_illness', 'physical_examination', 'treatment_plan'],
-        requiresAdmissionInfo: true
+        requiresAdmissionInfo: true,
+        requiresEncounter: true
       },
       professional: {
         requiredVitals: ['systolic', 'diastolic', 'pulse', 'temperature', 'height', 'weight'],
         requiredClinical: ['chief_complaint', 'history_of_present_illness', 'treatment_plan'],
-        requiresAdmissionInfo: false
+        requiresAdmissionInfo: false,
+        requiresEncounter: true
       },
       pharmacy: {
-        requiredVitals: ['weight', 'height'],
-        requiredClinical: ['chief_complaint'],
-        requiresAdmissionInfo: false
+        // Pharmacy claims: NO ENCOUNTER REQUIRED per NPHIES example Claim-483074.json
+        // Only requires: Patient, Provider, Diagnosis, Items, Insurance, Total
+        requiredVitals: [], // No vitals required for pharmacy
+        requiredClinical: [], // No clinical notes required - just diagnosis and medication
+        requiresAdmissionInfo: false,
+        requiresEncounter: false
       },
       dental: {
         requiredVitals: ['systolic', 'diastolic', 'pulse'],
         requiredClinical: ['chief_complaint', 'history_of_present_illness', 'physical_examination', 'treatment_plan'],
-        requiresAdmissionInfo: false
+        requiresAdmissionInfo: false,
+        requiresEncounter: true
       },
       vision: {
-        requiredVitals: ['systolic', 'diastolic'],
-        requiredClinical: ['chief_complaint', 'physical_examination', 'treatment_plan'],
-        requiresAdmissionInfo: false
+        // Vision claims: NO ENCOUNTER REQUIRED per NPHIES IG
+        // Vision Claims only contain: Patient, Provider, Diagnosis, Items, Benefit, Supporting Info
+        // Vitals and clinical notes are OPTIONAL - only diagnosis and vision services are required
+        requiredVitals: [], // No vitals required for vision
+        requiredClinical: [], // No clinical notes required - just diagnosis and vision items
+        requiresAdmissionInfo: false,
+        requiresEncounter: false
       }
     };
 
@@ -360,6 +371,7 @@ class PriorAuthValidationService {
     const clinicalInfo = formData.clinical_info || {};
     const diagnoses = formData.diagnoses || [];
     const items = formData.items || [];
+    const rules = this.validationRules[authType] || this.validationRules.professional;
 
     // Calculate BMI if available
     let bmiInfo = '';
@@ -376,11 +388,42 @@ class PriorAuthValidationService {
       `- ${i.product_or_service_code || i.medication_code || 'N/A'}: ${i.service_description || i.medication_name || 'N/A'}`
     ).join('\n');
 
-    return `You are a medical AI assistant reviewing a prior authorization request for NPHIES (Saudi Arabia healthcare system). Analyze the clinical data and identify potential rejection risks.
+    // Build auth type specific context
+    let authTypeContext = '';
+    if (authType === 'vision') {
+      authTypeContext = `
+IMPORTANT: This is a VISION authorization request.
+- Vision claims do NOT require encounter information per NPHIES IG
+- Vision claims do NOT require vital signs or clinical notes
+- Only diagnosis and vision services/items are required
+- Focus validation on: diagnosis appropriateness, service codes, and coverage
+- Do NOT flag missing vitals or clinical notes as issues`;
+    } else if (authType === 'pharmacy') {
+      authTypeContext = `
+IMPORTANT: This is a PHARMACY authorization request.
+- Pharmacy claims do NOT require encounter information per NPHIES IG
+- Pharmacy claims do NOT require vital signs or clinical notes
+- Only diagnosis and medication items are required
+- Focus validation on: diagnosis-medication alignment, drug interactions, dosage appropriateness
+- Do NOT flag missing vitals or clinical notes as issues`;
+    } else if (authType === 'dental') {
+      authTypeContext = `
+IMPORTANT: This is a DENTAL authorization request.
+- Dental claims require ambulatory encounter class
+- Focus on dental-specific diagnoses (ICD-10 K00-K14)
+- Verify tooth numbers and dental procedure codes are appropriate`;
+    } else if (authType === 'institutional') {
+      authTypeContext = `
+IMPORTANT: This is an INSTITUTIONAL authorization request.
+- Requires inpatient or daycase encounter class
+- Full vital signs and clinical documentation are required
+- Admission information is mandatory`;
+    }
 
-=== AUTHORIZATION TYPE ===
-${authType.toUpperCase()}
-
+    // Build vitals section only if required for this auth type
+    let vitalsSection = '';
+    if (rules.requiredVitals && rules.requiredVitals.length > 0) {
+      vitalsSection = `
 === VITAL SIGNS ===
 Systolic BP: ${vitalSigns.systolic || 'Not recorded'} mmHg
 Diastolic BP: ${vitalSigns.diastolic || 'Not recorded'} mmHg
@@ -390,8 +433,17 @@ ${bmiInfo}
 Pulse: ${vitalSigns.pulse || 'Not recorded'} bpm
 Temperature: ${vitalSigns.temperature || 'Not recorded'} °C
 O2 Saturation: ${vitalSigns.oxygen_saturation || 'Not recorded'} %
-Respiratory Rate: ${vitalSigns.respiratory_rate || 'Not recorded'} /min
+Respiratory Rate: ${vitalSigns.respiratory_rate || 'Not recorded'} /min`;
+    } else {
+      vitalsSection = `
+=== VITAL SIGNS ===
+(Not required for ${authType} authorization type)`;
+    }
 
+    // Build clinical section only if required for this auth type
+    let clinicalSection = '';
+    if (rules.requiredClinical && rules.requiredClinical.length > 0) {
+      clinicalSection = `
 === CLINICAL INFORMATION ===
 Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}
 Chief Complaint Code: ${clinicalInfo.chief_complaint_code || 'Not coded'}
@@ -408,7 +460,21 @@ ${clinicalInfo.physical_examination || 'Not documented'}
 Treatment Plan:
 ${clinicalInfo.treatment_plan || 'Not documented'}
 
-Investigation Result: ${clinicalInfo.investigation_result || 'Not specified'}
+Investigation Result: ${clinicalInfo.investigation_result || 'Not specified'}`;
+    } else {
+      clinicalSection = `
+=== CLINICAL INFORMATION ===
+(Detailed clinical notes not required for ${authType} authorization type)
+Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
+    }
+
+    return `You are a medical AI assistant reviewing a prior authorization request for NPHIES (Saudi Arabia healthcare system). Analyze the clinical data and identify potential rejection risks.
+
+=== AUTHORIZATION TYPE ===
+${authType.toUpperCase()}
+${authTypeContext}
+${vitalsSection}
+${clinicalSection}
 
 === DIAGNOSES ===
 ${diagnosisList || 'No diagnoses specified'}
@@ -421,9 +487,9 @@ Analyze this prior authorization request and provide:
 
 1. MEDICAL_NECESSITY_SCORE: A score from 0.0 to 1.0 indicating how well the clinical documentation supports the requested services (1.0 = excellent justification, 0.0 = no justification)
 
-2. CONSISTENCY_CHECK: Are the chief complaint, diagnoses, and requested services logically consistent?
+2. CONSISTENCY_CHECK: Are the diagnoses and requested services logically consistent?
 
-3. DOCUMENTATION_GAPS: List any missing documentation that could lead to rejection
+3. DOCUMENTATION_GAPS: List any missing documentation that could lead to rejection (considering the auth type requirements)
 
 4. REJECTION_RISKS: List specific rejection risks with NPHIES codes (MN-*, SE-*, CV-*)
 
@@ -981,25 +1047,34 @@ SUGGESTED_JUSTIFICATION: [A sentence that could be added to support medical nece
     let filled = 0;
     let total = 0;
 
-    // Count vitals
-    rules.requiredVitals.forEach(vital => {
-      total++;
-      if (formData.vital_signs?.[vital]) filled++;
-    });
+    // Count vitals (only if required for this auth type)
+    if (rules.requiredVitals && rules.requiredVitals.length > 0) {
+      rules.requiredVitals.forEach(vital => {
+        total++;
+        if (formData.vital_signs?.[vital]) filled++;
+      });
+    }
 
-    // Count clinical fields
-    rules.requiredClinical.forEach(field => {
-      total++;
-      const value = field === 'chief_complaint'
-        ? (formData.clinical_info?.chief_complaint_code || formData.clinical_info?.chief_complaint_text)
-        : formData.clinical_info?.[field];
-      if (value) filled++;
-    });
+    // Count clinical fields (only if required for this auth type)
+    if (rules.requiredClinical && rules.requiredClinical.length > 0) {
+      rules.requiredClinical.forEach(field => {
+        total++;
+        const value = field === 'chief_complaint'
+          ? (formData.clinical_info?.chief_complaint_code || formData.clinical_info?.chief_complaint_text)
+          : formData.clinical_info?.[field];
+        if (value) filled++;
+      });
+    }
 
-    // Count diagnoses and items
+    // Count diagnoses and items (always required for all auth types)
     total += 2;
     if (formData.diagnoses?.length > 0) filled++;
     if (formData.items?.length > 0) filled++;
+
+    // Prevent division by zero
+    if (total === 0) {
+      return { percentage: 100, filled: 0, total: 0 };
+    }
 
     return {
       percentage: Math.round((filled / total) * 100),
