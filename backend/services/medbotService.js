@@ -10,8 +10,8 @@ dotenv.config();
  */
 class MedbotService {
   constructor() {
-    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://38.29.145.78:11434';
-    this.model = 'Goosedev/medbot';
+    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://206.168.83.244:11434';
+    this.model = process.env.OLLAMA_MODEL || 'thewindmom/llama3-med42-8b:latest';
     this.timeout = parseInt(process.env.OLLAMA_TIMEOUT) || 120000;
     this.maxRetries = 3;
     

@@ -76,13 +76,13 @@ ollama pull cniongolo/biomistral
 ollama pull Goosedev/medbot
 
 # Verify both are installed
-curl http://38.29.145.78:11434/api/tags
+curl http://206.168.83.244:11434/api/tags
 ```
 
 Update your `.env` file:
 
 ```env
-OLLAMA_BASE_URL=http://38.29.145.78:11434
+OLLAMA_BASE_URL=http://206.168.83.244:11434
 OLLAMA_MODEL=cniongolo/biomistral  # For embeddings
 OLLAMA_TIMEOUT=120000
 # Note: Goosedev/medbot is hardcoded in medbotService.js

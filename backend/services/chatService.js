@@ -10,9 +10,9 @@ dotenv.config();
  */
 class ChatService {
   constructor() {
-    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://38.29.145.78:11434';
+    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://206.168.83.244:11434';
     this.drugModel = 'Goosedev/medbot';
-    this.generalModel = process.env.OLLAMA_MODEL || 'cniongolo/biomistral';
+    this.generalModel = process.env.OLLAMA_MODEL || 'thewindmom/llama3-med42-8b:latest';
     this.timeout = parseInt(process.env.OLLAMA_TIMEOUT) || 120000;
     
     this.client = new Ollama({

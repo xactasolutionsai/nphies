@@ -5,7 +5,7 @@ dotenv.config();
 
 class OllamaService {
   constructor() {
-    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://38.29.145.78:11434';
+    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://206.168.83.244:11434';
     this.model = process.env.OLLAMA_MODEL || 'thewindmom/llama3-med42-8b:latest';
     this.timeout = parseInt(process.env.OLLAMA_TIMEOUT, 10) || 120000; // 120 seconds default
     this.maxRetries = 3;
@@ -1182,13 +1182,19 @@ JUSTIFICATION_NARRATIVE:
         result.rejectionRisks = riskLines
           .map(line => {
             const cleaned = line.replace(/^[-*•]\s*/, '').trim();
-            const codeMatch = cleaned.match(/^([A-Z]{2}-[\d-]+):\s*(.+)/);
+            // Try to match NPHIES-style codes: XX-XXXX, MN-XXX, SE-XXX, CV-XXX, BV-XXXXX, etc.
+            const codeMatch = cleaned.match(/^([A-Z]{2,3}-[\d-]+):\s*(.+)/);
             if (codeMatch) {
               return { code: codeMatch[1], description: codeMatch[2] };
             }
-            return { code: 'UNKNOWN', description: cleaned };
+            // If no code found but description is meaningful, return without code (null)
+            // This prevents showing "UNKNOWN" badges in the UI
+            if (cleaned.length > 10) {
+              return { code: null, description: cleaned };
+            }
+            return null;
           })
-          .filter(r => r.description.length > 5);
+          .filter(r => r && r.description && r.description.length > 5);
       }
 
       // Extract recommendations

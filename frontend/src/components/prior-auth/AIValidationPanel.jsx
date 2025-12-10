@@ -386,15 +386,17 @@ const AIValidationPanel = ({
               {/* Rejection Risks */}
               {validation.ai.rejectionRisks?.length > 0 && (
                 <div className="p-2 bg-red-50 rounded-lg">
-                  <span className="text-xs font-medium text-red-700 mb-2 block">Potential Rejection Codes:</span>
+                  <span className="text-xs font-medium text-red-700 mb-2 block">Potential Rejection Risks:</span>
                   <div className="flex flex-wrap gap-1">
-                    {validation.ai.rejectionRisks.map((risk, idx) => (
+                    {validation.ai.rejectionRisks
+                      .filter(risk => risk.code || risk.description)
+                      .map((risk, idx) => (
                       <span 
                         key={idx}
                         className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded"
                         title={risk.description}
                       >
-                        {risk.code}
+                        {risk.code || (risk.description?.length > 50 ? risk.description.substring(0, 50) + '...' : risk.description)}
                       </span>
                     ))}
                   </div>

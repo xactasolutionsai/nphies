@@ -501,15 +501,21 @@ JUSTIFICATION_NARRATIVE:
       // Extract rejection risks
       const risksSection = responseText.match(/REJECTION_RISKS:([\s\S]*?)(?=RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i);
       if (risksSection) {
-        const riskLines = risksSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
+        const riskLines = risksSection[1].trim().split('\n').filter(line => line.trim().match(/^[-*•]/));
         result.rejectionRisks = riskLines.map(line => {
-          const cleaned = line.replace(/^-\s*/, '').trim();
-          const codeMatch = cleaned.match(/^([A-Z]{2}-[\d-]+):\s*(.+)/);
+          const cleaned = line.replace(/^[-*•]\s*/, '').trim();
+          // Try to match NPHIES-style codes: XX-XXXX, MN-XXX, SE-XXX, CV-XXX, BV-XXXXX, etc.
+          const codeMatch = cleaned.match(/^([A-Z]{2,3}-[\d-]+):\s*(.+)/);
           if (codeMatch) {
             return { code: codeMatch[1], description: codeMatch[2] };
           }
-          return { code: 'UNKNOWN', description: cleaned };
-        }).filter(r => r.description.length > 5);
+          // If no code found but description is meaningful, return without code (null)
+          // This prevents showing "UNKNOWN" badges in the UI
+          if (cleaned.length > 10) {
+            return { code: null, description: cleaned };
+          }
+          return null;
+        }).filter(r => r && r.description && r.description.length > 5);
       }
 
       // Extract recommendations
