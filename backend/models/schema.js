@@ -524,6 +524,16 @@ export const validationSchemas = {
       category: Joi.string().max(50).allow(null, '').optional()
     })).optional(),
     
+    // Clinical Documents (PDF uploads for future use)
+    clinical_documents: Joi.array().items(Joi.object({
+      id: Joi.string().max(100).optional(),
+      name: Joi.string().max(255).required(),
+      size: Joi.number().integer().allow(null).optional(),
+      type: Joi.string().max(100).allow(null, '').optional(),
+      data: Joi.string().allow(null, '').optional(), // base64 data
+      uploadedAt: Joi.string().allow(null, '').optional()
+    })).optional(),
+    
     // Vision Prescription data (for vision auth types only)
     vision_prescription: Joi.object({
       product_type: Joi.string().valid('lens', 'contact').allow(null, '').optional(),
