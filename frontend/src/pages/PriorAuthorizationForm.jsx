@@ -43,7 +43,8 @@ import {
   CHIEF_COMPLAINT_FORMAT_OPTIONS,
   TRIAGE_CATEGORY_OPTIONS,
   ENCOUNTER_SERVICE_TYPE_OPTIONS,
-  ENCOUNTER_PRIORITY_OPTIONS
+  ENCOUNTER_PRIORITY_OPTIONS,
+  DENTAL_PROCEDURE_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -123,8 +124,8 @@ export default function PriorAuthorizationForm() {
     },
     clinical_info: {
       chief_complaint_format: 'snomed', // 'snomed' for SNOMED codes, 'text' for free text
-      chief_complaint_code: '27355003', // Default: Toothache (SNOMED)
-      chief_complaint_display: 'Toothache',
+      chief_complaint_code: '',
+      chief_complaint_display: '',
       chief_complaint_text: '', // Free text option (like json2 example)
       patient_history: '',
       history_of_present_illness: '',
@@ -1559,10 +1560,11 @@ export default function PriorAuthorizationForm() {
                     <DatePicker
                       selected={formData.vital_signs.measurement_time ? new Date(formData.vital_signs.measurement_time) : null}
                       onChange={(date) => handleVitalSignChange('measurement_time', date ? date.toISOString() : null)}
-                      showTimeSelect
+                      showTimeInput
+                      timeInputLabel="Time:"
                       dateFormat="yyyy-MM-dd HH:mm"
                       className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                      placeholderText="Select time"
+                      placeholderText="Select date & time"
                     />
                     <Calendar className="datepicker-icon h-4 w-4" />
                   </div>
@@ -2160,14 +2162,24 @@ export default function PriorAuthorizationForm() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Dental Procedure Code (oral-health-op)</Label>
-                        <Input
-                          value={item.product_or_service_code || ''}
-                          onChange={(e) => {
-                            handleItemChange(index, 'product_or_service_code', e.target.value);
+                        <Label>Dental Procedure Code *</Label>
+                        <Select
+                          value={DENTAL_PROCEDURE_OPTIONS.find(opt => opt.value === item.product_or_service_code)}
+                          onChange={(option) => {
+                            handleItemChange(index, 'product_or_service_code', option?.value || '');
+                            // Extract description from label (format: "CODE - Description")
+                            const description = option?.label?.includes(' - ') 
+                              ? option.label.split(' - ').slice(1).join(' - ')
+                              : '';
+                            handleItemChange(index, 'product_or_service_display', description);
                             handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
                           }}
-                          placeholder="e.g. 97613-07-00"
+                          options={DENTAL_PROCEDURE_OPTIONS}
+                          styles={selectStyles}
+                          placeholder="Select dental procedure..."
+                          isClearable
+                          isSearchable
+                          menuPortalTarget={document.body}
                         />
                       </div>
                       <div className="space-y-2">
@@ -2175,7 +2187,9 @@ export default function PriorAuthorizationForm() {
                         <Input
                           value={item.product_or_service_display || ''}
                           onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
-                          placeholder="e.g. Lithium disilicate ceramic crown"
+                          placeholder="Auto-filled from selection"
+                          readOnly
+                          className="bg-gray-50"
                         />
                       </div>
                     </div>
@@ -2498,62 +2512,88 @@ export default function PriorAuthorizationForm() {
                 <p className="text-sm">Click "Add Info" to add clinical justification</p>
               </div>
             ) : (
-              formData.supporting_info.map((info, index) => (
-                <div key={index} className="flex items-start gap-4 p-4 border rounded-lg bg-gray-50">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-cyan text-white flex items-center justify-center text-sm font-medium">
-                    {info.sequence}
-                  </div>
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Category</Label>
-                      <Select
-                        value={SUPPORTING_INFO_CATEGORY_OPTIONS.find(opt => opt.value === info.category)}
-                        onChange={(option) => handleSupportingInfoChange(index, 'category', option?.value || 'info')}
-                        options={SUPPORTING_INFO_CATEGORY_OPTIONS}
-                        styles={selectStyles}
-                        menuPortalTarget={document.body}
-                      />
+              formData.supporting_info.map((info, index) => {
+                const selectedCategory = SUPPORTING_INFO_CATEGORY_OPTIONS.find(opt => opt.value === info.category);
+                const needsCode = selectedCategory?.needsCode || false;
+                
+                return (
+                  <div key={index} className="flex items-start gap-4 p-4 border rounded-lg bg-gray-50">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-cyan text-white flex items-center justify-center text-sm font-medium">
+                      {info.sequence}
                     </div>
-                    <div className="space-y-2">
-                      <Label>Code</Label>
-                      <Input
-                        value={info.code || ''}
-                        onChange={(e) => handleSupportingInfoChange(index, 'code', e.target.value)}
-                        placeholder="Code"
-                      />
-                    </div>
-                    {info.category === 'days-supply' ? (
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">
-                        <Label>Days</Label>
-                        <Input
-                          type="number"
-                          value={info.value_quantity || ''}
-                          onChange={(e) => handleSupportingInfoChange(index, 'value_quantity', e.target.value)}
-                          placeholder="Number of days"
+                        <Label>Category</Label>
+                        <Select
+                          value={selectedCategory}
+                          onChange={(option) => {
+                            handleSupportingInfoChange(index, 'category', option?.value || 'info');
+                            // Auto-fill code with category value (NPHIES uses category as code)
+                            if (!option?.needsCode) {
+                              handleSupportingInfoChange(index, 'code', option?.value || '');
+                            } else {
+                              handleSupportingInfoChange(index, 'code', '');
+                            }
+                          }}
+                          options={SUPPORTING_INFO_CATEGORY_OPTIONS}
+                          styles={selectStyles}
+                          menuPortalTarget={document.body}
+                          formatOptionLabel={(option) => (
+                            <div>
+                              <div className="font-medium">{option.label}</div>
+                              {option.description && (
+                                <div className="text-xs text-gray-500">{option.description}</div>
+                              )}
+                            </div>
+                          )}
                         />
                       </div>
-                    ) : (
                       <div className="space-y-2">
-                        <Label>Value</Label>
+                        <Label>Code</Label>
                         <Input
-                          value={info.value_string || ''}
-                          onChange={(e) => handleSupportingInfoChange(index, 'value_string', e.target.value)}
-                          placeholder="Value"
+                          value={info.code || info.category || ''}
+                          onChange={(e) => handleSupportingInfoChange(index, 'code', e.target.value)}
+                          placeholder={needsCode ? "Enter code (e.g., lab test code)" : "Auto-filled from category"}
+                          readOnly={!needsCode}
+                          className={!needsCode ? "bg-gray-100" : ""}
                         />
+                        {!needsCode && (
+                          <p className="text-xs text-gray-500">Code auto-filled from category</p>
+                        )}
                       </div>
-                    )}
+                      {info.category === 'days-supply' ? (
+                        <div className="space-y-2">
+                          <Label>Days</Label>
+                          <Input
+                            type="number"
+                            value={info.value_quantity || ''}
+                            onChange={(e) => handleSupportingInfoChange(index, 'value_quantity', e.target.value)}
+                            placeholder="Number of days"
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label>Value</Label>
+                          <Input
+                            value={info.value_string || ''}
+                            onChange={(e) => handleSupportingInfoChange(index, 'value_string', e.target.value)}
+                            placeholder="Value"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-700"
+                      onClick={() => removeSupportingInfo(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:text-red-700"
-                    onClick={() => removeSupportingInfo(index)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))
+                );
+              })
             )}
 
             {/* Pharmacy warning */}

@@ -209,6 +209,20 @@ export const DENTAL_ICD10_OPTIONS = [
   { value: 'K10.9', label: 'K10.9 - Disease of jaw, unspecified' }
 ];
 
+// Dental Procedure Codes for Prior Authorization
+// Reference: NPHIES Dental/Oral Procedure Codes
+export const DENTAL_PROCEDURE_OPTIONS = [
+  { value: '97011-00-00', label: '97011-00-00 - Comprehensive oral examination' },
+  { value: '97043-00-00', label: '97043-00-00 - Dental antibiotic sensitivity test' },
+  { value: '97613-07-00', label: '97613-07-00 - Lithium disilicate ceramic crown (e max), indirect; per crown' },
+  { value: '012', label: '012 - Periodic oral examination' },
+  { value: '97511-01-00', label: '97511-01-00 - Metallic restoration of tooth, one surface, direct' },
+  { value: '618', label: '618 - Full crown metallic indirect' },
+  { value: '658', label: '658 - The extraoral repair of a crown, bridge or splint' },
+  { value: '97521-01-00', label: '97521-01-00 - Adhesive restoration tooth 1 surface direct' },
+  { value: '415', label: '415 - Root canal' }
+];
+
 // Vision ICD-10 Codes for eye examinations and disorders
 // Reference: https://icd.who.int/browse10/2016/en
 export const VISION_ICD10_OPTIONS = [
@@ -443,52 +457,52 @@ export const TOOTH_SURFACE_OPTIONS = [
 
 // NPHIES Claim Information Category codes
 // Reference: http://nphies.sa/terminology/CodeSystem/claim-information-category
+// Source: https://portal.nphies.sa/ig/CodeSystem-claim-information-category.html
 export const SUPPORTING_INFO_CATEGORY_OPTIONS = [
   // General categories
-  { value: 'info', label: 'Information - General situation/condition info' },
-  { value: 'onset', label: 'Onset - Period/dates of condition' },
-  { value: 'attachment', label: 'Attachment - Images, documents, resources' },
+  { value: 'info', label: 'info - Information', description: 'Codes conveying additional situation and condition information', needsCode: false },
+  { value: 'onset', label: 'onset - Onset', description: 'Period, start or end dates of aspects of the Condition', needsCode: false },
+  { value: 'attachment', label: 'attachment - Attachment', description: 'Materials attached such as images, documents and resources', needsCode: false },
+  { value: 'employmentImpacted', label: 'employmentImpacted - Employment Impacted', description: 'An indication that the patient was unable to work', needsCode: false },
   
-  // Clinical categories (required for oral/dental claims)
-  { value: 'chief-complaint', label: 'Chief Complaint - Reason for encounter' },
-  { value: 'investigation-result', label: 'Investigation Result' },
-  { value: 'treatment-plan', label: 'Treatment Plan' },
-  { value: 'patient-history', label: 'Patient History - Past surgical/medical history' },
-  { value: 'physical-examination', label: 'Physical Examination' },
-  { value: 'history-of-present-illness', label: 'History of Present Illness' },
-  { value: 'reason-for-visit', label: 'Reason for Visit' },
+  // Clinical categories
+  { value: 'chief-complaint', label: 'chief-complaint - Chief Complaint', description: 'A concise statement describing the symptom, problem, condition, or reason for encounter', needsCode: false },
+  { value: 'reason-for-visit', label: 'reason-for-visit - Reason for Visit', description: 'Reason for visit', needsCode: false },
+  { value: 'investigation-result', label: 'investigation-result - Investigation Result', description: 'Investigation Result', needsCode: false },
+  { value: 'treatment-plan', label: 'treatment-plan - Treatment Plan', description: 'Treatment Plan', needsCode: false },
+  { value: 'patient-history', label: 'patient-history - Patient History', description: 'Past Surgical History', needsCode: false },
+  { value: 'physical-examination', label: 'physical-examination - Physical Examination', description: 'Physical Examination', needsCode: false },
+  { value: 'history-of-present-illness', label: 'history-of-present-illness - History Of Present Illness', description: 'History Of Present Illness', needsCode: false },
+  { value: 'lab-test', label: 'lab-test - Lab Test', description: 'Test code', needsCode: true },
   
   // Vital signs
-  { value: 'vital-sign-weight', label: 'Weight' },
-  { value: 'vital-sign-height', label: 'Height' },
-  { value: 'vital-sign-systolic', label: 'Systolic BP' },
-  { value: 'vital-sign-diastolic', label: 'Diastolic BP' },
-  { value: 'temperature', label: 'Temperature' },
-  { value: 'pulse', label: 'Pulse Rate' },
-  { value: 'oxygen-saturation', label: 'Oxygen Saturation' },
-  { value: 'respiratory-rate', label: 'Respiratory Rate' },
+  { value: 'vital-sign-weight', label: 'vital-sign-weight - Weight', description: 'Weight', needsCode: false },
+  { value: 'vital-sign-height', label: 'vital-sign-height - Height', description: 'Height', needsCode: false },
+  { value: 'vital-sign-systolic', label: 'vital-sign-systolic - Systolic', description: 'Systolic blood pressure', needsCode: false },
+  { value: 'vital-sign-diastolic', label: 'vital-sign-diastolic - Diastolic', description: 'Diastolic blood pressure', needsCode: false },
+  { value: 'temperature', label: 'temperature - Temperature', description: 'The body temperature in degree celsius', needsCode: false },
+  { value: 'pulse', label: 'pulse - Pulse', description: 'Pulse rate per minute', needsCode: false },
+  { value: 'oxygen-saturation', label: 'oxygen-saturation - Oxygen Saturation', description: 'Blood oxygen saturation in %', needsCode: false },
+  { value: 'respiratory-rate', label: 'respiratory-rate - Respiratory Rate', description: 'Respiratory rate per minute', needsCode: false },
   
   // Hospital/admission specific
-  { value: 'hospitalized', label: 'Hospitalized - Hospitalization info' },
-  { value: 'icu-hours', label: 'ICU Hours' },
-  { value: 'ventilation-hours', label: 'Ventilation Hours' },
-  { value: 'admission-weight', label: 'Admission Weight' },
-  { value: 'estimated-Length-of-Stay', label: 'Estimated Length of Stay' },
+  { value: 'icu-hours', label: 'icu-hours - ICU Hours', description: 'Number of hours spent in ICU', needsCode: false },
+  { value: 'ventilation-hours', label: 'ventilation-hours - Ventilation Hours', description: 'Number of hours under mechanical ventilation', needsCode: false },
+  { value: 'admission-weight', label: 'admission-weight - Admission Weight', description: 'Admission Weight', needsCode: false },
+  { value: 'estimated-Length-of-Stay', label: 'estimated-Length-of-Stay - Estimated Length Of Stay', description: 'Estimated Length Of Stay', needsCode: false },
   
   // Dental specific
-  { value: 'missingtooth', label: 'Missing Tooth' },
+  { value: 'missingtooth', label: 'missingtooth - Missing Tooth', description: 'Teeth which are missing for any reason', needsCode: false },
   
   // Pharmacy specific
-  { value: 'days-supply', label: 'Days Supply' },
+  { value: 'days-supply', label: 'days-supply - Days Supply', description: 'Days Supply (for medications)', needsCode: false },
   
-  // Maternity
-  { value: 'last-menstrual-period', label: 'Last Menstrual Period' },
-  { value: 'birth-weight', label: 'Birth Weight' },
+  // Maternity/Birth
+  { value: 'last-menstrual-period', label: 'last-menstrual-period - Last Menstrual Period', description: 'Start date of last menstrual period', needsCode: false },
+  { value: 'birth-weight', label: 'birth-weight - Birth Weight', description: 'Birth weight is the first weight of the new born', needsCode: false },
   
   // Other
-  { value: 'lab-test', label: 'Lab Test Code' },
-  { value: 'morphology', label: 'Morphology - Tumor diagnosis' },
-  { value: 'employmentImpacted', label: 'Employment Impacted' }
+  { value: 'morphology', label: 'morphology - Morphology', description: 'Historical morphology of the reported tumor diagnosis', needsCode: false }
 ];
 
 // NPHIES Vital Signs Fields (per Claim-483069.json example)
