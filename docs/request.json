@@ -1,5 +1,5 @@
 {
-  "id": "a7ce9cbf-478a-49ce-90e2-6daf34278f6e",
+  "id": "7d31b16b-77e9-4c37-88fc-9d27bf4dbc91",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "urn:uuid:fcaf36d8-1052-4823-b699-1bd619b83655",
+      "fullUrl": "urn:uuid:e4e95d60-6d87-46d4-b0ad-b94fead864b9",
       "resource": {
-        "id": "fcaf36d8-1052-4823-b699-1bd619b83655",
+        "id": "e4e95d60-6d87-46d4-b0ad-b94fead864b9",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -18,7 +18,7 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/25ece600-a169-4f7d-bb75-ea1ddac43b0a"
+            "reference": "http://provider.com/Claim/6845c458-4167-4687-8962-e01c802bc668"
           }
         ],
         "sender": {
@@ -51,9 +51,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/25ece600-a169-4f7d-bb75-ea1ddac43b0a",
+      "fullUrl": "http://provider.com/Claim/6845c458-4167-4687-8962-e01c802bc668",
       "resource": {
-        "id": "25ece600-a169-4f7d-bb75-ea1ddac43b0a",
+        "id": "6845c458-4167-4687-8962-e01c802bc668",
         "use": "preauthorization",
         "item": [
           {
@@ -100,7 +100,7 @@
               "value": 0,
               "currency": "SAR"
             },
-            "servicedDate": "2025-12-07",
+            "servicedDate": "2025-12-09",
             "careTeamSequence": [
               1
             ],
@@ -131,7 +131,8 @@
               12,
               13,
               14,
-              15
+              15,
+              16
             ]
           }
         ],
@@ -163,12 +164,12 @@
           "currency": "SAR"
         },
         "status": "active",
-        "created": "2025-12-10T20:52:16.670Z",
+        "created": "2025-12-10T21:32:55.726Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
         "patient": {
-          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
+          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
         "subType": {
           "coding": [
@@ -189,13 +190,13 @@
               ]
             },
             "provider": {
-              "reference": "Practitioner/d78a09fe-5e3c-42fd-8935-6d341236d9c9"
+              "reference": "Practitioner/dc8daa83-c984-484c-ab5c-a5b93ae7e7ae"
             },
             "sequence": 1,
             "qualification": {
               "coding": [
                 {
-                  "code": "08.00",
+                  "code": "01.03",
                   "system": "http://nphies.sa/terminology/CodeSystem/practice-codes"
                 }
               ]
@@ -238,9 +239,9 @@
             "diagnosisCodeableConcept": {
               "coding": [
                 {
-                  "code": "A01",
+                  "code": "A03.2",
                   "system": "http://hl7.org/fhir/sid/icd-10-am",
-                  "display": "Typhoid and paratyphoid fevers"
+                  "display": "Shigellosis due to Shigella boydii"
                 }
               ]
             }
@@ -250,7 +251,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/e6942664-bb13-47e0-baca-cfb87ddaa413"
+              "reference": "Encounter/0e9fcdb2-65da-4263-8bf4-2f2267e6199d"
             }
           }
         ],
@@ -258,14 +259,14 @@
           {
             "focal": true,
             "coverage": {
-              "reference": "Coverage/c8dcca19-abdc-4b87-88eb-276c5581e067"
+              "reference": "Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
             },
             "sequence": 1
           }
         ],
         "identifier": [
           {
-            "value": "DUP-1765399936600",
+            "value": "PA-1765402375723",
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
           }
         ],
@@ -282,8 +283,8 @@
             },
             "sequence": 1,
             "timingPeriod": {
-              "end": "2025-12-07T21:00:00.000Z",
-              "start": "2025-12-07T21:00:00.000Z"
+              "end": "2025-12-09T21:00:00.000Z",
+              "start": "2025-12-09T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "mm[Hg]",
@@ -302,12 +303,12 @@
             },
             "sequence": 2,
             "timingPeriod": {
-              "end": "2025-12-07T21:00:00.000Z",
-              "start": "2025-12-07T21:00:00.000Z"
+              "end": "2025-12-09T21:00:00.000Z",
+              "start": "2025-12-09T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "mm[Hg]",
-              "value": 88,
+              "value": 83,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -322,12 +323,12 @@
             },
             "sequence": 3,
             "timingPeriod": {
-              "end": "2025-12-07T21:00:00.000Z",
-              "start": "2025-12-07T21:00:00.000Z"
+              "end": "2025-12-09T21:00:00.000Z",
+              "start": "2025-12-09T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "cm",
-              "value": 172,
+              "value": 158,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -342,12 +343,12 @@
             },
             "sequence": 4,
             "timingPeriod": {
-              "end": "2025-12-07T21:00:00.000Z",
-              "start": "2025-12-07T21:00:00.000Z"
+              "end": "2025-12-09T21:00:00.000Z",
+              "start": "2025-12-09T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "kg",
-              "value": 86.5,
+              "value": 72.6,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -362,12 +363,12 @@
             },
             "sequence": 5,
             "timingPeriod": {
-              "end": "2025-12-07T21:00:00.000Z",
-              "start": "2025-12-07T21:00:00.000Z"
+              "end": "2025-12-09T21:00:00.000Z",
+              "start": "2025-12-09T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "/min",
-              "value": 85,
+              "value": 90,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -382,12 +383,12 @@
             },
             "sequence": 6,
             "timingPeriod": {
-              "end": "2025-12-07T21:00:00.000Z",
-              "start": "2025-12-07T21:00:00.000Z"
+              "end": "2025-12-09T21:00:00.000Z",
+              "start": "2025-12-09T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "Cel",
-              "value": 37.2,
+              "value": 37.3,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -402,12 +403,12 @@
             },
             "sequence": 7,
             "timingPeriod": {
-              "end": "2025-12-07T21:00:00.000Z",
-              "start": "2025-12-07T21:00:00.000Z"
+              "end": "2025-12-09T21:00:00.000Z",
+              "start": "2025-12-09T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "%",
-              "value": 99,
+              "value": 100,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -422,12 +423,12 @@
             },
             "sequence": 8,
             "timingPeriod": {
-              "end": "2025-12-07T21:00:00.000Z",
-              "start": "2025-12-07T21:00:00.000Z"
+              "end": "2025-12-09T21:00:00.000Z",
+              "start": "2025-12-09T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "/min",
-              "value": 17,
+              "value": 15,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -435,9 +436,9 @@
             "code": {
               "coding": [
                 {
-                  "code": "422587007",
+                  "code": "62315008",
                   "system": "http://snomed.info/sct",
-                  "display": "Nausea"
+                  "display": "Diarrhea"
                 }
               ]
             },
@@ -461,7 +462,7 @@
               ]
             },
             "sequence": 10,
-            "valueString": "Chronic kidney disease stage 3. Hypertension. History of gout. Allergic to sulfa drugs."
+            "valueString": "Sara Abbas, a 36-year-old female, presented to Saudi General Hospital with complaints of diarrhea (62315008). She is diagnosed with Shigellosis due to Shigella boydii (A03.2), identified as the principal diagnosis following clinical evaluation and laboratory tests.\nThe patient has a history of Chronic Kidney Disease (CKD) stage 3, hypertension, gout, and sulfa drug allergy. Vital signs recorded during this encounter include blood pressure at 129/83 mmHg, pulse rate at 90 bpm, temperature at 37.3°C, oxygen saturation at 100%, respiratory rate at 15/min, height of 158 cm, weight of 72.6 kg, and a calculated body mass index (BMI) of 29.1 kg/m².\nThe estimated length of stay for this daycase encounter is three days. The requested services include appropriate diagnostic and therapeutic interventions for managing Shigellosis and addressing the patient's underlying chronic conditions. Saudi National Insurance will be responsible for covering these services as per the patient's insurance policy."
           },
           {
             "category": {
@@ -473,7 +474,7 @@
               ]
             },
             "sequence": 11,
-            "valueString": "Patient presents with 3-day history of progressive abdominal pain, localized to RLQ. Associated with low-grade fever and decreased appetite. No vomiting or diarrhea."
+            "valueString": "History of Present Illness:\nSara Abbas, a 36-year-old female, presents with sudden onset severe headache described as \"worst headache of life,\" accompanied by neck stiffness and photophobia. These symptoms occurred concurrently with diarrhea, which is her chief complaint (62315008). The patient's vital signs include blood pressure at 129/83 mmHg, pulse rate at 90 bpm, temperature at 37.3°C, oxygen saturation at 100%, respiratory rate at 15/min, height of 158 cm, weight of 72.6 kg, and BMI of 29.1 kg/m². The primary diagnosis is Shigellosis due to Shigella boydii (A03.2), with the headache possibly indicative of meningitis or other central nervous system involvement. The patient is scheduled for a daycase institutional service at Saudi General Hospital with an estimated stay of three days, and her care will be covered by Saudi National Insurance."
           },
           {
             "category": {
@@ -485,7 +486,7 @@
               ]
             },
             "sequence": 12,
-            "valueString": "Right hip externally rotated and shortened. Unable to perform ROM. Neurovascular intact distally."
+            "valueString": "Physical Examination:\nThe right hip exhibits external rotation and shortening with an inability to perform range of motion (ROM) assessments due to pain and discomfort. Neurovascular integrity is confirmed distally, as there are no signs of numbness, tingling, or changes in skin coloration, temperature, or capillary refill time. The patient's vital signs remain stable within normal limits during the examination."
           },
           {
             "category": {
@@ -497,7 +498,7 @@
               ]
             },
             "sequence": 13,
-            "valueString": "Orthopedic consultation. Hip X-ray and CT. Pain management. DVT prophylaxis. Plan for surgical fixation."
+            "valueString": "Admit for CHF exacerbation. IV diuretics. Fluid restriction. Daily weights. Echocardiogram."
           },
           {
             "code": {
@@ -523,16 +524,31 @@
             "category": {
               "coding": [
                 {
-                  "code": "estimated-Length-of-Stay",
+                  "code": "admission-weight",
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
                 }
               ]
             },
             "sequence": 15,
-            "timingDate": "2025-12-10",
+            "valueQuantity": {
+              "code": "kg",
+              "value": 72.6,
+              "system": "http://unitsofmeasure.org"
+            }
+          },
+          {
+            "category": {
+              "coding": [
+                {
+                  "code": "estimated-Length-of-Stay",
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
+                }
+              ]
+            },
+            "sequence": 16,
             "valueQuantity": {
               "code": "d",
-              "value": 1,
+              "value": 3,
               "system": "http://unitsofmeasure.org"
             }
           }
@@ -540,38 +556,39 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/e6942664-bb13-47e0-baca-cfb87ddaa413",
+      "fullUrl": "http://provider.com/Encounter/0e9fcdb2-65da-4263-8bf4-2f2267e6199d",
       "resource": {
-        "id": "e6942664-bb13-47e0-baca-cfb87ddaa413",
+        "id": "0e9fcdb2-65da-4263-8bf4-2f2267e6199d",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
           ]
         },
         "class": {
-          "code": "AMB",
+          "code": "SS",
           "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-          "display": "ambulatory"
+          "display": "short stay"
         },
         "period": {
-          "start": "2025-12-07T03:00:00+03:00"
+          "end": "2025-12-12T00:00:00+03:00",
+          "start": "2025-12-09T00:00:00+03:00"
         },
         "status": "planned",
         "subject": {
-          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
+          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
         "identifier": [
           {
-            "value": "DUP-1765399936600",
+            "value": "PA-1765402375723",
             "system": "http://PR-FHIR.com.sa/identifiers/encounter"
           }
         ],
         "serviceType": {
           "coding": [
             {
-              "code": "acute-care",
+              "code": "sub-acute-care",
               "system": "http://nphies.sa/terminology/CodeSystem/service-type",
-              "display": "Acute Care"
+              "display": "Sub-Acute Care"
             }
           ]
         },
@@ -607,9 +624,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Coverage/c8dcca19-abdc-4b87-88eb-276c5581e067",
+      "fullUrl": "http://provider.com/Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
       "resource": {
-        "id": "c8dcca19-abdc-4b87-88eb-276c5581e067",
+        "id": "32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
@@ -626,7 +643,7 @@
         },
         "class": [
           {
-            "name": "Dream Team",
+            "name": "Insurance Plan",
             "type": {
               "coding": [
                 {
@@ -644,24 +661,24 @@
           }
         ],
         "period": {
-          "end": "2028-09-28",
-          "start": "2021-09-28"
+          "end": "2028-03-16",
+          "start": "2021-03-16"
         },
         "status": "active",
         "identifier": [
           {
-            "value": "0000000002",
+            "value": "2000000003",
             "system": "http://payer.com/memberid"
           }
         ],
         "subscriber": {
-          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
+          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
         "beneficiary": {
-          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
+          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
         "policyHolder": {
-          "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
+          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
         "relationship": {
           "coding": [
@@ -676,9 +693,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/d78a09fe-5e3c-42fd-8935-6d341236d9c9",
+      "fullUrl": "http://provider.com/Practitioner/dc8daa83-c984-484c-ab5c-a5b93ae7e7ae",
       "resource": {
-        "id": "d78a09fe-5e3c-42fd-8935-6d341236d9c9",
+        "id": "dc8daa83-c984-484c-ab5c-a5b93ae7e7ae",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -706,7 +723,7 @@
                 }
               ]
             },
-            "value": "PRACT-d78a09fe",
+            "value": "PRACT-dc8daa83",
             "system": "http://nphies.sa/license/practitioner-license"
           }
         ],
@@ -833,9 +850,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161",
+      "fullUrl": "http://provider.com/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
       "resource": {
-        "id": "1a72f430-d5b2-4402-91f3-59ee1ed73161",
+        "id": "09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
@@ -844,16 +861,16 @@
         "name": [
           {
             "use": "official",
-            "text": "Ahmad Khaled Abbas",
+            "text": "Sara Abbas Female",
             "given": [
-              "Ahmad",
-              "Khaled"
+              "Sara",
+              "Abbas"
             ],
-            "family": "Abbas"
+            "family": "Female"
           }
         ],
         "active": true,
-        "gender": "male",
+        "gender": "female",
         "_gender": {
           "extension": [
             {
@@ -861,7 +878,7 @@
               "valueCodeableConcept": {
                 "coding": [
                   {
-                    "code": "male",
+                    "code": "female",
                     "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender"
                   }
                 ]
@@ -869,13 +886,7 @@
             }
           ]
         },
-        "telecom": [
-          {
-            "value": "+966512345691",
-            "system": "phone"
-          }
-        ],
-        "birthDate": "1984-12-22",
+        "birthDate": "1989-03-10",
         "extension": [
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
@@ -894,14 +905,14 @@
             "type": {
               "coding": [
                 {
-                  "code": "PPN",
+                  "code": "PRC",
                   "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                  "display": "Passport Number"
+                  "display": "Permanent Resident Card"
                 }
               ]
             },
-            "value": "G12345678",
-            "system": "http://nphies.sa/identifier/passportnumber",
+            "value": "2000000003",
+            "system": "http://nphies.sa/identifier/iqama",
             "extension": [
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
@@ -931,6 +942,6 @@
       }
     }
   ],
-  "timestamp": "2025-12-10T20:52:54.568Z",
+  "timestamp": "2025-12-10T21:32:56.085Z",
   "resourceType": "Bundle"
 }

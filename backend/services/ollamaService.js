@@ -1780,6 +1780,168 @@ Focus on the most specific and accurate codes for the clinical description.
     return suggestions.slice(0, 5);
   }
 
+  /**
+   * Validate if a SNOMED code matches its description
+   * @param {string} code - The SNOMED CT code to validate
+   * @param {string} description - The description/display text for the code
+   * @returns {Promise<object>} - Validation result with isValid, confidence, and suggestions
+   */
+  async validateSnomedCode(code, description) {
+    if (!code || !description) {
+      return { 
+        success: false, 
+        isValid: false, 
+        error: 'Both code and description are required',
+        confidence: 0
+      };
+    }
+
+    const prompt = this.buildSnomedValidationPrompt(code, description);
+
+    try {
+      console.log('\n✅ ==> AI SNOMED CODE VALIDATION REQUEST <==');
+      console.log(`📅 Timestamp: ${new Date().toISOString()}`);
+      console.log(`🤖 Model: ${this.model}`);
+      console.log(`🏷️ Code: ${code}`);
+      console.log(`📝 Description: ${description}\n`);
+
+      const result = await this.generateCompletion(prompt, {
+        temperature: 0.1, // Very low temperature for consistent validation
+        num_predict: 800,
+        repeat_penalty: 1.2
+      });
+
+      console.log('\n📥 ==> RAW AI RESPONSE <==');
+      console.log('─'.repeat(60));
+      console.log(result.response);
+      console.log('─'.repeat(60));
+
+      const validation = this.parseSnomedValidationResponse(result.response);
+
+      console.log(`\n✅ Validation Result: ${validation.isValid ? 'VALID' : 'INVALID'}`);
+      console.log(`   Confidence: ${(validation.confidence * 100).toFixed(0)}%`);
+      if (validation.correctDescription) {
+        console.log(`   Correct Description: ${validation.correctDescription}`);
+      }
+      if (validation.suggestedCode) {
+        console.log(`   Suggested Code: ${validation.suggestedCode}`);
+      }
+
+      return {
+        success: true,
+        code,
+        providedDescription: description,
+        ...validation,
+        metadata: {
+          model: this.model,
+          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+          timestamp: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error validating SNOMED code:', error.message);
+      return { 
+        success: false, 
+        isValid: false, 
+        code,
+        providedDescription: description,
+        error: error.message,
+        confidence: 0
+      };
+    }
+  }
+
+  /**
+   * Build SNOMED validation prompt
+   * @private
+   */
+  buildSnomedValidationPrompt(code, description) {
+    return `You are a medical coding expert specializing in SNOMED CT (Systematized Nomenclature of Medicine - Clinical Terms). 
+
+Your task is to validate whether a given SNOMED CT code correctly matches its provided description.
+
+=== CODE TO VALIDATE ===
+SNOMED Code: ${code}
+Provided Description: ${description}
+
+=== VALIDATION TASK ===
+1. Determine if this SNOMED CT code exists and is valid
+2. Check if the provided description accurately matches the official SNOMED CT concept for this code
+3. If the code is valid but the description is wrong, provide the correct description
+4. If the description is valid but the code is wrong, suggest the correct code
+5. Rate your confidence in this validation (0.0 to 1.0)
+
+=== OUTPUT FORMAT ===
+VALID: [YES/NO]
+CONFIDENCE: [0.0-1.0]
+EXPLANATION: [Brief explanation of your validation]
+CORRECT_DESCRIPTION: [The official SNOMED CT description for this code, or "N/A" if code is invalid]
+SUGGESTED_CODE: [If description is valid but code is wrong, provide correct code, otherwise "N/A"]
+SUGGESTED_DESCRIPTION: [If you have a better matching term, provide it, otherwise "N/A"]
+
+=== BEGIN VALIDATION ===`;
+  }
+
+  /**
+   * Parse SNOMED validation response
+   * @private
+   */
+  parseSnomedValidationResponse(response) {
+    const result = {
+      isValid: false,
+      confidence: 0.5,
+      explanation: '',
+      correctDescription: null,
+      suggestedCode: null,
+      suggestedDescription: null
+    };
+
+    try {
+      // Extract validity
+      const validMatch = response.match(/VALID:\s*(YES|NO)/i);
+      if (validMatch) {
+        result.isValid = validMatch[1].toUpperCase() === 'YES';
+      }
+
+      // Extract confidence
+      const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
+      if (confidenceMatch) {
+        result.confidence = parseFloat(confidenceMatch[1]);
+        // Clamp to 0-1 range
+        result.confidence = Math.max(0, Math.min(1, result.confidence));
+      }
+
+      // Extract explanation
+      const explanationMatch = response.match(/EXPLANATION:\s*([^\n]+)/i);
+      if (explanationMatch) {
+        result.explanation = explanationMatch[1].trim();
+      }
+
+      // Extract correct description
+      const correctDescMatch = response.match(/CORRECT_DESCRIPTION:\s*([^\n]+)/i);
+      if (correctDescMatch && correctDescMatch[1].trim().toLowerCase() !== 'n/a') {
+        result.correctDescription = correctDescMatch[1].trim();
+      }
+
+      // Extract suggested code
+      const suggestedCodeMatch = response.match(/SUGGESTED_CODE:\s*(\d+|N\/A)/i);
+      if (suggestedCodeMatch && suggestedCodeMatch[1].toLowerCase() !== 'n/a') {
+        result.suggestedCode = suggestedCodeMatch[1].trim();
+      }
+
+      // Extract suggested description
+      const suggestedDescMatch = response.match(/SUGGESTED_DESCRIPTION:\s*([^\n]+)/i);
+      if (suggestedDescMatch && suggestedDescMatch[1].trim().toLowerCase() !== 'n/a') {
+        result.suggestedDescription = suggestedDescMatch[1].trim();
+      }
+
+    } catch (error) {
+      console.error('❌ Error parsing SNOMED validation response:', error.message);
+    }
+
+    return result;
+  }
+
   // ============================================================================
   // MEDICAL NECESSITY ASSESSMENT
   // ============================================================================

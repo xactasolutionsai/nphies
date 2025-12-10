@@ -37,6 +37,9 @@ router.post('/enhance-clinical', aiValidationController.enhanceClinicalText.bind
 // POST /api/ai-validation/suggest-snomed - Suggest SNOMED codes from free text
 router.post('/suggest-snomed', aiValidationController.suggestSnomedCodes.bind(aiValidationController));
 
+// POST /api/ai-validation/validate-snomed - Validate SNOMED code against description
+router.post('/validate-snomed', aiValidationController.validateSnomedCode.bind(aiValidationController));
+
 // POST /api/ai-validation/check-medical-necessity - Check medical necessity
 router.post('/check-medical-necessity', aiValidationController.checkMedicalNecessity.bind(aiValidationController));
 

@@ -393,6 +393,38 @@ class AIValidationController {
       });
     }
   }
+
+  /**
+   * Validate SNOMED code against its description
+   * POST /api/ai-validation/validate-snomed
+   */
+  async validateSnomedCode(req, res) {
+    try {
+      const { code, description } = req.body;
+
+      if (!code || !description) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required fields',
+          message: 'Both code and description are required'
+        });
+      }
+
+      console.log(`🏷️ SNOMED validation request: ${code} - ${description}`);
+
+      const result = await ollamaService.validateSnomedCode(code, description);
+
+      res.json(result);
+
+    } catch (error) {
+      console.error('❌ Error in validateSnomedCode:', error.message);
+      res.status(500).json({
+        success: false,
+        error: 'SNOMED validation failed',
+        message: error.message
+      });
+    }
+  }
 }
 
 export default new AIValidationController();
