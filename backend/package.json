@@ -9,7 +9,8 @@
     "dev": "nodemon server.js",
     "seed": "node seed.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "seed-medical-knowledge": "node scripts/seedMedicalKnowledge.js"
+    "seed-medical-knowledge": "node scripts/seedMedicalKnowledge.js",
+    "import-icd10": "node scripts/importIcd10Codes.js"
   },
   "keywords": [
     "healthcare",
@@ -34,7 +35,8 @@
     "ollama": "^0.6.2",
     "pdf-parse": "^2.4.5",
     "pg": "^8.11.3",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import DatePicker from 'react-datepicker';
 import Select from 'react-select';
+import AsyncSelect from 'react-select/async';
 import 'react-datepicker/dist/react-datepicker.css';
 import api from '@/services/api';
 import { 
@@ -27,8 +28,6 @@ import {
   getEncounterClassOptions,
   CURRENCY_OPTIONS,
   DIAGNOSIS_TYPE_OPTIONS,
-  DENTAL_ICD10_OPTIONS,
-  VISION_ICD10_OPTIONS,
   EYE_OPTIONS,
   BODY_SITE_OPTIONS_BY_AUTH_TYPE,
   FDI_TOOTH_OPTIONS,
@@ -1467,35 +1466,49 @@ export default function PriorAuthorizationForm() {
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>ICD-10 Code *</Label>
-                    {(formData.auth_type === 'dental' || formData.auth_type === 'vision') ? (
-                      <Select
-                        value={(formData.auth_type === 'dental' ? DENTAL_ICD10_OPTIONS : VISION_ICD10_OPTIONS).find(opt => opt.value === diagnosis.diagnosis_code)}
-                        onChange={(option) => {
-                          handleDiagnosisChange(index, 'diagnosis_code', option?.value || '');
-                          handleDiagnosisChange(index, 'diagnosis_display', option?.label?.split(' - ')[1] || '');
-                        }}
-                        options={formData.auth_type === 'dental' ? DENTAL_ICD10_OPTIONS : VISION_ICD10_OPTIONS}
-                        styles={selectStyles}
-                        placeholder={formData.auth_type === 'dental' ? "Select dental diagnosis..." : "Select vision diagnosis..."}
-                        isClearable
-                        isSearchable
-                        menuPortalTarget={document.body}
-                      />
-                    ) : (
-                      <Input
-                        value={diagnosis.diagnosis_code}
-                        onChange={(e) => handleDiagnosisChange(index, 'diagnosis_code', e.target.value)}
-                        placeholder="e.g., J06.9"
-                      />
-                    )}
+                    <AsyncSelect
+                      value={diagnosis.diagnosis_code ? {
+                        value: diagnosis.diagnosis_code,
+                        label: `${diagnosis.diagnosis_code}${diagnosis.diagnosis_display ? ' - ' + diagnosis.diagnosis_display : ''}`
+                      } : null}
+                      onChange={(option) => {
+                        handleDiagnosisChange(index, 'diagnosis_code', option?.value || '');
+                        // Extract description from label (format: "CODE - Description")
+                        const description = option?.label?.includes(' - ') 
+                          ? option.label.split(' - ').slice(1).join(' - ')
+                          : '';
+                        handleDiagnosisChange(index, 'diagnosis_display', description);
+                      }}
+                      loadOptions={async (inputValue) => {
+                        try {
+                          const results = await api.searchIcd10Codes(inputValue, 50);
+                          return results;
+                        } catch (error) {
+                          console.error('Error loading ICD-10 codes:', error);
+                          return [];
+                        }
+                      }}
+                      defaultOptions
+                      cacheOptions
+                      styles={selectStyles}
+                      placeholder="Search ICD-10 codes..."
+                      isClearable
+                      isSearchable
+                      menuPortalTarget={document.body}
+                      noOptionsMessage={({ inputValue }) => 
+                        inputValue ? `No codes found for "${inputValue}"` : 'Type to search ICD-10 codes...'
+                      }
+                      loadingMessage={() => 'Searching...'}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Description</Label>
                     <Input
                       value={diagnosis.diagnosis_display || ''}
                       onChange={(e) => handleDiagnosisChange(index, 'diagnosis_display', e.target.value)}
-                      placeholder="Diagnosis description"
-                      disabled={formData.auth_type === 'dental' || formData.auth_type === 'vision'}
+                      placeholder="Auto-filled from ICD-10 selection"
+                      readOnly
+                      className="bg-gray-50"
                     />
                   </div>
                   <div className="space-y-2">

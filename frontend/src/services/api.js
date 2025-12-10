@@ -526,6 +526,37 @@ class ApiService {
       body: JSON.stringify(formData)
     });
   }
+
+  // ICD-10 Codes
+  /**
+   * Search ICD-10 codes for async dropdown
+   * Returns array of { value, label } for react-select
+   * @param {string} searchTerm - Search term to filter codes
+   * @param {number} limit - Max results (default 50)
+   */
+  async searchIcd10Codes(searchTerm = '', limit = 50) {
+    const params = new URLSearchParams();
+    if (searchTerm) params.append('q', searchTerm);
+    params.append('limit', limit.toString());
+    return this.request(`/nphies-codes/icd10/search?${params.toString()}`);
+  }
+
+  /**
+   * Get ICD-10 codes with full pagination support
+   * @param {Object} params - Query parameters (search, type, limit, offset)
+   */
+  async getIcd10Codes(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/nphies-codes/icd10${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Get a single ICD-10 code by code value
+   * @param {string} code - ICD-10 code (e.g., "A00.1")
+   */
+  async getIcd10Code(code) {
+    return this.request(`/nphies-codes/icd10/${encodeURIComponent(code)}`);
+  }
 }
 
 export default new ApiService();

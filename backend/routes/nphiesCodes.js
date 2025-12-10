@@ -24,6 +24,11 @@ router.get('/identifier-types', (req, res) => nphiesCodesController.getIdentifie
 router.get('/provider-types', (req, res) => nphiesCodesController.getProviderTypes(req, res));
 router.get('/relationships', (req, res) => nphiesCodesController.getRelationships(req, res));
 
+// ICD-10 codes endpoints
+router.get('/icd10', (req, res) => nphiesCodesController.getIcd10Codes(req, res));
+router.get('/icd10/search', (req, res) => nphiesCodesController.searchIcd10Codes(req, res));
+router.get('/icd10/:code', (req, res) => nphiesCodesController.getIcd10CodeByCode(req, res));
+
 // Get codes by system
 router.get('/:systemCode', (req, res) => nphiesCodesController.getCodesBySystem(req, res));
 

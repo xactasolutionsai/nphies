@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import DatePicker from 'react-datepicker';
 import Select from 'react-select';
+import AsyncSelect from 'react-select/async';
 import 'react-datepicker/dist/react-datepicker.css';
 import api from '@/services/api';
 import { 
@@ -926,10 +927,39 @@ export default function ClaimSubmissionForm() {
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>ICD-10 Code *</Label>
-                    <Input
-                      value={diagnosis.diagnosis_code}
-                      onChange={(e) => handleDiagnosisChange(index, 'diagnosis_code', e.target.value)}
-                      placeholder="e.g., J06.9"
+                    <AsyncSelect
+                      value={diagnosis.diagnosis_code ? {
+                        value: diagnosis.diagnosis_code,
+                        label: `${diagnosis.diagnosis_code}${diagnosis.diagnosis_display ? ' - ' + diagnosis.diagnosis_display : ''}`
+                      } : null}
+                      onChange={(option) => {
+                        handleDiagnosisChange(index, 'diagnosis_code', option?.value || '');
+                        // Extract description from label (format: "CODE - Description")
+                        const description = option?.label?.includes(' - ') 
+                          ? option.label.split(' - ').slice(1).join(' - ')
+                          : '';
+                        handleDiagnosisChange(index, 'diagnosis_display', description);
+                      }}
+                      loadOptions={async (inputValue) => {
+                        try {
+                          const results = await api.searchIcd10Codes(inputValue, 50);
+                          return results;
+                        } catch (error) {
+                          console.error('Error loading ICD-10 codes:', error);
+                          return [];
+                        }
+                      }}
+                      defaultOptions
+                      cacheOptions
+                      styles={selectStyles}
+                      placeholder="Search ICD-10 codes..."
+                      isClearable
+                      isSearchable
+                      menuPortalTarget={document.body}
+                      noOptionsMessage={({ inputValue }) => 
+                        inputValue ? `No codes found for "${inputValue}"` : 'Type to search ICD-10 codes...'
+                      }
+                      loadingMessage={() => 'Searching...'}
                     />
                   </div>
                   <div className="space-y-2">
@@ -937,7 +967,9 @@ export default function ClaimSubmissionForm() {
                     <Input
                       value={diagnosis.diagnosis_display || ''}
                       onChange={(e) => handleDiagnosisChange(index, 'diagnosis_display', e.target.value)}
-                      placeholder="Diagnosis description"
+                      placeholder="Auto-filled from ICD-10 selection"
+                      readOnly
+                      className="bg-gray-50"
                     />
                   </div>
                   <div className="space-y-2">
