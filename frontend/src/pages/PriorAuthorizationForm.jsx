@@ -44,7 +44,8 @@ import {
   TRIAGE_CATEGORY_OPTIONS,
   ENCOUNTER_SERVICE_TYPE_OPTIONS,
   ENCOUNTER_PRIORITY_OPTIONS,
-  DENTAL_PROCEDURE_OPTIONS
+  DENTAL_PROCEDURE_OPTIONS,
+  NPHIES_PROCEDURE_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -2094,10 +2095,23 @@ export default function PriorAuthorizationForm() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Service/Procedure Code *</Label>
-                      <Input
-                        value={item.product_or_service_code}
-                        onChange={(e) => handleItemChange(index, 'product_or_service_code', e.target.value)}
-                        placeholder="CPT/SNOMED code"
+                      <Select
+                        value={NPHIES_PROCEDURE_OPTIONS.find(opt => opt.value === item.product_or_service_code)}
+                        onChange={(option) => {
+                          handleItemChange(index, 'product_or_service_code', option?.value || '');
+                          // Extract description from label (format: "CODE - Description")
+                          const description = option?.label?.includes(' - ') 
+                            ? option.label.split(' - ').slice(1).join(' - ')
+                            : '';
+                          handleItemChange(index, 'product_or_service_display', description);
+                          handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/procedures');
+                        }}
+                        options={NPHIES_PROCEDURE_OPTIONS}
+                        styles={selectStyles}
+                        placeholder="Select procedure..."
+                        isClearable
+                        isSearchable
+                        menuPortalTarget={document.body}
                       />
                     </div>
                     <div className="space-y-2">
@@ -2105,7 +2119,9 @@ export default function PriorAuthorizationForm() {
                       <Input
                         value={item.product_or_service_display || ''}
                         onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
-                        placeholder="Service description"
+                        placeholder="Auto-filled from selection"
+                        readOnly
+                        className="bg-gray-50"
                       />
                     </div>
                   </div>

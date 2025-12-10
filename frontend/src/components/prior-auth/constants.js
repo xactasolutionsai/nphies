@@ -210,7 +210,7 @@ export const DENTAL_ICD10_OPTIONS = [
 ];
 
 // Dental Procedure Codes for Prior Authorization
-// Reference: NPHIES Dental/Oral Procedure Codes
+// Reference: NPHIES Dental/Oral Procedure Codes (http://nphies.sa/terminology/CodeSystem/oral-health-op)
 export const DENTAL_PROCEDURE_OPTIONS = [
   { value: '97011-00-00', label: '97011-00-00 - Comprehensive oral examination' },
   { value: '97043-00-00', label: '97043-00-00 - Dental antibiotic sensitivity test' },
@@ -221,6 +221,18 @@ export const DENTAL_PROCEDURE_OPTIONS = [
   { value: '658', label: '658 - The extraoral repair of a crown, bridge or splint' },
   { value: '97521-01-00', label: '97521-01-00 - Adhesive restoration tooth 1 surface direct' },
   { value: '415', label: '415 - Root canal' }
+];
+
+// NPHIES Procedure Codes for Institutional/Professional Prior Authorization
+// Reference: http://nphies.sa/terminology/CodeSystem/procedures
+export const NPHIES_PROCEDURE_OPTIONS = [
+  { value: '30571-00-00', label: '30571-00-00 - Appendicectomy' },
+  { value: '96196-01-00', label: '96196-01-00 - Intra-arterial administration of pharmacological agent, thrombolytic agent' },
+  { value: '96092-00-10', label: '96092-00-10 - Fitting of spectacles' },
+  { value: '13882-00-00', label: '13882-00-00 - Management of continuous ventilatory support, <= 24 hours' },
+  { value: '38287-02-00', label: '38287-02-00 - Catheter ablation of arrhythmia circuit or focus involving left atrial chamber' },
+  { value: '42503-00-02', label: '42503-00-02 - Ophthalmological examination, bilateral' },
+  { value: '33509-00-00', label: '33509-00-00 - Aorta endarterectomy' }
 ];
 
 // Vision ICD-10 Codes for eye examinations and disorders
