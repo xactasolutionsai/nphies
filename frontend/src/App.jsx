@@ -26,7 +26,9 @@ import EyeApprovals from './pages/EyeApprovals';
 import EyeApprovalsForm from './pages/EyeApprovalsForm';
 import EyeApprovalsDetails from './pages/EyeApprovalsDetails';
 import MedicineSearch from './pages/MedicineSearch';
-import NphiesEligibility from './pages/NphiesEligibility';
+import NphiesEligibilityList from './pages/NphiesEligibilityList';
+import NphiesEligibilityForm from './pages/NphiesEligibilityForm';
+import NphiesEligibilityDetails from './pages/NphiesEligibilityDetails';
 import PriorAuthorizations from './pages/PriorAuthorizations';
 import PriorAuthorizationForm from './pages/PriorAuthorizationForm';
 import PriorAuthorizationDetails from './pages/PriorAuthorizationDetails';
@@ -46,7 +48,9 @@ function App() {
           <Route path="/insurers" element={<Insurers />} />
           <Route path="/authorizations" element={<Authorizations />} />
           <Route path="/eligibility" element={<Eligibility />} />
-          <Route path="/nphies-eligibility" element={<NphiesEligibility />} />
+          <Route path="/nphies-eligibility" element={<NphiesEligibilityList />} />
+          <Route path="/nphies-eligibility/new" element={<NphiesEligibilityForm />} />
+          <Route path="/nphies-eligibility/:id" element={<NphiesEligibilityDetails />} />
           <Route path="/claims" element={<Claims />} />
           <Route path="/claim-batches" element={<ClaimBatches />} />
           <Route path="/payments" element={<Payments />} />

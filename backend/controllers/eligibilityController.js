@@ -20,24 +20,21 @@ class EligibilityController extends BaseController {
       const search = req.query.search || '';
       const status = req.query.status || '';
 
-      // Build dynamic WHERE clause
+      // Build dynamic WHERE clause - use separate param indices for count vs data queries
       let whereConditions = [];
-      let queryParams = [limit, offset];
       let countParams = [];
-      let paramIndex = 3;
+      let countParamIndex = 1;
 
       if (search) {
-        whereConditions.push(`(p.name ILIKE $${paramIndex} OR pr.provider_name ILIKE $${paramIndex} OR i.insurer_name ILIKE $${paramIndex} OR e.purpose ILIKE $${paramIndex})`);
-        queryParams.push(`%${search}%`);
+        whereConditions.push(`(p.name ILIKE $${countParamIndex} OR pr.provider_name ILIKE $${countParamIndex} OR i.insurer_name ILIKE $${countParamIndex} OR e.purpose ILIKE $${countParamIndex})`);
         countParams.push(`%${search}%`);
-        paramIndex++;
+        countParamIndex++;
       }
 
       if (status) {
-        whereConditions.push(`e.status = $${paramIndex}`);
-        queryParams.push(status);
+        whereConditions.push(`e.status = $${countParamIndex}`);
         countParams.push(status);
-        paramIndex++;
+        countParamIndex++;
       }
 
       const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
@@ -54,23 +51,43 @@ class EligibilityController extends BaseController {
       const countResult = await query(countQuery, countParams);
       const total = parseInt(countResult.rows[0].total);
 
+      // Build WHERE clause for data query with offset param indices (limit=$1, offset=$2)
+      let dataWhereConditions = [];
+      let dataParams = [limit, offset];
+      let dataParamIndex = 3;
+
+      if (search) {
+        dataWhereConditions.push(`(p.name ILIKE $${dataParamIndex} OR pr.provider_name ILIKE $${dataParamIndex} OR i.insurer_name ILIKE $${dataParamIndex} OR e.purpose ILIKE $${dataParamIndex})`);
+        dataParams.push(`%${search}%`);
+        dataParamIndex++;
+      }
+
+      if (status) {
+        dataWhereConditions.push(`e.status = $${dataParamIndex}`);
+        dataParams.push(status);
+        dataParamIndex++;
+      }
+
+      const dataWhereClause = dataWhereConditions.length > 0 ? 'WHERE ' + dataWhereConditions.join(' AND ') : '';
+
       // Get paginated data with joins
       const dataQuery = `
         SELECT
           e.*,
           e.eligibility_id as id,
           p.name as patient_name,
+          p.identifier as patient_identifier,
           pr.provider_name as provider_name,
           i.insurer_name as insurer_name
         FROM eligibility e
         LEFT JOIN patients p ON e.patient_id = p.patient_id
         LEFT JOIN providers pr ON e.provider_id = pr.provider_id
         LEFT JOIN insurers i ON e.insurer_id = i.insurer_id
-        ${whereClause}
-        ORDER BY e.eligibility_id DESC 
+        ${dataWhereClause}
+        ORDER BY e.created_at DESC 
         LIMIT $1 OFFSET $2
       `;
-      const result = await query(dataQuery, queryParams);
+      const result = await query(dataQuery, dataParams);
 
       res.json({
         data: result.rows,

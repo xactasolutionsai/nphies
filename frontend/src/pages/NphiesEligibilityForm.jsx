@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Shield, CheckCircle, XCircle, AlertCircle, Info, FileText, ChevronDown, ChevronUp, Baby, ArrowRightLeft, User, Building, CreditCard, Search, Calendar, Eye } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Shield, CheckCircle, XCircle, AlertCircle, Info, FileText, ChevronDown, ChevronUp, Baby, ArrowRightLeft, User, Building, CreditCard, Search, Calendar, Eye, ArrowLeft } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import Select from 'react-select';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -116,7 +118,9 @@ const RequiredFieldIndicator = () => (
   <span className="text-red-500 ml-1">*</span>
 );
 
-export default function NphiesEligibility() {
+export default function NphiesEligibilityForm() {
+  const navigate = useNavigate();
+  
   // Input mode toggles
   const [patientMode, setPatientMode] = useState('existing'); // 'existing' | 'manual'
   const [providerMode, setProviderMode] = useState('existing'); // 'existing' | 'manual'
@@ -341,6 +345,11 @@ export default function NphiesEligibility() {
       
       if (!response.success) {
         setError(response.error || 'Eligibility check failed');
+      } else {
+        // Navigate to the detail page on success
+        if (response.eligibilityId) {
+          navigate(`/nphies-eligibility/${response.eligibilityId}`);
+        }
       }
     } catch (err) {
       console.error('Error checking eligibility:', err);
@@ -476,25 +485,6 @@ export default function NphiesEligibility() {
     setError(null);
   };
 
-  // Get Site Eligibility display text
-  const getSiteEligibilityDisplay = (code) => {
-    const displays = {
-      'eligible': 'Patient is eligible for coverage at this site',
-      'not-eligible': 'Patient is not eligible for coverage at this site',
-      'not-in-network': 'Provider is not in the patient\'s network',
-      'plan-expired': 'Patient\'s plan has expired',
-      'coverage-suspended': 'Patient\'s coverage is suspended',
-      'benefit-exhausted': 'Patient\'s benefits have been exhausted'
-    };
-    return displays[code] || code;
-  };
-
-  // Get Site Eligibility badge color
-  const getSiteEligibilityColor = (code) => {
-    if (code === 'eligible') return 'bg-green-100 text-green-800 border-green-300';
-    return 'bg-red-100 text-red-800 border-red-300';
-  };
-
   // Mode toggle button component
   const ModeToggle = ({ mode, setMode, options, labels }) => (
     <div className="flex space-x-1 bg-gray-100 rounded-lg p-1 mb-3">
@@ -560,8 +550,19 @@ export default function NphiesEligibility() {
         <div className="relative bg-white rounded-2xl p-8 border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
+              <div className="flex items-center space-x-4 mb-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/nphies-eligibility')}
+                  className="text-gray-600 hover:text-gray-900"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to List
+                </Button>
+              </div>
               <h1 className="text-4xl font-bold text-gray-900">
-                NPHIES Eligibility Check
+                New Eligibility Check
               </h1>
               <p className="text-gray-600 mt-2 text-lg">
                 Verify patient insurance coverage with NPHIES platform
@@ -1032,13 +1033,22 @@ export default function NphiesEligibility() {
 
             {/* Action Buttons */}
             <div className="flex justify-between">
-              <button
-                type="button"
-                onClick={clearForm}
-                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium"
-              >
-                Clear Form
-              </button>
+              <div className="flex space-x-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate('/nphies-eligibility')}
+                >
+                  Cancel
+                </Button>
+                <button
+                  type="button"
+                  onClick={clearForm}
+                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Clear Form
+                </button>
+              </div>
               <div className="flex space-x-3">
                 {/* Preview Button */}
                 <button
@@ -1173,527 +1183,6 @@ export default function NphiesEligibility() {
               >
                 Close Preview
               </button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Results */}
-      {result && (
-        <Card className={result.success ? 'border-green-200 bg-green-50/50' : 'border-amber-200 bg-amber-50/50'}>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center">
-                {result.success ? (
-                  <>
-                    <CheckCircle className="h-6 w-6 text-green-600 mr-2" />
-                    <span className="text-green-900">Eligibility Verified Successfully</span>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="h-6 w-6 text-amber-600 mr-2" />
-                    <span className="text-amber-900">Eligibility Check Returned Errors</span>
-                  </>
-                )}
-              </div>
-              <Badge 
-                variant={result.outcome === 'complete' ? 'default' : 'secondary'}
-                className={result.outcome === 'error' ? 'bg-amber-100 text-amber-800 border-amber-300' : ''}
-              >
-                {result.outcome?.toUpperCase()}
-              </Badge>
-            </CardTitle>
-            <CardDescription className="flex items-center justify-between mt-2">
-              <span>
-                {result.success 
-                  ? 'Eligibility verification completed successfully' 
-                  : 'Response received but contains validation errors'}
-              </span>
-              {result.nphiesResponseId && (
-                <span className="text-xs font-mono bg-white px-2 py-1 rounded border">
-                  ID: {result.nphiesResponseId}
-                </span>
-              )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Site Eligibility Banner */}
-            {result.siteEligibility && (
-              <div className={`rounded-xl p-4 border ${getSiteEligibilityColor(result.siteEligibility.code)}`}>
-                <div className="flex items-center space-x-3">
-                  {result.siteEligibility.code === 'eligible' ? (
-                    <CheckCircle className="h-6 w-6" />
-                  ) : (
-                    <XCircle className="h-6 w-6" />
-                  )}
-                  <div>
-                    <p className="font-semibold">Site Eligibility: {result.siteEligibility.code?.toUpperCase()}</p>
-                    <p className="text-sm">{result.siteEligibility.display || getSiteEligibilityDisplay(result.siteEligibility.code)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* NPHIES Generated Warning */}
-            {result.isNphiesGenerated && (
-              <div className="bg-amber-50 border-l-4 border-amber-500 rounded-lg p-4">
-                <div className="flex items-start space-x-3">
-                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-amber-900">NPHIES Generated Response</p>
-                    <p className="text-sm text-amber-800">
-                      This response was generated by NPHIES due to a timeout or delivery issue. 
-                      The request may not have reached the insurer.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Response Summary */}
-            <div className="bg-white rounded-xl p-6 border border-gray-200">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Info className="h-5 w-5 text-primary-purple mr-2" />
-                Response Summary
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600">Outcome</p>
-                  <Badge variant={result.outcome === 'complete' ? 'default' : 'destructive'} className="mt-1">
-                    {result.outcome?.toUpperCase()}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Response Code</p>
-                  <p className="text-lg font-semibold">{result.responseCode || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Response ID</p>
-                  <p className="text-sm font-mono text-gray-700">{result.nphiesResponseId || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Coverage Status</p>
-                  <p className="text-lg font-semibold">
-                    {result.inforce ? (
-                      <span className="text-green-600">✓ In Force</span>
-                    ) : (
-                      <span className="text-red-600">✗ Not In Force</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-              {/* Disposition */}
-              {result.disposition && (
-                <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-sm text-green-800 font-medium">
-                    <span className="text-green-600 mr-2">✓</span>
-                    {result.disposition}
-                  </p>
-                </div>
-              )}
-              {/* Site Eligibility */}
-              {result.siteEligibility && (
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-600 font-medium mb-1">Site Eligibility</p>
-                  <p className="text-blue-800">
-                    <Badge variant={result.siteEligibility.code === 'eligible' ? 'default' : 'destructive'}>
-                      {result.siteEligibility.code?.toUpperCase()}
-                    </Badge>
-                    <span className="ml-2 text-sm">{result.siteEligibility.display}</span>
-                  </p>
-                </div>
-              )}
-              {/* Purpose */}
-              {result.purpose && result.purpose.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm text-gray-600 mb-2">Request Purpose</p>
-                  <div className="flex flex-wrap gap-2">
-                    {result.purpose.map((p, idx) => (
-                      <Badge key={idx} variant="outline" className="capitalize">
-                        {p}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Serviced Period */}
-              {result.servicedPeriod && (
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Service Period Start</p>
-                    <p className="font-semibold">{result.servicedPeriod.start}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Service Period End</p>
-                    <p className="font-semibold">{result.servicedPeriod.end}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Patient Information */}
-            {result.patient && (
-              <div className="bg-white rounded-xl p-6 border border-gray-200">
-                <h3 className="text-lg font-semibold mb-4 flex items-center">
-                  <Shield className="h-5 w-5 text-blue-600 mr-2" />
-                  Patient Information
-                  {result.patient.active && (
-                    <Badge variant="default" className="ml-2 text-xs bg-green-500">Active</Badge>
-                  )}
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Full Name</p>
-                    <p className="text-lg font-semibold">{result.patient.name || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Identifier</p>
-                    <p className="text-lg font-semibold">{result.patient.identifier || 'N/A'}</p>
-                    {result.patient.identifierType && (
-                      <p className="text-sm text-gray-500">{result.patient.identifierType}</p>
-                    )}
-                    {result.patient.identifierCountry && (
-                      <p className="text-xs text-blue-600">Country: {result.patient.identifierCountry}</p>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Birth Date</p>
-                    <p className="text-lg font-semibold">{result.patient.birthDate || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Gender</p>
-                    <p className="text-lg font-semibold capitalize">{result.patient.gender || 'N/A'}</p>
-                  </div>
-                  {result.patient.phone && (
-                  <div>
-                    <p className="text-sm text-gray-600">Phone</p>
-                    <p className="text-lg font-semibold">{result.patient.phone}</p>
-                  </div>
-                  )}
-                  {result.patient.occupation && (
-                    <div>
-                      <p className="text-sm text-gray-600">Occupation</p>
-                      <p className="text-lg font-semibold capitalize">{result.patient.occupation}</p>
-                  </div>
-                  )}
-                  {result.patient.maritalStatus && (
-                    <div>
-                      <p className="text-sm text-gray-600">Marital Status</p>
-                      <p className="text-lg font-semibold">
-                        {result.patient.maritalStatus === 'M' ? 'Married' : 
-                         result.patient.maritalStatus === 'S' ? 'Single' :
-                         result.patient.maritalStatus === 'D' ? 'Divorced' :
-                         result.patient.maritalStatus === 'W' ? 'Widowed' :
-                         result.patient.maritalStatus === 'U' ? 'Unknown' : result.patient.maritalStatus}
-                      </p>
-                    </div>
-                  )}
-                  {result.patient.deceased !== undefined && (
-                    <div>
-                      <p className="text-sm text-gray-600">Deceased Status</p>
-                      <Badge variant={result.patient.deceased ? 'destructive' : 'default'} className={result.patient.deceased ? '' : 'bg-green-500'}>
-                        {result.patient.deceased ? 'Yes' : 'No'}
-                      </Badge>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Coverage Information */}
-            {result.coverage && (
-              <div className="bg-white rounded-xl p-6 border border-gray-200">
-                <h3 className="text-lg font-semibold mb-4 flex items-center">
-                  <Shield className="h-5 w-5 text-green-600 mr-2" />
-                  Coverage Information
-                  <Badge variant={result.coverage.status === 'active' ? 'default' : 'secondary'} className="ml-2">
-                    {result.coverage.status?.toUpperCase() || 'N/A'}
-                  </Badge>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Member ID</p>
-                    <p className="text-lg font-semibold">{result.coverage.memberId || result.coverage.policyNumber || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Coverage Type</p>
-                    <p className="text-lg font-semibold">{result.coverage.type || 'N/A'}</p>
-                    {result.coverage.typeCode && (
-                      <p className="text-xs text-gray-500 font-mono">{result.coverage.typeCode}</p>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Relationship</p>
-                    <p className="text-lg font-semibold capitalize">{result.coverage.relationship || 'N/A'}</p>
-                  </div>
-                  {result.coverage.network && (
-                  <div>
-                    <p className="text-sm text-gray-600">Network</p>
-                    <p className="text-lg font-semibold">{result.coverage.network}</p>
-                  </div>
-                  )}
-                  </div>
-
-                {/* Coverage Classes */}
-                {result.coverage.classes && result.coverage.classes.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <p className="text-sm font-medium text-gray-700 mb-3">Coverage Classes</p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {result.coverage.classes.map((cls, idx) => (
-                        <div key={idx} className="bg-gray-50 p-3 rounded-lg">
-                          <p className="text-xs text-gray-500 capitalize">{cls.type}</p>
-                          <p className="font-semibold">{cls.name || cls.value}</p>
-                          {cls.name && cls.value && cls.name !== cls.value && (
-                            <p className="text-xs text-gray-400">ID: {cls.value}</p>
-                          )}
-                </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Dependent Info */}
-                {result.coverage.dependent && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Dependent Information</p>
-                    <p className="text-gray-800">{result.coverage.dependent}</p>
-                  </div>
-                )}
-
-                {/* Coverage Period */}
-                {(result.coverage.periodStart || result.coverage.periodEnd) && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <p className="text-sm font-medium text-gray-700 mb-3">Coverage Period</p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-green-50 p-3 rounded-lg">
-                        <p className="text-xs text-green-600">Start Date</p>
-                        <p className="font-semibold text-green-800">{result.coverage.periodStart || 'N/A'}</p>
-                      </div>
-                      <div className="bg-red-50 p-3 rounded-lg">
-                        <p className="text-xs text-red-600">End Date</p>
-                        <p className="font-semibold text-red-800">{result.coverage.periodEnd || 'N/A'}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Cost to Beneficiary */}
-                {result.coverage.costToBeneficiary && result.coverage.costToBeneficiary.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <p className="text-sm font-medium text-gray-700 mb-3">Cost to Beneficiary</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {result.coverage.costToBeneficiary.map((cost, index) => (
-                        <div key={index} className="bg-amber-50 p-3 rounded-lg border border-amber-200">
-                          <p className="text-xs text-amber-600">{cost.typeDisplay || cost.type}</p>
-                          <p className="text-xl font-bold text-amber-800">
-                            {cost.value}{cost.unit === '%' ? '%' : ` ${cost.unit}`}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Subrogation */}
-                {result.coverage.subrogation !== undefined && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-200">
-                      <div>
-                        <p className="text-sm font-medium text-blue-700">Subrogation Rights</p>
-                        <p className="text-xs text-blue-600">Insurer can recover costs from third parties</p>
-                      </div>
-                      <Badge variant={result.coverage.subrogation ? 'default' : 'secondary'} className={result.coverage.subrogation ? 'bg-blue-600' : ''}>
-                        {result.coverage.subrogation ? 'Yes' : 'No'}
-                      </Badge>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Provider & Insurer Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {result.provider && (
-                <div className="bg-white rounded-xl p-6 border border-gray-200">
-                  <h3 className="text-lg font-semibold mb-4 flex items-center">
-                    <CheckCircle className="h-5 w-5 text-purple-600 mr-2" />
-                    Provider Details
-                  </h3>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-gray-600">Organization</p>
-                      <p className="text-lg font-semibold">{result.provider.name || 'N/A'}</p>
-                    </div>
-                    {result.provider.nphiesId && (
-                    <div>
-                        <p className="text-sm text-gray-600">NPHIES ID</p>
-                        <p className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">{result.provider.nphiesId}</p>
-                    </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {result.insurer && (
-                <div className="bg-white rounded-xl p-6 border border-gray-200">
-                  <h3 className="text-lg font-semibold mb-4 flex items-center">
-                    <Shield className="h-5 w-5 text-amber-600 mr-2" />
-                    Insurer Details
-                    {result.insurer.active && (
-                      <Badge variant="default" className="ml-2 text-xs bg-green-500">Active</Badge>
-                    )}
-                  </h3>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-gray-600">Organization</p>
-                      <p className="text-lg font-semibold">{result.insurer.name || 'N/A'}</p>
-                    </div>
-                    {result.insurer.nphiesId && (
-                    <div>
-                        <p className="text-sm text-gray-600">NPHIES ID</p>
-                        <p className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">{result.insurer.nphiesId}</p>
-                    </div>
-                    )}
-                    {result.insurer.address && (
-                    <div>
-                      <p className="text-sm text-gray-600">Address</p>
-                      <p className="text-sm text-gray-700">{result.insurer.address}</p>
-                        {(result.insurer.city || result.insurer.country) && (
-                          <p className="text-sm text-gray-500">
-                            {[result.insurer.city, result.insurer.country].filter(Boolean).join(', ')}
-                          </p>
-                        )}
-                    </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Benefits */}
-            {result.benefits && result.benefits.length > 0 && (
-              <div className="bg-white rounded-xl p-6 border border-gray-200">
-                <h3 className="text-lg font-semibold mb-4 flex items-center justify-between">
-                  <span>Benefits Details ({result.benefits.length} items)</span>
-                  <Badge variant="outline">{result.benefits.filter(b => !b.excluded).length} Active</Badge>
-                </h3>
-                <div className="space-y-4">
-                  {result.benefits.map((benefit, index) => (
-                    <div key={index} className={`rounded-lg p-4 border ${benefit.excluded ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
-                      {/* Benefit Header */}
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">{benefit.category}</h4>
-                          {benefit.description && (
-                            <p className="text-sm text-gray-600 mt-1">{benefit.description}</p>
-                          )}
-                        </div>
-                        <div className="flex gap-2 ml-4">
-                          <Badge variant={benefit.networkCode === 'in' ? 'default' : 'secondary'} className="text-xs">
-                            {benefit.network}
-                          </Badge>
-                          {benefit.term && (
-                            <Badge variant="outline" className="text-xs">{benefit.term}</Badge>
-                          )}
-                        </div>
-                        </div>
-                      
-                      {/* Benefit Details */}
-                      {benefit.benefitDetails && benefit.benefitDetails.length > 0 && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {benefit.benefitDetails.map((detail, detailIndex) => (
-                            <div key={detailIndex} className={`p-2 rounded ${
-                              detail.type === 'benefit' ? 'bg-green-100' :
-                              detail.type === 'approval-limit' ? 'bg-blue-100' :
-                              detail.type?.includes('copay') ? 'bg-amber-100' :
-                              detail.type === 'room' ? 'bg-purple-100' : 'bg-gray-100'
-                            }`}>
-                              <p className="text-xs text-gray-600">{detail.typeDisplay}</p>
-                              <p className="font-semibold text-sm">{detail.allowedDisplay || 'N/A'}</p>
-                              {detail.usedDisplay && (
-                                <p className="text-xs text-gray-500">Used: {detail.usedDisplay}</p>
-                              )}
-                              {detail.remainingDisplay && (
-                                <p className="text-xs text-blue-600 font-medium">Left: {detail.remainingDisplay}</p>
-                              )}
-                        </div>
-                          ))}
-                      </div>
-                      )}
-                      
-                      {benefit.excluded && (
-                        <Badge variant="destructive" className="mt-2">Excluded</Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Errors */}
-            {result.errors && result.errors.length > 0 && (
-              <div className="bg-red-50 rounded-xl p-6 border border-red-200">
-                <h3 className="text-lg font-semibold mb-4 text-red-900 flex items-center">
-                  <AlertCircle className="h-5 w-5 mr-2" />
-                  NPHIES Validation Errors ({result.errors.length})
-                </h3>
-                <div className="space-y-3">
-                  {result.errors.map((err, index) => (
-                    <div key={index} className="bg-white rounded-lg p-4 border-l-4 border-red-500">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <Badge variant="destructive" className="font-mono">
-                              {err.code}
-                            </Badge>
-                            <span className="text-sm text-gray-500">Error #{index + 1}</span>
-                          </div>
-                          <p className="text-red-700 font-medium mb-2">{err.message}</p>
-                          {err.location && (
-                            <div className="bg-white rounded px-3 py-2 mt-2">
-                              <p className="text-xs text-gray-600 mb-1">Location in Bundle:</p>
-                              <p className="text-sm font-mono text-gray-800">{err.location}</p>
-                            </div>
-                          )}
-                        </div>
-                        <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 ml-3" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Raw FHIR Data Toggle */}
-            <div className="bg-white rounded-xl p-4">
-              <button
-                type="button"
-                onClick={() => setShowRawData(!showRawData)}
-                className="w-full flex items-center justify-between text-left font-semibold text-gray-700 hover:text-primary-purple transition-colors"
-              >
-                <span className="flex items-center">
-                  <FileText className="h-5 w-5 mr-2" />
-                  Raw FHIR Request/Response
-                </span>
-                {showRawData ? <ChevronUp /> : <ChevronDown />}
-              </button>
-              
-              {showRawData && (
-                <div className="mt-4 space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-gray-700 mb-2">Request Bundle</h4>
-                    <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs max-h-96">
-                      {JSON.stringify(result.raw?.request, null, 2)}
-                    </pre>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-700 mb-2">Response Bundle</h4>
-                    <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs max-h-96">
-                      {JSON.stringify(result.raw?.response, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>
