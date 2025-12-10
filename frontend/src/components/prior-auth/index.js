@@ -40,6 +40,9 @@ export {
   getInitialSupportingInfoData
 } from './helpers';
 
+// Dummy Data Generator
+export { generateDummyVitalsAndClinical } from './dummyDataGenerator';
+
 // Components
 export { default as TabButton } from './TabButton';
 

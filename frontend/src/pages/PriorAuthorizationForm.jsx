@@ -13,7 +13,7 @@ import api from '@/services/api';
 import { 
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
-  Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard
+  Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles
 } from 'lucide-react';
 
 // Import extracted modules
@@ -54,7 +54,7 @@ import {
   getInitialDiagnosisData,
   getInitialSupportingInfoData
 } from '@/components/prior-auth/helpers';
-import { TabButton } from '@/components/prior-auth';
+import { TabButton, generateDummyVitalsAndClinical } from '@/components/prior-auth';
 
 export default function PriorAuthorizationForm() {
   const navigate = useNavigate();
@@ -463,6 +463,17 @@ export default function PriorAuthorizationForm() {
     setFormData(prev => ({
       ...prev,
       admission_info: { ...prev.admission_info, [key]: value }
+    }));
+  };
+
+  // Handler for filling dummy/sample data in Vitals & Clinical tab
+  const handleFillDummyData = () => {
+    const dummyData = generateDummyVitalsAndClinical(formData.auth_type, formData.encounter_class);
+    setFormData(prev => ({
+      ...prev,
+      vital_signs: { ...prev.vital_signs, ...dummyData.vital_signs },
+      clinical_info: { ...prev.clinical_info, ...dummyData.clinical_info },
+      admission_info: { ...prev.admission_info, ...dummyData.admission_info }
     }));
   };
 
@@ -1555,19 +1566,32 @@ export default function PriorAuthorizationForm() {
                   </CardTitle>
                   <CardDescription>Patient vital signs measured during the encounter</CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm text-gray-500">Measurement Time:</Label>
-                  <div className="datepicker-wrapper w-52">
-                    <DatePicker
-                      selected={formData.vital_signs.measurement_time ? new Date(formData.vital_signs.measurement_time) : null}
-                      onChange={(date) => handleVitalSignChange('measurement_time', date ? date.toISOString() : null)}
-                      showTimeInput
-                      timeInputLabel="Time:"
-                      dateFormat="yyyy-MM-dd HH:mm"
-                      className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                      placeholderText="Select date & time"
-                    />
-                    <Calendar className="datepicker-icon h-4 w-4" />
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleFillDummyData}
+                    className="flex items-center gap-2 text-purple-600 border-purple-200 hover:bg-purple-50 hover:border-purple-300"
+                    title="Fill with realistic sample data based on authorization type"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Fill Sample Data
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm text-gray-500">Measurement Time:</Label>
+                    <div className="datepicker-wrapper w-52">
+                      <DatePicker
+                        selected={formData.vital_signs.measurement_time ? new Date(formData.vital_signs.measurement_time) : null}
+                        onChange={(date) => handleVitalSignChange('measurement_time', date ? date.toISOString() : null)}
+                        showTimeInput
+                        timeInputLabel="Time:"
+                        dateFormat="yyyy-MM-dd HH:mm"
+                        className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholderText="Select date & time"
+                      />
+                      <Calendar className="datepicker-icon h-4 w-4" />
+                    </div>
                   </div>
                 </div>
               </div>

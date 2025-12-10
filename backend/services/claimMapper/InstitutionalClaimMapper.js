@@ -336,15 +336,22 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       );
     }
 
-    // Total
-    let totalAmount = claim.total_amount;
-    if (!totalAmount && claim.items?.length > 0) {
+    // Total - BV-00059: Must equal sum of item net values
+    // Calculate total from items to ensure accuracy
+    let totalAmount = 0;
+    if (claim.items?.length > 0) {
       totalAmount = claim.items.reduce((sum, item) => {
-        return sum + (parseFloat(item.quantity || 1) * parseFloat(item.unit_price || 0) * parseFloat(item.factor || 1)) + parseFloat(item.tax || 0);
+        const quantity = parseFloat(item.quantity || 1);
+        const unitPrice = parseFloat(item.unit_price || 0);
+        const factor = parseFloat(item.factor || 1);
+        const tax = parseFloat(item.tax || 0);
+        return sum + (quantity * unitPrice * factor) + tax;
       }, 0);
+    } else if (claim.total_amount) {
+      totalAmount = parseFloat(claim.total_amount);
     }
     claimResource.total = { 
-      value: parseFloat(totalAmount || 0), 
+      value: totalAmount, 
       currency: claim.currency || 'SAR' 
     };
 
@@ -422,12 +429,91 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
 
   /**
    * Build Encounter resource for Claims (status: finished instead of planned)
+   * 
+   * NPHIES Validation Requirements for Claims with encounter end date:
+   * - BV-00759: dischargeDisposition SHALL be provided when encounter end date is provided
+   * - BV-00758: extension-dischargeSpecialty SHALL be provided when encounter end date is provided  
+   * - BV-00744: extension-intendedLengthOfStay SHALL be provided for Inpatient/DayCase
    */
   buildClaimEncounterResource(claim, patient, provider, bundleResourceIds) {
     const encounterId = bundleResourceIds.encounter;
     const encounterClass = claim.encounter_class || 'daycase';
     const encounterIdentifier = claim.encounter_identifier || claim.claim_number || `ENC-${encounterId.substring(0, 8)}`;
     const providerNphiesId = provider?.nphies_id || 'provider';
+
+    // Build hospitalization extensions
+    const hospitalizationExtensions = [
+      // Admission Specialty (always required)
+      { 
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-admissionSpecialty', 
+        valueCodeableConcept: { 
+          coding: [{ 
+            system: 'http://nphies.sa/terminology/CodeSystem/practice-codes', 
+            code: claim.admission_specialty || claim.practice_code || '08.00',
+            display: this.getPracticeCodeDisplay(claim.admission_specialty || claim.practice_code || '08.00')
+          }] 
+        } 
+      }
+    ];
+
+    // BV-00744: intendedLengthOfStay is REQUIRED for Inpatient (IMP) or DayCase (SS)
+    const isInpatientOrDaycase = ['inpatient', 'daycase', 'IMP', 'SS'].includes(encounterClass);
+    if (isInpatientOrDaycase) {
+      // Calculate intended length of stay from encounter period or use provided value
+      let lengthOfStay = claim.intended_length_of_stay || claim.estimated_length_of_stay || 1;
+      if (claim.encounter_start && claim.encounter_end) {
+        const start = new Date(claim.encounter_start);
+        const end = new Date(claim.encounter_end);
+        const diffTime = Math.abs(end - start);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        lengthOfStay = diffDays || 1;
+      }
+      
+      hospitalizationExtensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-intendedLengthOfStay',
+        valueQuantity: {
+          value: lengthOfStay,
+          system: 'http://unitsofmeasure.org',
+          code: 'd'
+        }
+      });
+    }
+
+    // BV-00758: dischargeSpecialty is REQUIRED when encounter end date is provided
+    if (claim.encounter_end) {
+      hospitalizationExtensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-dischargeSpecialty',
+        valueCodeableConcept: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
+            code: claim.discharge_specialty || claim.admission_specialty || claim.practice_code || '08.00',
+            display: this.getPracticeCodeDisplay(claim.discharge_specialty || claim.admission_specialty || claim.practice_code || '08.00')
+          }]
+        }
+      });
+    }
+
+    const hospitalization = {
+      extension: hospitalizationExtensions,
+      admitSource: { 
+        coding: [{ 
+          system: 'http://nphies.sa/terminology/CodeSystem/admit-source', 
+          code: claim.admit_source || 'WKIN',
+          display: this.getAdmitSourceDisplay(claim.admit_source || 'WKIN')
+        }] 
+      }
+    };
+
+    // BV-00759: dischargeDisposition is REQUIRED when encounter end date is provided
+    if (claim.encounter_end) {
+      hospitalization.dischargeDisposition = {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/discharge-disposition',
+          code: claim.discharge_disposition || 'home',
+          display: this.getDischargeDispositionDisplay(claim.discharge_disposition || 'home')
+        }]
+      };
+    }
 
     const encounter = {
       resourceType: 'Encounter',
@@ -446,33 +532,15 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       serviceType: { 
         coding: [{ 
           system: 'http://nphies.sa/terminology/CodeSystem/service-type', 
-          code: claim.service_type || 'sub-acute-care', 
-          display: this.getServiceTypeDisplay(claim.service_type || 'sub-acute-care') 
+          code: claim.service_type || 'acute-care', 
+          display: this.getServiceTypeDisplay(claim.service_type || 'acute-care') 
         }] 
       },
       subject: { reference: `Patient/${bundleResourceIds.patient}` },
       period: { 
         start: this.formatDateTimeWithTimezone(claim.encounter_start || claim.service_date || new Date()) 
       },
-      hospitalization: {
-        extension: [{ 
-          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-admissionSpecialty', 
-          valueCodeableConcept: { 
-            coding: [{ 
-              system: 'http://nphies.sa/terminology/CodeSystem/practice-codes', 
-              code: claim.admission_specialty || claim.practice_code || '08.00',
-              display: this.getPracticeCodeDisplay(claim.admission_specialty || claim.practice_code || '08.00')
-            }] 
-          } 
-        }],
-        admitSource: { 
-          coding: [{ 
-            system: 'http://nphies.sa/terminology/CodeSystem/admit-source', 
-            code: claim.admit_source || 'WKIN',
-            display: this.getAdmitSourceDisplay(claim.admit_source || 'WKIN')
-          }] 
-        }
-      },
+      hospitalization,
       serviceProvider: { reference: `Organization/${bundleResourceIds.provider}` }
     };
 
@@ -484,6 +552,25 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       fullUrl: `http://provider.com/Encounter/${encounterId}`, 
       resource: encounter 
     };
+  }
+
+  /**
+   * Get display text for discharge disposition codes
+   */
+  getDischargeDispositionDisplay(code) {
+    const displays = {
+      'home': 'Home',
+      'other-hcf': 'Other healthcare facility',
+      'hosp': 'Hospitalization',
+      'long': 'Long-term care',
+      'aadvice': 'Left against advice',
+      'exp': 'Expired',
+      'psy': 'Psychiatric hospital',
+      'rehab': 'Rehabilitation',
+      'snf': 'Skilled nursing facility',
+      'oth': 'Other'
+    };
+    return displays[code] || code;
   }
 
   /**
