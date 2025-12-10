@@ -333,31 +333,50 @@ class DentalMapper extends BaseMapper {
     let supportingInfoList = [...(priorAuth.supporting_info || [])];
     
     // chief-complaint is REQUIRED for dental
-    if (!supportingInfoList.some(info => info.category === 'chief-complaint')) {
-      const clinicalInfo = priorAuth.clinical_info || {};
-      const format = clinicalInfo.chief_complaint_format || 'snomed';
-      
-      if (format === 'text' && clinicalInfo.chief_complaint_text) {
-        // Free text format per Claim-298042 example
-        supportingInfoList.unshift({
-          category: 'chief-complaint',
-          code_text: clinicalInfo.chief_complaint_text
-        });
-      } else {
-        // SNOMED code format per Claim-293093 example
-        supportingInfoList.unshift({
-          category: 'chief-complaint',
-          code: clinicalInfo.chief_complaint_code || priorAuth.chief_complaint_code || '27355003',
-          code_display: clinicalInfo.chief_complaint_display || priorAuth.chief_complaint_display || 'Toothache',
-          code_system: 'http://snomed.info/sct'
-        });
+    // BV-00531: For dental/oral claims, chief-complaint MUST use code.text format (free text)
+    // NOT code.coding format - this is different from institutional/professional claims
+    const existingChiefComplaint = supportingInfoList.find(info => info.category === 'chief-complaint');
+    if (existingChiefComplaint) {
+      // Convert any SNOMED code format to free text format for dental
+      if (existingChiefComplaint.code && !existingChiefComplaint.code_text) {
+        existingChiefComplaint.code_text = existingChiefComplaint.code_display || existingChiefComplaint.code || 'Dental complaint';
+        delete existingChiefComplaint.code;
+        delete existingChiefComplaint.code_system;
+        delete existingChiefComplaint.code_display;
       }
+    } else {
+      // Add chief complaint if not present
+      const clinicalInfo = priorAuth.clinical_info || {};
+      // For dental, always use free text format (code.text)
+      const chiefComplaintText = clinicalInfo.chief_complaint_text || 
+                                  clinicalInfo.chief_complaint_display || 
+                                  priorAuth.chief_complaint_display ||
+                                  'Periodic oral examination';
+      supportingInfoList.unshift({
+        category: 'chief-complaint',
+        code_text: chiefComplaintText
+      });
     }
     
     if (supportingInfoList.length > 0) {
       claim.supportingInfo = supportingInfoList.map((info, idx) => {
         const seq = idx + 1;
         supportingInfoSequences.push(seq);
+        
+        // BV-00531: For dental claims, chief-complaint MUST use code.text format
+        // Convert any code format to code_text format
+        if (info.category === 'chief-complaint' && info.code && !info.code_text) {
+          const convertedInfo = {
+            ...info,
+            sequence: seq,
+            code_text: info.code_display || info.code || 'Dental complaint'
+          };
+          delete convertedInfo.code;
+          delete convertedInfo.code_system;
+          delete convertedInfo.code_display;
+          return this.buildSupportingInfo(convertedInfo);
+        }
+        
         return this.buildSupportingInfo({ ...info, sequence: seq });
       });
     }
