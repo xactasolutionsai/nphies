@@ -189,6 +189,10 @@ class ClaimSubmissionsController extends BaseController {
         query('SELECT * FROM prior_authorization_supporting_info WHERE prior_auth_id = $1 ORDER BY sequence ASC', [paId])
       ]);
 
+      // For claims, service_date must be within encounter period (BV-00041)
+      // Use encounter_start as the service date, or today if no encounter dates exist
+      const serviceDate = pa.encounter_start ? new Date(pa.encounter_start) : new Date();
+      
       const claimData = {
         claim_number: `CLM-${Date.now()}`,
         claim_type: pa.auth_type,
@@ -211,7 +215,7 @@ class ClaimSubmissionsController extends BaseController {
         priority: pa.priority,
         total_amount: pa.approved_amount || pa.total_amount,
         currency: pa.currency,
-        service_date: new Date()
+        service_date: serviceDate
       };
 
       const columns = Object.keys(claimData).filter(key => claimData[key] !== undefined && claimData[key] !== null);
@@ -222,11 +226,13 @@ class ClaimSubmissionsController extends BaseController {
 
       if (paItemsResult.rows.length > 0) {
         // Apply service code overrides for professional claims if provided
+        // Item servicedDate must be within encounter period (BV-00041)
         const items = paItemsResult.rows.map((item, idx) => {
           const override = itemOverrides?.find(o => o.sequence === idx + 1);
           return {
             ...item,
-            serviced_date: new Date(),
+            // Use item's original serviced_date, or encounter start, or today
+            serviced_date: item.serviced_date || serviceDate,
             // For professional claims, override the service code and system if provided
             product_or_service_code: override?.service_code || item.product_or_service_code,
             product_or_service_display: override?.service_display || item.product_or_service_display,

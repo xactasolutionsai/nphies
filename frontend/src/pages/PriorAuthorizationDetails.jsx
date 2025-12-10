@@ -526,6 +526,12 @@ export default function PriorAuthorizationDetails() {
       setClaimBundleLoading(true);
       
       // Build claim preview data from the prior authorization
+      // For claims, we use the PA's encounter dates as the reference period
+      // Item servicedDate must be within the encounter period (BV-00041)
+      const encounterStartDate = priorAuth.encounter_start 
+        ? new Date(priorAuth.encounter_start).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+      
       const claimPreviewData = {
         claim_type: priorAuth.auth_type,
         sub_type: priorAuth.sub_type || 'ip',
@@ -537,7 +543,7 @@ export default function PriorAuthorizationDetails() {
         encounter_class: priorAuth.encounter_class,
         encounter_start: priorAuth.encounter_start,
         encounter_end: priorAuth.encounter_end,
-        service_date: new Date().toISOString().split('T')[0],
+        service_date: encounterStartDate, // Use encounter start date for service
         total_amount: priorAuth.approved_amount || priorAuth.total_amount,
         currency: priorAuth.currency || 'SAR',
         practice_code: priorAuth.practice_code,
@@ -546,7 +552,8 @@ export default function PriorAuthorizationDetails() {
         items: priorAuth.items?.map((item, idx) => ({
           ...item,
           sequence: idx + 1,
-          serviced_date: new Date().toISOString().split('T')[0]
+          // Use item's original serviced_date, or encounter start date, or today
+          serviced_date: item.serviced_date || encounterStartDate
         })) || [],
         diagnoses: priorAuth.diagnoses || [],
         supporting_info: priorAuth.supporting_info || []
