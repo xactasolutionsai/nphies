@@ -13,7 +13,8 @@ import api from '@/services/api';
 import { 
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
-  Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles
+  Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
+  Upload, File, X
 } from 'lucide-react';
 
 // Import extracted modules
@@ -140,6 +141,8 @@ export default function PriorAuthorizationForm() {
       admission_weight: '',
       estimated_length_of_stay: ''
     },
+    // Clinical Documents (PDF uploads for future use)
+    clinical_documents: [],
     // Vision Prescription Data (per NPHIES VisionPrescription-3.json standard)
     vision_prescription: {
       product_type: 'lens', // 'lens' or 'contact'
@@ -466,6 +469,58 @@ export default function PriorAuthorizationForm() {
       ...prev,
       admission_info: { ...prev.admission_info, [key]: value }
     }));
+  };
+
+  // Handler for PDF file uploads
+  const handlePdfUpload = (e) => {
+    const files = Array.from(e.target.files);
+    const pdfFiles = files.filter(file => file.type === 'application/pdf');
+    
+    if (pdfFiles.length !== files.length) {
+      alert('Only PDF files are allowed');
+    }
+    
+    if (pdfFiles.length > 0) {
+      // Convert files to base64 for storage
+      pdfFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const newDocument = {
+            id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            data: event.target.result, // base64 data
+            uploadedAt: new Date().toISOString()
+          };
+          setFormData(prev => ({
+            ...prev,
+            clinical_documents: [...prev.clinical_documents, newDocument]
+          }));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    
+    // Reset input
+    e.target.value = '';
+  };
+
+  // Handler to remove uploaded PDF
+  const handleRemovePdf = (documentId) => {
+    setFormData(prev => ({
+      ...prev,
+      clinical_documents: prev.clinical_documents.filter(doc => doc.id !== documentId)
+    }));
+  };
+
+  // Format file size for display
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   // Handler for filling dummy/sample data in Vitals & Clinical tab
@@ -1828,6 +1883,81 @@ export default function PriorAuthorizationForm() {
             </div>
           )}
 
+          {/* Clinical Documents Upload Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <File className="h-5 w-5 text-red-500" />
+                Clinical Documents
+              </CardTitle>
+              <CardDescription>
+                Upload PDF documents related to the clinical case (lab results, medical reports, etc.)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Upload Area */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 hover:bg-purple-50/30 transition-colors">
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  multiple
+                  onChange={handlePdfUpload}
+                  className="hidden"
+                  id="pdf-upload"
+                />
+                <label htmlFor="pdf-upload" className="cursor-pointer">
+                  <Upload className="h-10 w-10 mx-auto text-gray-400 mb-3" />
+                  <p className="text-sm font-medium text-gray-700">
+                    Click to upload PDF files
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    PDF files only • Multiple files allowed
+                  </p>
+                </label>
+              </div>
+
+              {/* Uploaded Files List */}
+              {formData.clinical_documents?.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">
+                    Uploaded Documents ({formData.clinical_documents.length})
+                  </p>
+                  <div className="space-y-2">
+                    {formData.clinical_documents.map((doc) => (
+                      <div 
+                        key={doc.id} 
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-red-100 rounded-lg">
+                            <FileText className="h-5 w-5 text-red-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-800 truncate max-w-xs">
+                              {doc.name}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {formatFileSize(doc.size)} • Uploaded {new Date(doc.uploadedAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemovePdf(doc.id)}
+                          className="text-gray-400 hover:text-red-500 hover:bg-red-50"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Summary of what will be submitted */}
           <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
             <CardHeader className="pb-3">
@@ -1837,7 +1967,7 @@ export default function PriorAuthorizationForm() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
                 <div className="bg-white rounded-lg p-2 border">
                   <p className="text-gray-500 text-xs">Vital Signs</p>
                   <p className="font-medium">
@@ -1853,13 +1983,19 @@ export default function PriorAuthorizationForm() {
                 <div className="bg-white rounded-lg p-2 border">
                   <p className="text-gray-500 text-xs">Chief Complaint</p>
                   <p className="font-medium">
-                    {formData.clinical_info.chief_complaint_code ? 'Set' : 'Not set'}
+                    {formData.clinical_info.chief_complaint_code || formData.clinical_info.chief_complaint_text ? 'Set' : 'Not set'}
                   </p>
                 </div>
                 <div className="bg-white rounded-lg p-2 border">
                   <p className="text-gray-500 text-xs">Investigation Result</p>
                   <p className="font-medium">
                     {formData.clinical_info.investigation_result || 'Not set'}
+                  </p>
+                </div>
+                <div className="bg-white rounded-lg p-2 border">
+                  <p className="text-gray-500 text-xs">Documents</p>
+                  <p className="font-medium">
+                    {formData.clinical_documents?.length || 0} file(s)
                   </p>
                 </div>
               </div>
