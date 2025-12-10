@@ -911,11 +911,18 @@ class BaseMapper {
     const category = (info.category || '').toLowerCase();
     const categoriesAllowingCodeText = ['chief-complaint'];
     
-    if (info.code_text && categoriesAllowingCodeText.includes(category)) {
-      // Only add code.text for categories that allow free text (like chief-complaint)
+    // BV-00531: For chief-complaint, if we have free text (code_text or value_string without code),
+    // use code.text format instead of valueString
+    const isChiefComplaintFreeText = categoriesAllowingCodeText.includes(category) && 
+      (info.code_text || (info.value_string && !info.code));
+    
+    if (isChiefComplaintFreeText) {
+      // Use code.text for chief-complaint free text (BV-00531)
       supportingInfo.code = {
-        text: info.code_text
+        text: info.code_text || info.value_string
       };
+      // Mark that we used value_string for code.text so we don't add valueString later
+      info._usedValueStringForCodeText = true;
     } else if (info.code) {
       const codeableConcept = {
         coding: [
@@ -943,7 +950,8 @@ class BaseMapper {
     }
 
     // Add value based on type
-    if (info.value_string !== undefined && info.value_string !== null) {
+    // Skip valueString if we already used it for code.text (chief-complaint case)
+    if (info.value_string !== undefined && info.value_string !== null && !info._usedValueStringForCodeText) {
       supportingInfo.valueString = info.value_string;
     } else if (info.value_quantity !== null && info.value_quantity !== undefined) {
       const ucumCode = this.getUCUMCode(info.value_quantity_unit || info.unit);
