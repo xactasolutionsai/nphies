@@ -67,7 +67,7 @@ export default function PriorAuthorizationForm() {
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [errors, setErrors] = useState([]);
-  const [activeTab, setActiveTab] = useState('parties');
+  const [activeTab, setActiveTab] = useState('basic');
   
   // Preview state
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -945,11 +945,11 @@ export default function PriorAuthorizationForm() {
 
       {/* Tabs Navigation */}
       <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
-      <TabButton active={activeTab === 'parties'} onClick={() => setActiveTab('parties')} icon={Building}>
-          Parties
-        </TabButton>
         <TabButton active={activeTab === 'basic'} onClick={() => setActiveTab('basic')} icon={FileText}>
           Basic Info
+        </TabButton>
+        <TabButton active={activeTab === 'parties'} onClick={() => setActiveTab('parties')} icon={Building}>
+          Parties
         </TabButton>
         <TabButton active={activeTab === 'clinical'} onClick={() => setActiveTab('clinical')} icon={Stethoscope}>
           Clinical
