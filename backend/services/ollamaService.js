@@ -1063,31 +1063,84 @@ History of Present Illness (BV-00806): ${hpi}
 
 Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
     } else if (authType === 'pharmacy') {
+      // Pharmacy claims: Require supporting info but no vitals or encounter
+      const supportingInfo = formData.supporting_info || [];
+      const getInfoValue = (category) => {
+        const info = supportingInfo.find(s => s.category === category);
+        return info?.value_string || info?.value || 'NOT PROVIDED - REQUIRED';
+      };
+      const treatmentPlan = getInfoValue('treatment-plan');
+      const patientHistory = getInfoValue('patient-history');
+      const physicalExam = getInfoValue('physical-examination');
+      const hpi = getInfoValue('history-of-present-illness');
+      
       authTypeContext = `
 IMPORTANT: This is a PHARMACY authorization request.
 - Pharmacy claims do NOT require encounter information per NPHIES IG
-- Pharmacy claims do NOT require vital signs or clinical notes
-- Only diagnosis and medication items are required
+- Pharmacy claims do NOT require vital signs
+- Pharmacy claims REQUIRE the following supporting info:
+  * Treatment Plan - REQUIRED
+  * Patient History - REQUIRED
+  * Physical Examination - REQUIRED
+  * History of Present Illness - REQUIRED
 - Focus validation on: diagnosis-medication alignment, drug interactions, dosage appropriateness
-- Do NOT flag missing vitals or clinical notes as issues`;
+- Do NOT flag missing vitals or encounter as issues
+- DO flag missing supporting information as issues`;
       
       vitalsSection = `
 === VITAL SIGNS ===
 (Not required for pharmacy authorization type)`;
       
       clinicalSection = `
-=== CLINICAL INFORMATION ===
-(Detailed clinical notes not required for pharmacy authorization type)
+=== SUPPORTING INFORMATION (REQUIRED FOR PHARMACY) ===
+Treatment Plan: ${treatmentPlan}
+Patient History: ${patientHistory}
+Physical Examination: ${physicalExam}
+History of Present Illness: ${hpi}
+
+Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
+    } else if (authType === 'dental') {
+      // Dental claims: Require clinical documentation but no vitals
+      // Get supporting info for dental - similar to vision
+      const supportingInfo = formData.supporting_info || [];
+      const getInfoValue = (category) => {
+        const info = supportingInfo.find(s => s.category === category);
+        return info?.value_string || info?.value || 'NOT PROVIDED - REQUIRED';
+      };
+      const treatmentPlan = getInfoValue('treatment-plan');
+      const patientHistory = getInfoValue('patient-history');
+      const physicalExam = getInfoValue('physical-examination');
+      const hpi = getInfoValue('history-of-present-illness');
+      
+      authTypeContext = `
+IMPORTANT: This is a DENTAL (Oral) authorization request.
+- Dental claims require ambulatory encounter class
+- Dental claims do NOT require vital signs
+- Dental claims REQUIRE the following supporting info:
+  * Treatment Plan - REQUIRED
+  * Patient History - REQUIRED
+  * Physical Examination - REQUIRED
+  * History of Present Illness - REQUIRED
+- Focus on dental-specific diagnoses (ICD-10 K00-K14) and dental procedures
+- Verify tooth numbers (FDI notation) and dental procedure codes are appropriate
+- Do NOT flag missing vitals as issues
+- DO flag missing supporting information as issues`;
+      
+      vitalsSection = `
+=== VITAL SIGNS ===
+(Not required for dental authorization type)`;
+      
+      clinicalSection = `
+=== SUPPORTING INFORMATION (REQUIRED FOR DENTAL) ===
+Treatment Plan: ${treatmentPlan}
+Patient History: ${patientHistory}
+Physical Examination: ${physicalExam}
+History of Present Illness: ${hpi}
+
 Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
     } else {
-      // For institutional, professional, dental - include full vitals and clinical info
-      if (authType === 'dental') {
-        authTypeContext = `
-IMPORTANT: This is a DENTAL authorization request.
-- Dental claims require ambulatory encounter class
-- Focus on dental-specific diagnoses (ICD-10 K00-K14)
-- Verify tooth numbers and dental procedure codes are appropriate`;
-      } else if (authType === 'institutional') {
+      // For institutional, professional - include full vitals and clinical info
+      if (authType === 'institutional') {
         authTypeContext = `
 IMPORTANT: This is an INSTITUTIONAL authorization request.
 - Requires inpatient or daycase encounter class

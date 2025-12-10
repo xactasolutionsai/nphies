@@ -29,18 +29,22 @@ class PriorAuthValidationService {
         requiresEncounter: true
       },
       pharmacy: {
-        // Pharmacy claims: NO ENCOUNTER REQUIRED per NPHIES example Claim-483074.json
-        // Only requires: Patient, Provider, Diagnosis, Items, Insurance, Total
+        // Pharmacy claims: NO ENCOUNTER REQUIRED per NPHIES example
+        // BUT requires supporting info fields per NPHIES specification
         requiredVitals: [], // No vitals required for pharmacy
-        requiredClinical: [], // No clinical notes required - just diagnosis and medication
+        requiredClinical: [], // Clinical notes go into supportingInfo
+        requiredSupportingInfo: ['treatment-plan', 'patient-history', 'physical-examination', 'history-of-present-illness'],
         requiresAdmissionInfo: false,
         requiresEncounter: false
       },
       dental: {
-        requiredVitals: ['systolic', 'diastolic', 'pulse'],
-        requiredClinical: ['chief_complaint', 'history_of_present_illness', 'physical_examination', 'treatment_plan'],
+        // Dental (Oral) claims: Require clinical documentation but no vitals
+        // Per user feedback: dental needs clinical text fields
+        requiredVitals: [], // No vitals required for dental
+        requiredClinical: [], // Clinical notes go into supportingInfo
+        requiredSupportingInfo: ['treatment-plan', 'patient-history', 'physical-examination', 'history-of-present-illness'],
         requiresAdmissionInfo: false,
-        requiresEncounter: true
+        requiresEncounter: true // Dental does require ambulatory encounter
       },
       vision: {
         // Vision claims: NO ENCOUNTER REQUIRED per NPHIES IG
