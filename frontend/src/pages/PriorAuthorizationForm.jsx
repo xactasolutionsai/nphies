@@ -26,6 +26,7 @@ import {
   ENCOUNTER_CLASS_OPTIONS,
   ALLOWED_ENCOUNTER_CLASSES,
   getEncounterClassOptions,
+  ADMIT_SOURCE_OPTIONS,
   CURRENCY_OPTIONS,
   DIAGNOSIS_TYPE_OPTIONS,
   EYE_OPTIONS,
@@ -87,6 +88,7 @@ export default function PriorAuthorizationForm() {
     priority: 'normal',
     currency: 'SAR',
     encounter_class: 'ambulatory',
+    admit_source: 'WKIN', // NPHIES: hospitalization.admitSource (default: Walk-in)
     service_event_type: 'ICSE', // NPHIES: ICSE (Initial) or SCSE (Subsequent)
     // Emergency encounter fields (per NPHIES Encounter-10122.json)
     triage_category: '', // Required for EMER: I, VU, U, S, NS
@@ -1001,6 +1003,23 @@ export default function PriorAuthorizationForm() {
                     menuPortalTarget={document.body}
                     isOptionDisabled={(option) => option.isDisabled}
                   />
+                </div>
+              )}
+              {/* Admit Source - Required for hospitalization encounters (institutional: inpatient/daycase) */}
+              {formData.auth_type === 'institutional' && ['inpatient', 'daycase'].includes(formData.encounter_class) && (
+                <div className="space-y-2">
+                  <Label>Admit Source</Label>
+                  <Select
+                    value={ADMIT_SOURCE_OPTIONS.find(opt => opt.value === formData.admit_source)}
+                    onChange={(option) => handleChange('admit_source', option?.value || 'WKIN')}
+                    options={ADMIT_SOURCE_OPTIONS}
+                    styles={selectStyles}
+                    menuPortalTarget={document.body}
+                    placeholder="Select admit source..."
+                  />
+                  <p className="text-xs text-gray-500">
+                    How the patient was admitted to the facility
+                  </p>
                 </div>
               )}
             </div>

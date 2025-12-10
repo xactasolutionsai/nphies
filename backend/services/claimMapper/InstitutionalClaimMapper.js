@@ -458,19 +458,21 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
 
     // BV-00744: intendedLengthOfStay is REQUIRED for Inpatient (IMP) or DayCase (SS)
     // DT-01540: Must use valueCodeableConcept with intended-length-of-stay CodeSystem
-    // Valid codes: IO (Intended overnight), SD (Same day/Day case), etc.
+    // IB-00419: Must use codes from the specified ValueSet
+    // Valid codes: ISD (Intended same day), IO (Intended overnight)
+    // Reference: https://portal.nphies.sa/ig/Encounter-10135.json.html
     const isInpatientOrDaycase = ['inpatient', 'daycase', 'IMP', 'SS'].includes(encounterClass);
     if (isInpatientOrDaycase) {
       // Determine intended length of stay code
-      // SD = Same day (day case), IO = Intended overnight (inpatient)
+      // ISD = Intended same day (day case), IO = Intended overnight (inpatient)
       let intendedLengthCode = claim.intended_length_of_stay_code;
       let intendedLengthDisplay = claim.intended_length_of_stay_display;
       
       if (!intendedLengthCode) {
         // Default based on encounter class
         if (encounterClass === 'daycase' || encounterClass === 'SS') {
-          intendedLengthCode = 'SD';
-          intendedLengthDisplay = 'Same day';
+          intendedLengthCode = 'ISD';
+          intendedLengthDisplay = 'Intended same day';
         } else {
           intendedLengthCode = 'IO';
           intendedLengthDisplay = 'Intended overnight';
@@ -586,13 +588,13 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
   /**
    * Get display text for intended length of stay codes
    * Reference: http://nphies.sa/terminology/CodeSystem/intended-length-of-stay
+   * Valid codes from ValueSet: ISD, IO
+   * Reference: https://portal.nphies.sa/ig/Encounter-10135.json.html
    */
   getIntendedLengthOfStayDisplay(code) {
     const displays = {
-      'SD': 'Same day',
-      'IO': 'Intended overnight',
-      'LT': 'Long term',
-      'UK': 'Unknown'
+      'ISD': 'Intended same day',
+      'IO': 'Intended overnight'
     };
     return displays[code] || code;
   }

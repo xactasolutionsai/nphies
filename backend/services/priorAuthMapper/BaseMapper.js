@@ -560,15 +560,30 @@ class BaseMapper {
 
   /**
    * Get admit source display name
+   * Reference: http://nphies.sa/terminology/CodeSystem/admit-source
    */
   getAdmitSourceDisplay(code) {
     const displays = {
+      'IA': 'Immediate Admission',
+      'EPH': 'Emergency Admission by referral from private hospital',
+      'EER': 'Admission from hospital ER',
+      'EWIS': 'Elective waiting list admission insurance coverage Scheme',
+      'EPPHC': 'Emergency Admission by referral from private primary healthcare center',
+      'EOP': 'Emergency Admission from hospital outpatient',
+      'PMBA': 'Planned Maternity Birth Admission',
+      'EGGH': 'Emergency Admission by referral from general government hospital',
+      'PVAMB': 'Private ambulance',
       'WKIN': 'Walk-in',
-      'EMR': 'Emergency Room',
-      'TRANS': 'Transfer',
-      'REF': 'Referral',
-      'BIRTH': 'Birth',
-      'READM': 'Readmission'
+      'EMBA': 'Emergency Maternity Birth Admission',
+      'EWSS': 'Elective waiting list admission self-payment Scheme',
+      'Others': 'Others',
+      'EWGS': 'Elective waiting list admission government free Scheme',
+      'EIC': 'Emergency Admission by insurance company',
+      'EGPHC': 'Emergency Admission by referral from government primary healthcare center',
+      'FMLYM': 'Family member',
+      'AA': 'Already admitted',
+      'RECR': 'Red crescent',
+      'AAIC': 'Already admitted- insurance consumed'
     };
     return displays[code] || code;
   }

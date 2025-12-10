@@ -101,6 +101,34 @@ export const getEncounterClassOptions = (authType) => {
   }));
 };
 
+// ============================================================================
+// ADMIT SOURCE OPTIONS
+// Reference: http://nphies.sa/terminology/CodeSystem/admit-source
+// Used for: hospitalization.admitSource in Encounter resource
+// ============================================================================
+export const ADMIT_SOURCE_OPTIONS = [
+  { value: 'WKIN', label: 'Walk-in' },
+  { value: 'IA', label: 'Immediate Admission' },
+  { value: 'EER', label: 'Admission from hospital ER' },
+  { value: 'EOP', label: 'Emergency Admission from hospital outpatient' },
+  { value: 'EPH', label: 'Emergency Admission by referral from private hospital' },
+  { value: 'EGGH', label: 'Emergency Admission by referral from general government hospital' },
+  { value: 'EPPHC', label: 'Emergency Admission by referral from private primary healthcare center' },
+  { value: 'EGPHC', label: 'Emergency Admission by referral from government primary healthcare center' },
+  { value: 'EIC', label: 'Emergency Admission by insurance company' },
+  { value: 'EWIS', label: 'Elective waiting list admission insurance coverage Scheme' },
+  { value: 'EWSS', label: 'Elective waiting list admission self-payment Scheme' },
+  { value: 'EWGS', label: 'Elective waiting list admission government free Scheme' },
+  { value: 'PMBA', label: 'Planned Maternity Birth Admission' },
+  { value: 'EMBA', label: 'Emergency Maternity Birth Admission' },
+  { value: 'PVAMB', label: 'Private ambulance' },
+  { value: 'RECR', label: 'Red crescent' },
+  { value: 'FMLYM', label: 'Family member' },
+  { value: 'AA', label: 'Already admitted' },
+  { value: 'AAIC', label: 'Already admitted - insurance consumed' },
+  { value: 'Others', label: 'Others' }
+];
+
 export const CURRENCY_OPTIONS = [
   { value: 'SAR', label: 'SAR - Saudi Riyal' },
   { value: 'USD', label: 'USD - US Dollar' }
