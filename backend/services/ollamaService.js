@@ -1027,10 +1027,15 @@ This patient is ELDERLY (${patientAge}). Consider:
     if (authType === 'vision') {
       // Get supporting info for vision - REQUIRED per NPHIES BV-00803, BV-00804, BV-00805, BV-00806
       const supportingInfo = formData.supporting_info || [];
-      const treatmentPlan = supportingInfo.find(s => s.category === 'treatment-plan')?.value || 'NOT PROVIDED - REQUIRED';
-      const patientHistory = supportingInfo.find(s => s.category === 'patient-history')?.value || 'NOT PROVIDED - REQUIRED';
-      const physicalExam = supportingInfo.find(s => s.category === 'physical-examination')?.value || 'NOT PROVIDED - REQUIRED';
-      const hpi = supportingInfo.find(s => s.category === 'history-of-present-illness')?.value || 'NOT PROVIDED - REQUIRED';
+      // Note: Frontend sends value_string for text fields
+      const getInfoValue = (category) => {
+        const info = supportingInfo.find(s => s.category === category);
+        return info?.value_string || info?.value || 'NOT PROVIDED - REQUIRED';
+      };
+      const treatmentPlan = getInfoValue('treatment-plan');
+      const patientHistory = getInfoValue('patient-history');
+      const physicalExam = getInfoValue('physical-examination');
+      const hpi = getInfoValue('history-of-present-illness');
       
       authTypeContext = `
 IMPORTANT: This is a VISION authorization request.

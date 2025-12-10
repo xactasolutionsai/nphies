@@ -233,9 +233,12 @@ class PriorAuthValidationService {
       rules.requiredSupportingInfo.forEach(category => {
         const hasCategory = providedCategories.includes(category);
         // Also check if the supporting info has actual content
-        const infoWithContent = supportingInfo.find(info => 
-          info.category === category && info.value && info.value.trim().length > 0
-        );
+        // Note: Frontend sends value_string for text fields, value for other types
+        const infoWithContent = supportingInfo.find(info => {
+          if (info.category !== category) return false;
+          const value = info.value_string || info.value || '';
+          return typeof value === 'string' && value.trim().length > 0;
+        });
         
         if (!hasCategory || !infoWithContent) {
           issues.push({
