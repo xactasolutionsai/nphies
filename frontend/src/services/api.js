@@ -9,12 +9,19 @@ const CACHE_DURATION = 30000; // 30 seconds cache
 class ApiService {
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
+    const method = options.method || 'GET';
+    
+    // Only cache GET requests - POST/PUT/DELETE should always be fresh
+    // This fixes the issue where AI validation returns stale cached results
+    const shouldCache = method === 'GET' && !endpoint.includes('/validate') && !endpoint.includes('/ai-validation');
     const cacheKey = `${url}_${JSON.stringify(options)}`;
     
-    // Check cache first
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      return cached.data;
+    // Check cache first (only for cacheable requests)
+    if (shouldCache) {
+      const cached = cache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        return cached.data;
+      }
     }
 
     const config = {
@@ -52,7 +59,9 @@ class ApiService {
             throw error;
           }
           const data = await retryResponse.json();
-          cache.set(cacheKey, { data, timestamp: Date.now() });
+          if (shouldCache) {
+            cache.set(cacheKey, { data, timestamp: Date.now() });
+          }
           return data;
         }
         // Parse error response and attach to error
@@ -63,7 +72,9 @@ class ApiService {
       }
       
       const data = await response.json();
-      cache.set(cacheKey, { data, timestamp: Date.now() });
+      if (shouldCache) {
+        cache.set(cacheKey, { data, timestamp: Date.now() });
+      }
       return data;
     } catch (error) {
       console.error('API request failed:', error);

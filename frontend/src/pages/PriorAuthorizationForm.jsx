@@ -2319,8 +2319,8 @@ export default function PriorAuthorizationForm() {
                       value={formData.clinical_info?.[field.key] ?? ''}
                       onChange={(e) => handleClinicalInfoChange(field.key, e.target.value)}
                       placeholder={field.placeholder}
-                      rows={3}
-                      className={`w-full rounded-md border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30 resize-none transition-colors ${
+                      rows={5}
+                      className={`w-full rounded-md border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30 resize-y min-h-[120px] transition-colors ${
                         enhancingField === field.key 
                           ? 'border-blue-300 bg-blue-50/30' 
                           : 'border-gray-200'
