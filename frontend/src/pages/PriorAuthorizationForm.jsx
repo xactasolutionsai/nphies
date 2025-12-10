@@ -2953,34 +2953,14 @@ export default function PriorAuthorizationForm() {
                   </div>
                 )}
 
-                {formData.auth_type === 'vision' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Eye</Label>
-                      <Select
-                        value={EYE_OPTIONS.find(opt => opt.value === item.eye)}
-                        onChange={(option) => handleItemChange(index, 'eye', option?.value || '')}
-                        options={EYE_OPTIONS}
-                        styles={selectStyles}
-                        placeholder="Select eye..."
-                        isClearable
-                        menuPortalTarget={document.body}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Body Site</Label>
-                      <Select
-                        value={BODY_SITE_OPTIONS_BY_AUTH_TYPE.vision?.find(opt => opt.value === item.body_site_code)}
-                        onChange={(option) => handleItemChange(index, 'body_site_code', option?.value || '')}
-                        options={BODY_SITE_OPTIONS_BY_AUTH_TYPE.vision || []}
-                        styles={selectStyles}
-                        placeholder="Select body site..."
-                        isClearable
-                        menuPortalTarget={document.body}
-                      />
-                    </div>
-                  </div>
-                )}
+                {/* 
+                  Vision claims: Per NPHIES BV-00374, NO bodySite on items for Vision claims
+                  The Eye and Body Site fields are NOT required for vision - only the VisionPrescription
+                  resource contains eye-specific details (right_eye/left_eye prescription data)
+                  
+                  Vision Claim items only need: service code, quantity, unit price
+                  The eye specification is captured in the VisionPrescription section, not in items
+                */}
 
                 {/* Body Site for Professional/Institutional */}
                 {['professional', 'institutional'].includes(formData.auth_type) && (

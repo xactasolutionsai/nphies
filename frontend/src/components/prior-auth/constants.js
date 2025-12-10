@@ -394,8 +394,11 @@ export const SIDE_BODY_SITE_OPTIONS = [
 ];
 
 // Combined Body Site Options by Authorization Type
+// Reference: NPHIES IG - Vision claims do NOT use bodySite (BV-00374)
 export const BODY_SITE_OPTIONS_BY_AUTH_TYPE = {
-  vision: VISION_BODY_SITE_OPTIONS,
+  // Vision: NO bodySite on items per NPHIES BV-00374
+  // Vision claims use VisionPrescription resource for eye-specific details
+  vision: [],
   dental: [], // Dental uses FDI tooth codes instead
   professional: [
     ...SIDE_BODY_SITE_OPTIONS,
