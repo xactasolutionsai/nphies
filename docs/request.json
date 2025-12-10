@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "f7bca192-b1bd-470c-95e0-530fd218d0fc",
+  "id": "a164762a-6d35-4f6f-a6ca-c68670fd2de1",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-10T14:48:13.136Z",
+  "timestamp": "2025-12-10T14:57:45.515Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:fa7c6f9b-f69d-43b3-95be-151fc864866d",
+      "fullUrl": "urn:uuid:5fcf77a8-efdc-44df-b524-eaa00f9bae3e",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "fa7c6f9b-f69d-43b3-95be-151fc864866d",
+        "id": "5fcf77a8-efdc-44df-b524-eaa00f9bae3e",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/eafe9acc-ea80-451b-8859-ff870df86622"
+            "reference": "http://provider.com/Claim/fe34da76-7339-4693-a05b-99a33e45df14"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/eafe9acc-ea80-451b-8859-ff870df86622",
+      "fullUrl": "http://provider.com/Claim/fe34da76-7339-4693-a05b-99a33e45df14",
       "resource": {
         "resourceType": "Claim",
-        "id": "eafe9acc-ea80-451b-8859-ff870df86622",
+        "id": "fe34da76-7339-4693-a05b-99a33e45df14",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/institutional-claim|1.0.0"
@@ -70,21 +70,21 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/e0dda51f-3d82-43f4-87f7-53c1c26db4c9"
+              "reference": "Encounter/ecc3a46a-7857-4fee-a8ba-da8a8ecc87d1"
             }
           },
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
             "valueIdentifier": {
               "system": "http://saudigeneralhospital.com.sa/identifiers/episode",
-              "value": "provider_EpisodeID_PREVIEW-1765378093131"
+              "value": "provider_EpisodeID_PREVIEW-1765378665506"
             }
           }
         ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-            "value": "PREVIEW-1765378093131"
+            "value": "PREVIEW-1765378665506"
           }
         ],
         "status": "active",
@@ -108,7 +108,7 @@
         "patient": {
           "reference": "Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
         },
-        "created": "2025-12-10T17:48:13+03:00",
+        "created": "2025-12-10T17:57:45+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -137,7 +137,7 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/5181bd5a-c41c-4db1-8662-7b0e2a92273d"
+              "reference": "Practitioner/6b801e3b-386b-42ae-940c-bffe443cfcee"
             },
             "role": {
               "coding": [
@@ -169,8 +169,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-26T21:00:00.000Z",
-              "end": "2023-11-26T21:00:00.000Z"
+              "start": "2023-11-24T21:00:00.000Z",
+              "end": "2023-11-24T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 120,
@@ -189,8 +189,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-26T21:00:00.000Z",
-              "end": "2023-11-26T21:00:00.000Z"
+              "start": "2023-11-24T21:00:00.000Z",
+              "end": "2023-11-24T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 80,
@@ -209,8 +209,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-26T21:00:00.000Z",
-              "end": "2023-11-26T21:00:00.000Z"
+              "start": "2023-11-24T21:00:00.000Z",
+              "end": "2023-11-24T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 160,
@@ -229,8 +229,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-26T21:00:00.000Z",
-              "end": "2023-11-26T21:00:00.000Z"
+              "start": "2023-11-24T21:00:00.000Z",
+              "end": "2023-11-24T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 129,
@@ -249,8 +249,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-26T21:00:00.000Z",
-              "end": "2023-11-26T21:00:00.000Z"
+              "start": "2023-11-24T21:00:00.000Z",
+              "end": "2023-11-24T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 100,
@@ -269,8 +269,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-26T21:00:00.000Z",
-              "end": "2023-11-26T21:00:00.000Z"
+              "start": "2023-11-24T21:00:00.000Z",
+              "end": "2023-11-24T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 37,
@@ -289,8 +289,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-26T21:00:00.000Z",
-              "end": "2023-11-26T21:00:00.000Z"
+              "start": "2023-11-24T21:00:00.000Z",
+              "end": "2023-11-24T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 100,
@@ -309,8 +309,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-26T21:00:00.000Z",
-              "end": "2023-11-26T21:00:00.000Z"
+              "start": "2023-11-24T21:00:00.000Z",
+              "end": "2023-11-24T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 70,
@@ -518,7 +518,7 @@
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice",
                 "valueIdentifier": {
                   "system": "http://saudigeneralhospital.com.sa/identifiers/patientInvoice",
-                  "value": "Invc-20251210/PREVIEW-1765378093131"
+                  "value": "Invc-20251210/PREVIEW-1765378665506"
                 }
               },
               {
@@ -575,16 +575,16 @@
           }
         ],
         "total": {
-          "value": 290,
+          "value": 300,
           "currency": "SAR"
         }
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/e0dda51f-3d82-43f4-87f7-53c1c26db4c9",
+      "fullUrl": "http://provider.com/Encounter/ecc3a46a-7857-4fee-a8ba-da8a8ecc87d1",
       "resource": {
         "resourceType": "Encounter",
-        "id": "e0dda51f-3d82-43f4-87f7-53c1c26db4c9",
+        "id": "ecc3a46a-7857-4fee-a8ba-da8a8ecc87d1",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -593,7 +593,7 @@
         "identifier": [
           {
             "system": "http://prfhir.com.sa/identifiers/encounter",
-            "value": "PREVIEW-1765378093131"
+            "value": "PREVIEW-1765378665506"
           }
         ],
         "status": "finished",
@@ -631,6 +631,26 @@
                   }
                 ]
               }
+            },
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-intendedLengthOfStay",
+              "valueQuantity": {
+                "value": 1,
+                "system": "http://unitsofmeasure.org",
+                "code": "d"
+              }
+            },
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-dischargeSpecialty",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
+                    "code": "08.00",
+                    "display": "Internal Medicine Specialty"
+                  }
+                ]
+              }
             }
           ],
           "admitSource": {
@@ -639,6 +659,15 @@
                 "system": "http://nphies.sa/terminology/CodeSystem/admit-source",
                 "code": "WKIN",
                 "display": "Walk-in"
+              }
+            ]
+          },
+          "dischargeDisposition": {
+            "coding": [
+              {
+                "system": "http://nphies.sa/terminology/CodeSystem/discharge-disposition",
+                "code": "home",
+                "display": "Home"
               }
             ]
           }
@@ -718,10 +747,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/5181bd5a-c41c-4db1-8662-7b0e2a92273d",
+      "fullUrl": "http://provider.com/Practitioner/6b801e3b-386b-42ae-940c-bffe443cfcee",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "5181bd5a-c41c-4db1-8662-7b0e2a92273d",
+        "id": "6b801e3b-386b-42ae-940c-bffe443cfcee",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -739,7 +768,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-5181bd5a"
+            "value": "PRACT-6b801e3b"
           }
         ],
         "active": true,

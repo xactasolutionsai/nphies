@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "ffee814b-db15-4ef4-81ea-765abbb6425f",
+  "id": "2055e32e-0a1d-4437-9602-4bcedd90f980",
   "meta": {
       "profile": [
           "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
       ]
   },
   "type": "message",
-  "timestamp": "2025-12-10T17:48:22.067+03:00",
+  "timestamp": "2025-12-10T17:57:51.795+03:00",
   "entry": [
       {
-          "fullUrl": "http://nphies.sa/MessageHeader/76703b7f-06ec-4d11-8236-cdb2112033f3",
+          "fullUrl": "http://nphies.sa/MessageHeader/7e0659da-18fa-4697-b37a-33bf319e8986",
           "resource": {
               "resourceType": "MessageHeader",
-              "id": "76703b7f-06ec-4d11-8236-cdb2112033f3",
+              "id": "7e0659da-18fa-4697-b37a-33bf319e8986",
               "meta": {
                   "profile": [
                       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -52,21 +52,21 @@
                   "endpoint": "http://nphies.sa/"
               },
               "response": {
-                  "identifier": "fa7c6f9b-f69d-43b3-95be-151fc864866d",
+                  "identifier": "5fcf77a8-efdc-44df-b524-eaa00f9bae3e",
                   "code": "ok"
               },
               "focus": [
                   {
-                      "reference": "http://nphies.sa/ClaimResponse/309"
+                      "reference": "http://nphies.sa/ClaimResponse/844"
                   }
               ]
           }
       },
       {
-          "fullUrl": "http://nphies.sa/ClaimResponse/309",
+          "fullUrl": "http://nphies.sa/ClaimResponse/844",
           "resource": {
               "resourceType": "ClaimResponse",
-              "id": "309",
+              "id": "844",
               "meta": {
                   "profile": [
                       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -81,7 +81,7 @@
               "identifier": [
                   {
                       "system": "http://nphies.sa/ClaimResponse",
-                      "value": "PREVIEW-1765378093131"
+                      "value": "PREVIEW-1765378665506"
                   }
               ],
               "status": "active",
@@ -97,7 +97,7 @@
               "patient": {
                   "reference": "Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
               },
-              "created": "2025-12-10T17:48:13+03:00",
+              "created": "2025-12-10T17:57:45+03:00",
               "insurer": {
                   "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
               },
@@ -108,7 +108,7 @@
                   "type": "Claim",
                   "identifier": {
                       "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-                      "value": "PREVIEW-1765378093131"
+                      "value": "PREVIEW-1765378665506"
                   }
               },
               "outcome": "error",
@@ -129,12 +129,12 @@
                                   "extension": [
                                       {
                                           "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "bundle.entry[1].resource.total"
+                                          "valueString": "Bundle.entry[2].resource.hospitalization.extension[1].value"
                                       }
                                   ],
                                   "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                  "code": "BV-00059",
-                                  "display": "Claim total is not equal to sum of Claim item net"
+                                  "code": "DT-01540",
+                                  "display": "Invalid data type used for 'Encounter hospitalization intended Length Of Stay'"
                               }
                           ]
                       }
@@ -146,63 +146,12 @@
                                   "extension": [
                                       {
                                           "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "bundle.entry[1].resource.item[0].servicedDate"
+                                          "valueString": "Bundle.entry[2].resource.hospitalization.extension[1].value[x]:valueCodeableConcept"
                                       }
                                   ],
                                   "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                  "code": "BV-00041",
-                                  "display": "Claim item serviced[x] is not within the encounter period"
-                              }
-                          ]
-                      }
-                  },
-                  {
-                      "code": {
-                          "coding": [
-                              {
-                                  "extension": [
-                                      {
-                                          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "bundle.entry[2].resource.hospitalization.dischargeDisposition"
-                                      }
-                                  ],
-                                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                  "code": "BV-00759",
-                                  "display": "Discharge Disposition SHALL be provided in institutional claim when encounter end date is provided"
-                              }
-                          ]
-                      }
-                  },
-                  {
-                      "code": {
-                          "coding": [
-                              {
-                                  "extension": [
-                                      {
-                                          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "bundle.entry[2].resource.hospitalization.extension"
-                                      }
-                                  ],
-                                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                  "code": "BV-00758",
-                                  "display": "Discharge Specialty SHALL be provided in institutional claim when encounter end date is provided"
-                              }
-                          ]
-                      }
-                  },
-                  {
-                      "code": {
-                          "coding": [
-                              {
-                                  "extension": [
-                                      {
-                                          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                          "valueString": "bundle.entry[2].resource.hospitalization.extension"
-                                      }
-                                  ],
-                                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                  "code": "BV-00744",
-                                  "display": "Hospitalization Intended Length Of Stay SHALL be provided for claim with Inpatient Admission or DayCase Encounter Class"
+                                  "code": "IC-01428",
+                                  "display": "The element SHALL follow the cardinality specified in the NPHIES profile"
                               }
                           ]
                       }

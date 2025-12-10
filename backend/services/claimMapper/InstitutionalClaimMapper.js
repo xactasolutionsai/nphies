@@ -457,24 +457,34 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     ];
 
     // BV-00744: intendedLengthOfStay is REQUIRED for Inpatient (IMP) or DayCase (SS)
+    // DT-01540: Must use valueCodeableConcept with intended-length-of-stay CodeSystem
+    // Valid codes: IO (Intended overnight), SD (Same day/Day case), etc.
     const isInpatientOrDaycase = ['inpatient', 'daycase', 'IMP', 'SS'].includes(encounterClass);
     if (isInpatientOrDaycase) {
-      // Calculate intended length of stay from encounter period or use provided value
-      let lengthOfStay = claim.intended_length_of_stay || claim.estimated_length_of_stay || 1;
-      if (claim.encounter_start && claim.encounter_end) {
-        const start = new Date(claim.encounter_start);
-        const end = new Date(claim.encounter_end);
-        const diffTime = Math.abs(end - start);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        lengthOfStay = diffDays || 1;
+      // Determine intended length of stay code
+      // SD = Same day (day case), IO = Intended overnight (inpatient)
+      let intendedLengthCode = claim.intended_length_of_stay_code;
+      let intendedLengthDisplay = claim.intended_length_of_stay_display;
+      
+      if (!intendedLengthCode) {
+        // Default based on encounter class
+        if (encounterClass === 'daycase' || encounterClass === 'SS') {
+          intendedLengthCode = 'SD';
+          intendedLengthDisplay = 'Same day';
+        } else {
+          intendedLengthCode = 'IO';
+          intendedLengthDisplay = 'Intended overnight';
+        }
       }
       
       hospitalizationExtensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-intendedLengthOfStay',
-        valueQuantity: {
-          value: lengthOfStay,
-          system: 'http://unitsofmeasure.org',
-          code: 'd'
+        valueCodeableConcept: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/intended-length-of-stay',
+            code: intendedLengthCode,
+            display: intendedLengthDisplay || this.getIntendedLengthOfStayDisplay(intendedLengthCode)
+          }]
         }
       });
     }
@@ -569,6 +579,20 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       'rehab': 'Rehabilitation',
       'snf': 'Skilled nursing facility',
       'oth': 'Other'
+    };
+    return displays[code] || code;
+  }
+
+  /**
+   * Get display text for intended length of stay codes
+   * Reference: http://nphies.sa/terminology/CodeSystem/intended-length-of-stay
+   */
+  getIntendedLengthOfStayDisplay(code) {
+    const displays = {
+      'SD': 'Same day',
+      'IO': 'Intended overnight',
+      'LT': 'Long term',
+      'UK': 'Unknown'
     };
     return displays[code] || code;
   }
