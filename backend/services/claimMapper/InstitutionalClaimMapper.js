@@ -9,7 +9,8 @@
  * - profile: institutional-claim (instead of institutional-priorauth)
  * - encounter.status: 'finished' (instead of 'planned')
  * 
- * Required Extensions (per NPHIES example):
+ * Required Extensions (per NPHIES validation):
+ * - extension-accountingPeriod (REQUIRED per IC-01620, must be FIRST, day must be "01" per BV-01010)
  * - extension-encounter (required)
  * - extension-eligibility-offline-reference (optional)
  * - extension-eligibility-offline-date (optional)
@@ -156,17 +157,26 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     const providerIdentifierSystem = provider.identifier_system || 
       `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
 
-    // Build extensions per NPHIES example: https://portal.nphies.sa/ig/Claim-483070.json.html
-    // Order: encounter, eligibility-offline-reference, eligibility-offline-date, episode
+    // Build extensions per NPHIES validation requirements
+    // Order: accountingPeriod (FIRST per IC-01620), encounter, eligibility-offline-*, episode
     const extensions = [];
+
+    // 1. AccountingPeriod extension (REQUIRED per IC-01620, must be FIRST)
+    // BV-01010: Day must be defaulted to "01" (e.g., "2025-12-01" not "2025-12-08")
+    const serviceDate = new Date(claim.service_date || claim.request_date || new Date());
+    const accountingPeriodDate = `${serviceDate.getFullYear()}-${String(serviceDate.getMonth() + 1).padStart(2, '0')}-01`;
+    extensions.push({
+      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
+      valueDate: accountingPeriodDate
+    });
     
-    // 1. Encounter extension (required)
+    // 2. Encounter extension (required)
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter',
       valueReference: { reference: `Encounter/${bundleResourceIds.encounter}` }
     });
 
-    // 2. Eligibility offline reference (optional - add before episode per NPHIES example)
+    // 3. Eligibility offline reference (optional - add before episode per NPHIES example)
     if (claim.eligibility_offline_ref) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-reference',
@@ -174,7 +184,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       });
     }
 
-    // 3. Eligibility offline date (optional - add before episode per NPHIES example)
+    // 4. Eligibility offline date (optional - add before episode per NPHIES example)
     if (claim.eligibility_offline_date) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-date',
@@ -182,7 +192,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       });
     }
 
-    // 4. Episode extension (required for institutional claims)
+    // 5. Episode extension (required for institutional claims)
     const episodeId = claim.episode_identifier || `provider_EpisodeID_${claim.claim_number || Date.now()}`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
