@@ -29,6 +29,64 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString();
 };
 
+// Purpose display helper
+const getPurposeLabel = (purpose) => {
+  const labels = {
+    discovery: 'Discovery',
+    benefits: 'Benefits',
+    validation: 'Validation'
+  };
+  return labels[purpose] || purpose;
+};
+
+const getPurposeBadgeConfig = (purpose) => {
+  const configs = {
+    discovery: { className: 'bg-purple-100 text-purple-700 border-purple-200' },
+    benefits: { className: 'bg-blue-100 text-blue-700 border-blue-200' },
+    validation: { className: 'bg-orange-100 text-orange-700 border-orange-200' }
+  };
+  return configs[purpose] || { className: 'bg-gray-100 text-gray-700 border-gray-200' };
+};
+
+const getPurposeBadges = (purposeValue) => {
+  if (!purposeValue) return <span className="text-gray-400">-</span>;
+  
+  // Purpose can be stored as comma-separated string or JSON array
+  let purposes = [];
+  try {
+    if (typeof purposeValue === 'string') {
+      // Try parsing as JSON first
+      if (purposeValue.startsWith('[')) {
+        purposes = JSON.parse(purposeValue);
+      } else {
+        // Split by comma
+        purposes = purposeValue.split(',').map(p => p.trim().toLowerCase());
+      }
+    } else if (Array.isArray(purposeValue)) {
+      purposes = purposeValue;
+    }
+  } catch {
+    purposes = [purposeValue];
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {purposes.map((p, idx) => {
+        const config = getPurposeBadgeConfig(p);
+        return (
+          <Badge 
+            key={idx} 
+            variant="outline" 
+            className={`text-xs ${config.className}`}
+          >
+            {getPurposeLabel(p)}
+          </Badge>
+        );
+      })}
+    </div>
+  );
+};
+
 export default function NphiesEligibilityList() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -158,6 +216,12 @@ export default function NphiesEligibilityList() {
       key: 'insurer_name',
       header: 'Insurer',
       accessor: 'insurer_name'
+    },
+    {
+      key: 'purpose',
+      header: 'Purpose',
+      accessor: 'purpose',
+      render: (row) => getPurposeBadges(row.purpose)
     },
     {
       key: 'status',
