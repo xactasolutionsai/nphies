@@ -1025,21 +1025,37 @@ This patient is ELDERLY (${patientAge}). Consider:
     let clinicalSection = '';
     
     if (authType === 'vision') {
+      // Get supporting info for vision - REQUIRED per NPHIES BV-00803, BV-00804, BV-00805, BV-00806
+      const supportingInfo = formData.supporting_info || [];
+      const treatmentPlan = supportingInfo.find(s => s.category === 'treatment-plan')?.value || 'NOT PROVIDED - REQUIRED';
+      const patientHistory = supportingInfo.find(s => s.category === 'patient-history')?.value || 'NOT PROVIDED - REQUIRED';
+      const physicalExam = supportingInfo.find(s => s.category === 'physical-examination')?.value || 'NOT PROVIDED - REQUIRED';
+      const hpi = supportingInfo.find(s => s.category === 'history-of-present-illness')?.value || 'NOT PROVIDED - REQUIRED';
+      
       authTypeContext = `
 IMPORTANT: This is a VISION authorization request.
 - Vision claims do NOT require encounter information per NPHIES IG
-- Vision claims do NOT require vital signs or clinical notes
-- Only diagnosis and vision services/items are required
-- Focus validation on: diagnosis appropriateness, service codes, and coverage
-- Do NOT flag missing vitals or clinical notes as issues`;
+- Vision claims do NOT require vital signs
+- BUT Vision claims REQUIRE the following supporting info (will cause rejection if missing):
+  * Treatment Plan (BV-00803) - REQUIRED
+  * Patient History (BV-00804) - REQUIRED
+  * Physical Examination (BV-00805) - REQUIRED
+  * History of Present Illness (BV-00806) - REQUIRED
+- VisionPrescription with lens specifications may be included
+- Do NOT flag missing vitals or encounter information as issues
+- DO flag missing supporting information as HIGH-PRIORITY rejection risks`;
       
       vitalsSection = `
 === VITAL SIGNS ===
 (Not required for vision authorization type)`;
       
       clinicalSection = `
-=== CLINICAL INFORMATION ===
-(Detailed clinical notes not required for vision authorization type)
+=== SUPPORTING INFORMATION (REQUIRED FOR VISION) ===
+Treatment Plan (BV-00803): ${treatmentPlan}
+Patient History (BV-00804): ${patientHistory}
+Physical Examination (BV-00805): ${physicalExam}
+History of Present Illness (BV-00806): ${hpi}
+
 Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
     } else if (authType === 'pharmacy') {
       authTypeContext = `

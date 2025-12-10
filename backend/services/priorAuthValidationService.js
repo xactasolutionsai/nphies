@@ -44,10 +44,14 @@ class PriorAuthValidationService {
       },
       vision: {
         // Vision claims: NO ENCOUNTER REQUIRED per NPHIES IG
-        // Vision Claims only contain: Patient, Provider, Diagnosis, Items, Benefit, Supporting Info
-        // Vitals and clinical notes are OPTIONAL - only diagnosis and vision services are required
+        // BUT requires supporting info per NPHIES errors:
+        // BV-00803: treatment-plan required
+        // BV-00804: patient-history required  
+        // BV-00805: physical-examination required
+        // BV-00806: history-of-present-illness required
         requiredVitals: [], // No vitals required for vision
-        requiredClinical: [], // No clinical notes required - just diagnosis and vision items
+        requiredClinical: [], // Clinical notes go into supportingInfo, not separate fields
+        requiredSupportingInfo: ['treatment-plan', 'patient-history', 'physical-examination', 'history-of-present-illness'],
         requiresAdmissionInfo: false,
         requiresEncounter: false
       }
@@ -204,6 +208,45 @@ class PriorAuthValidationService {
           severity: 'medium'
         });
       }
+    }
+
+    // Check required supporting info categories (e.g., for vision claims)
+    // NPHIES errors: BV-00803, BV-00804, BV-00805, BV-00806
+    if (rules.requiredSupportingInfo && rules.requiredSupportingInfo.length > 0) {
+      const supportingInfo = formData.supporting_info || [];
+      const providedCategories = supportingInfo.map(info => info.category);
+      
+      const supportingInfoLabels = {
+        'treatment-plan': 'Treatment Plan',
+        'patient-history': 'Patient History',
+        'physical-examination': 'Physical Examination',
+        'history-of-present-illness': 'History of Present Illness'
+      };
+      
+      const supportingInfoCodes = {
+        'treatment-plan': 'BV-00803',
+        'patient-history': 'BV-00804',
+        'physical-examination': 'BV-00805',
+        'history-of-present-illness': 'BV-00806'
+      };
+      
+      rules.requiredSupportingInfo.forEach(category => {
+        const hasCategory = providedCategories.includes(category);
+        // Also check if the supporting info has actual content
+        const infoWithContent = supportingInfo.find(info => 
+          info.category === category && info.value && info.value.trim().length > 0
+        );
+        
+        if (!hasCategory || !infoWithContent) {
+          issues.push({
+            category: this.rejectionCategories.SUPPORTING_EVIDENCE,
+            field: `supporting_info.${category}`,
+            code: supportingInfoCodes[category] || 'SE-4',
+            message: `Missing required supporting information: ${supportingInfoLabels[category] || category}`,
+            severity: 'high'
+          });
+        }
+      });
     }
 
     // Check diagnoses
