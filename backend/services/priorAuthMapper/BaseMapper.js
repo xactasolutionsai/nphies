@@ -909,20 +909,39 @@ class BaseMapper {
     // IMPORTANT: Per NPHIES BV-00530, code.text is ONLY allowed for 'chief-complaint' category
     // For other categories, if you include a 'code' element, it MUST have code.coding with a proper system/code
     const category = (info.category || '').toLowerCase();
-    const categoriesAllowingCodeText = ['chief-complaint'];
+    const isChiefComplaint = category === 'chief-complaint';
     
-    // BV-00531: For chief-complaint, if we have free text (code_text or value_string without code),
-    // use code.text format instead of valueString
-    const isChiefComplaintFreeText = categoriesAllowingCodeText.includes(category) && 
-      (info.code_text || (info.value_string && !info.code));
+    // BV-00531: For chief-complaint, the code element is REQUIRED
+    // If we have free text (code_text or value_string), use code.text format
+    // If we have a SNOMED code, use code.coding format
+    const hasCodeText = info.code_text && info.code_text.trim().length > 0;
+    const hasValueString = info.value_string && info.value_string.trim && info.value_string.trim().length > 0;
+    const hasCode = info.code && info.code.trim && info.code.trim().length > 0;
     
-    if (isChiefComplaintFreeText) {
-      // Use code.text for chief-complaint free text (BV-00531)
-      supportingInfo.code = {
-        text: info.code_text || info.value_string
-      };
-      // Mark that we used value_string for code.text so we don't add valueString later
-      info._usedValueStringForCodeText = true;
+    if (isChiefComplaint) {
+      // Chief complaint MUST have code element (BV-00531)
+      if (hasCodeText || (hasValueString && !hasCode)) {
+        // Use code.text for free text format
+        supportingInfo.code = {
+          text: info.code_text || info.value_string
+        };
+        // Mark that we used value_string for code.text so we don't add valueString later
+        info._usedValueStringForCodeText = true;
+      } else if (hasCode) {
+        // Use code.coding for SNOMED code format
+        supportingInfo.code = {
+          coding: [{
+            system: info.code_system || 'http://snomed.info/sct',
+            code: info.code,
+            display: info.code_display
+          }]
+        };
+      } else {
+        // Fallback: chief-complaint requires code, provide default text
+        supportingInfo.code = {
+          text: 'Chief complaint'
+        };
+      }
     } else if (info.code) {
       const codeableConcept = {
         coding: [

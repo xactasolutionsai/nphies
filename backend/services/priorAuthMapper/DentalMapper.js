@@ -364,16 +364,22 @@ class DentalMapper extends BaseMapper {
         supportingInfoSequences.push(seq);
         
         // BV-00531: For dental claims, chief-complaint MUST use code.text format
-        // Convert any code format to code_text format
-        if (info.category === 'chief-complaint' && info.code && !info.code_text) {
+        // Convert ANY format to code_text format for dental chief-complaint
+        if (info.category === 'chief-complaint') {
+          // Get the text from any available source
+          const chiefComplaintText = info.code_text || 
+                                      info.value_string || 
+                                      info.code_display || 
+                                      info.code || 
+                                      'Dental complaint';
+          
           const convertedInfo = {
-            ...info,
             sequence: seq,
-            code_text: info.code_display || info.code || 'Dental complaint'
+            category: 'chief-complaint',
+            code_text: chiefComplaintText,
+            timing_date: info.timing_date
           };
-          delete convertedInfo.code;
-          delete convertedInfo.code_system;
-          delete convertedInfo.code_display;
+          // Explicitly NOT including: code, code_system, code_display, value_string
           return this.buildSupportingInfo(convertedInfo);
         }
         
