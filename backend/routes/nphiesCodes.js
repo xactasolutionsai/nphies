@@ -29,6 +29,11 @@ router.get('/icd10', (req, res) => nphiesCodesController.getIcd10Codes(req, res)
 router.get('/icd10/search', (req, res) => nphiesCodesController.searchIcd10Codes(req, res));
 router.get('/icd10/:code', (req, res) => nphiesCodesController.getIcd10CodeByCode(req, res));
 
+// Medication codes endpoints
+router.get('/medications', (req, res) => nphiesCodesController.getMedicationCodes(req, res));
+router.get('/medications/search', (req, res) => nphiesCodesController.searchMedicationCodes(req, res));
+router.get('/medications/:code', (req, res) => nphiesCodesController.getMedicationByCode(req, res));
+
 // Get codes by system
 router.get('/:systemCode', (req, res) => nphiesCodesController.getCodesBySystem(req, res));
 

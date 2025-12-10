@@ -557,6 +557,37 @@ class ApiService {
   async getIcd10Code(code) {
     return this.request(`/nphies-codes/icd10/${encodeURIComponent(code)}`);
   }
+
+  // Medication Codes
+  /**
+   * Search medication codes for async dropdown
+   * Returns array of { value, label, medication } for react-select
+   * @param {string} searchTerm - Search term to filter medications
+   * @param {number} limit - Max results (default 50)
+   */
+  async searchMedicationCodes(searchTerm = '', limit = 50) {
+    const params = new URLSearchParams();
+    if (searchTerm) params.append('q', searchTerm);
+    params.append('limit', limit.toString());
+    return this.request(`/nphies-codes/medications/search?${params.toString()}`);
+  }
+
+  /**
+   * Get medication codes with full pagination support
+   * @param {Object} params - Query parameters (search, limit, offset)
+   */
+  async getMedicationCodes(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/nphies-codes/medications${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Get a single medication by GTIN code
+   * @param {string} code - GTIN code (e.g., "06281147005347")
+   */
+  async getMedicationByCode(code) {
+    return this.request(`/nphies-codes/medications/${encodeURIComponent(code)}`);
+  }
 }
 
 export default new ApiService();

@@ -359,6 +359,229 @@ class NphiesCodesController {
       res.status(500).json({ error: 'Failed to search ICD-10 codes' });
     }
   }
+
+  // ==================== MEDICATION CODES ====================
+
+  /**
+   * Get medication codes with search and pagination
+   * 
+   * Query parameters:
+   * - search: Search term (searches code, display, generic_name, ingredients)
+   * - limit: Max results (default 50, max 500)
+   * - offset: Pagination offset (default 0)
+   */
+  async getMedicationCodes(req, res) {
+    try {
+      const { query: dbQuery } = await import('../db.js');
+      
+      const {
+        search = '',
+        limit = 50,
+        offset = 0
+      } = req.query;
+      
+      // Validate and sanitize parameters
+      const safeLimit = Math.min(Math.max(1, parseInt(limit) || 50), 500);
+      const safeOffset = Math.max(0, parseInt(offset) || 0);
+      
+      let whereConditions = [];
+      let params = [];
+      let paramIndex = 1;
+      
+      // Add search condition if provided
+      if (search && search.trim()) {
+        const searchTerm = search.trim();
+        whereConditions.push(`(
+          code ILIKE $${paramIndex} OR 
+          display ILIKE $${paramIndex + 1} OR
+          generic_name ILIKE $${paramIndex + 2} OR
+          ingredients ILIKE $${paramIndex + 3}
+        )`);
+        params.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+        paramIndex += 4;
+      }
+      
+      const whereClause = whereConditions.length > 0 
+        ? `WHERE ${whereConditions.join(' AND ')}` 
+        : '';
+      
+      // Get total count for pagination
+      const countResult = await dbQuery(`
+        SELECT COUNT(*) as total
+        FROM medication_codes
+        ${whereClause}
+      `, params);
+      
+      const total = parseInt(countResult.rows[0].total);
+      
+      // Get paginated results
+      const result = await dbQuery(`
+        SELECT 
+          id,
+          code,
+          display,
+          strength,
+          generic_name,
+          route_of_administration,
+          dosage_form,
+          package_size,
+          unit_type,
+          price,
+          ingredients,
+          atc_code,
+          is_controlled,
+          reg_owner
+        FROM medication_codes
+        ${whereClause}
+        ORDER BY display, code
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `, [...params, safeLimit, safeOffset]);
+      
+      res.json({
+        data: result.rows,
+        pagination: {
+          total,
+          limit: safeLimit,
+          offset: safeOffset,
+          hasMore: safeOffset + result.rows.length < total
+        }
+      });
+    } catch (error) {
+      console.error('Error getting medication codes:', error);
+      res.status(500).json({ error: 'Failed to fetch medication codes' });
+    }
+  }
+
+  /**
+   * Get a single medication by GTIN code
+   */
+  async getMedicationByCode(req, res) {
+    try {
+      const { query: dbQuery } = await import('../db.js');
+      const { code } = req.params;
+      
+      const result = await dbQuery(`
+        SELECT 
+          id,
+          code,
+          display,
+          strength,
+          generic_name,
+          route_of_administration,
+          dosage_form,
+          package_size,
+          unit_type,
+          price,
+          ingredients,
+          atc_code,
+          is_controlled,
+          reg_owner
+        FROM medication_codes
+        WHERE code = $1
+      `, [code]);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: `Medication code '${code}' not found` });
+      }
+      
+      res.json({ data: result.rows[0] });
+    } catch (error) {
+      console.error('Error getting medication:', error);
+      res.status(500).json({ error: 'Failed to fetch medication' });
+    }
+  }
+
+  /**
+   * Search medications for async dropdown (optimized for react-select)
+   * Returns format: { value, label, medication } where medication contains full details
+   */
+  async searchMedicationCodes(req, res) {
+    try {
+      const { query: dbQuery } = await import('../db.js');
+      
+      const {
+        q = '',
+        limit = 50
+      } = req.query;
+      
+      const safeLimit = Math.min(Math.max(1, parseInt(limit) || 50), 100);
+      
+      let result;
+      
+      if (q && q.trim()) {
+        const searchTerm = q.trim();
+        
+        // Search by code, display name, generic name, or ingredients
+        result = await dbQuery(`
+          SELECT 
+            code as value,
+            COALESCE(display, code) || COALESCE(' (' || strength || ')', '') as label,
+            code,
+            display,
+            strength,
+            generic_name,
+            dosage_form,
+            route_of_administration,
+            price,
+            ingredients
+          FROM medication_codes
+          WHERE (
+            code ILIKE $1 OR 
+            display ILIKE $2 OR
+            generic_name ILIKE $3 OR
+            ingredients ILIKE $4
+          )
+          ORDER BY 
+            CASE 
+              WHEN code ILIKE $1 THEN 0
+              WHEN display ILIKE $5 THEN 1
+              ELSE 2
+            END,
+            display
+          LIMIT $6
+        `, [`${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `${searchTerm}%`, safeLimit]);
+      } else {
+        // Return first N medications when no search term
+        result = await dbQuery(`
+          SELECT 
+            code as value,
+            COALESCE(display, code) || COALESCE(' (' || strength || ')', '') as label,
+            code,
+            display,
+            strength,
+            generic_name,
+            dosage_form,
+            route_of_administration,
+            price,
+            ingredients
+          FROM medication_codes
+          ORDER BY display
+          LIMIT $1
+        `, [safeLimit]);
+      }
+      
+      // Transform to include full medication details for auto-fill
+      const data = result.rows.map(row => ({
+        value: row.value,
+        label: row.label,
+        medication: {
+          code: row.code,
+          display: row.display,
+          strength: row.strength,
+          generic_name: row.generic_name,
+          dosage_form: row.dosage_form,
+          route_of_administration: row.route_of_administration,
+          price: row.price,
+          ingredients: row.ingredients
+        }
+      }));
+      
+      res.json(data);
+    } catch (error) {
+      console.error('Error searching medication codes:', error);
+      res.status(500).json({ error: 'Failed to search medication codes' });
+    }
+  }
 }
 
 export default new NphiesCodesController();

@@ -10,7 +10,8 @@
     "seed": "node seed.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed-medical-knowledge": "node scripts/seedMedicalKnowledge.js",
-    "import-icd10": "node scripts/importIcd10Codes.js"
+    "import-icd10": "node scripts/importIcd10Codes.js",
+    "import-medications": "node scripts/importMedicationCodes.js"
   },
   "keywords": [
     "healthcare",

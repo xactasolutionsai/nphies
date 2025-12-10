@@ -2277,32 +2277,88 @@ export default function PriorAuthorizationForm() {
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Medication Code (GTIN) *</Label>
-                        <Input
-                          value={item.medication_code || ''}
-                          onChange={(e) => handleItemChange(index, 'medication_code', e.target.value)}
-                          placeholder="e.g., 07612797198780"
+                        <Label>Medication *</Label>
+                        <AsyncSelect
+                          value={item.medication_code ? {
+                            value: item.medication_code,
+                            label: `${item.medication_code}${item.medication_name ? ' - ' + item.medication_name : ''}`
+                          } : null}
+                          onChange={(option) => {
+                            // Update medication code
+                            handleItemChange(index, 'medication_code', option?.value || '');
+                            // Auto-fill medication name from selection
+                            if (option?.medication) {
+                              handleItemChange(index, 'medication_name', option.medication.display || '');
+                            } else {
+                              handleItemChange(index, 'medication_name', '');
+                            }
+                          }}
+                          loadOptions={async (inputValue) => {
+                            try {
+                              const results = await api.searchMedicationCodes(inputValue, 50);
+                              return results;
+                            } catch (error) {
+                              console.error('Error loading medications:', error);
+                              return [];
+                            }
+                          }}
+                          defaultOptions
+                          cacheOptions
+                          styles={selectStyles}
+                          placeholder="Search medications by name, code, or ingredient..."
+                          isClearable
+                          isSearchable
+                          menuPortalTarget={document.body}
+                          noOptionsMessage={({ inputValue }) => 
+                            inputValue ? `No medications found for "${inputValue}"` : 'Type to search medications...'
+                          }
+                          loadingMessage={() => 'Searching medications...'}
                         />
-                        <p className="text-xs text-gray-500">NPHIES medication code (GTIN format)</p>
+                        <p className="text-xs text-gray-500">Search by medication name, GTIN code, or ingredient</p>
                       </div>
                       <div className="space-y-2">
                         <Label>Medication Name</Label>
                         <Input
                           value={item.medication_name || ''}
                           onChange={(e) => handleItemChange(index, 'medication_name', e.target.value)}
-                          placeholder="e.g., VOLTAREN 50 MG TAB"
+                          placeholder="Auto-filled from selection"
+                          readOnly
+                          className="bg-gray-50"
                         />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Prescribed Medication Code</Label>
-                        <Input
-                          value={item.prescribed_medication_code || ''}
-                          onChange={(e) => handleItemChange(index, 'prescribed_medication_code', e.target.value)}
-                          placeholder="Original prescription code"
+                        <AsyncSelect
+                          value={item.prescribed_medication_code ? {
+                            value: item.prescribed_medication_code,
+                            label: item.prescribed_medication_code
+                          } : null}
+                          onChange={(option) => {
+                            handleItemChange(index, 'prescribed_medication_code', option?.value || '');
+                          }}
+                          loadOptions={async (inputValue) => {
+                            try {
+                              const results = await api.searchMedicationCodes(inputValue, 50);
+                              return results;
+                            } catch (error) {
+                              console.error('Error loading medications:', error);
+                              return [];
+                            }
+                          }}
+                          defaultOptions
+                          cacheOptions
+                          styles={selectStyles}
+                          placeholder="Search original prescription..."
+                          isClearable
+                          isSearchable
+                          menuPortalTarget={document.body}
+                          noOptionsMessage={({ inputValue }) => 
+                            inputValue ? `No medications found` : 'Type to search...'
+                          }
                         />
-                        <p className="text-xs text-gray-500">Code of originally prescribed medication (if different)</p>
+                        <p className="text-xs text-gray-500">Original prescribed medication (if substituting)</p>
                       </div>
                       <div className="space-y-2">
                         <Label>Days Supply *</Label>

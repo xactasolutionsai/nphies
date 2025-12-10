@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "6cb40d8f-c0b2-45d6-aa6d-fbade614b74b",
+  "id": "b67a68cc-736b-4b8b-a706-3ab97dc11567",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-08T20:03:42.582Z",
+  "timestamp": "2025-12-10T12:54:11.070Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:a8b305f8-9cc9-4ac4-bd72-bd3eb39b3502",
+      "fullUrl": "urn:uuid:1c467442-d622-43af-ba5e-f450ef4708b3",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "a8b305f8-9cc9-4ac4-bd72-bd3eb39b3502",
+        "id": "1c467442-d622-43af-ba5e-f450ef4708b3",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -21,7 +21,7 @@
         },
         "eventCoding": {
           "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
-          "code": "claim-request"
+          "code": "priorauth-request"
         },
         "destination": [
           {
@@ -47,60 +47,25 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/c9313d53-dce9-4c79-9e18-f1146acc70f5"
+            "reference": "http://provider.com/Claim/f835e62f-f7ce-4791-aa9f-82a4ec5d6f9b"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/c9313d53-dce9-4c79-9e18-f1146acc70f5",
+      "fullUrl": "http://provider.com/Claim/f835e62f-f7ce-4791-aa9f-82a4ec5d6f9b",
       "resource": {
         "resourceType": "Claim",
-        "id": "c9313d53-dce9-4c79-9e18-f1146acc70f5",
+        "id": "f835e62f-f7ce-4791-aa9f-82a4ec5d6f9b",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-claim|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-priorauth|1.0.0"
           ]
         },
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
-            "valueIdentifier": {
-              "system": "http://saudigeneralhospital.com.sa/identifiers/batch",
-              "value": "batch-PREVIEW-1765224222574"
-            }
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-number",
-            "valuePositiveInt": 1
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period",
-            "valuePeriod": {
-              "start": "2025-12-08",
-              "end": "2025-12-08"
-            }
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date",
-            "valueDateTime": "2025-12-08T03:00:00+03:00"
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
-            "valueIdentifier": {
-              "system": "http://saudigeneralhospital.com.sa/identifiers/episode",
-              "value": "EpisodeID-PREVIEW-1765224222574"
-            }
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod",
-            "valueDate": "2025-12-01"
-          }
-        ],
         "identifier": [
           {
-            "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-            "value": "PREVIEW-1765224222574"
+            "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
+            "value": "DUP-1765223941095"
           }
         ],
         "status": "active",
@@ -120,11 +85,11 @@
             }
           ]
         },
-        "use": "claim",
+        "use": "preauthorization",
         "patient": {
           "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
         },
-        "created": "2025-12-08T23:03:42+03:00",
+        "created": "2025-12-10T15:54:11+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -149,92 +114,6 @@
             ]
           }
         },
-        "supportingInfo": [
-          {
-            "sequence": 1,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "days-supply"
-                }
-              ]
-            },
-            "valueQuantity": {
-              "value": 30,
-              "system": "http://unitsofmeasure.org",
-              "code": "d"
-            }
-          },
-          {
-            "sequence": 2,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "investigation-result"
-                }
-              ]
-            },
-            "valueCodeableConcept": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
-                  "code": "normal",
-                  "display": "Normal"
-                }
-              ]
-            }
-          },
-          {
-            "sequence": 3,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "treatment-plan"
-                }
-              ]
-            },
-            "valueString": "Medication therapy as prescribed"
-          },
-          {
-            "sequence": 4,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "patient-history"
-                }
-              ]
-            },
-            "valueString": "No significant past medical history"
-          },
-          {
-            "sequence": 5,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "physical-examination"
-                }
-              ]
-            },
-            "valueString": "Within normal limits"
-          },
-          {
-            "sequence": 6,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "history-of-present-illness"
-                }
-              ]
-            },
-            "valueString": "Patient presents with symptoms requiring medication"
-          }
-        ],
         "diagnosis": [
           {
             "sequence": 1,
@@ -281,44 +160,115 @@
             ]
           }
         ],
+        "supportingInfo": [
+          {
+            "sequence": 1,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "days-supply"
+                }
+              ]
+            },
+            "timingDate": "2025-12-10",
+            "valueQuantity": {
+              "value": 30,
+              "unit": "d",
+              "system": "http://unitsofmeasure.org",
+              "code": "d"
+            }
+          },
+          {
+            "sequence": 2,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "patient-history"
+                }
+              ]
+            },
+            "valueString": "No systemic disease"
+          },
+          {
+            "sequence": 3,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "history-of-present-illness"
+                }
+              ]
+            },
+            "valueString": "No history"
+          },
+          {
+            "sequence": 4,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "physical-examination"
+                }
+              ]
+            },
+            "valueString": "No history"
+          },
+          {
+            "sequence": 5,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "treatment-plan"
+                }
+              ]
+            },
+            "valueString": "Appendectomy"
+          },
+          {
+            "sequence": 6,
+            "category": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                  "code": "investigation-result"
+                }
+              ]
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
+                  "code": "INP",
+                  "display": "INP - Investigation(s) not performed"
+                }
+              ]
+            }
+          }
+        ],
         "insurance": [
           {
             "sequence": 1,
             "focal": true,
             "coverage": {
               "reference": "Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
-            },
-            "preAuthRef": [
-              "98118790-5053-4cef-b479-ae744986fbd5"
-            ]
+            }
           }
         ],
         "item": [
           {
             "extension": [
               {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
-                "valueMoney": {
-                  "value": 0,
-                  "currency": "SAR"
-                }
-              },
-              {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
                 "valueBoolean": false
               },
               {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax",
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
                 "valueMoney": {
                   "value": 0,
                   "currency": "SAR"
-                }
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice",
-                "valueIdentifier": {
-                  "system": "http://saudigeneralhospital.com.sa/identifiers/patientInvoice",
-                  "value": "Invc-20251208-1"
                 }
               },
               {
@@ -344,6 +294,18 @@
                 }
               },
               {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-substitute",
+                      "code": "Irreplaceable",
+                      "display": "SFDA Irreplaceable drugs"
+                    }
+                  ]
+                }
+              },
+              {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
                 "valueBoolean": false
               }
@@ -363,7 +325,7 @@
                 }
               ]
             },
-            "servicedDate": "2025-12-08",
+            "servicedDate": "2023-12-04",
             "quantity": {
               "value": 1
             },
