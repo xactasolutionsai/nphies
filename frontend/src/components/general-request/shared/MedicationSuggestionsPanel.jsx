@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pill, Plus, Loader2, AlertCircle, Info, ChevronDown, ChevronUp, Database, CheckCircle } from 'lucide-react';
+import { Pill, Plus, Loader2, AlertCircle, Info, ChevronDown, ChevronUp, Database, CheckCircle, User } from 'lucide-react';
 
 /**
  * MedicationSuggestionsPanel Component
@@ -11,7 +11,8 @@ const MedicationSuggestionsPanel = ({
   isLoading, 
   error, 
   onAddMedication,
-  onAddSystemMedication // New prop for adding medications with system code
+  onAddSystemMedication, // New prop for adding medications with system code
+  patientContext // Patient context used for suggestions (age, gender, emergencyCase)
 }) => {
   const [expandedSuggestions, setExpandedSuggestions] = useState({});
 
@@ -62,6 +63,31 @@ const MedicationSuggestionsPanel = ({
         <p className="text-sm text-blue-700 mt-1">
           Based on the diagnosis and patient profile. Click on system medications to add directly.
         </p>
+        
+        {/* Patient Context Display */}
+        {patientContext && (patientContext.age || patientContext.gender) && (
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-blue-600 flex items-center gap-1">
+              <User className="w-3 h-3" />
+              Suggestions tailored for:
+            </span>
+            {patientContext.age && (
+              <span className="px-2 py-0.5 bg-blue-200 text-blue-800 text-xs font-medium rounded">
+                Age {patientContext.age} years
+              </span>
+            )}
+            {patientContext.gender && (
+              <span className="px-2 py-0.5 bg-purple-200 text-purple-800 text-xs font-medium rounded">
+                {patientContext.gender}
+              </span>
+            )}
+            {patientContext.emergencyCase && (
+              <span className="px-2 py-0.5 bg-red-200 text-red-800 text-xs font-medium rounded">
+                Emergency Case
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Suggestions */}

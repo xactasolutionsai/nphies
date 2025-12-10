@@ -1150,32 +1150,73 @@ export default function PriorAuthorizationDetails() {
 
           {/* AI Medication Safety Analysis Tab */}
           {activeTab === 'safety' && priorAuth.auth_type === 'pharmacy' && (
-            <Card className="border-blue-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-blue-600" />
-                  AI Medication Safety Analysis
-                </CardTitle>
-                <CardDescription>
-                  AI-powered analysis of drug interactions, side effects, and safety warnings for this pharmacy authorization
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {priorAuth.medication_safety_analysis ? (
-                  <MedicationSafetyPanel
-                    analysis={priorAuth.medication_safety_analysis}
-                    isLoading={false}
-                    error={null}
-                  />
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <Shield className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                    <p>No medication safety analysis available</p>
-                    <p className="text-sm mt-1">Safety analysis is generated when medications are added in the pharmacy authorization form</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              <Card className="border-blue-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-blue-600" />
+                    AI Medication Safety Analysis
+                  </CardTitle>
+                  <CardDescription>
+                    AI-powered analysis of drug interactions, side effects, and safety warnings for this pharmacy authorization
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {priorAuth.medication_safety_analysis ? (
+                    <MedicationSafetyPanel
+                      analysis={priorAuth.medication_safety_analysis}
+                      isLoading={false}
+                      error={null}
+                    />
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Shield className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                      <p>No medication safety analysis available</p>
+                      <p className="text-sm mt-1">Safety analysis is generated when medications are added in the pharmacy authorization form</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Drug Interaction Justification - Show if exists */}
+              {priorAuth.drug_interaction_justification && (
+                <Card className="border-amber-200 bg-amber-50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-amber-900">
+                      <FileText className="h-5 w-5 text-amber-600" />
+                      Clinical Justification for Drug Safety Override
+                    </CardTitle>
+                    <CardDescription className="text-amber-700">
+                      This authorization was approved with the following justification for proceeding despite safety warnings
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="bg-white border border-amber-200 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
+                          <AlertCircle className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-gray-900 whitespace-pre-wrap">{priorAuth.drug_interaction_justification}</p>
+                          {priorAuth.drug_interaction_justification_date && (
+                            <p className="text-sm text-gray-500 mt-3 flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              Provided on: {new Date(priorAuth.drug_interaction_justification_date).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 p-3 bg-amber-100 border border-amber-200 rounded-lg">
+                      <p className="text-sm text-amber-800">
+                        <strong>Note:</strong> This authorization contains medications with potential safety concerns. 
+                        The prescriber has provided the above clinical justification for proceeding with this prescription.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
 
           {/* Vision Prescription Tab */}

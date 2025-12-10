@@ -627,6 +627,126 @@ class ApiService {
       body: JSON.stringify({ medications })
     });
   }
+
+  // ============================================================================
+  // AI Prior Authorization Validation (biomistral-powered)
+  // ============================================================================
+
+  /**
+   * Validate prior authorization form data with AI
+   * Analyzes vitals, clinical info, diagnoses, and items for potential rejection risks
+   * @param {Object} formData - Complete prior authorization form data
+   */
+  async validatePriorAuth(formData) {
+    return this.request('/ai-validation/validate-prior-auth', {
+      method: 'POST',
+      body: JSON.stringify(formData)
+    });
+  }
+
+  /**
+   * Enhance clinical text using AI
+   * Expands brief notes into structured clinical documentation
+   * @param {string} text - Original clinical text
+   * @param {string} field - Field type (history_of_present_illness, physical_examination, etc.)
+   * @param {Object} context - Additional context (chief complaint, diagnosis, requested service)
+   */
+  async enhanceClinicalText(text, field, context = {}) {
+    return this.request('/ai-validation/enhance-clinical', {
+      method: 'POST',
+      body: JSON.stringify({ text, field, context })
+    });
+  }
+
+  /**
+   * Suggest SNOMED codes from free text
+   * @param {string} text - Clinical text to analyze
+   * @param {string} category - Category (chief_complaint, diagnosis, etc.)
+   */
+  async suggestSnomedCodes(text, category = 'chief_complaint') {
+    return this.request('/ai-validation/suggest-snomed', {
+      method: 'POST',
+      body: JSON.stringify({ text, category })
+    });
+  }
+
+  /**
+   * Check medical necessity for prior authorization
+   * Assesses whether services are medically necessary based on documentation
+   * @param {Object} formData - Prior authorization form data
+   */
+  async checkMedicalNecessity(formData) {
+    return this.request('/ai-validation/check-medical-necessity', {
+      method: 'POST',
+      body: JSON.stringify(formData)
+    });
+  }
+
+  /**
+   * Check AI prior auth validation service health
+   */
+  async checkPriorAuthValidationHealth() {
+    return this.request('/ai-validation/prior-auth/health');
+  }
+
+  /**
+   * Validate eye approval form with AI
+   * @param {Object} formData - Eye approval form data
+   */
+  async validateEyeForm(formData) {
+    return this.request('/ai-validation/validate-eye-form', {
+      method: 'POST',
+      body: JSON.stringify(formData)
+    });
+  }
+
+  /**
+   * Get AI validation history for a form
+   * @param {string} formId - Form ID to get history for
+   * @param {number} limit - Max results
+   */
+  async getAIValidationHistory(formId, limit = 10) {
+    return this.request(`/ai-validation/history/${formId}?limit=${limit}`);
+  }
+
+  /**
+   * Mark AI validation as overridden by user
+   * @param {string} validationId - Validation ID to mark as overridden
+   */
+  async markValidationOverridden(validationId) {
+    return this.request(`/ai-validation/override/${validationId}`, {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Get AI validation statistics
+   * @param {Object} filters - Filters (startDate, endDate, formType)
+   */
+  async getAIValidationStatistics(filters = {}) {
+    const queryString = new URLSearchParams(filters).toString();
+    return this.request(`/ai-validation/statistics${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Check AI validation service health
+   */
+  async checkAIValidationHealth() {
+    return this.request('/ai-validation/health');
+  }
+
+  /**
+   * Search medical knowledge base
+   * @param {string} query - Search query
+   * @param {number} limit - Max results
+   * @param {string} category - Category filter
+   */
+  async searchMedicalKnowledge(query, limit = 5, category = null) {
+    return this.request('/ai-validation/knowledge/search', {
+      method: 'POST',
+      body: JSON.stringify({ query, limit, category })
+    });
+  }
 }
 
 export default new ApiService();

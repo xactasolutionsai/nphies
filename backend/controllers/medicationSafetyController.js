@@ -122,6 +122,13 @@ class MedicationSafetyController {
         result.suggestions = enhancedSuggestions;
       }
 
+      // Include patient context in response for display purposes
+      result.patientContext = {
+        age: patientAge || null,
+        gender: patientGender || null,
+        emergencyCase: emergencyCase || false
+      };
+
       res.json(result);
 
     } catch (error) {

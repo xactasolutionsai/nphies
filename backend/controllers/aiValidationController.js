@@ -1,4 +1,6 @@
 import medicalValidationService from '../services/medicalValidationService.js';
+import priorAuthValidationService from '../services/priorAuthValidationService.js';
+import ollamaService from '../services/ollamaService.js';
 import ragService from '../services/ragService.js';
 
 class AIValidationController {
@@ -218,6 +220,175 @@ class AIValidationController {
       console.error('❌ Error in getKnowledgeStats:', error.message);
       res.status(500).json({
         error: 'Failed to retrieve knowledge base statistics',
+        message: error.message
+      });
+    }
+  }
+
+  // ============================================================================
+  // PRIOR AUTHORIZATION VALIDATION ENDPOINTS
+  // ============================================================================
+
+  /**
+   * Validate prior authorization form
+   * POST /api/ai-validation/validate-prior-auth
+   */
+  async validatePriorAuth(req, res) {
+    try {
+      const formData = req.body;
+
+      // Validate that we have form data
+      if (!formData || Object.keys(formData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Form data is required',
+          message: 'Please provide the prior authorization form data to validate'
+        });
+      }
+
+      console.log(`🏥 Prior auth validation request received for ${formData.auth_type || 'unknown'} type`);
+
+      // Perform validation
+      const validationResult = await priorAuthValidationService.validatePriorAuth(formData);
+
+      // Return result
+      res.json(validationResult);
+
+    } catch (error) {
+      console.error('❌ Error in validatePriorAuth:', error.message);
+      res.status(500).json({
+        success: false,
+        error: 'Validation failed',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * Enhance clinical text using AI
+   * POST /api/ai-validation/enhance-clinical
+   */
+  async enhanceClinicalText(req, res) {
+    try {
+      const { text, field, context } = req.body;
+
+      if (!text) {
+        return res.status(400).json({
+          success: false,
+          error: 'Text is required',
+          message: 'Please provide the clinical text to enhance'
+        });
+      }
+
+      if (!field) {
+        return res.status(400).json({
+          success: false,
+          error: 'Field type is required',
+          message: 'Please specify the field type (e.g., history_of_present_illness, physical_examination)'
+        });
+      }
+
+      console.log(`📝 Clinical text enhancement request for field: ${field}`);
+
+      const result = await ollamaService.enhanceClinicalText(text, field, context || {});
+
+      res.json(result);
+
+    } catch (error) {
+      console.error('❌ Error in enhanceClinicalText:', error.message);
+      res.status(500).json({
+        success: false,
+        error: 'Enhancement failed',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * Suggest SNOMED codes from free text
+   * POST /api/ai-validation/suggest-snomed
+   */
+  async suggestSnomedCodes(req, res) {
+    try {
+      const { text, category } = req.body;
+
+      if (!text) {
+        return res.status(400).json({
+          success: false,
+          error: 'Text is required',
+          message: 'Please provide the clinical text to analyze'
+        });
+      }
+
+      console.log(`🏷️ SNOMED suggestion request for: ${text.substring(0, 50)}...`);
+
+      const result = await ollamaService.suggestSnomedCodes(text, category || 'chief_complaint');
+
+      res.json(result);
+
+    } catch (error) {
+      console.error('❌ Error in suggestSnomedCodes:', error.message);
+      res.status(500).json({
+        success: false,
+        error: 'SNOMED suggestion failed',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * Check medical necessity for prior authorization
+   * POST /api/ai-validation/check-medical-necessity
+   */
+  async checkMedicalNecessity(req, res) {
+    try {
+      const formData = req.body;
+
+      if (!formData || Object.keys(formData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Form data is required',
+          message: 'Please provide the prior authorization form data'
+        });
+      }
+
+      console.log(`⚖️ Medical necessity check request`);
+
+      const result = await ollamaService.assessMedicalNecessity(formData);
+
+      res.json(result);
+
+    } catch (error) {
+      console.error('❌ Error in checkMedicalNecessity:', error.message);
+      res.status(500).json({
+        success: false,
+        error: 'Medical necessity check failed',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * Check prior auth validation service health
+   * GET /api/ai-validation/prior-auth/health
+   */
+  async checkPriorAuthHealth(req, res) {
+    try {
+      const health = await priorAuthValidationService.checkHealth();
+
+      const statusCode = health.status === 'ready' ? 200 : 
+                        health.status === 'limited' ? 200 : 503;
+
+      res.status(statusCode).json({
+        success: true,
+        data: health
+      });
+
+    } catch (error) {
+      console.error('❌ Error in checkPriorAuthHealth:', error.message);
+      res.status(503).json({
+        success: false,
+        error: 'Health check failed',
         message: error.message
       });
     }

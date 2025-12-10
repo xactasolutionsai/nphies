@@ -24,5 +24,24 @@ router.post('/knowledge/search', aiValidationController.searchKnowledge.bind(aiV
 // GET /api/ai-validation/knowledge/stats - Get knowledge base statistics
 router.get('/knowledge/stats', aiValidationController.getKnowledgeStats.bind(aiValidationController));
 
+// ============================================================================
+// PRIOR AUTHORIZATION VALIDATION ROUTES
+// ============================================================================
+
+// POST /api/ai-validation/validate-prior-auth - Validate prior authorization form
+router.post('/validate-prior-auth', aiValidationController.validatePriorAuth.bind(aiValidationController));
+
+// POST /api/ai-validation/enhance-clinical - Enhance clinical text using AI
+router.post('/enhance-clinical', aiValidationController.enhanceClinicalText.bind(aiValidationController));
+
+// POST /api/ai-validation/suggest-snomed - Suggest SNOMED codes from free text
+router.post('/suggest-snomed', aiValidationController.suggestSnomedCodes.bind(aiValidationController));
+
+// POST /api/ai-validation/check-medical-necessity - Check medical necessity
+router.post('/check-medical-necessity', aiValidationController.checkMedicalNecessity.bind(aiValidationController));
+
+// GET /api/ai-validation/prior-auth/health - Check prior auth validation service health
+router.get('/prior-auth/health', aiValidationController.checkPriorAuthHealth.bind(aiValidationController));
+
 export default router;
 

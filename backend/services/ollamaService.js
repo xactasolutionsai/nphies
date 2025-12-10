@@ -715,6 +715,679 @@ MECHANISM_OF_ACTION:
     
     return instructionPatterns.some(pattern => pattern.test(line));
   }
+
+  // ============================================================================
+  // PRIOR AUTHORIZATION VALIDATION METHODS
+  // ============================================================================
+
+  /**
+   * Validate prior authorization form data
+   * @param {object} formData - The prior auth form data to validate
+   * @param {string} authType - The authorization type (institutional, professional, etc.)
+   * @returns {Promise<object>} - Structured validation result
+   */
+  async validatePriorAuthForm(formData, authType = 'professional') {
+    const prompt = this.buildPriorAuthValidationPrompt(formData, authType);
+    
+    try {
+      console.log('\n🏥 ==> AI PRIOR AUTH VALIDATION REQUEST <==');
+      console.log(`📅 Timestamp: ${new Date().toISOString()}`);
+      console.log(`🤖 Model: ${this.model}`);
+      console.log(`📋 Auth Type: ${authType}`);
+      console.log(`📝 Prompt Length: ${prompt.length} characters\n`);
+      
+      const result = await this.generateCompletion(prompt, {
+        temperature: 0.3,
+        num_predict: 2500,
+        repeat_penalty: 1.2
+      });
+
+      console.log('\n📥 ==> RAW AI RESPONSE <==');
+      console.log('─'.repeat(80));
+      console.log(result.response);
+      console.log('─'.repeat(80));
+      console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s\n`);
+
+      const validation = this.parsePriorAuthValidationResponse(result.response);
+      
+      console.log('✅ ==> PARSED VALIDATION RESULT <==');
+      console.log(`   Medical Necessity Score: ${(validation.medicalNecessityScore * 100).toFixed(0)}%`);
+      console.log(`   Consistency Check: ${validation.consistencyCheck.passed ? 'PASS' : 'FAIL'}`);
+      console.log(`   Rejection Risks: ${validation.rejectionRisks.length}`);
+      console.log(`   Recommendations: ${validation.recommendations.length}\n`);
+      
+      return {
+        ...validation,
+        metadata: {
+          model: this.model,
+          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+          timestamp: new Date().toISOString(),
+          rawResponse: result.response
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ Error in prior auth validation:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Build the prior auth validation prompt
+   * @private
+   */
+  buildPriorAuthValidationPrompt(formData, authType) {
+    const vitalSigns = formData.vital_signs || {};
+    const clinicalInfo = formData.clinical_info || {};
+    const diagnoses = formData.diagnoses || [];
+    const items = formData.items || [];
+
+    // Calculate BMI if available
+    let bmiInfo = '';
+    if (vitalSigns.height && vitalSigns.weight) {
+      const bmi = parseFloat(vitalSigns.weight) / Math.pow(parseFloat(vitalSigns.height) / 100, 2);
+      bmiInfo = `BMI: ${bmi.toFixed(1)} kg/m²`;
+    }
+
+    return `You are a medical AI assistant reviewing a prior authorization request for NPHIES (Saudi Arabia healthcare system). Analyze the clinical data and identify potential rejection risks.
+
+=== AUTHORIZATION TYPE ===
+${authType.toUpperCase()}
+
+=== VITAL SIGNS ===
+Systolic BP: ${vitalSigns.systolic || 'Not recorded'} mmHg
+Diastolic BP: ${vitalSigns.diastolic || 'Not recorded'} mmHg
+Height: ${vitalSigns.height || 'Not recorded'} cm
+Weight: ${vitalSigns.weight || 'Not recorded'} kg
+${bmiInfo}
+Pulse: ${vitalSigns.pulse || 'Not recorded'} bpm
+Temperature: ${vitalSigns.temperature || 'Not recorded'} °C
+O2 Saturation: ${vitalSigns.oxygen_saturation || 'Not recorded'} %
+Respiratory Rate: ${vitalSigns.respiratory_rate || 'Not recorded'} /min
+
+=== CLINICAL INFORMATION ===
+Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}
+Chief Complaint Code: ${clinicalInfo.chief_complaint_code || 'Not coded'}
+
+Patient History:
+${clinicalInfo.patient_history || 'Not documented'}
+
+History of Present Illness:
+${clinicalInfo.history_of_present_illness || 'Not documented'}
+
+Physical Examination:
+${clinicalInfo.physical_examination || 'Not documented'}
+
+Treatment Plan:
+${clinicalInfo.treatment_plan || 'Not documented'}
+
+Investigation Result: ${clinicalInfo.investigation_result || 'Not specified'}
+
+=== DIAGNOSES ===
+${diagnoses.map(d => `- ${d.diagnosis_code || 'N/A'}: ${d.diagnosis_display || d.diagnosis_description || 'N/A'} (${d.diagnosis_type || 'secondary'})`).join('\n') || 'No diagnoses specified'}
+
+=== REQUESTED SERVICES/PROCEDURES ===
+${items.map(i => `- ${i.product_or_service_code || i.medication_code || 'N/A'}: ${i.service_description || i.medication_name || 'N/A'}`).join('\n') || 'No items specified'}
+
+=== ANALYSIS REQUIRED ===
+Analyze this prior authorization request and provide:
+
+1. MEDICAL_NECESSITY_SCORE: A score from 0.0 to 1.0 indicating how well the clinical documentation supports the requested services
+
+2. CONSISTENCY_CHECK: Are the chief complaint, diagnoses, and requested services logically consistent?
+
+3. DOCUMENTATION_GAPS: List any missing documentation that could lead to rejection
+
+4. REJECTION_RISKS: List specific rejection risks with NPHIES codes (MN-*, SE-*, CV-*)
+
+5. RECOMMENDATIONS: Specific improvements to strengthen the authorization
+
+=== OUTPUT FORMAT ===
+
+MEDICAL_NECESSITY_SCORE: [0.0-1.0]
+
+CONSISTENCY_CHECK: [PASS/FAIL]
+[Explanation if FAIL]
+
+DOCUMENTATION_GAPS:
+- [Gap 1]
+- [Gap 2]
+
+REJECTION_RISKS:
+- [Code]: [Description]
+
+RECOMMENDATIONS:
+- [Recommendation 1]
+- [Recommendation 2]
+
+JUSTIFICATION_NARRATIVE:
+[A brief medical necessity justification that could be added to strengthen the request]
+
+=== BEGIN ANALYSIS ===`;
+  }
+
+  /**
+   * Parse prior auth validation response
+   * @private
+   */
+  parsePriorAuthValidationResponse(responseText) {
+    const result = {
+      passed: true,
+      medicalNecessityScore: 0.5,
+      consistencyCheck: { passed: true, explanation: '' },
+      documentationGaps: [],
+      rejectionRisks: [],
+      recommendations: [],
+      justificationNarrative: ''
+    };
+
+    try {
+      // Extract medical necessity score
+      const scoreMatch = responseText.match(/MEDICAL_NECESSITY_SCORE:\s*([\d.]+)/i);
+      if (scoreMatch) {
+        result.medicalNecessityScore = parseFloat(scoreMatch[1]);
+        if (result.medicalNecessityScore < 0.6) {
+          result.passed = false;
+        }
+      }
+
+      // Extract consistency check
+      const consistencyMatch = responseText.match(/CONSISTENCY_CHECK:\s*(PASS|FAIL)/i);
+      if (consistencyMatch) {
+        result.consistencyCheck.passed = consistencyMatch[1].toUpperCase() === 'PASS';
+        if (!result.consistencyCheck.passed) {
+          result.passed = false;
+          const explMatch = responseText.match(/CONSISTENCY_CHECK:\s*FAIL\s*\n([^\n]+)/i);
+          if (explMatch) {
+            result.consistencyCheck.explanation = explMatch[1].trim();
+          }
+        }
+      }
+
+      // Extract documentation gaps
+      const gapsSection = responseText.match(/DOCUMENTATION_GAPS:([\s\S]*?)(?=REJECTION_RISKS:|RECOMMENDATIONS:|$)/i);
+      if (gapsSection) {
+        const gapLines = gapsSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
+        result.documentationGaps = gapLines.map(line => line.replace(/^-\s*/, '').trim()).filter(g => g.length > 5);
+      }
+
+      // Extract rejection risks
+      const risksSection = responseText.match(/REJECTION_RISKS:([\s\S]*?)(?=RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i);
+      if (risksSection) {
+        const riskLines = risksSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
+        result.rejectionRisks = riskLines.map(line => {
+          const cleaned = line.replace(/^-\s*/, '').trim();
+          const codeMatch = cleaned.match(/^([A-Z]{2}-[\d-]+):\s*(.+)/);
+          if (codeMatch) {
+            return { code: codeMatch[1], description: codeMatch[2] };
+          }
+          return { code: 'UNKNOWN', description: cleaned };
+        }).filter(r => r.description.length > 5);
+      }
+
+      // Extract recommendations
+      const recsSection = responseText.match(/RECOMMENDATIONS:([\s\S]*?)(?=JUSTIFICATION_NARRATIVE:|$)/i);
+      if (recsSection) {
+        const recLines = recsSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
+        result.recommendations = recLines.map(line => line.replace(/^-\s*/, '').trim()).filter(r => r.length > 5);
+      }
+
+      // Extract justification narrative
+      const narrativeSection = responseText.match(/JUSTIFICATION_NARRATIVE:([\s\S]*?)$/i);
+      if (narrativeSection) {
+        result.justificationNarrative = narrativeSection[1].trim()
+          .replace(/^[\s\n]+/, '')
+          .replace(/[\s\n]+$/, '')
+          .split('\n')
+          .filter(line => !line.match(/^(===|---)/))
+          .join(' ')
+          .trim();
+      }
+
+    } catch (error) {
+      console.error('❌ Error parsing prior auth validation response:', error.message);
+    }
+
+    return result;
+  }
+
+  /**
+   * Enhance clinical text using AI
+   * @param {string} text - The original clinical text
+   * @param {string} field - The field type (history_of_present_illness, physical_examination, etc.)
+   * @param {object} context - Additional context (chief complaint, diagnosis, etc.)
+   * @returns {Promise<object>} - Enhanced text result
+   */
+  async enhanceClinicalText(text, field, context = {}) {
+    const prompt = this.buildClinicalEnhancementPrompt(text, field, context);
+    
+    try {
+      console.log('\n📝 ==> AI CLINICAL TEXT ENHANCEMENT REQUEST <==');
+      console.log(`📅 Timestamp: ${new Date().toISOString()}`);
+      console.log(`🤖 Model: ${this.model}`);
+      console.log(`📋 Field: ${field}`);
+      console.log(`📝 Original Text: "${text}"`);
+      console.log(`📝 Original Text Length: ${text?.length || 0} characters`);
+      console.log(`📋 Context: ${JSON.stringify(context)}\n`);
+      
+      const result = await this.generateCompletion(prompt, {
+        temperature: 0.5,
+        num_predict: 2000,
+        repeat_penalty: 1.15,
+        top_p: 0.9
+      });
+
+      console.log('\n📥 ==> RAW AI RESPONSE <==');
+      console.log('─'.repeat(60));
+      console.log(result.response);
+      console.log('─'.repeat(60));
+
+      let enhancedText = this.parseEnhancedTextResponse(result.response);
+
+      console.log('\n📤 ==> PARSED ENHANCED TEXT <==');
+      console.log('─'.repeat(60));
+      console.log(enhancedText);
+      console.log('─'.repeat(60));
+      console.log(`✅ Enhanced text generated (${enhancedText.length} characters)\n`);
+      
+      // Check if the AI just echoed the prompt back - look for prompt markers
+      const promptMarkers = [
+        'you are a medical',
+        'expand brief clinical',
+        'example - brief note:',
+        'example - expanded:',
+        'now expand this',
+        'brief note context:',
+        'chief complaint context:'
+      ];
+      
+      let cleanedText = enhancedText;
+      const lowerText = enhancedText.toLowerCase();
+      
+      // Check if any prompt markers are in the response
+      const hasPromptEcho = promptMarkers.some(marker => lowerText.includes(marker));
+      
+      if (hasPromptEcho) {
+        console.warn('⚠️ AI echoed prompt back, extracting actual content');
+        
+        // Try to find the actual enhanced content after "Expanded" marker
+        const expandedMarkers = [
+          /expanded\s+(?:physical examination|history of present illness|treatment plan|patient medical history|patient history)\s*:\s*/i,
+          /expanded\s*:\s*/i,
+          /expanded note\s*:\s*/i
+        ];
+        
+        for (const marker of expandedMarkers) {
+          const match = enhancedText.match(marker);
+          if (match) {
+            const startIdx = match.index + match[0].length;
+            cleanedText = enhancedText.substring(startIdx).trim();
+            console.log('📌 Extracted after marker:', marker);
+            break;
+          }
+        }
+        
+        // If still has prompt content, try splitting by double newline and take last substantial part
+        if (cleanedText.toLowerCase().includes('example -') || cleanedText.toLowerCase().includes('brief note:')) {
+          const parts = cleanedText.split(/\n\n+/);
+          // Find the last substantial part that doesn't look like a prompt
+          for (let i = parts.length - 1; i >= 0; i--) {
+            const part = parts[i].trim();
+            if (part.length > 30 && 
+                !part.toLowerCase().includes('example') && 
+                !part.toLowerCase().includes('brief note') &&
+                !part.toLowerCase().includes('now expand')) {
+              cleanedText = part;
+              console.log('📌 Extracted last substantial part');
+              break;
+            }
+          }
+        }
+      }
+      
+      // Final cleanup - remove any remaining prompt-like prefixes
+      cleanedText = cleanedText
+        .replace(/^["']/g, '')
+        .replace(/["']$/g, '')
+        .replace(/^\s*-\s*/, '')
+        .trim();
+      
+      // Validate that we got meaningful output (at least longer than original or min 20 chars)
+      if (!cleanedText || cleanedText.length < Math.min(text.length, 20)) {
+        console.warn('⚠️ Enhanced text too short or empty');
+        return {
+          success: false,
+          originalText: text,
+          enhancedText: text,
+          error: 'AI returned insufficient content. Try adding more detail to your input.',
+          metadata: {
+            model: this.model,
+            responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+            timestamp: new Date().toISOString()
+          }
+        };
+      }
+      
+      enhancedText = cleanedText;
+      
+      return {
+        success: true,
+        originalText: text,
+        enhancedText,
+        metadata: {
+          model: this.model,
+          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ Error enhancing clinical text:', error.message);
+      return {
+        success: false,
+        originalText: text,
+        enhancedText: text,
+        error: error.message,
+        metadata: {
+          model: this.model,
+          timestamp: new Date().toISOString()
+        }
+      };
+    }
+  }
+
+  /**
+   * Build clinical text enhancement prompt
+   * @private
+   */
+  buildClinicalEnhancementPrompt(text, field, context) {
+    const fieldExamples = {
+      history_of_present_illness: {
+        name: 'History of Present Illness',
+        example: 'Patient is a [age]-year-old [gender] presenting with [chief complaint]. The symptoms began [duration] ago and are characterized by [description]. Associated symptoms include [symptoms]. The patient reports [severity/progression]. Previous treatments include [treatments]. Current medications: [medications].'
+      },
+      physical_examination: {
+        name: 'Physical Examination',
+        example: 'General: Patient appears [condition], alert and oriented. Vital Signs: [vitals if relevant]. [System] Examination: [detailed findings]. [Additional systems as relevant]. Overall clinical impression: [summary].'
+      },
+      treatment_plan: {
+        name: 'Treatment Plan',
+        example: 'Based on clinical findings, the following treatment plan is recommended: 1) [Primary intervention] - [rationale]. 2) [Secondary measures]. 3) Follow-up: [timeline]. Expected outcomes: [prognosis]. Patient education provided regarding [topics].'
+      },
+      patient_history: {
+        name: 'Patient Medical History',
+        example: 'Past Medical History: [conditions]. Surgical History: [procedures]. Medications: [current medications]. Allergies: [allergies]. Family History: [relevant family history]. Social History: [smoking, alcohol, occupation].'
+      }
+    };
+
+    const fieldInfo = fieldExamples[field] || { name: field, example: '' };
+
+    // Use few-shot style prompt - show example then ask for completion
+    return `You are a medical documentation assistant. Expand brief clinical notes into detailed professional documentation.
+
+Example - Brief note: "Headache for 3 days, took Tylenol"
+Example - Expanded: "Patient presents with a 3-day history of headache. The pain is described as moderate in intensity. Patient has attempted self-treatment with acetaminophen (Tylenol) with partial relief. No associated symptoms of nausea, vomiting, or visual disturbances reported."
+
+Now expand this ${fieldInfo.name}:
+
+Brief note: "${text}"
+
+Chief complaint context: ${context.chiefComplaint || 'Not specified'}
+
+Expanded ${fieldInfo.name}:`;
+  }
+
+  /**
+   * Parse enhanced text response
+   * @private
+   */
+  parseEnhancedTextResponse(response) {
+    let text = response || '';
+    
+    // Remove common AI response prefixes/headers
+    const prefixPatterns = [
+      /^ENHANCED_TEXT:\s*/i,
+      /^Enhanced\s*(Text|Version|Content)?:\s*/i,
+      /^Here('s| is) the enhanced.*?:\s*/i,
+      /^The enhanced.*?:\s*/i,
+      /^Please enhance.*$/im,
+      /^You are a medical.*$/im,
+      /^<\|assistant\|>\s*/i,
+      /^Assistant:\s*/i,
+    ];
+    
+    for (const pattern of prefixPatterns) {
+      text = text.replace(pattern, '');
+    }
+    
+    // Remove any trailing markers or instructions
+    text = text.replace(/\n*<\|.*?\|>.*$/s, '');
+    text = text.replace(/\n*===.*$/s, '');
+    text = text.replace(/\n*---.*$/s, '');
+    
+    // Remove quotes if the entire response is wrapped in them
+    text = text.trim();
+    if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+      text = text.slice(1, -1);
+    }
+    
+    // Final cleanup
+    text = text.replace(/^[\s\n]+/, '').replace(/[\s\n]+$/, '');
+    
+    return text;
+  }
+
+  /**
+   * Suggest SNOMED codes from free text
+   * @param {string} text - The clinical text to analyze
+   * @param {string} category - The category (chief_complaint, diagnosis, etc.)
+   * @returns {Promise<object>} - SNOMED code suggestions
+   */
+  async suggestSnomedCodes(text, category = 'chief_complaint') {
+    if (!text || text.trim().length < 3) {
+      return { success: false, suggestions: [], error: 'Text too short' };
+    }
+
+    const prompt = this.buildSnomedSuggestionPrompt(text, category);
+    
+    try {
+      console.log('\n🏷️ ==> AI SNOMED CODE SUGGESTION REQUEST <==');
+      console.log(`📅 Timestamp: ${new Date().toISOString()}`);
+      console.log(`🤖 Model: ${this.model}`);
+      console.log(`📋 Category: ${category}`);
+      console.log(`📝 Text: ${text.substring(0, 50)}...\n`);
+      
+      const result = await this.generateCompletion(prompt, {
+        temperature: 0.2,
+        num_predict: 600,
+        repeat_penalty: 1.1
+      });
+
+      const suggestions = this.parseSnomedSuggestionsResponse(result.response);
+
+      console.log(`✅ Found ${suggestions.length} SNOMED suggestions\n`);
+      
+      return {
+        success: true,
+        originalText: text,
+        suggestions,
+        metadata: {
+          model: this.model,
+          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ Error suggesting SNOMED codes:', error.message);
+      return { success: false, suggestions: [], error: error.message };
+    }
+  }
+
+  /**
+   * Build SNOMED suggestion prompt
+   * @private
+   */
+  buildSnomedSuggestionPrompt(text, category) {
+    return `You are a medical coding specialist. Suggest appropriate SNOMED CT codes for the following clinical text.
+
+=== CLINICAL TEXT ===
+${text}
+
+=== CATEGORY ===
+${category}
+
+=== REQUIREMENTS ===
+Provide up to 5 relevant SNOMED CT codes with their descriptions. Format each suggestion as:
+CODE: [SNOMED code] - [Description]
+
+Focus on the most specific and accurate codes for the clinical description.
+
+=== SNOMED SUGGESTIONS ===`;
+  }
+
+  /**
+   * Parse SNOMED suggestions response
+   * @private
+   */
+  parseSnomedSuggestionsResponse(response) {
+    const suggestions = [];
+    const lines = response.split('\n');
+
+    lines.forEach(line => {
+      // Try different patterns
+      const match = line.match(/CODE:\s*(\d+)\s*-\s*(.+)/i) || 
+                    line.match(/(\d{6,})\s*[-:]\s*(.+)/) ||
+                    line.match(/^-?\s*(\d{6,})\s*[-:–]\s*(.+)/);
+      if (match) {
+        suggestions.push({
+          code: match[1].trim(),
+          display: match[2].trim().replace(/^\s*-\s*/, '')
+        });
+      }
+    });
+
+    return suggestions.slice(0, 5);
+  }
+
+  /**
+   * Assess medical necessity for a prior authorization
+   * @param {object} formData - The prior auth form data
+   * @returns {Promise<object>} - Medical necessity assessment
+   */
+  async assessMedicalNecessity(formData) {
+    const prompt = this.buildMedicalNecessityPrompt(formData);
+    
+    try {
+      console.log('\n⚖️ ==> AI MEDICAL NECESSITY ASSESSMENT REQUEST <==');
+      console.log(`📅 Timestamp: ${new Date().toISOString()}`);
+      console.log(`🤖 Model: ${this.model}\n`);
+      
+      const result = await this.generateCompletion(prompt, {
+        temperature: 0.3,
+        num_predict: 1500,
+        repeat_penalty: 1.2
+      });
+
+      const assessment = this.parseMedicalNecessityResponse(result.response);
+
+      console.log(`✅ Assessment complete: ${assessment.assessment}\n`);
+      
+      return {
+        ...assessment,
+        metadata: {
+          model: this.model,
+          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ Error assessing medical necessity:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Build medical necessity assessment prompt
+   * @private
+   */
+  buildMedicalNecessityPrompt(formData) {
+    const diagnoses = formData.diagnoses || [];
+    const items = formData.items || [];
+    const clinicalInfo = formData.clinical_info || {};
+
+    return `You are a medical necessity reviewer for insurance prior authorizations. Assess whether the requested services are medically necessary based on the clinical documentation.
+
+=== DIAGNOSES ===
+${diagnoses.map(d => `- ${d.diagnosis_code}: ${d.diagnosis_display || d.diagnosis_description}`).join('\n') || 'None specified'}
+
+=== REQUESTED SERVICES ===
+${items.map(i => `- ${i.product_or_service_code || i.medication_code}: ${i.service_description || i.medication_name}`).join('\n') || 'None specified'}
+
+=== CLINICAL DOCUMENTATION ===
+Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}
+HPI: ${clinicalInfo.history_of_present_illness || 'Not documented'}
+Exam: ${clinicalInfo.physical_examination || 'Not documented'}
+Plan: ${clinicalInfo.treatment_plan || 'Not documented'}
+
+=== ASSESSMENT REQUIRED ===
+1. Is the service medically necessary for the diagnosis?
+2. Is there sufficient documentation to support the request?
+3. What additional documentation would strengthen the case?
+
+=== OUTPUT FORMAT ===
+NECESSITY_SCORE: [0.0-1.0]
+ASSESSMENT: [APPROVED/NEEDS_INFO/LIKELY_DENIED]
+REASONING: [Brief explanation]
+MISSING_ELEMENTS:
+- [Element 1]
+- [Element 2]
+SUGGESTED_JUSTIFICATION: [A sentence that could be added to support medical necessity]`;
+  }
+
+  /**
+   * Parse medical necessity response
+   * @private
+   */
+  parseMedicalNecessityResponse(response) {
+    const result = {
+      success: true,
+      necessityScore: 0.5,
+      assessment: 'NEEDS_INFO',
+      reasoning: '',
+      missingElements: [],
+      suggestedJustification: ''
+    };
+
+    try {
+      const scoreMatch = response.match(/NECESSITY_SCORE:\s*([\d.]+)/i);
+      if (scoreMatch) result.necessityScore = parseFloat(scoreMatch[1]);
+
+      const assessmentMatch = response.match(/ASSESSMENT:\s*(APPROVED|NEEDS_INFO|LIKELY_DENIED)/i);
+      if (assessmentMatch) result.assessment = assessmentMatch[1];
+
+      const reasoningMatch = response.match(/REASONING:\s*([^\n]+)/i);
+      if (reasoningMatch) result.reasoning = reasoningMatch[1].trim();
+
+      const missingSection = response.match(/MISSING_ELEMENTS:([\s\S]*?)(?=SUGGESTED_JUSTIFICATION:|$)/i);
+      if (missingSection) {
+        result.missingElements = missingSection[1].trim()
+          .split('\n')
+          .filter(line => line.trim().startsWith('-'))
+          .map(line => line.replace(/^-\s*/, '').trim())
+          .filter(e => e.length > 3);
+      }
+
+      const justificationMatch = response.match(/SUGGESTED_JUSTIFICATION:\s*([^\n]+)/i);
+      if (justificationMatch) result.suggestedJustification = justificationMatch[1].trim();
+
+    } catch (error) {
+      console.error('❌ Error parsing medical necessity response:', error.message);
+    }
+
+    return result;
+  }
 }
 
 // Export singleton instance

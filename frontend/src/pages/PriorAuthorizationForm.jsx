@@ -60,7 +60,7 @@ import {
   getInitialDiagnosisData,
   getInitialSupportingInfoData
 } from '@/components/prior-auth/helpers';
-import { TabButton, generateDummyVitalsAndClinical } from '@/components/prior-auth';
+import { TabButton, generateDummyVitalsAndClinical, AIValidationPanel, DrugInteractionJustificationModal } from '@/components/prior-auth';
 
 export default function PriorAuthorizationForm() {
   const navigate = useNavigate();
@@ -93,6 +93,18 @@ export default function PriorAuthorizationForm() {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  
+  // AI Prior Auth Validation State
+  const [aiValidationResult, setAiValidationResult] = useState(null);
+  const [aiValidationLoading, setAiValidationLoading] = useState(false);
+  const [showAiValidation, setShowAiValidation] = useState(false);
+  const [enhancingField, setEnhancingField] = useState(null); // Track which field is being enhanced
+  const [suggestionsPatientContext, setSuggestionsPatientContext] = useState(null);
+  
+  // Drug Interaction Justification Modal State
+  const [showJustificationModal, setShowJustificationModal] = useState(false);
+  const [pendingSaveAction, setPendingSaveAction] = useState(null); // 'save' or 'saveAndSend'
+  const [drugInteractionJustification, setDrugInteractionJustification] = useState('');
 
   // Form data
   const [formData, setFormData] = useState({
@@ -309,6 +321,10 @@ export default function PriorAuthorizationForm() {
       if (response.success && response.suggestions) {
         setMedicationSuggestions(response.suggestions);
         setShowSuggestions(true);
+        // Store patient context from response for display in panel
+        if (response.patientContext) {
+          setSuggestionsPatientContext(response.patientContext);
+        }
       } else {
         throw new Error(response.message || 'Failed to get suggestions');
       }
@@ -680,6 +696,124 @@ export default function PriorAuthorizationForm() {
     }));
   };
 
+  // AI Validation Handler - Validate prior auth with biomistral AI
+  const handleAIValidation = async () => {
+    setAiValidationLoading(true);
+    setShowAiValidation(true);
+    setAiValidationResult(null);
+
+    try {
+      // Build supporting info array for validation
+      const supportingInfoArray = buildSupportingInfoArray();
+      
+      const validationData = {
+        ...formData,
+        supporting_info: supportingInfoArray
+      };
+
+      const response = await api.validatePriorAuth(validationData);
+      
+      if (response.success) {
+        setAiValidationResult(response);
+      } else {
+        setAiValidationResult({
+          success: false,
+          error: response.error || 'Validation failed',
+          riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+          suggestions: []
+        });
+      }
+    } catch (error) {
+      console.error('AI validation error:', error);
+      setAiValidationResult({
+        success: false,
+        error: error.message || 'Failed to validate prior authorization',
+        riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+        suggestions: []
+      });
+    } finally {
+      setAiValidationLoading(false);
+    }
+  };
+
+  // Apply AI suggestion to form
+  const handleApplyAISuggestion = (suggestion) => {
+    if (suggestion.type === 'justification' && suggestion.suggestedText) {
+      // Append to treatment plan
+      setFormData(prev => ({
+        ...prev,
+        clinical_info: {
+          ...prev.clinical_info,
+          treatment_plan: prev.clinical_info.treatment_plan 
+            ? `${prev.clinical_info.treatment_plan}\n\n${suggestion.suggestedText}`
+            : suggestion.suggestedText
+        }
+      }));
+    } else if (suggestion.field && suggestion.suggestedText) {
+      // Apply to specific field
+      const fieldParts = suggestion.field.split('.');
+      if (fieldParts[0] === 'clinical_info') {
+        setFormData(prev => ({
+          ...prev,
+          clinical_info: {
+            ...prev.clinical_info,
+            [fieldParts[1]]: prev.clinical_info[fieldParts[1]]
+              ? `${prev.clinical_info[fieldParts[1]]}\n\n${suggestion.suggestedText}`
+              : suggestion.suggestedText
+          }
+        }));
+      }
+    }
+    
+    // Re-run validation after applying suggestion
+    setTimeout(() => handleAIValidation(), 500);
+  };
+
+  // Enhance clinical text with AI
+  const handleEnhanceClinicalText = async (field) => {
+    const currentText = formData.clinical_info[field];
+    if (!currentText || currentText.trim().length < 5) {
+      alert('Please enter at least 5 characters before enhancing with AI.');
+      return;
+    }
+
+    setEnhancingField(field);
+
+    try {
+      const context = {
+        chiefComplaint: formData.clinical_info.chief_complaint_display || formData.clinical_info.chief_complaint_text || '',
+        diagnosis: formData.diagnoses?.[0]?.diagnosis_display || formData.diagnoses?.[0]?.diagnosis_description || '',
+        requestedService: formData.items?.[0]?.service_description || formData.items?.[0]?.medication_name || ''
+      };
+
+      console.log(`🤖 Enhancing ${field} with AI...`, { currentText, context });
+
+      const response = await api.enhanceClinicalText(currentText, field, context);
+      
+      if (response.success && response.enhancedText && response.enhancedText !== currentText) {
+        setFormData(prev => ({
+          ...prev,
+          clinical_info: {
+            ...prev.clinical_info,
+            [field]: response.enhancedText
+          }
+        }));
+        console.log(`✅ Enhanced ${field} successfully`);
+      } else if (response.error) {
+        console.error('Enhancement failed:', response.error);
+        alert(`Enhancement failed: ${response.error}\n\nPlease try again or add more detail to your text.`);
+      } else {
+        console.warn('No enhancement returned');
+        alert('AI could not enhance the text. Try adding more clinical details to your input.');
+      }
+    } catch (error) {
+      console.error('Error enhancing clinical text:', error);
+      alert('Failed to connect to AI service. Please check the server is running and try again.');
+    } finally {
+      setEnhancingField(null);
+    }
+  };
+
   // Handler for vision prescription fields
   const handleVisionPrescriptionChange = (field, value, eye = null) => {
     setFormData(prev => {
@@ -819,17 +953,32 @@ export default function PriorAuthorizationForm() {
     return { valid: validationErrors.length === 0, errors: validationErrors };
   };
 
-  const handleSave = async () => {
+  // Check if there are drug safety issues that require justification
+  const hasDrugSafetyIssues = () => {
+    if (formData.auth_type !== 'pharmacy' || !medicationSafetyAnalysis) {
+      return false;
+    }
+    
+    const {
+      drugInteractions = [],
+      ageRelatedWarnings = [],
+      pregnancyWarnings = [],
+      overallRiskAssessment
+    } = medicationSafetyAnalysis;
+    
+    return (
+      drugInteractions.length > 0 ||
+      ageRelatedWarnings.length > 0 ||
+      pregnancyWarnings.length > 0 ||
+      overallRiskAssessment === 'high'
+    );
+  };
+
+  // Execute the actual save operation
+  const executeSave = async (justification = null) => {
     try {
       setSaving(true);
       setErrors([]);
-
-      const validation = validateForm();
-      if (!validation.valid) {
-        setErrors(validation.errors);
-        alert('Please fix the validation errors before saving.');
-        return;
-      }
 
       // Merge structured vital signs and clinical data into supporting_info
       const dataToSave = {
@@ -857,6 +1006,12 @@ export default function PriorAuthorizationForm() {
       if (dataToSave.auth_type === 'pharmacy' && medicationSafetyAnalysis) {
         dataToSave.medication_safety_analysis = medicationSafetyAnalysis;
       }
+      
+      // Include drug interaction justification if provided
+      if (justification) {
+        dataToSave.drug_interaction_justification = justification;
+        dataToSave.drug_interaction_justification_date = new Date().toISOString();
+      }
 
       let response;
       if (isEditMode) {
@@ -877,17 +1032,30 @@ export default function PriorAuthorizationForm() {
     }
   };
 
-  const handleSaveAndSend = async () => {
+  const handleSave = async () => {
+    const validation = validateForm();
+    if (!validation.valid) {
+      setErrors(validation.errors);
+      alert('Please fix the validation errors before saving.');
+      return;
+    }
+    
+    // Check if drug safety issues exist and no justification has been provided
+    if (hasDrugSafetyIssues() && !drugInteractionJustification) {
+      setPendingSaveAction('save');
+      setShowJustificationModal(true);
+      return;
+    }
+    
+    // Proceed with save (with existing justification if any)
+    await executeSave(drugInteractionJustification || null);
+  };
+
+  // Execute the actual save and send operation
+  const executeSaveAndSend = async (justification = null) => {
     try {
       setSending(true);
       setErrors([]);
-
-      const validation = validateForm();
-      if (!validation.valid) {
-        setErrors(validation.errors);
-        alert('Please fix the validation errors before sending.');
-        return;
-      }
 
       // Merge structured vital signs and clinical data into supporting_info
       const dataToSave = {
@@ -916,6 +1084,12 @@ export default function PriorAuthorizationForm() {
       if (dataToSave.auth_type === 'pharmacy' && medicationSafetyAnalysis) {
         dataToSave.medication_safety_analysis = medicationSafetyAnalysis;
       }
+      
+      // Include drug interaction justification if provided
+      if (justification) {
+        dataToSave.drug_interaction_justification = justification;
+        dataToSave.drug_interaction_justification_date = new Date().toISOString();
+      }
 
       // Save first
       let savedId = id;
@@ -943,6 +1117,46 @@ export default function PriorAuthorizationForm() {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleSaveAndSend = async () => {
+    const validation = validateForm();
+    if (!validation.valid) {
+      setErrors(validation.errors);
+      alert('Please fix the validation errors before sending.');
+      return;
+    }
+    
+    // Check if drug safety issues exist and no justification has been provided
+    if (hasDrugSafetyIssues() && !drugInteractionJustification) {
+      setPendingSaveAction('saveAndSend');
+      setShowJustificationModal(true);
+      return;
+    }
+    
+    // Proceed with save and send (with existing justification if any)
+    await executeSaveAndSend(drugInteractionJustification || null);
+  };
+
+  // Handle justification modal submission
+  const handleJustificationSubmit = async (justification) => {
+    setDrugInteractionJustification(justification);
+    setShowJustificationModal(false);
+    
+    // Execute the pending save action with the justification
+    if (pendingSaveAction === 'save') {
+      await executeSave(justification);
+    } else if (pendingSaveAction === 'saveAndSend') {
+      await executeSaveAndSend(justification);
+    }
+    
+    setPendingSaveAction(null);
+  };
+
+  // Handle justification modal cancel
+  const handleJustificationCancel = () => {
+    setShowJustificationModal(false);
+    setPendingSaveAction(null);
   };
 
   const handlePreview = async () => {
@@ -1801,6 +2015,22 @@ export default function PriorAuthorizationForm() {
                     type="button"
                     variant="outline"
                     size="sm"
+                    onClick={handleAIValidation}
+                    disabled={aiValidationLoading}
+                    className="flex items-center gap-2 text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-300"
+                    title="Validate clinical data with AI to identify potential rejection risks"
+                  >
+                    {aiValidationLoading ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    AI Validate
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={handleFillDummyData}
                     className="flex items-center gap-2 text-purple-600 border-purple-200 hover:bg-purple-50 hover:border-purple-300"
                     title="Fill with realistic sample data based on authorization type"
@@ -1864,6 +2094,16 @@ export default function PriorAuthorizationForm() {
               )}
             </CardContent>
           </Card>
+
+          {/* AI Validation Panel */}
+          {showAiValidation && (
+            <AIValidationPanel
+              validationResult={aiValidationResult}
+              loading={aiValidationLoading}
+              onApplySuggestion={handleApplyAISuggestion}
+              onDismiss={() => setShowAiValidation(false)}
+            />
+          )}
 
           {/* Clinical Information Section */}
           <Card>
@@ -1956,17 +2196,50 @@ export default function PriorAuthorizationForm() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {CLINICAL_TEXT_FIELDS.map((field) => (
                   <div key={field.key} className="space-y-2">
-                    <Label htmlFor={field.key}>{field.label}</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor={field.key}>{field.label}</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEnhanceClinicalText(field.key)}
+                        disabled={enhancingField === field.key || !formData.clinical_info?.[field.key] || formData.clinical_info?.[field.key]?.length < 5}
+                        className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                        title="Enhance this text with AI to make it more detailed and clinically complete"
+                      >
+                        {enhancingField === field.key ? (
+                          <>
+                            <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                            Enhancing...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            Enhance with AI
+                          </>
+                        )}
+                      </Button>
+                    </div>
                     <textarea
                       id={field.key}
                       value={formData.clinical_info?.[field.key] ?? ''}
                       onChange={(e) => handleClinicalInfoChange(field.key, e.target.value)}
                       placeholder={field.placeholder}
                       rows={3}
-                      className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30 resize-none"
+                      className={`w-full rounded-md border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30 resize-none transition-colors ${
+                        enhancingField === field.key 
+                          ? 'border-blue-300 bg-blue-50/30' 
+                          : 'border-gray-200'
+                      }`}
+                      disabled={enhancingField === field.key}
                     />
-                    <p className="text-xs text-gray-400 text-right">
-                      {formData.clinical_info?.[field.key]?.length || 0} characters
+                    <p className={`text-xs text-right ${
+                      enhancingField === field.key ? 'text-blue-500' : 'text-gray-400'
+                    }`}>
+                      {enhancingField === field.key 
+                        ? '✨ AI is enhancing this text...' 
+                        : `${formData.clinical_info?.[field.key]?.length || 0} characters`
+                      }
                     </p>
                   </div>
                 ))}
@@ -2834,33 +3107,85 @@ export default function PriorAuthorizationForm() {
           {formData.auth_type === 'pharmacy' && (
             <>
               {/* AI Suggestions Button */}
-              {formData.diagnoses?.some(d => d.diagnosis_code) && !showSuggestions && (
-                <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium text-purple-900 mb-1 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4" />
-                        AI Medication Suggestions Available
-                      </h4>
-                      <p className="text-sm text-purple-700 mb-3">
-                        Get AI-powered medication recommendations based on the diagnosis: <strong>{formData.diagnoses?.find(d => d.diagnosis_type === 'principal')?.diagnosis_display || formData.diagnoses?.[0]?.diagnosis_display || 'Selected diagnosis'}</strong>
-                      </p>
+              {formData.diagnoses?.some(d => d.diagnosis_code) && !showSuggestions && (() => {
+                // Get patient information for display
+                const selectedPatient = patients.find(p => p.patient_id == formData.patient_id);
+                const patientAge = selectedPatient ? calculatePatientAge(selectedPatient.birth_date || selectedPatient.date_of_birth) : null;
+                const patientGender = selectedPatient?.gender;
+                const patientName = selectedPatient?.name;
+                const hasPatientInfo = selectedPatient && patientAge;
+                
+                return (
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-purple-900 mb-1 flex items-center gap-2">
+                          <Sparkles className="w-4 h-4" />
+                          AI Medication Suggestions Available
+                        </h4>
+                        <p className="text-sm text-purple-700 mb-2">
+                          Get AI-powered medication recommendations based on:
+                        </p>
+                        
+                        {/* Patient & Diagnosis Info */}
+                        <div className="bg-white rounded-lg p-3 mb-3 border border-purple-100">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            {/* Patient Info */}
+                            <div>
+                              <p className="text-xs font-medium text-gray-500 uppercase mb-1">Patient</p>
+                              {hasPatientInfo ? (
+                                <div className="flex flex-wrap gap-2">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                                    {patientName || 'Selected Patient'}
+                                  </span>
+                                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                                    Age: {patientAge} years
+                                  </span>
+                                  <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
+                                    {patientGender || 'Gender N/A'}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-orange-600 text-xs">
+                                  ⚠️ Select a patient in "Involved Parties" for age-appropriate suggestions
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* Diagnosis Info */}
+                            <div>
+                              <p className="text-xs font-medium text-gray-500 uppercase mb-1">Diagnosis</p>
+                              <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
+                                {formData.diagnoses?.find(d => d.diagnosis_type === 'principal')?.diagnosis_display || formData.diagnoses?.[0]?.diagnosis_display || 'Selected diagnosis'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                    
+                    <Button
+                      type="button"
+                      onClick={getMedicationSuggestionsHandler}
+                      disabled={suggestionsLoading}
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                    >
+                      <Sparkles className={`w-4 h-4 mr-2 ${suggestionsLoading ? 'animate-pulse' : ''}`} />
+                      {suggestionsLoading ? 'Generating Suggestions...' : 'Get AI Suggestions'}
+                    </Button>
+                    
+                    {!hasPatientInfo && (
+                      <p className="text-xs text-orange-600 mt-2">
+                        💡 Tip: Select a patient first to get age and gender-appropriate medication suggestions
+                      </p>
+                    )}
+                    
+                    {suggestionsError && (
+                      <p className="text-sm text-red-600 mt-2">{suggestionsError}</p>
+                    )}
                   </div>
-                  <Button
-                    type="button"
-                    onClick={getMedicationSuggestionsHandler}
-                    disabled={suggestionsLoading}
-                    className="bg-purple-600 hover:bg-purple-700 text-white"
-                  >
-                    <Sparkles className={`w-4 h-4 mr-2 ${suggestionsLoading ? 'animate-pulse' : ''}`} />
-                    {suggestionsLoading ? 'Generating Suggestions...' : 'Get AI Suggestions'}
-                  </Button>
-                  {suggestionsError && (
-                    <p className="text-sm text-red-600 mt-2">{suggestionsError}</p>
-                  )}
-                </div>
-              )}
+                );
+              })()}
 
               {/* Medication Suggestions Panel */}
               {showSuggestions && (
@@ -2869,6 +3194,7 @@ export default function PriorAuthorizationForm() {
                     suggestions={medicationSuggestions}
                     isLoading={suggestionsLoading}
                     error={suggestionsError}
+                    patientContext={suggestionsPatientContext}
                     onAddMedication={(suggestion) => {
                       // Add a new item with the suggested medication (generic - no system match)
                       addItem();
@@ -3306,6 +3632,14 @@ export default function PriorAuthorizationForm() {
           </div>
         </div>
       )}
+
+      {/* Drug Interaction Justification Modal */}
+      <DrugInteractionJustificationModal
+        isOpen={showJustificationModal}
+        safetyAnalysis={medicationSafetyAnalysis}
+        onSubmit={handleJustificationSubmit}
+        onCancel={handleJustificationCancel}
+      />
     </div>
   );
 }

@@ -448,6 +448,10 @@ export const validationSchemas = {
     // AI Medication Safety Analysis (for pharmacy authorizations)
     medication_safety_analysis: Joi.object().allow(null).optional(),
     
+    // Drug Interaction Justification (when proceeding despite safety warnings)
+    drug_interaction_justification: Joi.string().allow(null, '').optional(),
+    drug_interaction_justification_date: Joi.date().allow(null, '').optional(),
+    
     // Pre-auth period
     pre_auth_period_start: Joi.date().allow(null, '').optional(),
     pre_auth_period_end: Joi.date().allow(null, '').optional(),
