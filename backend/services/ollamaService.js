@@ -1112,6 +1112,18 @@ Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_co
       const physicalExam = getInfoValue('physical-examination');
       const hpi = getInfoValue('history-of-present-illness');
       
+      // Build dental-specific items info
+      const dentalItems = items.map((item, idx) => {
+        const procedureCode = item.product_or_service_code || item.dental_procedure_code || 'N/A';
+        const procedureDesc = item.service_description || item.product_or_service_display || 'N/A';
+        const toothNumber = item.body_site_code || item.tooth_number || 'N/A';
+        const toothSurfaces = item.sub_site_codes?.join(', ') || item.tooth_surfaces?.join(', ') || 'N/A';
+        return `  ${idx + 1}. Procedure: ${procedureCode} - ${procedureDesc}
+     Tooth Number (FDI): ${toothNumber}
+     Tooth Surfaces: ${toothSurfaces}
+     Quantity: ${item.quantity || 1}, Unit Price: ${item.unit_price || 0} SAR`;
+      }).join('\n');
+      
       authTypeContext = `
 IMPORTANT: This is a DENTAL (Oral) authorization request.
 - Dental claims require ambulatory encounter class
@@ -1122,7 +1134,9 @@ IMPORTANT: This is a DENTAL (Oral) authorization request.
   * Physical Examination - REQUIRED
   * History of Present Illness - REQUIRED
 - Focus on dental-specific diagnoses (ICD-10 K00-K14) and dental procedures
-- Verify tooth numbers (FDI notation) and dental procedure codes are appropriate
+- Verify tooth numbers (FDI notation 11-48 for permanent, 51-85 for deciduous) are appropriate
+- Verify dental procedure codes match the treatment being performed
+- Check that tooth surfaces (M=Mesial, O=Occlusal, D=Distal, B=Buccal, L=Lingual) are appropriate for the procedure
 - Do NOT flag missing vitals as issues
 - DO flag missing supporting information as issues`;
       
@@ -1137,7 +1151,10 @@ Patient History: ${patientHistory}
 Physical Examination: ${physicalExam}
 History of Present Illness: ${hpi}
 
-Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
+Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}
+
+=== DENTAL PROCEDURE DETAILS ===
+${dentalItems || 'No dental items specified'}`;
     } else {
       // For institutional, professional - include full vitals and clinical info
       if (authType === 'institutional') {
