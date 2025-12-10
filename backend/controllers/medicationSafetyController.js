@@ -1,4 +1,5 @@
 import medicationSafetyService from '../services/medicationSafetyService.js';
+import { query as dbQuery } from '../db.js';
 
 class MedicationSafetyController {
   /**
@@ -74,6 +75,7 @@ class MedicationSafetyController {
 
   /**
    * Get AI medication suggestions based on diagnosis
+   * Enhanced to match suggestions with actual medications in the system database
    * POST /api/medication-safety/suggest
    */
   async suggestMedications(req, res) {
@@ -91,12 +93,34 @@ class MedicationSafetyController {
       console.log(`💊 Generating medication suggestions for: ${diagnosis}`);
       console.log(`   Patient: Age ${patientAge || 'Unknown'}, Gender: ${patientGender || 'Unknown'}`);
 
+      // Get AI suggestions
       const result = await medicationSafetyService.suggestMedications(
         diagnosis,
         patientAge,
         patientGender,
         emergencyCase || false
       );
+
+      // If we have suggestions, try to match them with medications in our database
+      if (result.success && result.suggestions && result.suggestions.length > 0) {
+        const enhancedSuggestions = await Promise.all(
+          result.suggestions.map(async (suggestion) => {
+            // Search for matching medications in the database
+            const matchingMedications = await this.findMatchingMedications(
+              suggestion.genericName,
+              suggestion.brandNamesExamples || []
+            );
+
+            return {
+              ...suggestion,
+              systemMedications: matchingMedications,
+              hasSystemMatches: matchingMedications.length > 0
+            };
+          })
+        );
+
+        result.suggestions = enhancedSuggestions;
+      }
 
       res.json(result);
 
@@ -107,6 +131,82 @@ class MedicationSafetyController {
         error: 'Medication suggestion failed',
         message: error.message
       });
+    }
+  }
+
+  /**
+   * Find matching medications from the system database
+   * @param {string} genericName - Generic name from AI suggestion
+   * @param {Array} brandNames - Brand names from AI suggestion
+   * @returns {Array} - Matching medications from database
+   */
+  async findMatchingMedications(genericName, brandNames = []) {
+    try {
+      const searchTerms = [genericName, ...brandNames].filter(Boolean);
+      
+      if (searchTerms.length === 0) return [];
+
+      // Build search conditions for each term
+      const conditions = [];
+      const params = [];
+      let paramIndex = 1;
+
+      searchTerms.forEach(term => {
+        const cleanTerm = term.trim().toLowerCase();
+        if (cleanTerm.length < 2) return;
+
+        // Search in display name, generic name, and ingredients
+        conditions.push(`(
+          LOWER(display) LIKE $${paramIndex} OR 
+          LOWER(generic_name) LIKE $${paramIndex} OR 
+          LOWER(ingredients) LIKE $${paramIndex}
+        )`);
+        params.push(`%${cleanTerm}%`);
+        paramIndex++;
+      });
+
+      if (conditions.length === 0) return [];
+
+      const query = `
+        SELECT 
+          code,
+          display,
+          strength,
+          generic_name,
+          dosage_form,
+          route_of_administration,
+          package_size,
+          price,
+          ingredients
+        FROM medication_codes
+        WHERE ${conditions.join(' OR ')}
+        ORDER BY 
+          CASE 
+            WHEN LOWER(display) LIKE $1 THEN 0
+            WHEN LOWER(generic_name) LIKE $1 THEN 1
+            ELSE 2
+          END,
+          display
+        LIMIT 10
+      `;
+
+      const result = await dbQuery(query, params);
+
+      return result.rows.map(row => ({
+        code: row.code,
+        display: row.display,
+        strength: row.strength,
+        genericName: row.generic_name,
+        dosageForm: row.dosage_form,
+        route: row.route_of_administration,
+        packageSize: row.package_size,
+        price: row.price,
+        ingredients: row.ingredients
+      }));
+
+    } catch (error) {
+      console.error('Error finding matching medications:', error);
+      return [];
     }
   }
 

@@ -1,16 +1,27 @@
-import React from 'react';
-import { Pill, Plus, Loader2, AlertCircle, Info } from 'lucide-react';
+import React, { useState } from 'react';
+import { Pill, Plus, Loader2, AlertCircle, Info, ChevronDown, ChevronUp, Database, CheckCircle } from 'lucide-react';
 
 /**
  * MedicationSuggestionsPanel Component
  * Displays AI-generated medication suggestions based on diagnosis
+ * Enhanced to show matching medications from the system database
  */
 const MedicationSuggestionsPanel = ({ 
   suggestions, 
   isLoading, 
   error, 
-  onAddMedication 
+  onAddMedication,
+  onAddSystemMedication // New prop for adding medications with system code
 }) => {
+  const [expandedSuggestions, setExpandedSuggestions] = useState({});
+
+  const toggleExpanded = (idx) => {
+    setExpandedSuggestions(prev => ({
+      ...prev,
+      [idx]: !prev[idx]
+    }));
+  };
+
   if (isLoading) {
     return (
       <div className="bg-white border border-blue-200 rounded-lg p-6">
@@ -43,13 +54,13 @@ const MedicationSuggestionsPanel = ({
   return (
     <div className="bg-white border border-blue-200 rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="bg-blue-100 px-4 py-3 border-b border-blue-200">
+      <div className="bg-gradient-to-r from-blue-100 to-purple-100 px-4 py-3 border-b border-blue-200">
         <h3 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
           <Pill className="w-5 h-5" />
           AI Medication Suggestions ({suggestions.length})
         </h3>
         <p className="text-sm text-blue-700 mt-1">
-          Based on the diagnosis and patient profile
+          Based on the diagnosis and patient profile. Click on system medications to add directly.
         </p>
       </div>
 
@@ -63,7 +74,7 @@ const MedicationSuggestionsPanel = ({
             {/* Header */}
             <div className="flex justify-between items-start mb-3">
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <h4 className="text-lg font-semibold text-gray-900">
                     {suggestion.genericName}
                   </h4>
@@ -72,25 +83,91 @@ const MedicationSuggestionsPanel = ({
                       Age Consideration
                     </span>
                   )}
+                  {suggestion.hasSystemMatches && (
+                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded flex items-center gap-1">
+                      <Database className="w-3 h-3" />
+                      {suggestion.systemMedications?.length} in System
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-gray-600">
                   <span className="font-medium">Class:</span> {suggestion.medicationClass}
                 </p>
               </div>
               
-              <button
-                onClick={() => onAddMedication(suggestion)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                Add to List
-              </button>
+              {!suggestion.hasSystemMatches && (
+                <button
+                  onClick={() => onAddMedication(suggestion)}
+                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center gap-2 text-sm font-medium"
+                  title="Add as generic - no exact match in system"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Generic
+                </button>
+              )}
             </div>
+
+            {/* System Medications - Matching products from database */}
+            {suggestion.hasSystemMatches && suggestion.systemMedications?.length > 0 && (
+              <div className="mb-3">
+                <button
+                  onClick={() => toggleExpanded(idx)}
+                  className="flex items-center gap-2 text-sm font-medium text-green-700 mb-2 hover:text-green-800"
+                >
+                  <Database className="w-4 h-4" />
+                  Available in System ({suggestion.systemMedications.length} products)
+                  {expandedSuggestions[idx] ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </button>
+                
+                {(expandedSuggestions[idx] || suggestion.systemMedications.length <= 3) && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
+                    {suggestion.systemMedications.slice(0, expandedSuggestions[idx] ? undefined : 3).map((med, medIdx) => (
+                      <div 
+                        key={medIdx}
+                        className="flex items-center justify-between bg-white rounded-lg p-3 border border-green-100 hover:border-green-300 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{med.display}</p>
+                          <div className="flex flex-wrap gap-2 mt-1 text-xs text-gray-600">
+                            <span className="bg-gray-100 px-2 py-0.5 rounded">Code: {med.code}</span>
+                            {med.strength && <span className="bg-blue-100 px-2 py-0.5 rounded">{med.strength}</span>}
+                            {med.dosageForm && <span className="bg-purple-100 px-2 py-0.5 rounded">{med.dosageForm}</span>}
+                            {med.price && <span className="bg-yellow-100 px-2 py-0.5 rounded">{med.price} SAR</span>}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => onAddSystemMedication ? onAddSystemMedication(med, suggestion) : onAddMedication({
+                            ...suggestion,
+                            selectedMedication: med
+                          })}
+                          className="ml-3 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1 text-sm font-medium flex-shrink-0"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Add
+                        </button>
+                      </div>
+                    ))}
+                    {!expandedSuggestions[idx] && suggestion.systemMedications.length > 3 && (
+                      <button
+                        onClick={() => toggleExpanded(idx)}
+                        className="text-sm text-green-700 hover:text-green-800 font-medium"
+                      >
+                        Show {suggestion.systemMedications.length - 3} more...
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Brand Names */}
             {suggestion.brandNamesExamples && suggestion.brandNamesExamples.length > 0 && (
               <div className="mb-3">
-                <p className="text-xs font-medium text-gray-700 mb-1">Brand Names:</p>
+                <p className="text-xs font-medium text-gray-700 mb-1">Brand Names (Reference):</p>
                 <div className="flex flex-wrap gap-2">
                   {suggestion.brandNamesExamples.map((brand, brandIdx) => (
                     <span
@@ -152,8 +229,8 @@ const MedicationSuggestionsPanel = ({
       {/* Footer Note */}
       <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
         <p className="text-xs text-gray-600">
-          💡 <strong>Note:</strong> These are AI-generated suggestions based on standard treatment protocols. 
-          Always verify appropriateness for the specific patient and clinical context.
+          💡 <strong>Note:</strong> Green highlighted medications are available in your system database and can be added directly with their GTIN codes. 
+          AI suggestions are based on standard treatment protocols - always verify appropriateness for the specific patient.
         </p>
       </div>
     </div>
@@ -161,4 +238,3 @@ const MedicationSuggestionsPanel = ({
 };
 
 export default MedicationSuggestionsPanel;
-

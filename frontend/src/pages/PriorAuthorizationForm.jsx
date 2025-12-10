@@ -2870,12 +2870,36 @@ export default function PriorAuthorizationForm() {
                     isLoading={suggestionsLoading}
                     error={suggestionsError}
                     onAddMedication={(suggestion) => {
-                      // Add a new item with the suggested medication
+                      // Add a new item with the suggested medication (generic - no system match)
                       addItem();
                       const newIndex = formData.items.length;
                       setTimeout(() => {
                         handleItemChange(newIndex, 'medication_name', suggestion.genericName);
                         handleItemChange(newIndex, 'medication_code', ''); // User needs to search for actual code
+                      }, 100);
+                    }}
+                    onAddSystemMedication={(systemMed, suggestion) => {
+                      // Add medication directly from system database with full details
+                      addItem();
+                      const newIndex = formData.items.length;
+                      setTimeout(() => {
+                        // Set the medication code (GTIN)
+                        handleItemChange(newIndex, 'medication_code', systemMed.code);
+                        // Set the medication name (display name from database)
+                        handleItemChange(newIndex, 'medication_name', systemMed.display);
+                        // Set default quantity
+                        handleItemChange(newIndex, 'quantity', 1);
+                        // Set unit price if available
+                        if (systemMed.price) {
+                          handleItemChange(newIndex, 'unit_price', parseFloat(systemMed.price));
+                          handleItemChange(newIndex, 'net_amount', parseFloat(systemMed.price));
+                        }
+                        // Set product/service code to GTIN for NPHIES
+                        handleItemChange(newIndex, 'product_or_service_code', systemMed.code);
+                        handleItemChange(newIndex, 'product_or_service_display', systemMed.display);
+                        handleItemChange(newIndex, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/medication-codes');
+                        // Set days supply default
+                        handleItemChange(newIndex, 'days_supply', 30);
                       }, 100);
                     }}
                   />
