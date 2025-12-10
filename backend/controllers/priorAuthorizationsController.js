@@ -175,6 +175,7 @@ class PriorAuthorizationsController extends BaseController {
         pa.practice_code, pa.service_event_type,
         pa.triage_category, pa.triage_date, pa.encounter_priority,
         pa.eligibility_response_id, pa.eligibility_response_system,
+        pa.medication_safety_analysis,
         p.name as patient_name,
         p.identifier as patient_identifier,
         p.gender as patient_gender,

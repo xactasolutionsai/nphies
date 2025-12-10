@@ -14,8 +14,12 @@ import {
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
   Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
-  Upload, File, X
+  Upload, File, X, RefreshCw, AlertTriangle, Info
 } from 'lucide-react';
+
+// Import AI Medication Safety components
+import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
+import MedicationSuggestionsPanel from '@/components/general-request/shared/MedicationSuggestionsPanel';
 
 // Import extracted modules
 import {
@@ -80,6 +84,15 @@ export default function PriorAuthorizationForm() {
   const [insurers, setInsurers] = useState([]);
   const [coverages, setCoverages] = useState([]);
   const [loadingCoverages, setLoadingCoverages] = useState(false);
+  
+  // AI Medication Safety Analysis (for pharmacy auth type)
+  const [medicationSafetyAnalysis, setMedicationSafetyAnalysis] = useState(null);
+  const [safetyLoading, setSafetyLoading] = useState(false);
+  const [safetyError, setSafetyError] = useState(null);
+  const [medicationSuggestions, setMedicationSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -173,6 +186,139 @@ export default function PriorAuthorizationForm() {
       loadPriorAuthorization();
     }
   }, [id]);
+
+  // Auto-analyze medication safety when pharmacy items change
+  useEffect(() => {
+    // Only run for pharmacy auth type
+    if (formData.auth_type !== 'pharmacy') {
+      setMedicationSafetyAnalysis(null);
+      setSafetyError(null);
+      return;
+    }
+
+    // Extract medications with valid medication codes
+    const validMedications = formData.items.filter(item => 
+      item.medication_code && item.medication_name
+    );
+
+    if (validMedications.length === 0) {
+      setMedicationSafetyAnalysis(null);
+      setSafetyError(null);
+      return;
+    }
+
+    // Debounce the analysis
+    const timer = setTimeout(async () => {
+      await analyzeMedicationSafety();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [formData.auth_type, formData.items, formData.patient_id, formData.diagnoses]);
+
+  // Helper to calculate patient age from birth date
+  const calculatePatientAge = (birthDate) => {
+    if (!birthDate) return null;
+    const birth = new Date(birthDate);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // Analyze medication safety using AI
+  const analyzeMedicationSafety = async () => {
+    const validMedications = formData.items.filter(item => 
+      item.medication_code && item.medication_name
+    );
+
+    if (validMedications.length === 0) {
+      setMedicationSafetyAnalysis(null);
+      return;
+    }
+
+    setSafetyLoading(true);
+    setSafetyError(null);
+
+    try {
+      // Get patient data for context
+      const selectedPatient = patients.find(p => p.patient_id == formData.patient_id);
+      const patientAge = selectedPatient ? calculatePatientAge(selectedPatient.birth_date || selectedPatient.date_of_birth) : null;
+      const patientGender = selectedPatient?.gender;
+
+      // Get primary diagnosis
+      const primaryDiagnosis = formData.diagnoses?.find(d => d.diagnosis_type === 'principal')?.diagnosis_display || 
+                               formData.diagnoses?.[0]?.diagnosis_display || '';
+
+      const response = await api.analyzeMedicationSafety(
+        validMedications.map(item => ({
+          medicationName: item.medication_name,
+          activeIngredient: item.medication_name, // Use medication name as fallback
+          medicationCode: item.medication_code,
+          strength: item.quantity || '',
+        })),
+        {
+          age: patientAge,
+          gender: patientGender,
+          diagnosis: primaryDiagnosis,
+          pregnant: false, // Could be enhanced with patient data
+          emergencyCase: formData.sub_type === 'emr'
+        }
+      );
+
+      if (response.success && response.analysis) {
+        setMedicationSafetyAnalysis(response.analysis);
+      } else {
+        throw new Error(response.message || 'Analysis failed');
+      }
+    } catch (error) {
+      console.error('Medication safety analysis error:', error);
+      setSafetyError(error.message || 'Failed to analyze medication safety');
+    } finally {
+      setSafetyLoading(false);
+    }
+  };
+
+  // Get AI medication suggestions based on diagnosis
+  const getMedicationSuggestionsHandler = async () => {
+    const primaryDiagnosis = formData.diagnoses?.find(d => d.diagnosis_type === 'principal')?.diagnosis_display || 
+                             formData.diagnoses?.[0]?.diagnosis_display;
+
+    if (!primaryDiagnosis) {
+      setSuggestionsError('Please add a diagnosis first to get medication suggestions');
+      return;
+    }
+
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+
+    try {
+      const selectedPatient = patients.find(p => p.patient_id == formData.patient_id);
+      const patientAge = selectedPatient ? calculatePatientAge(selectedPatient.birth_date || selectedPatient.date_of_birth) : null;
+      const patientGender = selectedPatient?.gender;
+
+      const response = await api.getMedicationSuggestions(
+        primaryDiagnosis,
+        patientAge,
+        patientGender,
+        formData.sub_type === 'emr'
+      );
+
+      if (response.success && response.suggestions) {
+        setMedicationSuggestions(response.suggestions);
+        setShowSuggestions(true);
+      } else {
+        throw new Error(response.message || 'Failed to get suggestions');
+      }
+    } catch (error) {
+      console.error('Medication suggestions error:', error);
+      setSuggestionsError(error.message || 'Failed to get medication suggestions');
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  };
 
   const loadReferenceData = async () => {
     try {
@@ -706,6 +852,11 @@ export default function PriorAuthorizationForm() {
         delete dataToSave.encounter_end;
         dataToSave.encounter_class = 'ambulatory';
       }
+      
+      // Include AI medication safety analysis for pharmacy authorizations
+      if (dataToSave.auth_type === 'pharmacy' && medicationSafetyAnalysis) {
+        dataToSave.medication_safety_analysis = medicationSafetyAnalysis;
+      }
 
       let response;
       if (isEditMode) {
@@ -759,6 +910,11 @@ export default function PriorAuthorizationForm() {
       if (dataToSave.auth_type === 'dental' || dataToSave.auth_type === 'vision') {
         delete dataToSave.encounter_end;
         dataToSave.encounter_class = 'ambulatory';
+      }
+      
+      // Include AI medication safety analysis for pharmacy authorizations
+      if (dataToSave.auth_type === 'pharmacy' && medicationSafetyAnalysis) {
+        dataToSave.medication_safety_analysis = medicationSafetyAnalysis;
       }
 
       // Save first
@@ -2673,6 +2829,118 @@ export default function PriorAuthorizationForm() {
             </div>
           </CardContent>
         </Card>
+
+          {/* AI Medication Safety Analysis - Only for Pharmacy */}
+          {formData.auth_type === 'pharmacy' && (
+            <>
+              {/* AI Suggestions Button */}
+              {formData.diagnoses?.some(d => d.diagnosis_code) && !showSuggestions && (
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="text-sm font-medium text-purple-900 mb-1 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        AI Medication Suggestions Available
+                      </h4>
+                      <p className="text-sm text-purple-700 mb-3">
+                        Get AI-powered medication recommendations based on the diagnosis: <strong>{formData.diagnoses?.find(d => d.diagnosis_type === 'principal')?.diagnosis_display || formData.diagnoses?.[0]?.diagnosis_display || 'Selected diagnosis'}</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={getMedicationSuggestionsHandler}
+                    disabled={suggestionsLoading}
+                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                  >
+                    <Sparkles className={`w-4 h-4 mr-2 ${suggestionsLoading ? 'animate-pulse' : ''}`} />
+                    {suggestionsLoading ? 'Generating Suggestions...' : 'Get AI Suggestions'}
+                  </Button>
+                  {suggestionsError && (
+                    <p className="text-sm text-red-600 mt-2">{suggestionsError}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Medication Suggestions Panel */}
+              {showSuggestions && (
+                <div>
+                  <MedicationSuggestionsPanel
+                    suggestions={medicationSuggestions}
+                    isLoading={suggestionsLoading}
+                    error={suggestionsError}
+                    onAddMedication={(suggestion) => {
+                      // Add a new item with the suggested medication
+                      addItem();
+                      const newIndex = formData.items.length;
+                      setTimeout(() => {
+                        handleItemChange(newIndex, 'medication_name', suggestion.genericName);
+                        handleItemChange(newIndex, 'medication_code', ''); // User needs to search for actual code
+                      }, 100);
+                    }}
+                  />
+                  <button
+                    onClick={() => setShowSuggestions(false)}
+                    className="mt-3 text-sm text-gray-600 hover:text-gray-900 underline"
+                  >
+                    Hide suggestions
+                  </button>
+                </div>
+              )}
+
+              {/* Safety Analysis Card */}
+              {formData.items.some(item => item.medication_code && item.medication_name) && (
+                <Card className="border-blue-200">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="w-5 h-5 text-blue-600" />
+                        AI Medication Safety Analysis
+                      </CardTitle>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={analyzeMedicationSafety}
+                        disabled={safetyLoading}
+                        className="flex items-center gap-2"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${safetyLoading ? 'animate-spin' : ''}`} />
+                        {safetyLoading ? 'Analyzing...' : 'Re-analyze'}
+                      </Button>
+                    </div>
+                    <CardDescription>
+                      AI-powered analysis of drug interactions, side effects, and safety warnings
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <MedicationSafetyPanel
+                      analysis={medicationSafetyAnalysis}
+                      isLoading={safetyLoading}
+                      error={safetyError}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Info when no medications selected */}
+              {!formData.items.some(item => item.medication_code && item.medication_name) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-medium text-blue-900 mb-1">
+                        AI Safety Analysis Available
+                      </h4>
+                      <p className="text-sm text-blue-700">
+                        Select medications above to automatically analyze drug interactions, side effects, and get safety recommendations powered by AI.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

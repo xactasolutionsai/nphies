@@ -5,7 +5,7 @@ dotenv.config();
 
 class OllamaService {
   constructor() {
-    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://38.29.145.78:11434';
     this.model = process.env.OLLAMA_MODEL || 'cniongolo/biomistral';
     this.timeout = parseInt(process.env.OLLAMA_TIMEOUT) || 120000; // 120 seconds default
     this.maxRetries = 3;

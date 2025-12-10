@@ -92,7 +92,7 @@ try {
 // Test 4: Check Ollama connection (needed for embeddings)
 console.log('\n5️⃣ Checking Ollama service...');
 try {
-  const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://38.29.145.78:11434';
   const response = await fetch(`${ollamaUrl}/api/tags`);
   
   if (response.ok) {

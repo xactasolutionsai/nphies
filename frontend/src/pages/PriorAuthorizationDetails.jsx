@@ -10,8 +10,11 @@ import {
   ArrowLeft, Edit, Send, RefreshCw, XCircle, ArrowRightLeft,
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
-  Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck
+  Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck, Pill
 } from 'lucide-react';
+
+// Import AI Medication Safety Panel
+import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
 
 // Helper functions
 const getAuthTypeDisplay = (authType) => {
@@ -851,6 +854,12 @@ export default function PriorAuthorizationDetails() {
                 Vision Rx
               </TabButton>
             )}
+            {priorAuth.auth_type === 'pharmacy' && priorAuth.medication_safety_analysis && (
+              <TabButton active={activeTab === 'safety'} onClick={() => setActiveTab('safety')}>
+                <Shield className="h-4 w-4 mr-1 inline" />
+                AI Safety Analysis
+              </TabButton>
+            )}
             {priorAuth.response_bundle && (
               <TabButton active={activeTab === 'nphies'} onClick={() => setActiveTab('nphies')}>
                 <CheckCircle className="h-4 w-4 mr-1 inline" />
@@ -1134,6 +1143,36 @@ export default function PriorAuthorizationDetails() {
                       </div>
                     </div>
                   </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* AI Medication Safety Analysis Tab */}
+          {activeTab === 'safety' && priorAuth.auth_type === 'pharmacy' && (
+            <Card className="border-blue-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-blue-600" />
+                  AI Medication Safety Analysis
+                </CardTitle>
+                <CardDescription>
+                  AI-powered analysis of drug interactions, side effects, and safety warnings for this pharmacy authorization
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {priorAuth.medication_safety_analysis ? (
+                  <MedicationSafetyPanel
+                    analysis={priorAuth.medication_safety_analysis}
+                    isLoading={false}
+                    error={null}
+                  />
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Shield className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                    <p>No medication safety analysis available</p>
+                    <p className="text-sm mt-1">Safety analysis is generated when medications are added in the pharmacy authorization form</p>
+                  </div>
                 )}
               </CardContent>
             </Card>

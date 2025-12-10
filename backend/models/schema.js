@@ -445,6 +445,9 @@ export const validationSchemas = {
     sub_type: Joi.string().max(50).allow(null, '').optional(),
     vision_prescription: Joi.object().allow(null).optional(),
     
+    // AI Medication Safety Analysis (for pharmacy authorizations)
+    medication_safety_analysis: Joi.object().allow(null).optional(),
+    
     // Pre-auth period
     pre_auth_period_start: Joi.date().allow(null, '').optional(),
     pre_auth_period_end: Joi.date().allow(null, '').optional(),

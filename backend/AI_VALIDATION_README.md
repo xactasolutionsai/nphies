@@ -96,7 +96,7 @@ npm install
 Update your `.env` file (or create one from `env.example`):
 ```env
 # AI Validation Configuration
-OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_BASE_URL=http://38.29.145.78:11434
 OLLAMA_MODEL=cniongolo/biomistral
 OLLAMA_TIMEOUT=120000
 AI_VALIDATION_ENABLED=true

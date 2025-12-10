@@ -588,6 +588,45 @@ class ApiService {
   async getMedicationByCode(code) {
     return this.request(`/nphies-codes/medications/${encodeURIComponent(code)}`);
   }
+
+  // Medication Safety Analysis (AI-powered)
+  /**
+   * Analyze medication safety using AI
+   * Checks for drug interactions, age warnings, pregnancy warnings, side effects
+   * @param {Array} medications - Array of medication objects with name/activeIngredient
+   * @param {Object} patientContext - Patient context (age, gender, pregnant, allergies, diagnosis)
+   */
+  async analyzeMedicationSafety(medications, patientContext = {}) {
+    return this.request('/medication-safety/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ medications, patientContext })
+    });
+  }
+
+  /**
+   * Get AI-powered medication suggestions based on diagnosis
+   * @param {string} diagnosis - Patient diagnosis
+   * @param {number} patientAge - Patient age
+   * @param {string} patientGender - Patient gender
+   * @param {boolean} emergencyCase - Is this an emergency case
+   */
+  async getMedicationSuggestions(diagnosis, patientAge, patientGender, emergencyCase = false) {
+    return this.request('/medication-safety/suggest', {
+      method: 'POST',
+      body: JSON.stringify({ diagnosis, patientAge, patientGender, emergencyCase })
+    });
+  }
+
+  /**
+   * Check drug interactions between medications
+   * @param {Array} medications - Array of medication objects
+   */
+  async checkDrugInteractions(medications) {
+    return this.request('/medication-safety/check-interactions', {
+      method: 'POST',
+      body: JSON.stringify({ medications })
+    });
+  }
 }
 
 export default new ApiService();
