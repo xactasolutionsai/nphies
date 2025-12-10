@@ -528,9 +528,16 @@ export default function PriorAuthorizationDetails() {
       // Build claim preview data from the prior authorization
       // For claims, we use the PA's encounter dates as the reference period
       // Item servicedDate must be within the encounter period (BV-00041)
-      const encounterStartDate = priorAuth.encounter_start 
-        ? new Date(priorAuth.encounter_start).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0];
+      // Extract date without timezone conversion to avoid date shifting
+      let encounterStartDate;
+      if (priorAuth.encounter_start) {
+        const dateStr = String(priorAuth.encounter_start);
+        encounterStartDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.substring(0, 10);
+      } else {
+        // Fallback to today in local time
+        const today = new Date();
+        encounterStartDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      }
       
       const claimPreviewData = {
         claim_type: priorAuth.auth_type,
@@ -549,12 +556,28 @@ export default function PriorAuthorizationDetails() {
         practice_code: priorAuth.practice_code,
         service_type: priorAuth.service_type,
         eligibility_offline_ref: priorAuth.eligibility_offline_ref,
-        items: priorAuth.items?.map((item, idx) => ({
-          ...item,
-          sequence: idx + 1,
-          // Use item's original serviced_date, or encounter start date, or today
-          serviced_date: item.serviced_date || encounterStartDate
-        })) || [],
+        items: priorAuth.items?.map((item, idx) => {
+          // Extract date without timezone conversion
+          // If item.serviced_date is ISO string like "2023-12-03T21:00:00.000Z", extract just the date part
+          let itemServicedDate = encounterStartDate;
+          if (item.serviced_date && item.serviced_date !== '') {
+            // Handle both ISO strings and plain date strings
+            const dateStr = String(item.serviced_date);
+            if (dateStr.includes('T')) {
+              // ISO string - extract date part directly without timezone conversion
+              itemServicedDate = dateStr.split('T')[0];
+            } else {
+              // Plain date string - use as is
+              itemServicedDate = dateStr.substring(0, 10);
+            }
+          }
+          
+          return {
+            ...item,
+            sequence: idx + 1,
+            serviced_date: itemServicedDate
+          };
+        }) || [],
         diagnoses: priorAuth.diagnoses || [],
         supporting_info: priorAuth.supporting_info || []
       };

@@ -18,11 +18,29 @@ class BaseMapper {
 
   /**
    * Format date to FHIR date format (YYYY-MM-DD)
+   * Handles timezone properly to avoid date shifting
    */
   formatDate(date) {
     if (!date) return null;
+    
+    // If it's already a string in YYYY-MM-DD format or ISO format, extract date part
+    if (typeof date === 'string') {
+      // Handle ISO strings like "2023-12-03T21:00:00.000Z" - extract date part directly
+      if (date.includes('T')) {
+        return date.split('T')[0];
+      }
+      // Already in YYYY-MM-DD format
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return date;
+      }
+    }
+    
+    // For Date objects, use local date to avoid UTC conversion
     const d = new Date(date);
-    return d.toISOString().split('T')[0];
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   /**

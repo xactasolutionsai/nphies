@@ -404,8 +404,8 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       }
     ];
 
-    let servicedDate = item.serviced_date ? new Date(item.serviced_date) : 
-                       (encounterPeriod?.start ? new Date(encounterPeriod.start) : new Date());
+    // Use item's serviced_date if available, otherwise fall back to encounter start or today
+    let servicedDate = item.serviced_date || encounterPeriod?.start || new Date();
 
     return {
       extension: itemExtensions,
