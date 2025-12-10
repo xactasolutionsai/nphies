@@ -780,13 +780,77 @@ export default function PriorAuthorizationForm() {
     setEnhancingField(field);
 
     try {
+      // Get selected patient from loaded patients (using patient_id)
+      const selectedPatient = patients.find(p => p.patient_id == formData.patient_id);
+      const patientAge = selectedPatient ? calculatePatientAge(selectedPatient.birth_date || selectedPatient.date_of_birth) : null;
+      
+      // Get selected provider from loaded providers
+      const selectedProvider = providers.find(p => p.provider_id == formData.provider_id);
+      
+      // Get selected insurer from loaded insurers
+      const selectedInsurer = insurers.find(i => i.insurer_id == formData.insurer_id);
+      
+      // Build comprehensive context from all form data
       const context = {
+        // Patient Information (from database)
+        patientName: selectedPatient?.name || selectedPatient?.full_name || '',
+        patientAge: patientAge,
+        patientGender: selectedPatient?.gender || '',
+        patientId: selectedPatient?.identifier || selectedPatient?.national_id || '',
+        
+        // Basic Information
+        authType: formData.auth_type || '',
+        priority: formData.priority || '',
+        encounterClass: formData.encounter_class || '',
+        claimSubtype: formData.claim_subtype || '',
+        
+        // Chief Complaint
         chiefComplaint: formData.clinical_info.chief_complaint_display || formData.clinical_info.chief_complaint_text || '',
-        diagnosis: formData.diagnoses?.[0]?.diagnosis_display || formData.diagnoses?.[0]?.diagnosis_description || '',
-        requestedService: formData.items?.[0]?.service_description || formData.items?.[0]?.medication_name || ''
+        chiefComplaintCode: formData.clinical_info.chief_complaint_code || '',
+        
+        // Diagnoses (all of them)
+        diagnoses: (formData.diagnoses || []).map(d => ({
+          code: d.diagnosis_code || '',
+          display: d.diagnosis_display || '',
+          description: d.diagnosis_description || '',
+          type: d.diagnosis_type || ''
+        })),
+        
+        // Vital Signs (all of them)
+        vitalSigns: {
+          systolic: formData.vital_signs?.systolic || '',
+          diastolic: formData.vital_signs?.diastolic || '',
+          pulse: formData.vital_signs?.pulse || '',
+          temperature: formData.vital_signs?.temperature || '',
+          oxygen_saturation: formData.vital_signs?.oxygen_saturation || '',
+          respiratory_rate: formData.vital_signs?.respiratory_rate || '',
+          height: formData.vital_signs?.height || '',
+          weight: formData.vital_signs?.weight || ''
+        },
+        
+        // Requested Services/Procedures/Medications
+        requestedServices: (formData.items || []).map(item => ({
+          code: item.product_or_service_code || item.medication_code || '',
+          description: item.service_description || item.medication_name || '',
+          quantity: item.quantity || '',
+          bodySite: item.body_site || '',
+          tooth: item.tooth_number || ''
+        })),
+        
+        // Provider Information (from database)
+        providerName: selectedProvider?.name || selectedProvider?.facility_name || '',
+        providerType: selectedProvider?.provider_type || '',
+        
+        // Insurer Information (from database)
+        insurerName: selectedInsurer?.name || selectedInsurer?.organization_name || '',
+        
+        // Admission Info (for inpatient)
+        admissionWeight: formData.admission_info?.admission_weight || '',
+        estimatedLengthOfStay: formData.admission_info?.estimated_length_of_stay || ''
       };
 
-      console.log(`🤖 Enhancing ${field} with AI...`, { currentText, context });
+      console.log(`🤖 Enhancing ${field} with AI...`);
+      console.log('📋 Context:', context);
 
       const response = await api.enhanceClinicalText(currentText, field, context);
       
@@ -1002,6 +1066,15 @@ export default function PriorAuthorizationForm() {
         dataToSave.encounter_class = 'ambulatory';
       }
       
+      // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
+      // Per NPHIES BV-00741: Encounter Class Shall be either 'Inpatient Admission', 'Day Case Admission' or 'inpatient acute' for Institutional Claim
+      // Per NPHIES BV-00845: Encounter Class 'Outpatient' SHALL be used only when claim is 'oral' or 'professional'
+      if (dataToSave.auth_type === 'institutional') {
+        if (!['inpatient', 'daycase'].includes(dataToSave.encounter_class)) {
+          dataToSave.encounter_class = 'daycase';
+        }
+      }
+      
       // Include AI medication safety analysis for pharmacy authorizations
       if (dataToSave.auth_type === 'pharmacy' && medicationSafetyAnalysis) {
         dataToSave.medication_safety_analysis = medicationSafetyAnalysis;
@@ -1078,6 +1151,15 @@ export default function PriorAuthorizationForm() {
       if (dataToSave.auth_type === 'dental' || dataToSave.auth_type === 'vision') {
         delete dataToSave.encounter_end;
         dataToSave.encounter_class = 'ambulatory';
+      }
+      
+      // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
+      // Per NPHIES BV-00741: Encounter Class Shall be either 'Inpatient Admission', 'Day Case Admission' or 'inpatient acute' for Institutional Claim
+      // Per NPHIES BV-00845: Encounter Class 'Outpatient' SHALL be used only when claim is 'oral' or 'professional'
+      if (dataToSave.auth_type === 'institutional') {
+        if (!['inpatient', 'daycase'].includes(dataToSave.encounter_class)) {
+          dataToSave.encounter_class = 'daycase';
+        }
       }
       
       // Include AI medication safety analysis for pharmacy authorizations
@@ -1192,6 +1274,15 @@ export default function PriorAuthorizationForm() {
       if (dataToPreview.auth_type === 'dental' || dataToPreview.auth_type === 'vision') {
         delete dataToPreview.encounter_end;
         dataToPreview.encounter_class = 'ambulatory';
+      }
+      
+      // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
+      // Per NPHIES BV-00741: Encounter Class Shall be either 'Inpatient Admission', 'Day Case Admission' or 'inpatient acute' for Institutional Claim
+      // Per NPHIES BV-00845: Encounter Class 'Outpatient' SHALL be used only when claim is 'oral' or 'professional'
+      if (dataToPreview.auth_type === 'institutional') {
+        if (!['inpatient', 'daycase'].includes(dataToPreview.encounter_class)) {
+          dataToPreview.encounter_class = 'daycase';
+        }
       }
 
       // Include the ID if we're editing an existing record - this allows the backend to save
@@ -1366,9 +1457,12 @@ export default function PriorAuthorizationForm() {
                     const currentClass = formData.encounter_class;
                     
                     // Auto-update encounter class if current selection is not allowed for new auth type
+                    // For institutional: default to 'daycase' (SS - Short Stay)
+                    // For professional/dental: default to 'ambulatory' (AMB)
                     if (!allowed.includes(currentClass)) {
-                      handleChange('encounter_class', allowed[0] || 'ambulatory');
-                      if (allowed[0] === 'ambulatory') {
+                      const defaultClass = newAuthType === 'institutional' ? 'daycase' : (allowed[0] || 'ambulatory');
+                      handleChange('encounter_class', defaultClass);
+                      if (defaultClass === 'ambulatory') {
                         handleChange('encounter_end', '');
                       }
                     }

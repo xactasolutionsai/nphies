@@ -6,16 +6,92 @@ dotenv.config();
 class OllamaService {
   constructor() {
     this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://38.29.145.78:11434';
-    this.model = process.env.OLLAMA_MODEL || 'cniongolo/biomistral';
-    this.timeout = parseInt(process.env.OLLAMA_TIMEOUT) || 120000; // 120 seconds default
+    this.model = process.env.OLLAMA_MODEL || 'thewindmom/llama3-med42-8b:latest';
+    this.timeout = parseInt(process.env.OLLAMA_TIMEOUT, 10) || 120000; // 120 seconds default
     this.maxRetries = 3;
+    this.requestCounter = 0;
+
+    // Optional: separate embedding model
+    this.embeddingModel = process.env.OLLAMA_EMBED_MODEL || this.model;
     
     this.client = new Ollama({
       host: this.baseUrl
     });
     
-    console.log(`✅ Ollama Service initialized with model: ${this.model}`);
+    console.log(`\n✅ Ollama Service initialized`);
+    console.log(`   📍 Base URL: ${this.baseUrl}`);
+    console.log(`   🤖 Model: ${this.model}`);
+    console.log(`   ⏱️  Timeout: ${this.timeout}ms`);
+    
+    // Test connection on startup
+    this.testConnection();
   }
+
+  /**
+   * Test connection to Ollama server on startup
+   */
+  async testConnection() {
+    console.log('\n🔌 Testing Ollama connection...');
+    try {
+      const response = await fetch(`${this.baseUrl}/api/tags`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(10000)
+      });
+      
+      if (!response.ok) {
+        console.error(`❌ Ollama server returned status: ${response.status}`);
+        return;
+      }
+      
+      const data = await response.json();
+      console.log(`✅ Ollama server connected`);
+      console.log(`   📦 Available models: ${data.models?.map(m => m.name).join(', ') || 'none'}`);
+      
+      const modelExists = data.models?.some(m => 
+        m.name === this.model || m.name.startsWith(this.model.split(':')[0])
+      );
+      
+      if (!modelExists) {
+        console.warn(`   ⚠️  WARNING: Model "${this.model}" not found!`);
+      } else {
+        console.log(`   ✅ Model "${this.model}" is available`);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to connect to Ollama: ${error.message}`);
+    }
+  }
+
+  // ============================================================================
+  // LOW-LEVEL HELPER
+  // ============================================================================
+
+  /**
+   * Run a promise with a soft timeout (no abort, only rejection)
+   * @private
+   */
+  async runWithTimeout(promise, ms, description = 'operation') {
+    let timeoutId;
+    const startTime = Date.now();
+    
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const elapsed = Date.now() - startTime;
+        console.error(`\n⏰ TIMEOUT: ${description} after ${elapsed}ms (limit: ${ms}ms)`);
+        reject(new Error(`Ollama ${description} timed out after ${ms}ms`));
+      }, ms);
+    });
+
+    try {
+      const result = await Promise.race([promise, timeoutPromise]);
+      return result;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // ============================================================================
+  // CORE COMPLETION & EMBEDDINGS
+  // ============================================================================
 
   /**
    * Generate a completion from the model
@@ -24,74 +100,112 @@ class OllamaService {
    * @returns {Promise<object>} - The completion response
    */
   async generateCompletion(prompt, options = {}) {
+    const requestId = ++this.requestCounter;
     const startTime = Date.now();
     let lastError = null;
 
+    console.log(`\n🚀 [REQ-${requestId}] Starting Ollama request`);
+    console.log(`   📍 Server: ${this.baseUrl}`);
+    console.log(`   🤖 Model: ${this.model}`);
+    console.log(`   📝 Prompt length: ${prompt?.length || 0} chars`);
+
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        console.log(`🤖 Ollama request (attempt ${attempt}/${this.maxRetries}) - Model: ${this.model}`);
-        console.log(`   Format: ${options.format || 'none'}`);
-        console.log(`   Temperature: ${options.temperature || 0.7}`);
-        console.log(`   num_predict: ${options.num_predict || 2048}`);
-        console.log(`   num_ctx: ${options.num_ctx || 'default'}`);
+        console.log(`\n📤 [REQ-${requestId}] Sending request (attempt ${attempt}/${this.maxRetries})`);
+        console.log(`   Temperature: ${options.temperature ?? 0.7}`);
+        console.log(`   num_predict: ${options.num_predict ?? 2048}`);
         
         const requestConfig = {
           model: this.model,
-          prompt: prompt,
+          prompt,
           stream: false,
-          format: options.format || undefined, // 'json' for JSON mode
+          format: options.format || undefined,
           options: {
-            temperature: options.temperature || 0.7,
-            top_p: options.top_p || 0.9,
-            top_k: options.top_k || 40,
-            num_predict: options.num_predict || 2048,
+            temperature: options.temperature ?? 0.7,
+            top_p: options.top_p ?? 0.9,
+            top_k: options.top_k ?? 40,
+            num_predict: options.num_predict ?? 2048,
             num_ctx: options.num_ctx || undefined,
             ...(Object.keys(options).reduce((acc, key) => {
-              // Don't duplicate format in options
-              if (key !== 'format' && key !== 'temperature' && key !== 'top_p' && key !== 'top_k' && key !== 'num_predict' && key !== 'num_ctx') {
+              if (!['format', 'temperature', 'top_p', 'top_k', 'num_predict', 'num_ctx'].includes(key)) {
                 acc[key] = options[key];
               }
               return acc;
             }, {}))
           }
         };
-        
-        const response = await this.client.generate(requestConfig);
 
-        const duration = Date.now() - startTime;
-        console.log(`✅ Ollama response received in ${duration}ms`);
+        // Progress logging for long requests
+        const progressInterval = setInterval(() => {
+          const elapsed = Math.round((Date.now() - startTime) / 1000);
+          console.log(`   ⏳ [REQ-${requestId}] Still waiting... ${elapsed}s elapsed`);
+        }, 10000);
 
-        return {
-          success: true,
-          response: response.response,
-          model: this.model,
-          duration: duration,
-          totalDuration: response.total_duration,
-          loadDuration: response.load_duration,
-          promptEvalCount: response.prompt_eval_count,
-          evalCount: response.eval_count
-        };
+        try {
+          const response = await this.runWithTimeout(
+            this.client.generate(requestConfig),
+            this.timeout,
+            'completion'
+          );
 
+          clearInterval(progressInterval);
+          const duration = Date.now() - startTime;
+          
+          console.log(`\n✅ [REQ-${requestId}] Response received in ${duration}ms`);
+          console.log(`   📝 Response length: ${response.response?.length || 0} chars`);
+          if (response.response) {
+            console.log(`   📄 Preview: ${response.response.substring(0, 100)}...`);
+          }
+
+          return {
+            success: true,
+            response: response.response,
+            model: this.model,
+            duration,
+            totalDuration: response.total_duration,
+            loadDuration: response.load_duration,
+            promptEvalCount: response.prompt_eval_count,
+            evalCount: response.eval_count
+          };
+        } catch (innerError) {
+          clearInterval(progressInterval);
+          throw innerError;
+        }
       } catch (error) {
         lastError = error;
-        console.error(`❌ Ollama error (attempt ${attempt}/${this.maxRetries}):`, error.message);
+        const elapsed = Date.now() - startTime;
         
-        // Don't retry on certain errors
+        console.error(`\n❌ [REQ-${requestId}] Error after ${elapsed}ms (attempt ${attempt}/${this.maxRetries})`);
+        console.error(`   Type: ${error.constructor.name}`);
+        console.error(`   Message: ${error.message}`);
+        
+        // Categorize error
         if (error.message?.includes('model not found') || error.message?.includes('invalid model')) {
-          throw new Error(`Model ${this.model} not found. Please ensure it's installed in Ollama.`);
+          console.error(`   💡 Run: ollama pull ${this.model}`);
+          throw new Error(`Model ${this.model} not found. Run: ollama pull ${this.model}`);
+        }
+        if (error.message?.includes('timed out')) {
+          console.error(`   💡 Request timed out after ${this.timeout}ms`);
+          console.error(`   💡 Try increasing OLLAMA_TIMEOUT env variable`);
+        }
+        if (error.message?.includes('ECONNREFUSED')) {
+          console.error(`   💡 Cannot connect to ${this.baseUrl}`);
+          console.error(`   💡 Make sure Ollama is running: ollama serve`);
+        }
+        if (error.message?.includes('fetch failed') || error.message?.includes('ECONNRESET')) {
+          console.error(`   💡 Network error - server may be overloaded or crashed`);
         }
 
-        // Wait before retrying (exponential backoff)
         if (attempt < this.maxRetries) {
-          const waitTime = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
-          console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+          const waitTime = Math.pow(2, attempt) * 1000;
+          console.log(`   ⏳ Waiting ${waitTime}ms before retry...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
     }
 
-    // All retries failed
-    throw new Error(`Ollama request failed after ${this.maxRetries} attempts: ${lastError?.message || 'Unknown error'}`);
+    console.error(`\n💀 [REQ-${requestId}] All ${this.maxRetries} attempts failed`);
+    throw new Error(`Ollama request failed after ${this.maxRetries} attempts: ${lastError?.message}`);
   }
 
   /**
@@ -103,10 +217,14 @@ class OllamaService {
     try {
       console.log(`🔢 Generating embedding for text (length: ${text.length})`);
       
-      const response = await this.client.embeddings({
-        model: this.model,
+      const response = await this.runWithTimeout(
+        this.client.embeddings({
+          model: this.embeddingModel,
         prompt: text
-      });
+        }),
+        this.timeout,
+        'embedding'
+      );
 
       if (!response.embedding || !Array.isArray(response.embedding)) {
         throw new Error('Invalid embedding response from Ollama');
@@ -114,20 +232,23 @@ class OllamaService {
 
       console.log(`✅ Embedding generated (dimension: ${response.embedding.length})`);
       return response.embedding;
-
     } catch (error) {
       console.error('❌ Error generating embedding:', error.message);
       
-      // Fallback: try with a simpler embedding model if available
       if (error.message?.includes('does not support') || error.message?.includes('embeddings')) {
-        console.log('⚠️ Model does not support embeddings, trying alternative approach...');
-        // You could fallback to another model or service here
-        throw new Error(`Model ${this.model} does not support embeddings. Consider using an embedding-specific model.`);
+        console.log('⚠️ Model does not support embeddings, consider using an embedding-specific model.');
+        throw new Error(
+          `Model ${this.embeddingModel} does not support embeddings. Consider using an embedding-specific model.`
+        );
       }
       
       throw error;
     }
   }
+
+  // ============================================================================
+  // EYE PRESCRIPTION VALIDATION
+  // ============================================================================
 
   /**
    * Validate eye approval form data with medical context
@@ -191,7 +312,6 @@ class OllamaService {
           rawResponse: result.response // Include raw response for debugging
         }
       };
-
     } catch (error) {
       console.error('❌ Error in form validation:', error.message);
       throw error;
@@ -274,7 +394,7 @@ MISSING_ANALYSES:
    * Parse AI response into structured validation result
    * @private
    */
-  parseValidationResponse(responseText, formData) {
+  parseValidationResponse(responseText) {
     const result = {
       isValid: true,
       confidenceScore: 0.85,
@@ -299,9 +419,13 @@ MISSING_ANALYSES:
       // Extract warnings
       const warningsSection = responseText.match(/WARNINGS:([\s\S]*?)(?=RECOMMENDATIONS:|MISSING_ANALYSES:|$)/i);
       if (warningsSection) {
-        const warningLines = warningsSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
+        const warningLines = warningsSection[1]
+          .trim()
+          .split('\n')
+          .filter(line => line.trim().match(/^[-*•]/));
+
         warningLines.forEach(line => {
-          const cleanLine = line.replace(/^-\s*/, '').trim();
+          const cleanLine = line.replace(/^[-*•]\s*/, '').trim();
           const severityMatch = cleanLine.match(/Severity:\s*(high|medium|low)/i);
           const severity = severityMatch ? severityMatch[1].toLowerCase() : 'medium';
           const message = cleanLine.replace(/\s*-\s*Severity:\s*(high|medium|low)/i, '').trim();
@@ -311,7 +435,7 @@ MISSING_ANALYSES:
             result.warnings.push({
               field: fieldMatch ? fieldMatch[1].trim() : 'general',
               message: fieldMatch ? fieldMatch[2].trim() : message,
-              severity: severity
+              severity
             });
           }
         });
@@ -320,9 +444,13 @@ MISSING_ANALYSES:
       // Extract recommendations
       const recommendationsSection = responseText.match(/RECOMMENDATIONS:([\s\S]*?)(?=MISSING_ANALYSES:|$)/i);
       if (recommendationsSection) {
-        const recLines = recommendationsSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
+        const recLines = recommendationsSection[1]
+          .trim()
+          .split('\n')
+          .filter(line => line.trim().match(/^[-*•]/));
+
         recLines.forEach(line => {
-          const cleanLine = line.replace(/^-\s*/, '').trim();
+          const cleanLine = line.replace(/^[-*•]\s*/, '').trim();
           if (cleanLine && cleanLine.length > 5) {
             result.recommendations.push(cleanLine);
           }
@@ -332,22 +460,29 @@ MISSING_ANALYSES:
       // Extract missing analyses
       const missingSection = responseText.match(/MISSING_ANALYSES:([\s\S]*?)$/i);
       if (missingSection) {
-        const missingLines = missingSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
+        const missingLines = missingSection[1]
+          .trim()
+          .split('\n')
+          .filter(line => line.trim().match(/^[-*•]/));
+
         missingLines.forEach(line => {
-          const cleanLine = line.replace(/^-\s*/, '').trim();
+          const cleanLine = line.replace(/^[-*•]\s*/, '').trim();
           if (cleanLine && cleanLine.length > 5) {
             result.missingAnalyses.push(cleanLine);
           }
         });
       }
 
-      // If parsing found nothing, try a more lenient approach
-      if (result.warnings.length === 0 && result.recommendations.length === 0 && result.missingAnalyses.length === 0) {
+      // If parsing found nothing, fallback
+      if (
+        result.warnings.length === 0 &&
+        result.recommendations.length === 0 &&
+        result.missingAnalyses.length === 0
+      ) {
         console.log('⚠️ Structured parsing found nothing, using fallback parsing...');
         console.log('📄 Full response text for debugging:');
         console.log(responseText);
         
-        // Define instruction patterns to filter out (these should NOT be included in recommendations)
         const instructionPatterns = [
           /you are (reviewing|analyzing)/i,
           /analyze the data/i,
@@ -355,8 +490,8 @@ MISSING_ANALYSES:
           /output required/i,
           /copy this format/i,
           /now analyze/i,
-          /^(===|---)/,  // Section delimiters
-          /^\[.*\]$/,    // Placeholder brackets like [Yes or No]
+          /^(===|---)/,
+          /^\[.*\]$/,
           /begin (your )?analysis/i,
           /required output format/i,
           /patient data/i,
@@ -366,39 +501,39 @@ MISSING_ANALYSES:
           /medical ai assistant/i
         ];
         
-        // Try to extract useful information from unstructured response
         const lines = responseText.split('\n').filter(l => l.trim().length > 10);
         
-        // Add meaningful lines as recommendations
         let addedCount = 0;
         for (const line of lines) {
           const trimmed = line.trim();
-          
-          // Check if line matches any instruction pattern
           const isInstruction = instructionPatterns.some(pattern => pattern.test(trimmed));
           
-          // Skip empty lines, headers, instructions, and very short lines
-          if (trimmed && 
+          if (
+            trimmed &&
               !isInstruction &&
               !trimmed.match(/^(VALIDITY|CONFIDENCE|WARNINGS|RECOMMENDATIONS|MISSING_ANALYSES):/i) &&
-              trimmed.length > 20 &&  // Increased minimum length for better quality
-              addedCount < 10) {
-            // Remove bullet points and clean up
-            const cleaned = trimmed.replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '');
-            
-            // Additional quality checks
-            if (cleaned.length > 20 && 
-                !cleaned.match(/^\[.*\]$/) &&  // Not a placeholder
-                cleaned.split(' ').length >= 4) {  // At least 4 words
+            trimmed.length > 20 &&
+            addedCount < 10
+          ) {
+            const cleaned = trimmed
+              .replace(/^[-*•]\s*/, '')
+              .replace(/^\d+\.\s*/, '');
+
+            if (
+              cleaned.length > 20 &&
+              !cleaned.match(/^\[.*\]$/) &&
+              cleaned.split(' ').length >= 4
+            ) {
               result.recommendations.push(cleaned);
               addedCount++;
             }
           }
         }
         
-        // If still nothing useful, add a helpful message
         if (result.recommendations.length === 0) {
-          result.recommendations.push('AI analysis completed. Please review the raw response in server logs for details.');
+          result.recommendations.push(
+            'AI analysis completed. Please review the raw response in server logs for details.'
+          );
           result.warnings.push({
             field: 'parsing',
             message: 'AI response format not recognized. Check server logs for full response.',
@@ -406,10 +541,8 @@ MISSING_ANALYSES:
           });
         }
       }
-
     } catch (error) {
       console.error('❌ Error parsing validation response:', error.message);
-      // Return safe defaults
       result.warnings.push({
         field: 'parsing',
         message: 'Unable to fully parse AI response. Manual review recommended.',
@@ -420,15 +553,20 @@ MISSING_ANALYSES:
     return result;
   }
 
+  // ============================================================================
+  // HEALTH CHECK & CONFIG
+  // ============================================================================
+
   /**
    * Check if Ollama is available and model is installed
    * @returns {Promise<object>} - Status information
    */
   async checkHealth() {
     try {
-      // Try to list available models
       const models = await this.client.list();
-      const modelExists = models.models.some(m => m.name === this.model || m.name.startsWith(this.model));
+      const modelExists = models.models.some(
+        m => m.name === this.model || m.name.startsWith(this.model)
+      );
 
       return {
         available: true,
@@ -437,7 +575,6 @@ MISSING_ANALYSES:
         modelInstalled: modelExists,
         availableModels: models.models.map(m => m.name)
       };
-
     } catch (error) {
       console.error('❌ Ollama health check failed:', error.message);
       return {
@@ -468,12 +605,17 @@ MISSING_ANALYSES:
       baseUrl: this.baseUrl,
       model: this.model,
       timeout: this.timeout,
-      maxRetries: this.maxRetries
+      maxRetries: this.maxRetries,
+      embeddingModel: this.embeddingModel
     };
   }
 
+  // ============================================================================
+  // MEDICINE INFORMATION (e.g. with medbot-like models)
+  // ============================================================================
+
   /**
-   * Get detailed medicine information using AI (Goosedev/medbot)
+   * Get detailed medicine information using AI
    * @param {object} medicineData - Medicine data object
    * @returns {Promise<object>} - Detailed medicine information
    */
@@ -490,7 +632,7 @@ MISSING_ANALYSES:
       console.log(`📝 Prompt Length: ${prompt.length} characters\n`);
       
       const result = await this.generateCompletion(prompt, {
-        temperature: 0.3, // Lower temperature for more factual responses
+        temperature: 0.3,
         num_predict: 4000,
         repeat_penalty: 1.1
       });
@@ -501,7 +643,6 @@ MISSING_ANALYSES:
       console.log('─'.repeat(80));
       console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s\n`);
 
-      // Parse the AI response into structured format
       const medicineInfo = this.parseMedicineInfoResponse(result.response, medicineData);
       
       console.log('✅ ==> PARSED MEDICINE INFORMATION <==');
@@ -519,7 +660,6 @@ MISSING_ANALYSES:
           rawResponse: result.response
         }
       };
-
     } catch (error) {
       console.error('❌ Error getting medicine information:', error.message);
       throw error;
@@ -531,8 +671,12 @@ MISSING_ANALYSES:
    * @private
    */
   buildMedicineInfoPrompt(medicineData) {
-    const brandsList = medicineData.brands && medicineData.brands.length > 0
-      ? medicineData.brands.map(b => b.brand_name || b.brandName).filter(Boolean).join(', ')
+    const brandsList =
+      medicineData.brands && medicineData.brands.length > 0
+        ? medicineData.brands
+          .map(b => b.brand_name || b.brandName)
+          .filter(Boolean)
+          .join(', ')
       : 'No brand names available';
 
     return `You are a medical AI assistant providing detailed pharmaceutical information. Analyze the following medicine and provide comprehensive clinical information.
@@ -611,27 +755,35 @@ MECHANISM_OF_ACTION:
       }
 
       // Extract contraindications
-      const contraindicationsMatch = responseText.match(/CONTRAINDICATIONS:([\s\S]*?)(?=SIDE_EFFECTS:|DRUG_INTERACTIONS:|$)/i);
+      const contraindicationsMatch = responseText.match(
+        /CONTRAINDICATIONS:([\s\S]*?)(?=SIDE_EFFECTS:|DRUG_INTERACTIONS:|$)/i
+      );
       if (contraindicationsMatch) {
         result.contraindications = this.extractListItems(contraindicationsMatch[1]);
       }
 
       // Extract side effects
-      const sideEffectsMatch = responseText.match(/SIDE_EFFECTS:([\s\S]*?)(?=DRUG_INTERACTIONS:|DOSAGE_GUIDELINES:|$)/i);
+      const sideEffectsMatch = responseText.match(
+        /SIDE_EFFECTS:([\s\S]*?)(?=DRUG_INTERACTIONS:|DOSAGE_GUIDELINES:|$)/i
+      );
       if (sideEffectsMatch) {
         result.sideEffects = this.extractListItems(sideEffectsMatch[1]);
       }
 
       // Extract drug interactions
-      const interactionsMatch = responseText.match(/DRUG_INTERACTIONS:([\s\S]*?)(?=DOSAGE_GUIDELINES:|WARNINGS:|$)/i);
+      const interactionsMatch = responseText.match(
+        /DRUG_INTERACTIONS:([\s\S]*?)(?=DOSAGE_GUIDELINES:|WARNINGS:|$)/i
+      );
       if (interactionsMatch) {
         result.interactions = this.extractListItems(interactionsMatch[1]);
       }
 
       // Extract dosage guidelines
-      const dosageMatch = responseText.match(/DOSAGE_GUIDELINES:([\s\S]*?)(?=WARNINGS:|MECHANISM_OF_ACTION:|$)/i);
+      const dosageMatch = responseText.match(
+        /DOSAGE_GUIDELINES:([\s\S]*?)(?=WARNINGS:|MECHANISM_OF_ACTION:|$)/i
+      );
       if (dosageMatch) {
-        result.dosageGuidelines = dosageMatch[1].trim().replace(/^[-*]\s*/gm, '');
+        result.dosageGuidelines = dosageMatch[1].trim().replace(/^[-*•]\s*/gm, '');
       }
 
       // Extract warnings
@@ -643,37 +795,39 @@ MECHANISM_OF_ACTION:
       // Extract mechanism of action
       const mechanismMatch = responseText.match(/MECHANISM_OF_ACTION:([\s\S]*?)$/i);
       if (mechanismMatch) {
-        result.mechanismOfAction = mechanismMatch[1].trim().replace(/^[-*]\s*/gm, '');
+        result.mechanismOfAction = mechanismMatch[1].trim().replace(/^[-*•]\s*/gm, '');
       }
 
-      // Fallback: if no structured data found, try to extract useful information
-      if (result.indications.length === 0 && result.contraindications.length === 0 && 
-          result.sideEffects.length === 0 && result.interactions.length === 0) {
+      // Fallback: heuristic extraction if nothing parsed
+      if (
+        result.indications.length === 0 &&
+        result.contraindications.length === 0 &&
+        result.sideEffects.length === 0 &&
+        result.interactions.length === 0
+      ) {
         console.log('⚠️ Structured parsing found nothing, attempting fallback extraction...');
         
-        // Extract any bullet points or useful information
-        const lines = responseText.split('\n')
+        const lines = responseText
+          .split('\n')
           .filter(line => line.trim().length > 10)
           .filter(line => !this.isInstructionLine(line));
         
-        // Try to categorize lines based on content
         lines.forEach(line => {
           const cleaned = line.trim().replace(/^[-*•]\s*/, '');
           if (cleaned.length > 15) {
-            // Simple heuristic categorization
-            if (cleaned.toLowerCase().includes('treat') || cleaned.toLowerCase().includes('used for')) {
+            const lower = cleaned.toLowerCase();
+            if (lower.includes('treat') || lower.includes('used for')) {
               result.indications.push(cleaned);
-            } else if (cleaned.toLowerCase().includes('should not') || cleaned.toLowerCase().includes('avoid')) {
+            } else if (lower.includes('should not') || lower.includes('avoid')) {
               result.contraindications.push(cleaned);
-            } else if (cleaned.toLowerCase().includes('side effect') || cleaned.toLowerCase().includes('adverse')) {
+            } else if (lower.includes('side effect') || lower.includes('adverse')) {
               result.sideEffects.push(cleaned);
-            } else if (cleaned.toLowerCase().includes('interact') || cleaned.toLowerCase().includes('with other')) {
+            } else if (lower.includes('interact') || lower.includes('with other')) {
               result.interactions.push(cleaned);
             }
           }
         });
       }
-
     } catch (error) {
       console.error('❌ Error parsing medicine information response:', error.message);
     }
@@ -688,8 +842,9 @@ MECHANISM_OF_ACTION:
   extractListItems(text) {
     if (!text) return [];
     
-    const lines = text.split('\n')
-      .filter(line => line.trim().startsWith('-') || line.trim().startsWith('*') || line.trim().startsWith('•'))
+    const lines = text
+      .split('\n')
+      .filter(line => line.trim().match(/^[-*•]/))
       .map(line => line.replace(/^[-*•]\s*/, '').trim())
       .filter(line => line.length > 10);
     
@@ -717,7 +872,7 @@ MECHANISM_OF_ACTION:
   }
 
   // ============================================================================
-  // PRIOR AUTHORIZATION VALIDATION METHODS
+  // PRIOR AUTHORIZATION VALIDATION (INSTITUTIONAL / PROFESSIONAL)
   // ============================================================================
 
   /**
@@ -728,14 +883,14 @@ MECHANISM_OF_ACTION:
    */
   async validatePriorAuthForm(formData, authType = 'professional') {
     const prompt = this.buildPriorAuthValidationPrompt(formData, authType);
-    
+
     try {
       console.log('\n🏥 ==> AI PRIOR AUTH VALIDATION REQUEST <==');
       console.log(`📅 Timestamp: ${new Date().toISOString()}`);
       console.log(`🤖 Model: ${this.model}`);
       console.log(`📋 Auth Type: ${authType}`);
       console.log(`📝 Prompt Length: ${prompt.length} characters\n`);
-      
+
       const result = await this.generateCompletion(prompt, {
         temperature: 0.3,
         num_predict: 2500,
@@ -749,15 +904,16 @@ MECHANISM_OF_ACTION:
       console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s\n`);
 
       const validation = this.parsePriorAuthValidationResponse(result.response);
-      
+
       console.log('✅ ==> PARSED VALIDATION RESULT <==');
       console.log(`   Medical Necessity Score: ${(validation.medicalNecessityScore * 100).toFixed(0)}%`);
       console.log(`   Consistency Check: ${validation.consistencyCheck.passed ? 'PASS' : 'FAIL'}`);
       console.log(`   Rejection Risks: ${validation.rejectionRisks.length}`);
       console.log(`   Recommendations: ${validation.recommendations.length}\n`);
-      
+
       return {
         ...validation,
+        authType,
         metadata: {
           model: this.model,
           responseTime: `${(result.duration / 1000).toFixed(2)}s`,
@@ -765,7 +921,6 @@ MECHANISM_OF_ACTION:
           rawResponse: result.response
         }
       };
-
     } catch (error) {
       console.error('❌ Error in prior auth validation:', error.message);
       throw error;
@@ -781,18 +936,100 @@ MECHANISM_OF_ACTION:
     const clinicalInfo = formData.clinical_info || {};
     const diagnoses = formData.diagnoses || [];
     const items = formData.items || [];
+    const patient = formData.patient || {};
 
-    // Calculate BMI if available
+    // Calculate patient age from birth date
+    let patientAge = 'Unknown';
+    let ageInDays = null;
+    let ageInMonths = null;
+    let ageInYears = null;
+    let ageCategory = 'adult'; // default
+    
+    if (patient.birth_date || patient.birthDate || formData.birth_date) {
+      const birthDate = new Date(patient.birth_date || patient.birthDate || formData.birth_date);
+      const today = new Date();
+      const diffTime = today - birthDate;
+      ageInDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      ageInMonths = Math.floor(ageInDays / 30.44);
+      ageInYears = Math.floor(ageInDays / 365.25);
+      
+      if (ageInDays < 0) {
+        patientAge = 'Not yet born (future date)';
+        ageCategory = 'invalid';
+      } else if (ageInDays < 28) {
+        patientAge = `${ageInDays} days (Neonate)`;
+        ageCategory = 'neonate';
+      } else if (ageInMonths < 12) {
+        patientAge = `${ageInMonths} months (Infant)`;
+        ageCategory = 'infant';
+      } else if (ageInYears < 2) {
+        patientAge = `${ageInMonths} months (Toddler)`;
+        ageCategory = 'toddler';
+      } else if (ageInYears < 12) {
+        patientAge = `${ageInYears} years (Child)`;
+        ageCategory = 'child';
+      } else if (ageInYears < 18) {
+        patientAge = `${ageInYears} years (Adolescent)`;
+        ageCategory = 'adolescent';
+      } else if (ageInYears < 65) {
+        patientAge = `${ageInYears} years (Adult)`;
+        ageCategory = 'adult';
+      } else {
+        patientAge = `${ageInYears} years (Elderly)`;
+        ageCategory = 'elderly';
+      }
+    }
+    
+    const patientGender = patient.gender || patient.sex || formData.gender || 'Unknown';
+    const patientName = patient.name || patient.full_name || formData.patient_name || 'Not specified';
+
     let bmiInfo = '';
     if (vitalSigns.height && vitalSigns.weight) {
-      const bmi = parseFloat(vitalSigns.weight) / Math.pow(parseFloat(vitalSigns.height) / 100, 2);
+      const bmi =
+        parseFloat(vitalSigns.weight) /
+        Math.pow(parseFloat(vitalSigns.height) / 100, 2);
       bmiInfo = `BMI: ${bmi.toFixed(1)} kg/m²`;
+    }
+
+    // Build age-specific warnings for the AI
+    let ageSpecificGuidance = '';
+    if (ageCategory === 'neonate' || ageCategory === 'infant') {
+      ageSpecificGuidance = `
+CRITICAL AGE CONSIDERATION:
+This patient is a ${ageCategory.toUpperCase()} (${patientAge}). You MUST:
+- Flag ANY dental procedures as inappropriate (infants have no teeth or only primary teeth erupting)
+- Verify vital signs are within pediatric/neonatal normal ranges (NOT adult ranges)
+- Ensure diagnoses and treatments are age-appropriate
+- Consider that many adult medications and procedures are contraindicated in infants
+- Neonatal normal vitals: HR 120-160, RR 30-60, BP 60-90/30-60, Temp 36.5-37.5°C
+- Infant normal vitals: HR 100-150, RR 25-40, BP 80-100/50-70`;
+    } else if (ageCategory === 'toddler' || ageCategory === 'child') {
+      ageSpecificGuidance = `
+AGE CONSIDERATION:
+This patient is a ${ageCategory.toUpperCase()} (${patientAge}). Consider:
+- Pediatric dosing and age-appropriate treatments
+- Vital sign ranges differ from adults
+- Some procedures may require pediatric specialist involvement`;
+    } else if (ageCategory === 'elderly') {
+      ageSpecificGuidance = `
+AGE CONSIDERATION:
+This patient is ELDERLY (${patientAge}). Consider:
+- Polypharmacy risks and drug interactions
+- Renal/hepatic function adjustments may be needed
+- Fall risk and frailty considerations`;
     }
 
     return `You are a medical AI assistant reviewing a prior authorization request for NPHIES (Saudi Arabia healthcare system). Analyze the clinical data and identify potential rejection risks.
 
 === AUTHORIZATION TYPE ===
 ${authType.toUpperCase()}
+
+=== PATIENT DEMOGRAPHICS ===
+Name: ${patientName}
+Age: ${patientAge}
+Gender: ${patientGender}
+Birth Date: ${patient.birth_date || patient.birthDate || formData.birth_date || 'Not provided'}
+${ageSpecificGuidance}
 
 === VITAL SIGNS ===
 Systolic BP: ${vitalSigns.systolic || 'Not recorded'} mmHg
@@ -824,10 +1061,20 @@ ${clinicalInfo.treatment_plan || 'Not documented'}
 Investigation Result: ${clinicalInfo.investigation_result || 'Not specified'}
 
 === DIAGNOSES ===
-${diagnoses.map(d => `- ${d.diagnosis_code || 'N/A'}: ${d.diagnosis_display || d.diagnosis_description || 'N/A'} (${d.diagnosis_type || 'secondary'})`).join('\n') || 'No diagnoses specified'}
+${diagnoses
+    .map(
+      d =>
+        `- ${d.diagnosis_code || 'N/A'}: ${d.diagnosis_display || d.diagnosis_description || 'N/A'} (${d.diagnosis_type || 'secondary'})`
+    )
+    .join('\n') || 'No diagnoses specified'}
 
 === REQUESTED SERVICES/PROCEDURES ===
-${items.map(i => `- ${i.product_or_service_code || i.medication_code || 'N/A'}: ${i.service_description || i.medication_name || 'N/A'}`).join('\n') || 'No items specified'}
+${items
+    .map(
+      i =>
+        `- ${i.product_or_service_code || i.medication_code || 'N/A'}: ${i.service_description || i.medication_name || 'N/A'}`
+    )
+    .join('\n') || 'No items specified'}
 
 === ANALYSIS REQUIRED ===
 Analyze this prior authorization request and provide:
@@ -895,47 +1142,75 @@ JUSTIFICATION_NARRATIVE:
       const consistencyMatch = responseText.match(/CONSISTENCY_CHECK:\s*(PASS|FAIL)/i);
       if (consistencyMatch) {
         result.consistencyCheck.passed = consistencyMatch[1].toUpperCase() === 'PASS';
-        if (!result.consistencyCheck.passed) {
-          result.passed = false;
-          const explMatch = responseText.match(/CONSISTENCY_CHECK:\s*FAIL\s*\n([^\n]+)/i);
-          if (explMatch) {
-            result.consistencyCheck.explanation = explMatch[1].trim();
-          }
+      }
+
+      if (!result.consistencyCheck.passed) {
+        result.passed = false;
+        const consistencyFailSection = responseText.match(
+          /CONSISTENCY_CHECK:\s*FAIL([\s\S]*?)(?=DOCUMENTATION_GAPS:|REJECTION_RISKS:|RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i
+        );
+        if (consistencyFailSection) {
+          result.consistencyCheck.explanation = consistencyFailSection[1].trim();
         }
       }
 
       // Extract documentation gaps
-      const gapsSection = responseText.match(/DOCUMENTATION_GAPS:([\s\S]*?)(?=REJECTION_RISKS:|RECOMMENDATIONS:|$)/i);
+      const gapsSection = responseText.match(
+        /DOCUMENTATION_GAPS:([\s\S]*?)(?=REJECTION_RISKS:|RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i
+      );
       if (gapsSection) {
-        const gapLines = gapsSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
-        result.documentationGaps = gapLines.map(line => line.replace(/^-\s*/, '').trim()).filter(g => g.length > 5);
+        const gapLines = gapsSection[1]
+          .trim()
+          .split('\n')
+          .filter(line => line.trim().match(/^[-*•]/));
+
+        result.documentationGaps = gapLines
+          .map(line => line.replace(/^[-*•]\s*/, '').trim())
+          .filter(g => g.length > 5);
       }
 
       // Extract rejection risks
-      const risksSection = responseText.match(/REJECTION_RISKS:([\s\S]*?)(?=RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i);
+      const risksSection = responseText.match(
+        /REJECTION_RISKS:([\s\S]*?)(?=RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i
+      );
       if (risksSection) {
-        const riskLines = risksSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
-        result.rejectionRisks = riskLines.map(line => {
-          const cleaned = line.replace(/^-\s*/, '').trim();
-          const codeMatch = cleaned.match(/^([A-Z]{2}-[\d-]+):\s*(.+)/);
-          if (codeMatch) {
-            return { code: codeMatch[1], description: codeMatch[2] };
-          }
-          return { code: 'UNKNOWN', description: cleaned };
-        }).filter(r => r.description.length > 5);
+        const riskLines = risksSection[1]
+          .trim()
+          .split('\n')
+          .filter(line => line.trim().match(/^[-*•]/));
+
+        result.rejectionRisks = riskLines
+          .map(line => {
+            const cleaned = line.replace(/^[-*•]\s*/, '').trim();
+            const codeMatch = cleaned.match(/^([A-Z]{2}-[\d-]+):\s*(.+)/);
+            if (codeMatch) {
+              return { code: codeMatch[1], description: codeMatch[2] };
+            }
+            return { code: 'UNKNOWN', description: cleaned };
+          })
+          .filter(r => r.description.length > 5);
       }
 
       // Extract recommendations
-      const recsSection = responseText.match(/RECOMMENDATIONS:([\s\S]*?)(?=JUSTIFICATION_NARRATIVE:|$)/i);
+      const recsSection = responseText.match(
+        /RECOMMENDATIONS:([\s\S]*?)(?=JUSTIFICATION_NARRATIVE:|$)/i
+      );
       if (recsSection) {
-        const recLines = recsSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
-        result.recommendations = recLines.map(line => line.replace(/^-\s*/, '').trim()).filter(r => r.length > 5);
+        const recLines = recsSection[1]
+          .trim()
+          .split('\n')
+          .filter(line => line.trim().match(/^[-*•]/));
+
+        result.recommendations = recLines
+          .map(line => line.replace(/^[-*•]\s*/, '').trim())
+          .filter(r => r.length > 5);
       }
 
       // Extract justification narrative
       const narrativeSection = responseText.match(/JUSTIFICATION_NARRATIVE:([\s\S]*?)$/i);
       if (narrativeSection) {
-        result.justificationNarrative = narrativeSection[1].trim()
+        result.justificationNarrative = narrativeSection[1]
+          .trim()
           .replace(/^[\s\n]+/, '')
           .replace(/[\s\n]+$/, '')
           .split('\n')
@@ -943,13 +1218,16 @@ JUSTIFICATION_NARRATIVE:
           .join(' ')
           .trim();
       }
-
     } catch (error) {
       console.error('❌ Error parsing prior auth validation response:', error.message);
     }
 
     return result;
   }
+
+  // ============================================================================
+  // CLINICAL TEXT ENHANCEMENT
+  // ============================================================================
 
   /**
    * Enhance clinical text using AI
@@ -960,7 +1238,7 @@ JUSTIFICATION_NARRATIVE:
    */
   async enhanceClinicalText(text, field, context = {}) {
     const prompt = this.buildClinicalEnhancementPrompt(text, field, context);
-    
+
     try {
       console.log('\n📝 ==> AI CLINICAL TEXT ENHANCEMENT REQUEST <==');
       console.log(`📅 Timestamp: ${new Date().toISOString()}`);
@@ -969,12 +1247,13 @@ JUSTIFICATION_NARRATIVE:
       console.log(`📝 Original Text: "${text}"`);
       console.log(`📝 Original Text Length: ${text?.length || 0} characters`);
       console.log(`📋 Context: ${JSON.stringify(context)}\n`);
-      
+
       const result = await this.generateCompletion(prompt, {
-        temperature: 0.5,
-        num_predict: 2000,
-        repeat_penalty: 1.15,
-        top_p: 0.9
+        temperature: 0.4,
+        num_predict: 3000,
+        repeat_penalty: 1.1,
+        top_p: 0.92,
+        num_ctx: 4096
       });
 
       console.log('\n📥 ==> RAW AI RESPONSE <==');
@@ -989,71 +1268,79 @@ JUSTIFICATION_NARRATIVE:
       console.log(enhancedText);
       console.log('─'.repeat(60));
       console.log(`✅ Enhanced text generated (${enhancedText.length} characters)\n`);
+
+      // Clean up the response
+      let cleanedText = enhancedText;
       
-      // Check if the AI just echoed the prompt back - look for prompt markers
-      const promptMarkers = [
-        'you are a medical',
-        'expand brief clinical',
-        'example - brief note:',
-        'example - expanded:',
-        'now expand this',
-        'brief note context:',
-        'chief complaint context:'
+      // Remove any echo of the prompt
+      const promptEchoPatterns = [
+        /^rewrite this clinical note.*?:\s*/i,
+        /^detailed version:\s*/i,
+        /^["'].*?["']\s*\n*detailed version:\s*/i,
+        /^enhance this .* for a medical/i,
+        /^you are a medical documentation/i,
       ];
       
-      let cleanedText = enhancedText;
-      const lowerText = enhancedText.toLowerCase();
+      for (const pattern of promptEchoPatterns) {
+        cleanedText = cleanedText.replace(pattern, '');
+      }
       
-      // Check if any prompt markers are in the response
-      const hasPromptEcho = promptMarkers.some(marker => lowerText.includes(marker));
-      
-      if (hasPromptEcho) {
-        console.warn('⚠️ AI echoed prompt back, extracting actual content');
-        
-        // Try to find the actual enhanced content after "Expanded" marker
-        const expandedMarkers = [
-          /expanded\s+(?:physical examination|history of present illness|treatment plan|patient medical history|patient history)\s*:\s*/i,
-          /expanded\s*:\s*/i,
-          /expanded note\s*:\s*/i
-        ];
-        
-        for (const marker of expandedMarkers) {
-          const match = enhancedText.match(marker);
-          if (match) {
-            const startIdx = match.index + match[0].length;
-            cleanedText = enhancedText.substring(startIdx).trim();
-            console.log('📌 Extracted after marker:', marker);
-            break;
-          }
-        }
-        
-        // If still has prompt content, try splitting by double newline and take last substantial part
-        if (cleanedText.toLowerCase().includes('example -') || cleanedText.toLowerCase().includes('brief note:')) {
-          const parts = cleanedText.split(/\n\n+/);
-          // Find the last substantial part that doesn't look like a prompt
-          for (let i = parts.length - 1; i >= 0; i--) {
-            const part = parts[i].trim();
-            if (part.length > 30 && 
-                !part.toLowerCase().includes('example') && 
-                !part.toLowerCase().includes('brief note') &&
-                !part.toLowerCase().includes('now expand')) {
-              cleanedText = part;
-              console.log('📌 Extracted last substantial part');
-              break;
-            }
+      // If response starts with the original text in quotes, remove it
+      if (cleanedText.startsWith('"') || cleanedText.startsWith("'")) {
+        const quoteEnd = cleanedText.indexOf(cleanedText[0], 1);
+        if (quoteEnd > 0 && quoteEnd < 200) {
+          // Check if there's more content after the quoted original
+          const afterQuote = cleanedText.substring(quoteEnd + 1).trim();
+          if (afterQuote.length > 30) {
+            cleanedText = afterQuote.replace(/^detailed version:\s*/i, '').trim();
           }
         }
       }
       
-      // Final cleanup - remove any remaining prompt-like prefixes
+      // Remove leading/trailing quotes
       cleanedText = cleanedText
-        .replace(/^["']/g, '')
-        .replace(/["']$/g, '')
-        .replace(/^\s*-\s*/, '')
+        .replace(/^["']+/, '')
+        .replace(/["']+$/, '')
         .trim();
       
-      // Validate that we got meaningful output (at least longer than original or min 20 chars)
-      if (!cleanedText || cleanedText.length < Math.min(text.length, 20)) {
+      // Check for various failure modes where AI echoes instructions instead of enhancing
+      const failurePatterns = [
+        /^i am a/i,
+        /^please write/i,
+        /^as a/i,
+        /^enhance this/i,
+        /^rewrite and expand/i,
+        /^your task is/i,
+        /^field type:/i,
+        /^clinical context:/i,
+        /^text to enhance:/i,
+        /^instructions:/i,
+        /^write the expanded/i,
+        /^you are a medical/i,
+        /^you are an expert/i,
+        /for a medical insurance prior authorization/i,
+        /into detailed professional medical documentation/i,
+        /into professional medical documentation/i,
+      ];
+      
+      const isFailure = failurePatterns.some(pattern => pattern.test(cleanedText));
+      if (isFailure) {
+        console.warn('⚠️ AI echoed instructions instead of enhancing the text');
+        return {
+          success: false,
+          originalText: text,
+          enhancedText: text,
+          error: 'AI did not enhance the text properly. The model may be overloaded. Please try again.',
+          metadata: {
+            model: this.model,
+            responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+            timestamp: new Date().toISOString()
+          }
+        };
+      }
+
+      // Check minimum length - enhanced text should be at least as long as original or close
+      if (!cleanedText || cleanedText.length < 20) {
         console.warn('⚠️ Enhanced text too short or empty');
         return {
           success: false,
@@ -1068,8 +1355,24 @@ JUSTIFICATION_NARRATIVE:
         };
       }
       
+      // Additional check: if the "enhanced" text is much shorter than original, something went wrong
+      if (cleanedText.length < text.length * 0.5) {
+        console.warn('⚠️ Enhanced text is significantly shorter than original - likely a parsing issue');
+        return {
+          success: false,
+          originalText: text,
+          enhancedText: text,
+          error: 'AI response was truncated or incomplete. Please try again.',
+          metadata: {
+            model: this.model,
+            responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+            timestamp: new Date().toISOString()
+          }
+        };
+      }
+
       enhancedText = cleanedText;
-      
+
       return {
         success: true,
         originalText: text,
@@ -1080,7 +1383,6 @@ JUSTIFICATION_NARRATIVE:
           timestamp: new Date().toISOString()
         }
       };
-
     } catch (error) {
       console.error('❌ Error enhancing clinical text:', error.message);
       return {
@@ -1101,40 +1403,175 @@ JUSTIFICATION_NARRATIVE:
    * @private
    */
   buildClinicalEnhancementPrompt(text, field, context) {
-    const fieldExamples = {
-      history_of_present_illness: {
-        name: 'History of Present Illness',
-        example: 'Patient is a [age]-year-old [gender] presenting with [chief complaint]. The symptoms began [duration] ago and are characterized by [description]. Associated symptoms include [symptoms]. The patient reports [severity/progression]. Previous treatments include [treatments]. Current medications: [medications].'
-      },
-      physical_examination: {
-        name: 'Physical Examination',
-        example: 'General: Patient appears [condition], alert and oriented. Vital Signs: [vitals if relevant]. [System] Examination: [detailed findings]. [Additional systems as relevant]. Overall clinical impression: [summary].'
-      },
-      treatment_plan: {
-        name: 'Treatment Plan',
-        example: 'Based on clinical findings, the following treatment plan is recommended: 1) [Primary intervention] - [rationale]. 2) [Secondary measures]. 3) Follow-up: [timeline]. Expected outcomes: [prognosis]. Patient education provided regarding [topics].'
-      },
-      patient_history: {
-        name: 'Patient Medical History',
-        example: 'Past Medical History: [conditions]. Surgical History: [procedures]. Medications: [current medications]. Allergies: [allergies]. Family History: [relevant family history]. Social History: [smoking, alcohol, occupation].'
-      }
+    const fieldNames = {
+      history_of_present_illness: 'History of Present Illness',
+      physical_examination: 'Physical Examination',
+      treatment_plan: 'Treatment Plan',
+      patient_history: 'Patient Medical History'
     };
+    
+    const fieldName = fieldNames[field] || field;
+    
+    // Build comprehensive context from all available data
+    let contextParts = [];
+    
+    // Patient Information (from database)
+    if (context.patientName || context.patientAge || context.patientBirthDate || context.patientGender) {
+      let patientInfo = 'Patient:';
+      if (context.patientName) patientInfo += ` ${context.patientName}`;
+      
+      // Calculate proper age display from birth date if available
+      if (context.patientBirthDate) {
+        const birthDate = new Date(context.patientBirthDate);
+        const today = new Date();
+        const ageInDays = Math.floor((today - birthDate) / (1000 * 60 * 60 * 24));
+        const ageInMonths = Math.floor(ageInDays / 30.44);
+        const ageInYears = Math.floor(ageInDays / 365.25);
+        
+        if (ageInDays < 0) {
+          patientInfo += `, Not yet born`;
+        } else if (ageInDays < 28) {
+          patientInfo += `, ${ageInDays} days old (Neonate)`;
+        } else if (ageInMonths < 12) {
+          patientInfo += `, ${ageInMonths} months old (Infant)`;
+        } else if (ageInYears < 2) {
+          patientInfo += `, ${ageInMonths} months old (Toddler)`;
+        } else {
+          patientInfo += `, ${ageInYears} years old`;
+        }
+      } else if (context.patientAge) {
+        // Fallback to provided age string
+        patientInfo += `, ${context.patientAge}`;
+        if (!context.patientAge.toString().includes('month') && !context.patientAge.toString().includes('day')) {
+          patientInfo += ' years old';
+        }
+      }
+      
+      if (context.patientGender) patientInfo += `, ${context.patientGender}`;
+      contextParts.push(patientInfo);
+    }
+    
+    // Basic Information
+    if (context.authType) {
+      const authTypeLabels = {
+        institutional: 'Institutional (Hospital/Facility)',
+        professional: 'Professional (Outpatient)',
+        pharmacy: 'Pharmacy/Medication',
+        dental: 'Dental',
+        vision: 'Vision/Optical'
+      };
+      contextParts.push(`Service Type: ${authTypeLabels[context.authType] || context.authType}`);
+    }
+    if (context.priority) {
+      contextParts.push(`Priority: ${context.priority}`);
+    }
+    if (context.encounterClass) {
+      contextParts.push(`Encounter: ${context.encounterClass}`);
+    }
+    
+    // Chief Complaint
+    if (context.chiefComplaint) {
+      let ccText = `Chief Complaint: ${context.chiefComplaint}`;
+      if (context.chiefComplaintCode) ccText += ` (${context.chiefComplaintCode})`;
+      contextParts.push(ccText);
+    }
+    
+    // Diagnoses (all from form)
+    if (context.diagnoses && context.diagnoses.length > 0) {
+      const diagList = context.diagnoses.map(d => {
+        let diagText = '';
+        if (d.code) diagText += d.code;
+        if (d.display || d.description) diagText += ` - ${d.display || d.description}`;
+        if (d.type) diagText += ` (${d.type})`;
+        return diagText.trim();
+      }).filter(d => d).join('\n  - ');
+      if (diagList) {
+        contextParts.push(`Diagnoses:\n  - ${diagList}`);
+      }
+    }
+    
+    // Vital Signs (all from form)
+    if (context.vitalSigns) {
+      const vitals = context.vitalSigns;
+      let vitalParts = [];
+      if (vitals.systolic && vitals.diastolic) vitalParts.push(`BP: ${vitals.systolic}/${vitals.diastolic} mmHg`);
+      if (vitals.pulse) vitalParts.push(`Pulse: ${vitals.pulse} bpm`);
+      if (vitals.temperature) vitalParts.push(`Temp: ${vitals.temperature}°C`);
+      if (vitals.oxygen_saturation) vitalParts.push(`SpO2: ${vitals.oxygen_saturation}%`);
+      if (vitals.respiratory_rate) vitalParts.push(`RR: ${vitals.respiratory_rate}/min`);
+      if (vitals.height) vitalParts.push(`Height: ${vitals.height} cm`);
+      if (vitals.weight) vitalParts.push(`Weight: ${vitals.weight} kg`);
+      if (vitals.height && vitals.weight) {
+        const bmi = (parseFloat(vitals.weight) / Math.pow(parseFloat(vitals.height) / 100, 2)).toFixed(1);
+        vitalParts.push(`BMI: ${bmi} kg/m²`);
+      }
+      if (vitalParts.length > 0) {
+        contextParts.push(`Vital Signs: ${vitalParts.join(', ')}`);
+      }
+    }
+    
+    // Requested Services/Procedures/Medications (all from form)
+    if (context.requestedServices && context.requestedServices.length > 0) {
+      const services = context.requestedServices.map(s => {
+        let svcText = s.description || '';
+        if (s.code) svcText += ` (${s.code})`;
+        if (s.tooth) svcText += ` - Tooth ${s.tooth}`;
+        if (s.bodySite) svcText += ` - ${s.bodySite}`;
+        if (s.quantity) svcText += ` x${s.quantity}`;
+        return svcText.trim();
+      }).filter(s => s).join('\n  - ');
+      if (services) {
+        contextParts.push(`Requested Services:\n  - ${services}`);
+      }
+    }
+    
+    // Provider & Insurer Information (from database)
+    if (context.providerName) {
+      let providerText = `Provider: ${context.providerName}`;
+      if (context.providerType) providerText += ` (${context.providerType})`;
+      contextParts.push(providerText);
+    }
+    if (context.insurerName) {
+      contextParts.push(`Insurer: ${context.insurerName}`);
+    }
+    
+    // Admission Info (for inpatient)
+    if (context.admissionWeight || context.estimatedLengthOfStay) {
+      let admissionParts = [];
+      if (context.admissionWeight) admissionParts.push(`Admission Weight: ${context.admissionWeight} kg`);
+      if (context.estimatedLengthOfStay) admissionParts.push(`Est. Stay: ${context.estimatedLengthOfStay} days`);
+      contextParts.push(admissionParts.join(', '));
+    }
+    
+    const contextString = contextParts.length > 0 
+      ? contextParts.join('\n') 
+      : 'No additional context provided';
+    
+    // Build a structured prompt optimized for Llama3-Med42-70B
+    return `<|system|>
+You are an expert medical documentation specialist. Your task is to expand brief clinical notes into comprehensive, professional medical documentation suitable for insurance prior authorization requests. Write in formal medical terminology while maintaining clinical accuracy.
+</|system|>
 
-    const fieldInfo = fieldExamples[field] || { name: field, example: '' };
+<|user|>
+Expand the following ${fieldName} into detailed professional medical documentation.
 
-    // Use few-shot style prompt - show example then ask for completion
-    return `You are a medical documentation assistant. Expand brief clinical notes into detailed professional documentation.
+ORIGINAL TEXT:
+"${text}"
 
-Example - Brief note: "Headache for 3 days, took Tylenol"
-Example - Expanded: "Patient presents with a 3-day history of headache. The pain is described as moderate in intensity. Patient has attempted self-treatment with acetaminophen (Tylenol) with partial relief. No associated symptoms of nausea, vomiting, or visual disturbances reported."
+CLINICAL CONTEXT:
+${contextString}
 
-Now expand this ${fieldInfo.name}:
+REQUIREMENTS:
+1. Expand the text with appropriate medical terminology and detail
+2. Maintain clinical accuracy - do not add symptoms or findings not implied by the original
+3. Use professional medical language suitable for insurance documentation
+4. Include relevant temporal markers, severity descriptors, and clinical observations where appropriate
+5. Format as a cohesive narrative paragraph or structured note as appropriate for the field type
+6. Do NOT include any preamble, explanations, or meta-commentary - output ONLY the enhanced clinical text
+</|user|>
 
-Brief note: "${text}"
-
-Chief complaint context: ${context.chiefComplaint || 'Not specified'}
-
-Expanded ${fieldInfo.name}:`;
+<|assistant|>
+`;
   }
 
   /**
@@ -1143,39 +1580,106 @@ Expanded ${fieldInfo.name}:`;
    */
   parseEnhancedTextResponse(response) {
     let text = response || '';
+
+    // Remove Llama3 chat format tokens first
+    text = text.replace(/<\|system\|>[\s\S]*?<\/\|system\|>/gi, '');
+    text = text.replace(/<\|user\|>[\s\S]*?<\/\|user\|>/gi, '');
+    text = text.replace(/<\|assistant\|>/gi, '');
+    text = text.replace(/<\/\|assistant\|>/gi, '');
+    text = text.replace(/<\|end\|>/gi, '');
+    text = text.replace(/<\|eot_id\|>/gi, '');
+    text = text.replace(/<\|start_header_id\|>.*?<\|end_header_id\|>/gi, '');
+
+    // Patterns that indicate the AI echoed the prompt instead of responding
+    const echoPatterns = [
+      /^Rewrite and expand this/i,
+      /^Enhance this .* for a medical/i,
+      /^You are a medical documentation specialist/i,
+      /^You are an expert medical/i,
+      /^You are a .* specialist/i,
+      /^Your task is to rewrite/i,
+      /^Your task is to expand/i,
+      /^FIELD TYPE:/i,
+      /^CLINICAL CONTEXT:/i,
+      /^TEXT TO ENHANCE:/i,
+      /^INSTRUCTIONS:/i,
+      /^1\. Expand the text/i,
+      /^Output ONLY the enhanced text/i,
+      /^Write the expanded .* now/i,
+      /into detailed professional medical documentation/i,
+      /into professional medical documentation suitable/i,
+      /suitable for insurance prior authorization/i,
+      /^Expand the following/i,
+      /^ORIGINAL TEXT:/i,
+      /^REQUIREMENTS:/i,
+    ];
     
-    // Remove common AI response prefixes/headers
+    // Check if the response is just echoing the prompt
+    const isEcho = echoPatterns.some(pattern => pattern.test(text.trim()));
+    if (isEcho) {
+      console.warn('⚠️ AI echoed the prompt instead of enhancing. Returning empty.');
+      return '';
+    }
+
     const prefixPatterns = [
       /^ENHANCED_TEXT:\s*/i,
+      /^ENHANCED\s+[A-Z\s]+:\s*/i, // ENHANCED PATIENT HISTORY:, ENHANCED TREATMENT PLAN:, etc.
       /^Enhanced\s*(Text|Version|Content)?:\s*/i,
       /^Here('s| is) the enhanced.*?:\s*/i,
       /^The enhanced.*?:\s*/i,
+      /^Here is the expanded.*?:\s*/i,
+      /^Below is the expanded.*?:\s*/i,
       /^Please enhance.*$/im,
       /^You are a medical.*$/im,
+      /^You are an expert.*$/im,
       /^<\|assistant\|>\s*/i,
       /^Assistant:\s*/i,
+      /^Sure[,!]?\s*(here('s| is))?.*?:\s*/i,
+      /^Certainly[,!]?\s*(here('s| is))?.*?:\s*/i,
+      /^Rewrite and expand.*?:\s*/i,
+      /^Write the expanded.*?:\s*/i,
+      /^\*\*Enhanced.*?\*\*:?\s*/i,
+      /^\*\*Expanded.*?\*\*:?\s*/i,
     ];
-    
+
     for (const pattern of prefixPatterns) {
       text = text.replace(pattern, '');
     }
-    
-    // Remove any trailing markers or instructions
+
     text = text.replace(/\n*<\|.*?\|>.*$/s, '');
     text = text.replace(/\n*===.*$/s, '');
     text = text.replace(/\n*---.*$/s, '');
     
-    // Remove quotes if the entire response is wrapped in them
+    // Remove any trailing instruction echoes
+    text = text.replace(/\n*INSTRUCTIONS:[\s\S]*$/i, '');
+    text = text.replace(/\n*CLINICAL CONTEXT:[\s\S]*$/i, '');
+    text = text.replace(/\n*Context:[\s\S]*$/i, '');
+    text = text.replace(/\n*REQUIREMENTS:[\s\S]*$/i, '');
+    text = text.replace(/\n*Note:[\s\S]{0,200}$/i, ''); // Remove trailing notes
+
     text = text.trim();
-    if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+    
+    // Remove surrounding quotes
+    if (
+      (text.startsWith('"') && text.endsWith('"')) ||
+      (text.startsWith("'") && text.endsWith("'"))
+    ) {
       text = text.slice(1, -1);
     }
     
-    // Final cleanup
+    // Remove markdown bold markers around the entire text
+    if (text.startsWith('**') && text.endsWith('**')) {
+      text = text.slice(2, -2);
+    }
+
     text = text.replace(/^[\s\n]+/, '').replace(/[\s\n]+$/, '');
-    
+
     return text;
   }
+
+  // ============================================================================
+  // SNOMED SUGGESTIONS
+  // ============================================================================
 
   /**
    * Suggest SNOMED codes from free text
@@ -1189,14 +1693,14 @@ Expanded ${fieldInfo.name}:`;
     }
 
     const prompt = this.buildSnomedSuggestionPrompt(text, category);
-    
+
     try {
       console.log('\n🏷️ ==> AI SNOMED CODE SUGGESTION REQUEST <==');
       console.log(`📅 Timestamp: ${new Date().toISOString()}`);
       console.log(`🤖 Model: ${this.model}`);
       console.log(`📋 Category: ${category}`);
       console.log(`📝 Text: ${text.substring(0, 50)}...\n`);
-      
+
       const result = await this.generateCompletion(prompt, {
         temperature: 0.2,
         num_predict: 600,
@@ -1206,7 +1710,7 @@ Expanded ${fieldInfo.name}:`;
       const suggestions = this.parseSnomedSuggestionsResponse(result.response);
 
       console.log(`✅ Found ${suggestions.length} SNOMED suggestions\n`);
-      
+
       return {
         success: true,
         originalText: text,
@@ -1217,7 +1721,6 @@ Expanded ${fieldInfo.name}:`;
           timestamp: new Date().toISOString()
         }
       };
-
     } catch (error) {
       console.error('❌ Error suggesting SNOMED codes:', error.message);
       return { success: false, suggestions: [], error: error.message };
@@ -1255,10 +1758,11 @@ Focus on the most specific and accurate codes for the clinical description.
     const lines = response.split('\n');
 
     lines.forEach(line => {
-      // Try different patterns
-      const match = line.match(/CODE:\s*(\d+)\s*-\s*(.+)/i) || 
-                    line.match(/(\d{6,})\s*[-:]\s*(.+)/) ||
-                    line.match(/^-?\s*(\d{6,})\s*[-:–]\s*(.+)/);
+      const match =
+        line.match(/CODE:\s*(\d+)\s*-\s*(.+)/i) ||
+        line.match(/(\d{6,})\s*[-:]\s*(.+)/) ||
+        line.match(/^-?\s*(\d{6,})\s*[-:–]\s*(.+)/);
+
       if (match) {
         suggestions.push({
           code: match[1].trim(),
@@ -1270,6 +1774,10 @@ Focus on the most specific and accurate codes for the clinical description.
     return suggestions.slice(0, 5);
   }
 
+  // ============================================================================
+  // MEDICAL NECESSITY ASSESSMENT
+  // ============================================================================
+
   /**
    * Assess medical necessity for a prior authorization
    * @param {object} formData - The prior auth form data
@@ -1277,12 +1785,12 @@ Focus on the most specific and accurate codes for the clinical description.
    */
   async assessMedicalNecessity(formData) {
     const prompt = this.buildMedicalNecessityPrompt(formData);
-    
+
     try {
       console.log('\n⚖️ ==> AI MEDICAL NECESSITY ASSESSMENT REQUEST <==');
       console.log(`📅 Timestamp: ${new Date().toISOString()}`);
       console.log(`🤖 Model: ${this.model}\n`);
-      
+
       const result = await this.generateCompletion(prompt, {
         temperature: 0.3,
         num_predict: 1500,
@@ -1292,7 +1800,7 @@ Focus on the most specific and accurate codes for the clinical description.
       const assessment = this.parseMedicalNecessityResponse(result.response);
 
       console.log(`✅ Assessment complete: ${assessment.assessment}\n`);
-      
+
       return {
         ...assessment,
         metadata: {
@@ -1301,7 +1809,6 @@ Focus on the most specific and accurate codes for the clinical description.
           timestamp: new Date().toISOString()
         }
       };
-
     } catch (error) {
       console.error('❌ Error assessing medical necessity:', error.message);
       throw error;
@@ -1316,14 +1823,74 @@ Focus on the most specific and accurate codes for the clinical description.
     const diagnoses = formData.diagnoses || [];
     const items = formData.items || [];
     const clinicalInfo = formData.clinical_info || {};
+    const patient = formData.patient || {};
+    const authType = formData.auth_type || 'professional';
+
+    // Calculate patient age from birth date
+    let patientAge = 'Unknown';
+    let ageCategory = 'adult';
+    
+    if (patient.birth_date || patient.birthDate || formData.birth_date) {
+      const birthDate = new Date(patient.birth_date || patient.birthDate || formData.birth_date);
+      const today = new Date();
+      const ageInDays = Math.floor((today - birthDate) / (1000 * 60 * 60 * 24));
+      const ageInMonths = Math.floor(ageInDays / 30.44);
+      const ageInYears = Math.floor(ageInDays / 365.25);
+      
+      if (ageInDays < 0) {
+        patientAge = 'Not yet born (future date)';
+        ageCategory = 'invalid';
+      } else if (ageInDays < 28) {
+        patientAge = `${ageInDays} days (Neonate)`;
+        ageCategory = 'neonate';
+      } else if (ageInMonths < 12) {
+        patientAge = `${ageInMonths} months (Infant)`;
+        ageCategory = 'infant';
+      } else if (ageInYears < 2) {
+        patientAge = `${ageInMonths} months (Toddler)`;
+        ageCategory = 'toddler';
+      } else if (ageInYears < 12) {
+        patientAge = `${ageInYears} years (Child)`;
+        ageCategory = 'child';
+      } else {
+        patientAge = `${ageInYears} years`;
+        ageCategory = ageInYears >= 65 ? 'elderly' : 'adult';
+      }
+    }
+
+    // Age-specific guidance
+    let ageGuidance = '';
+    if ((ageCategory === 'neonate' || ageCategory === 'infant') && authType === 'dental') {
+      ageGuidance = `
+CRITICAL: This is a ${ageCategory.toUpperCase()} patient (${patientAge}) with a DENTAL authorization request.
+- Infants typically have NO teeth or only erupting primary teeth
+- Most dental procedures are NOT medically appropriate for infants
+- This request should be flagged as LIKELY_DENIED unless there is a specific neonatal dental condition documented`;
+    } else if (ageCategory === 'neonate' || ageCategory === 'infant') {
+      ageGuidance = `
+NOTE: This is a ${ageCategory.toUpperCase()} patient (${patientAge}).
+- Verify all treatments are age-appropriate
+- Ensure pediatric dosing is used for any medications
+- Consider whether specialist pediatric care is required`;
+    }
 
     return `You are a medical necessity reviewer for insurance prior authorizations. Assess whether the requested services are medically necessary based on the clinical documentation.
 
+=== PATIENT INFORMATION ===
+Age: ${patientAge}
+Gender: ${patient.gender || patient.sex || formData.gender || 'Unknown'}
+Authorization Type: ${authType.toUpperCase()}
+${ageGuidance}
+
 === DIAGNOSES ===
-${diagnoses.map(d => `- ${d.diagnosis_code}: ${d.diagnosis_display || d.diagnosis_description}`).join('\n') || 'None specified'}
+${diagnoses
+    .map(d => `- ${d.diagnosis_code}: ${d.diagnosis_display || d.diagnosis_description}`)
+    .join('\n') || 'None specified'}
 
 === REQUESTED SERVICES ===
-${items.map(i => `- ${i.product_or_service_code || i.medication_code}: ${i.service_description || i.medication_name}`).join('\n') || 'None specified'}
+${items
+    .map(i => `- ${i.product_or_service_code || i.medication_code}: ${i.service_description || i.medication_name}`)
+    .join('\n') || 'None specified'}
 
 === CLINICAL DOCUMENTATION ===
 Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}
@@ -1334,7 +1901,8 @@ Plan: ${clinicalInfo.treatment_plan || 'Not documented'}
 === ASSESSMENT REQUIRED ===
 1. Is the service medically necessary for the diagnosis?
 2. Is there sufficient documentation to support the request?
-3. What additional documentation would strengthen the case?
+3. Are the requested services appropriate for the patient's age?
+4. What additional documentation would strengthen the case?
 
 === OUTPUT FORMAT ===
 NECESSITY_SCORE: [0.0-1.0]
@@ -1370,18 +1938,20 @@ SUGGESTED_JUSTIFICATION: [A sentence that could be added to support medical nece
       const reasoningMatch = response.match(/REASONING:\s*([^\n]+)/i);
       if (reasoningMatch) result.reasoning = reasoningMatch[1].trim();
 
-      const missingSection = response.match(/MISSING_ELEMENTS:([\s\S]*?)(?=SUGGESTED_JUSTIFICATION:|$)/i);
+      const missingSection = response.match(
+        /MISSING_ELEMENTS:([\s\S]*?)(?=SUGGESTED_JUSTIFICATION:|$)/i
+      );
       if (missingSection) {
-        result.missingElements = missingSection[1].trim()
+        result.missingElements = missingSection[1]
+          .trim()
           .split('\n')
-          .filter(line => line.trim().startsWith('-'))
-          .map(line => line.replace(/^-\s*/, '').trim())
+          .filter(line => line.trim().match(/^[-*•]/))
+          .map(line => line.replace(/^[-*•]\s*/, '').trim())
           .filter(e => e.length > 3);
       }
 
       const justificationMatch = response.match(/SUGGESTED_JUSTIFICATION:\s*([^\n]+)/i);
       if (justificationMatch) result.suggestedJustification = justificationMatch[1].trim();
-
     } catch (error) {
       console.error('❌ Error parsing medical necessity response:', error.message);
     }
@@ -1390,6 +1960,7 @@ SUGGESTED_JUSTIFICATION: [A sentence that could be added to support medical nece
   }
 }
 
-// Export singleton instance
-export default new OllamaService();
-
+// Export singleton instance and class (for testing / flexibility)
+export const ollamaService = new OllamaService();
+export default ollamaService;
+export { OllamaService };

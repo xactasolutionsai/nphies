@@ -70,8 +70,10 @@ export const ENCOUNTER_CLASS_OPTIONS = [
 // - Vision: NO ENCOUNTER - Vision claims are simple outpatient services without clinical encounter context
 
 export const ALLOWED_ENCOUNTER_CLASSES = {
-  // Institutional: Can use inpatient, daycase, and other classes
-  institutional: ['inpatient', 'daycase', 'emergency', 'ambulatory', 'home', 'telemedicine'],
+  // Institutional: MUST use inpatient (IMP), daycase (SS), or inpatient acute (ACUTE)
+  // Per NPHIES BV-00741: Encounter Class Shall be either 'Inpatient Admission', 'Day Case Admission' or 'inpatient acute' for Institutional Claim
+  // Per NPHIES BV-00845: Encounter Class 'Outpatient' SHALL be used only when claim is 'oral' or 'professional'
+  institutional: ['inpatient', 'daycase'],
   
   // Professional: Can use outpatient, ambulatory, and other non-inpatient classes
   professional: ['outpatient', 'ambulatory', 'emergency', 'home', 'telemedicine'],
