@@ -375,6 +375,7 @@ class OralClaimMapper extends DentalMapper {
   /**
    * Build SupportingInfo for Oral Claims
    * Per NPHIES examples: chief-complaint can use code.text OR code.coding
+   * BV-00531: chief-complaint REQUIRES the code element
    */
   buildOralSupportingInfo(info) {
     const supportingInfo = {
@@ -390,7 +391,9 @@ class OralClaimMapper extends DentalMapper {
     const category = (info.category || '').toLowerCase();
 
     // chief-complaint can use either code.text (free text) or code.coding (SNOMED)
+    // BV-00531: The code element is REQUIRED for chief-complaint
     if (category === 'chief-complaint') {
+      // Check for SNOMED code format first
       if (info.code && info.code_system) {
         // SNOMED coded complaint (per Claim-173094)
         supportingInfo.code = {
@@ -400,10 +403,16 @@ class OralClaimMapper extends DentalMapper {
             display: info.code_display
           }]
         };
-      } else if (info.code_text) {
+      } else {
         // Free text complaint (per Claim-293094)
+        // Check multiple sources: code_text, value_string, code_display, code
+        const freeText = info.code_text || 
+                         info.value_string || 
+                         info.code_display || 
+                         info.code ||
+                         'Dental complaint';
         supportingInfo.code = {
-          text: info.code_text
+          text: freeText
         };
       }
     } else {
