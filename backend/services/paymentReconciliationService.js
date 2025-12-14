@@ -396,7 +396,7 @@ class PaymentReconciliationService {
     if (pr.paymentIssuer?.reference) {
       const insurerMatch = await client.query(
         `SELECT insurer_id FROM insurers 
-         WHERE nphies_id = $1 OR name ILIKE $2
+         WHERE nphies_id = $1 OR insurer_name ILIKE $2
          LIMIT 1`,
         [
           this.extractIdFromReference(pr.paymentIssuer.reference),
@@ -416,7 +416,7 @@ class PaymentReconciliationService {
     if (pr.requestor?.reference) {
       const providerMatch = await client.query(
         `SELECT provider_id FROM providers 
-         WHERE nphies_id = $1 OR name ILIKE $2
+         WHERE nphies_id = $1 OR provider_name ILIKE $2
          LIMIT 1`,
         [
           this.extractIdFromReference(pr.requestor.reference),
