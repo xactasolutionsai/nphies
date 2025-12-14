@@ -590,6 +590,162 @@ class NphiesService {
     
     return paymentReconciliations;
   }
+  
+  /**
+   * Send Payment Notice (acknowledgement) to NPHIES
+   * This is sent by the provider after receiving a PaymentReconciliation
+   * @param {Object} paymentNoticeBundle - The PaymentNotice FHIR bundle
+   * @returns {Object} - Response from NPHIES
+   */
+  async sendPaymentNotice(paymentNoticeBundle) {
+    console.log('[NPHIES] Sending Payment Notice...');
+    
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/$process-message`,
+        paymentNoticeBundle,
+        {
+          headers: {
+            'Content-Type': 'application/fhir+json',
+            'Accept': 'application/fhir+json'
+          },
+          timeout: this.timeout,
+          validateStatus: (status) => status < 500
+        }
+      );
+      
+      console.log(`[NPHIES] Payment Notice response: ${response.status}`);
+      
+      return {
+        success: response.status >= 200 && response.status < 300,
+        status: response.status,
+        data: response.data,
+        requestBundle: paymentNoticeBundle
+      };
+      
+    } catch (error) {
+      console.error('[NPHIES] Payment Notice error:', error.message);
+      return {
+        success: false,
+        error: this.formatError(error),
+        requestBundle: paymentNoticeBundle
+      };
+    }
+  }
+  
+  /**
+   * Build a Payment Notice bundle to acknowledge receipt of PaymentReconciliation
+   * @param {Object} reconciliation - The payment reconciliation data
+   * @param {string} providerId - The provider's NPHIES ID
+   * @returns {Object} - FHIR Bundle containing PaymentNotice
+   */
+  buildPaymentNoticeBundle(reconciliation, providerId) {
+    const bundleId = randomUUID();
+    const messageHeaderId = randomUUID();
+    const paymentNoticeId = randomUUID();
+    const today = new Date().toISOString().split('T')[0];
+    
+    return {
+      resourceType: 'Bundle',
+      id: bundleId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: new Date().toISOString(),
+      entry: [
+        // MessageHeader
+        {
+          fullUrl: `urn:uuid:${messageHeaderId}`,
+          resource: {
+            resourceType: 'MessageHeader',
+            id: messageHeaderId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+            },
+            eventCoding: {
+              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+              code: 'payment-notice'
+            },
+            source: {
+              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com'
+            },
+            destination: [{
+              endpoint: 'http://nphies.sa',
+              receiver: {
+                type: 'Organization',
+                identifier: {
+                  system: 'http://nphies.sa/license/nphies-license',
+                  value: 'nphies'
+                }
+              }
+            }],
+            sender: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/provider-license',
+                value: providerId
+              }
+            },
+            focus: [{
+              reference: `PaymentNotice/${paymentNoticeId}`
+            }]
+          }
+        },
+        // PaymentNotice
+        {
+          fullUrl: `urn:uuid:${paymentNoticeId}`,
+          resource: {
+            resourceType: 'PaymentNotice',
+            id: paymentNoticeId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/payment-notice|1.0.0']
+            },
+            identifier: [{
+              system: `http://provider.nphies.sa/${providerId}/paymentnotice`,
+              value: `PN-${Date.now()}`
+            }],
+            status: 'active',
+            created: new Date().toISOString(),
+            provider: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/provider-license',
+                value: providerId
+              }
+            },
+            payment: {
+              reference: `PaymentReconciliation/${reconciliation.fhir_id}`,
+              type: 'PaymentReconciliation',
+              identifier: {
+                system: reconciliation.identifier_system,
+                value: reconciliation.identifier_value
+              }
+            },
+            paymentDate: reconciliation.payment_date ? 
+              new Date(reconciliation.payment_date).toISOString().split('T')[0] : today,
+            recipient: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/payer-license',
+                value: reconciliation.insurer_nphies_id || 'INS-FHIR'
+              }
+            },
+            amount: {
+              value: parseFloat(reconciliation.payment_amount) || 0,
+              currency: reconciliation.payment_currency || 'SAR'
+            },
+            paymentStatus: {
+              coding: [{
+                system: 'http://terminology.hl7.org/CodeSystem/paymentstatus',
+                code: 'paid'
+              }]
+            }
+          }
+        }
+      ]
+    };
+  }
 }
 
 export default new NphiesService();

@@ -392,6 +392,98 @@ class PaymentReconciliationController {
       });
     }
   }
+  
+  /**
+   * POST /api/payment-reconciliation/:id/acknowledge
+   * Send Payment Notice acknowledgement to NPHIES
+   */
+  async sendAcknowledgement(req, res) {
+    try {
+      const { id } = req.params;
+      
+      if (!id || isNaN(parseInt(id))) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Invalid reconciliation ID' 
+        });
+      }
+      
+      console.log(`[PaymentReconciliation] Sending Payment Notice for reconciliation: ${id}`);
+      
+      const result = await paymentReconciliationService.sendPaymentNotice(parseInt(id));
+      
+      if (result.success) {
+        return res.json({
+          success: true,
+          data: {
+            reconciliationId: result.reconciliationId,
+            paymentNoticeBundle: result.paymentNoticeBundle,
+            nphiesResponse: result.nphiesResponse
+          },
+          message: result.message
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: result.error || result.message
+        });
+      }
+      
+    } catch (error) {
+      console.error('[PaymentReconciliation] Error sending acknowledgement:', error);
+      
+      let statusCode = 500;
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+      } else if (error.message.includes('already been sent')) {
+        statusCode = 409;
+      }
+      
+      return res.status(statusCode).json({ 
+        success: false,
+        error: error.message
+      });
+    }
+  }
+  
+  /**
+   * GET /api/payment-reconciliation/:id/preview-acknowledge
+   * Preview the Payment Notice bundle (without sending)
+   */
+  async previewAcknowledgement(req, res) {
+    try {
+      const { id } = req.params;
+      
+      if (!id || isNaN(parseInt(id))) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Invalid reconciliation ID' 
+        });
+      }
+      
+      console.log(`[PaymentReconciliation] Previewing Payment Notice for reconciliation: ${id}`);
+      
+      const result = await paymentReconciliationService.previewPaymentNotice(parseInt(id));
+      
+      return res.json({
+        success: true,
+        data: result
+      });
+      
+    } catch (error) {
+      console.error('[PaymentReconciliation] Error previewing acknowledgement:', error);
+      
+      let statusCode = 500;
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+      }
+      
+      return res.status(statusCode).json({ 
+        success: false,
+        error: error.message
+      });
+    }
+  }
 }
 
 export default new PaymentReconciliationController();

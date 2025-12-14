@@ -36,6 +36,12 @@ router.get('/:id/bundle', paymentReconciliationController.getOriginalBundle.bind
 // GET /api/payment-reconciliation/:id/acknowledgement - Get acknowledgement bundle
 router.get('/:id/acknowledgement', paymentReconciliationController.getAcknowledgementBundle.bind(paymentReconciliationController));
 
+// POST /api/payment-reconciliation/:id/acknowledge - Send Payment Notice to NPHIES
+router.post('/:id/acknowledge', paymentReconciliationController.sendAcknowledgement.bind(paymentReconciliationController));
+
+// GET /api/payment-reconciliation/:id/preview-acknowledge - Preview Payment Notice bundle
+router.get('/:id/preview-acknowledge', paymentReconciliationController.previewAcknowledgement.bind(paymentReconciliationController));
+
 // GET /api/payment-reconciliation/:id - Get single reconciliation with details
 router.get('/:id', paymentReconciliationController.getById.bind(paymentReconciliationController));
 

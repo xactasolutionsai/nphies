@@ -21,7 +21,10 @@ import {
   ChevronUp,
   Minus,
   Plus,
-  FileJson
+  FileJson,
+  Send,
+  Eye,
+  RefreshCw
 } from 'lucide-react';
 import api from '@/services/api';
 
@@ -32,6 +35,9 @@ export default function PaymentReconciliationDetails() {
   const [loading, setLoading] = useState(true);
   const [expandedDetails, setExpandedDetails] = useState({});
   const [showRawBundle, setShowRawBundle] = useState(false);
+  const [sendingAck, setSendingAck] = useState(false);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [previewBundle, setPreviewBundle] = useState(null);
 
   useEffect(() => {
     loadReconciliation();
@@ -47,6 +53,49 @@ export default function PaymentReconciliationDetails() {
     } finally {
       setLoading(false);
     }
+  };
+  
+  const handleSendAcknowledgement = async () => {
+    if (!confirm('Send Payment Notice acknowledgement to NPHIES?\n\nThis will notify NPHIES that you have received and processed this payment reconciliation.')) {
+      return;
+    }
+    
+    try {
+      setSendingAck(true);
+      const response = await api.sendPaymentNoticeAcknowledgement(id);
+      
+      if (response.success) {
+        alert('Payment Notice sent successfully to NPHIES!');
+        await loadReconciliation(); // Reload to show updated status
+      } else {
+        alert(`Failed to send Payment Notice: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('Error sending acknowledgement:', error);
+      alert(`Error sending Payment Notice: ${error.message}`);
+    } finally {
+      setSendingAck(false);
+    }
+  };
+  
+  const handlePreviewAcknowledgement = async () => {
+    try {
+      const response = await api.previewPaymentNotice(id);
+      if (response.success) {
+        setPreviewBundle(response.data.bundle);
+        setShowPreviewDialog(true);
+      } else {
+        alert(`Failed to preview: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('Error previewing acknowledgement:', error);
+      alert(`Error: ${error.message}`);
+    }
+  };
+  
+  const copyBundleToClipboard = (bundle) => {
+    navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+    alert('Bundle copied to clipboard!');
   };
 
   const toggleDetailExpand = (detailId) => {
@@ -167,6 +216,37 @@ export default function PaymentReconciliationDetails() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          {/* Payment Notice Actions */}
+          {reconciliation.acknowledgement_status !== 'sent' ? (
+            <>
+              <Button 
+                onClick={handlePreviewAcknowledgement}
+                variant="outline"
+                className="border-purple-500 text-purple-600 hover:bg-purple-50"
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                Preview Payment Notice
+              </Button>
+              <Button 
+                onClick={handleSendAcknowledgement}
+                disabled={sendingAck}
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                {sendingAck ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                {sendingAck ? 'Sending...' : 'Send Payment Notice'}
+              </Button>
+            </>
+          ) : (
+            <Badge className="bg-green-100 text-green-800 border-green-300">
+              <CheckCircle className="h-4 w-4 mr-1" />
+              Payment Notice Sent
+            </Badge>
+          )}
+          
           <Button variant="outline" onClick={downloadBundle}>
             <Download className="h-4 w-4 mr-2" />
             Download FHIR Bundle
@@ -480,6 +560,44 @@ export default function PaymentReconciliationDetails() {
               <p className="font-mono text-sm">{reconciliation.nphies_message_id || '-'}</p>
             </div>
           </div>
+          
+          {/* Acknowledgement Status */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Payment Notice Status</p>
+                {reconciliation.acknowledgement_status === 'sent' ? (
+                  <div className="flex items-center mt-1">
+                    <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                    <span className="font-medium text-green-600">Sent to NPHIES</span>
+                    {reconciliation.acknowledgement_date && (
+                      <span className="text-sm text-gray-500 ml-2">
+                        on {formatDateTime(reconciliation.acknowledgement_date)}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center mt-1">
+                    <Clock className="h-5 w-5 text-amber-500 mr-2" />
+                    <span className="font-medium text-amber-600">Not yet sent</span>
+                  </div>
+                )}
+              </div>
+              {reconciliation.acknowledgement_bundle && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    setPreviewBundle(reconciliation.acknowledgement_bundle);
+                    setShowPreviewDialog(true);
+                  }}
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  View Sent Bundle
+                </Button>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -502,6 +620,45 @@ export default function PaymentReconciliationDetails() {
             <div className="p-4 overflow-auto max-h-[calc(90vh-80px)]">
               <pre className="text-xs bg-gray-900 text-emerald-400 p-4 rounded-lg overflow-auto">
                 {JSON.stringify(reconciliation.request_bundle, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Payment Notice Preview Modal */}
+      {showPreviewDialog && previewBundle && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">
+                <Send className="h-5 w-5 inline mr-2 text-purple-600" />
+                Payment Notice Bundle Preview
+              </h3>
+              <div className="flex items-center space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => copyBundleToClipboard(previewBundle)}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowPreviewDialog(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="p-4 overflow-auto max-h-[calc(90vh-80px)]">
+              <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <p className="text-sm text-purple-800">
+                  <strong>This is the FHIR PaymentNotice bundle that will be sent to NPHIES.</strong>
+                  <br />
+                  It acknowledges receipt of the PaymentReconciliation and confirms the payment has been processed.
+                </p>
+              </div>
+              <pre className="text-xs bg-gray-900 text-purple-400 p-4 rounded-lg overflow-auto">
+                {JSON.stringify(previewBundle, null, 2)}
               </pre>
             </div>
           </div>

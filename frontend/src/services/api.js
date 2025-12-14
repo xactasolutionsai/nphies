@@ -222,6 +222,18 @@ class ApiService {
     return this.request(`/payment-reconciliation/preview-poll${params}`);
   }
 
+  // Send Payment Notice acknowledgement to NPHIES
+  async sendPaymentNoticeAcknowledgement(reconciliationId) {
+    return this.request(`/payment-reconciliation/${reconciliationId}/acknowledge`, {
+      method: 'POST'
+    });
+  }
+
+  // Preview Payment Notice bundle (without sending)
+  async previewPaymentNotice(reconciliationId) {
+    return this.request(`/payment-reconciliation/${reconciliationId}/preview-acknowledge`);
+  }
+
   // Dashboard statistics
   async getDashboardStats() {
     return this.request('/dashboard/stats');

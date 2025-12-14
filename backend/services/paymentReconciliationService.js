@@ -1477,6 +1477,104 @@ class PaymentReconciliationService {
       pollRequestBundle: pollResult.pollRequestBundle
     };
   }
+  
+  /**
+   * Send Payment Notice acknowledgement to NPHIES for a PaymentReconciliation
+   * @param {number|string} reconciliationId - The payment reconciliation ID
+   * @returns {Object} - Result with acknowledgement status
+   */
+  async sendPaymentNotice(reconciliationId) {
+    console.log('[PaymentReconciliation] Sending Payment Notice for reconciliation:', reconciliationId);
+    
+    // 1. Get the reconciliation details
+    const reconciliation = await this.getById(reconciliationId);
+    
+    if (!reconciliation) {
+      throw new Error(`Payment reconciliation not found: ${reconciliationId}`);
+    }
+    
+    // 2. Check if already acknowledged
+    if (reconciliation.acknowledgement_status === 'sent') {
+      return {
+        success: false,
+        error: 'Payment Notice has already been sent for this reconciliation',
+        reconciliationId
+      };
+    }
+    
+    // 3. Get provider ID
+    let providerId = reconciliation.provider_nphies_id;
+    if (!providerId) {
+      const providerResult = await query(
+        `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
+      );
+      providerId = providerResult.rows[0]?.nphies_id || 'PR-FHIR';
+    }
+    
+    // 4. Build the Payment Notice bundle
+    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId);
+    
+    // 5. Send to NPHIES
+    const result = await NphiesService.sendPaymentNotice(paymentNoticeBundle);
+    
+    // 6. Update reconciliation with acknowledgement status
+    if (result.success) {
+      await query(
+        `UPDATE payment_reconciliations 
+         SET acknowledgement_status = 'sent',
+             acknowledgement_date = NOW(),
+             acknowledgement_bundle = $1
+         WHERE id = $2`,
+        [JSON.stringify(paymentNoticeBundle), reconciliationId]
+      );
+    }
+    
+    return {
+      success: result.success,
+      reconciliationId,
+      paymentNoticeBundle,
+      nphiesResponse: result.data,
+      error: result.error,
+      message: result.success 
+        ? 'Payment Notice sent successfully to NPHIES'
+        : `Failed to send Payment Notice: ${result.error}`
+    };
+  }
+  
+  /**
+   * Preview the Payment Notice bundle that would be sent (without sending)
+   * @param {number|string} reconciliationId - The payment reconciliation ID
+   * @returns {Object} - The generated bundle
+   */
+  async previewPaymentNotice(reconciliationId) {
+    console.log('[PaymentReconciliation] Previewing Payment Notice for reconciliation:', reconciliationId);
+    
+    // 1. Get the reconciliation details
+    const reconciliation = await this.getById(reconciliationId);
+    
+    if (!reconciliation) {
+      throw new Error(`Payment reconciliation not found: ${reconciliationId}`);
+    }
+    
+    // 2. Get provider ID
+    let providerId = reconciliation.provider_nphies_id;
+    if (!providerId) {
+      const providerResult = await query(
+        `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
+      );
+      providerId = providerResult.rows[0]?.nphies_id || 'PR-FHIR';
+    }
+    
+    // 3. Build the Payment Notice bundle
+    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId);
+    
+    return {
+      success: true,
+      reconciliationId,
+      bundle: paymentNoticeBundle,
+      alreadySent: reconciliation.acknowledgement_status === 'sent'
+    };
+  }
 }
 
 export default new PaymentReconciliationService();
