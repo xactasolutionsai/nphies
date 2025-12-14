@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import DataTable from '@/components/DataTable';
 import api from '@/services/api';
 import { 
-  FileText, Plus, Edit, Trash2, Eye, Send, RefreshCw, 
+  FileText, Edit, Trash2, Eye, Send, RefreshCw, 
   XCircle, Clock, CheckCircle, AlertCircle,
   Filter, Search, Copy, Receipt, DollarSign
 } from 'lucide-react';
@@ -389,13 +389,12 @@ export default function ClaimSubmissionsList() {
                 </div>
               </div>
             </div>
-            <Button 
-              onClick={() => navigate('/claim-submissions/new')} 
-              className="bg-gradient-to-r from-primary-purple to-accent-purple"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              New Claim Submission
-            </Button>
+            <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg border border-blue-200">
+              <FileText className="h-5 w-5 text-blue-600" />
+              <span className="text-sm text-blue-700">
+                Claims are created from approved Prior Authorizations
+              </span>
+            </div>
           </div>
         </div>
       </div>

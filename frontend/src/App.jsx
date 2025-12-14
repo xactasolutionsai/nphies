@@ -33,7 +33,6 @@ import PriorAuthorizations from './pages/PriorAuthorizations';
 import PriorAuthorizationForm from './pages/PriorAuthorizationForm';
 import PriorAuthorizationDetails from './pages/PriorAuthorizationDetails';
 import ClaimSubmissionsList from './pages/ClaimSubmissionsList';
-import ClaimSubmissionForm from './pages/ClaimSubmissionForm';
 import ClaimDetails from './pages/ClaimDetails';
 import PaymentReconciliations from './pages/PaymentReconciliations';
 import PaymentReconciliationDetails from './pages/PaymentReconciliationDetails';
@@ -81,9 +80,7 @@ function App() {
           <Route path="/prior-authorizations/:id" element={<PriorAuthorizationDetails />} />
           <Route path="/prior-authorizations/:id/edit" element={<PriorAuthorizationForm />} />
           <Route path="/claim-submissions" element={<ClaimSubmissionsList />} />
-          <Route path="/claim-submissions/new" element={<ClaimSubmissionForm />} />
           <Route path="/claim-submissions/:id" element={<ClaimDetails />} />
-          <Route path="/claim-submissions/:id/edit" element={<ClaimSubmissionForm />} />
           <Route path="/payment-reconciliations" element={<PaymentReconciliations />} />
           <Route path="/payment-reconciliations/:id" element={<PaymentReconciliationDetails />} />
         </Routes>

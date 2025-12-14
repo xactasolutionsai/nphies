@@ -14,8 +14,6 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  ExternalLink,
-  Download,
   Copy,
   ChevronDown,
   ChevronUp,
@@ -158,21 +156,6 @@ export default function PaymentReconciliationDetails() {
     navigator.clipboard.writeText(text);
   };
 
-  const downloadBundle = async () => {
-    try {
-      const response = await api.getPaymentReconciliationBundle(id);
-      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `payment-reconciliation-${reconciliation.fhir_id}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error downloading bundle:', error);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -247,9 +230,17 @@ export default function PaymentReconciliationDetails() {
             </Badge>
           )}
           
-          <Button variant="outline" onClick={downloadBundle}>
-            <Download className="h-4 w-4 mr-2" />
-            Download FHIR Bundle
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              if (reconciliation.request_bundle) {
+                copyBundleToClipboard(reconciliation.request_bundle);
+              }
+            }}
+            disabled={!reconciliation.request_bundle}
+          >
+            <Copy className="h-4 w-4 mr-2" />
+            Copy FHIR Bundle
           </Button>
           <Button variant="outline" onClick={() => setShowRawBundle(!showRawBundle)}>
             <FileJson className="h-4 w-4 mr-2" />
@@ -608,9 +599,13 @@ export default function PaymentReconciliationDetails() {
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Raw FHIR Bundle</h3>
               <div className="flex items-center space-x-2">
-                <Button variant="outline" size="sm" onClick={downloadBundle}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => copyBundleToClipboard(reconciliation.request_bundle)}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy JSON
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowRawBundle(false)}>
                   Close
