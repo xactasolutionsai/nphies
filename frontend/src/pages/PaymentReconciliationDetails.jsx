@@ -40,8 +40,8 @@ export default function PaymentReconciliationDetails() {
   const loadReconciliation = async () => {
     try {
       setLoading(true);
-      const response = await api.get(`/payment-reconciliation/${id}`);
-      setReconciliation(response.data?.data || null);
+      const response = await api.getPaymentReconciliation(id);
+      setReconciliation(response.data || null);
     } catch (error) {
       console.error('Error loading reconciliation:', error);
     } finally {
@@ -111,7 +111,7 @@ export default function PaymentReconciliationDetails() {
 
   const downloadBundle = async () => {
     try {
-      const response = await api.get(`/payment-reconciliation/${id}/bundle`);
+      const response = await api.getPaymentReconciliationBundle(id);
       const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

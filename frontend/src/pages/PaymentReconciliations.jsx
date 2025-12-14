@@ -44,26 +44,24 @@ export default function PaymentReconciliations() {
     try {
       setLoading(true);
       
-      // Load reconciliations
-      const reconciliationsResponse = await api.get('/payment-reconciliation', {
-        params: {
-          page: pagination.page,
-          limit: pagination.limit,
-          search: searchTerm,
-          status: statusFilter,
-          startDate,
-          endDate
-        }
+      // Load reconciliations using proper API method
+      const reconciliationsResponse = await api.getPaymentReconciliations({
+        page: pagination.page,
+        limit: pagination.limit,
+        search: searchTerm,
+        status: statusFilter,
+        startDate,
+        endDate
       });
       
-      setReconciliations(reconciliationsResponse.data?.data || []);
-      if (reconciliationsResponse.data?.pagination) {
-        setPagination(prev => ({ ...prev, ...reconciliationsResponse.data.pagination }));
+      setReconciliations(reconciliationsResponse.data || []);
+      if (reconciliationsResponse.pagination) {
+        setPagination(prev => ({ ...prev, ...reconciliationsResponse.pagination }));
       }
       
-      // Load stats
-      const statsResponse = await api.get('/payment-reconciliation/stats');
-      setStats(statsResponse.data?.data || null);
+      // Load stats using proper API method
+      const statsResponse = await api.getPaymentReconciliationStats();
+      setStats(statsResponse.data || null);
       
     } catch (error) {
       console.error('Error loading payment reconciliations:', error);
