@@ -791,7 +791,7 @@ class PaymentReconciliationService {
         p.nphies_id as provider_nphies_id,
         i.insurer_name as insurer_name,
         i.nphies_id as insurer_nphies_id,
-        pat.full_name as patient_name
+        pat.name as patient_name
       FROM claim_submissions cs
       LEFT JOIN providers p ON cs.provider_id = p.provider_id
       LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
@@ -1074,6 +1074,280 @@ class PaymentReconciliationService {
       paymentDate: today,
       message: `Simulated payment of ${netPayment} ${claim.currency || 'SAR'} generated for claim ${claim.claim_number}`,
       generatedBundle: bundle // Include the FHIR bundle that was generated
+    };
+  }
+  
+  /**
+   * Preview the PaymentReconciliation bundle that would be generated (without saving)
+   * @param {number|string} claimId - The claim ID to preview payment for
+   * @returns {Object} - The generated bundle without processing
+   */
+  async previewSimulatedPaymentReconciliation(claimId) {
+    console.log('[PaymentReconciliation] Previewing simulated payment bundle for claim:', claimId);
+    
+    // 1. Fetch the claim with all related data
+    const claimResult = await query(
+      `SELECT 
+        cs.*,
+        p.provider_name as provider_name,
+        p.nphies_id as provider_nphies_id,
+        i.insurer_name as insurer_name,
+        i.nphies_id as insurer_nphies_id,
+        pat.name as patient_name
+      FROM claim_submissions cs
+      LEFT JOIN providers p ON cs.provider_id = p.provider_id
+      LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
+      LEFT JOIN patients pat ON cs.patient_id = pat.patient_id
+      WHERE cs.id = $1`,
+      [claimId]
+    );
+    
+    if (claimResult.rows.length === 0) {
+      throw new Error(`Claim not found: ${claimId}`);
+    }
+    
+    const claim = claimResult.rows[0];
+    
+    // 2. Validate claim is approved
+    if (!['approved', 'complete'].includes(claim.status) && claim.adjudication_outcome !== 'approved') {
+      throw new Error(`Claim is not approved. Current status: ${claim.status}, outcome: ${claim.adjudication_outcome}`);
+    }
+    
+    // 3. Extract amounts from response bundle or claim data
+    let benefitAmount = 0;
+    
+    if (claim.response_bundle) {
+      const responseBundle = typeof claim.response_bundle === 'string' 
+        ? JSON.parse(claim.response_bundle) 
+        : claim.response_bundle;
+      
+      const claimResponse = responseBundle.entry?.find(
+        e => e.resource?.resourceType === 'ClaimResponse'
+      )?.resource;
+      
+      if (claimResponse?.total) {
+        for (const total of claimResponse.total) {
+          const categoryCode = total.category?.coding?.[0]?.code;
+          if (categoryCode === 'benefit') {
+            benefitAmount = total.amount?.value || 0;
+          }
+        }
+      }
+    }
+    
+    if (benefitAmount === 0) {
+      benefitAmount = parseFloat(claim.benefit_amount) || parseFloat(claim.approved_amount) || parseFloat(claim.total_amount) || 0;
+    }
+    
+    // 4. Generate payment identifiers
+    const paymentReconciliationId = randomUUID();
+    const paymentIdentifierValue = `URN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const today = new Date().toISOString().split('T')[0];
+    
+    // 5. Calculate fees (simulated)
+    const nphiesFee = Math.round(benefitAmount * 0.01 * 100) / 100;
+    const earlyFee = 0;
+    const netPayment = benefitAmount - nphiesFee - earlyFee;
+    
+    // 6. Get ClaimResponse identifier
+    let claimResponseId = claim.nphies_response_id;
+    if (!claimResponseId && claim.response_bundle) {
+      const responseBundle = typeof claim.response_bundle === 'string' 
+        ? JSON.parse(claim.response_bundle) 
+        : claim.response_bundle;
+      
+      const claimResponse = responseBundle.entry?.find(
+        e => e.resource?.resourceType === 'ClaimResponse'
+      )?.resource;
+      
+      claimResponseId = claimResponse?.identifier?.[0]?.value || claimResponse?.id;
+    }
+    
+    // 7. Build the FHIR PaymentReconciliation Bundle (same as in generateSimulatedPaymentReconciliation)
+    const bundle = {
+      resourceType: 'Bundle',
+      id: randomUUID(),
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: new Date().toISOString(),
+      entry: [
+        {
+          fullUrl: `urn:uuid:${randomUUID()}`,
+          resource: {
+            resourceType: 'MessageHeader',
+            id: randomUUID(),
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+            },
+            eventCoding: {
+              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+              code: 'payment-reconciliation'
+            },
+            source: {
+              endpoint: `http://insurer.nphies.sa/${claim.insurer_nphies_id || 'INS-FHIR'}`
+            },
+            destination: [{
+              endpoint: `http://provider.nphies.sa/${claim.provider_nphies_id || 'PR-FHIR'}`,
+              receiver: {
+                type: 'Organization',
+                identifier: {
+                  system: 'http://nphies.sa/license/provider-license',
+                  value: claim.provider_nphies_id || 'PR-FHIR'
+                }
+              }
+            }],
+            sender: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/payer-license',
+                value: claim.insurer_nphies_id || 'INS-FHIR'
+              }
+            }
+          }
+        },
+        {
+          fullUrl: `http://insurer.nphies.sa/PaymentReconciliation/${paymentReconciliationId}`,
+          resource: {
+            resourceType: 'PaymentReconciliation',
+            id: paymentReconciliationId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/payment-reconciliation|1.0.0']
+            },
+            identifier: [{
+              system: `http://insurer.nphies.sa/${claim.insurer_nphies_id || 'INS-FHIR'}/paymentreconciliation`,
+              value: paymentIdentifierValue
+            }],
+            status: 'active',
+            period: { start: today, end: today },
+            created: new Date().toISOString(),
+            paymentIssuer: {
+              reference: `Organization/${claim.insurer_id || claim.insurer_nphies_id}`,
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/payer-license',
+                value: claim.insurer_nphies_id || 'INS-FHIR'
+              },
+              display: claim.insurer_name || 'Insurance Company'
+            },
+            requestor: {
+              reference: `Organization/${claim.provider_id || claim.provider_nphies_id}`,
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/provider-license',
+                value: claim.provider_nphies_id || 'PR-FHIR'
+              },
+              display: claim.provider_name || 'Healthcare Provider'
+            },
+            outcome: 'complete',
+            disposition: `Simulated payment for claim ${claim.claim_number}. Payment processed on ${today}.`,
+            paymentDate: today,
+            paymentAmount: {
+              value: netPayment,
+              currency: claim.currency || 'SAR'
+            },
+            paymentIdentifier: {
+              system: 'http://insurer.nphies.sa/payment-reference',
+              value: paymentIdentifierValue
+            },
+            detail: [
+              {
+                identifier: {
+                  system: `http://insurer.nphies.sa/${claim.insurer_nphies_id || 'INS-FHIR'}/paymentdetail`,
+                  value: `${paymentIdentifierValue}-1`
+                },
+                type: {
+                  coding: [{
+                    system: 'http://terminology.hl7.org/CodeSystem/payment-type',
+                    code: 'payment',
+                    display: 'Payment'
+                  }]
+                },
+                request: {
+                  reference: `Claim/${claim.id}`,
+                  type: 'Claim',
+                  identifier: {
+                    system: `http://provider.nphies.sa/${claim.provider_nphies_id || 'PR-FHIR'}/claim`,
+                    value: claim.claim_number
+                  }
+                },
+                response: {
+                  reference: `ClaimResponse/${claimResponseId || claim.id}`,
+                  type: 'ClaimResponse',
+                  identifier: {
+                    system: `http://insurer.nphies.sa/${claim.insurer_nphies_id || 'INS-FHIR'}/claimresponse`,
+                    value: claimResponseId || `CR-${claim.claim_number}`
+                  }
+                },
+                submitter: {
+                  reference: `Organization/${claim.provider_id}`,
+                  type: 'Organization',
+                  display: claim.provider_name
+                },
+                payee: {
+                  reference: `Organization/${claim.provider_id}`,
+                  type: 'Organization',
+                  display: claim.provider_name
+                },
+                date: today,
+                amount: {
+                  value: benefitAmount,
+                  currency: claim.currency || 'SAR'
+                },
+                extension: [
+                  {
+                    url: EXTENSION_URLS.COMPONENT_PAYMENT,
+                    valueMoney: { value: netPayment, currency: claim.currency || 'SAR' }
+                  },
+                  {
+                    url: EXTENSION_URLS.COMPONENT_NPHIES_FEE,
+                    valueMoney: { value: nphiesFee, currency: claim.currency || 'SAR' }
+                  },
+                  {
+                    url: EXTENSION_URLS.COMPONENT_EARLY_FEE,
+                    valueMoney: { value: earlyFee, currency: claim.currency || 'SAR' }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+    
+    return {
+      success: true,
+      claimNumber: claim.claim_number,
+      paymentAmount: netPayment,
+      benefitAmount,
+      nphiesFee,
+      earlyFee,
+      bundle // Return the bundle for preview (not processed)
+    };
+  }
+  
+  /**
+   * Preview the poll request bundle (without sending)
+   * @param {string} providerId - Optional provider ID
+   * @returns {Object} - The poll request bundle
+   */
+  async previewPollBundle(providerId) {
+    // Get provider ID if not provided
+    if (!providerId) {
+      const providerResult = await query(
+        `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
+      );
+      providerId = providerResult.rows[0]?.nphies_id || 'PR-FHIR';
+    }
+    
+    // Build the poll request bundle using NphiesService
+    const pollBundle = NphiesService.buildPaymentReconciliationPollBundle(providerId);
+    
+    return {
+      success: true,
+      providerId,
+      bundle: pollBundle
     };
   }
   

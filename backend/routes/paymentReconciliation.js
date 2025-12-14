@@ -18,6 +18,12 @@ router.post('/simulate/:claimId', paymentReconciliationController.simulatePaymen
 // POST /api/payment-reconciliation/poll - Poll NPHIES for pending payment messages
 router.post('/poll', paymentReconciliationController.pollNphies.bind(paymentReconciliationController));
 
+// GET /api/payment-reconciliation/preview-simulate/:claimId - Preview simulate bundle (without saving)
+router.get('/preview-simulate/:claimId', paymentReconciliationController.previewSimulate.bind(paymentReconciliationController));
+
+// GET /api/payment-reconciliation/preview-poll - Preview poll bundle (without sending)
+router.get('/preview-poll', paymentReconciliationController.previewPoll.bind(paymentReconciliationController));
+
 // GET /api/payment-reconciliation/stats - Get dashboard statistics
 router.get('/stats', paymentReconciliationController.getStats.bind(paymentReconciliationController));
 

@@ -273,6 +273,55 @@ export default function ClaimDetails() {
     }
   };
 
+  // Preview simulate bundle (copy JSON before sending)
+  const handlePreviewSimulate = async () => {
+    if (!claim) return;
+    
+    const isApproved = claim.status === 'approved' || 
+                       claim.status === 'complete' || 
+                       claim.adjudication_outcome === 'approved';
+    
+    if (!isApproved) {
+      alert('Cannot preview: Claim must be approved first.');
+      return;
+    }
+    
+    try {
+      const response = await api.previewSimulatePaymentReconciliation(id);
+      
+      if (response.success && response.data?.bundle) {
+        await navigator.clipboard.writeText(JSON.stringify(response.data.bundle, null, 2));
+        setLastSimulateBundle(response.data.bundle);
+        alert(`Simulate bundle copied to clipboard!\n\nPayment Amount: ${response.data.paymentAmount} SAR\nBenefit Amount: ${response.data.benefitAmount} SAR\nnphies Fee: ${response.data.nphiesFee} SAR`);
+      } else {
+        alert(`Failed to preview: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('Error previewing simulate:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+      alert(`Error previewing: ${errorMessage}`);
+    }
+  };
+
+  // Preview poll bundle (copy JSON before sending)
+  const handlePreviewPoll = async () => {
+    try {
+      const response = await api.previewPollPaymentReconciliation();
+      
+      if (response.success && response.data?.bundle) {
+        await navigator.clipboard.writeText(JSON.stringify(response.data.bundle, null, 2));
+        setLastPollBundle(response.data.bundle);
+        alert(`Poll bundle copied to clipboard!\n\nProvider ID: ${response.data.providerId}`);
+      } else {
+        alert(`Failed to preview: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('Error previewing poll:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+      alert(`Error previewing: ${errorMessage}`);
+    }
+  };
+
   const handleLoadBundle = async () => {
     try {
       setActionLoading(true);
@@ -728,7 +777,30 @@ export default function ClaimDetails() {
             {pollingPayments ? 'Polling...' : 'Poll NPHIES Payments'}
           </Button>
           
-          {/* Copy JSON Buttons */}
+          {/* Preview JSON Buttons (copy before sending) */}
+          {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
+            <Button 
+              onClick={handlePreviewSimulate}
+              variant="outline"
+              className="border-orange-500 text-orange-600 hover:bg-orange-50"
+              title="Preview and copy the PaymentReconciliation bundle (without sending)"
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              Preview Simulate
+            </Button>
+          )}
+          
+          <Button 
+            onClick={handlePreviewPoll}
+            variant="outline"
+            className="border-cyan-500 text-cyan-600 hover:bg-cyan-50"
+            title="Preview and copy the poll request bundle (without sending)"
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            Preview Poll
+          </Button>
+          
+          {/* Copy JSON Buttons (after sending) */}
           {lastSimulateBundle && (
             <Button 
               onClick={handleCopySimulateBundle}

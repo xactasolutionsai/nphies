@@ -205,6 +205,23 @@ class ApiService {
     });
   }
 
+  /**
+   * Preview the PaymentReconciliation bundle that would be generated (without saving)
+   * @param {number|string} claimId - The claim ID to preview payment for
+   */
+  async previewSimulatePaymentReconciliation(claimId) {
+    return this.request(`/payment-reconciliation/preview-simulate/${claimId}`);
+  }
+
+  /**
+   * Preview the poll request bundle (without sending)
+   * @param {string} providerId - Optional provider ID
+   */
+  async previewPollPaymentReconciliation(providerId = null) {
+    const params = providerId ? `?providerId=${providerId}` : '';
+    return this.request(`/payment-reconciliation/preview-poll${params}`);
+  }
+
   // Dashboard statistics
   async getDashboardStats() {
     return this.request('/dashboard/stats');

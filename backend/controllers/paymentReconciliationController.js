@@ -327,6 +327,71 @@ class PaymentReconciliationController {
       });
     }
   }
+  
+  /**
+   * GET /api/payment-reconciliation/preview-simulate/:claimId
+   * Preview the PaymentReconciliation bundle that would be generated (without saving)
+   */
+  async previewSimulate(req, res) {
+    try {
+      const { claimId } = req.params;
+      
+      if (!claimId) {
+        return res.status(400).json({ error: 'Claim ID is required' });
+      }
+      
+      console.log(`[PaymentReconciliation] Previewing simulate bundle for claim: ${claimId}`);
+      
+      const result = await paymentReconciliationService.previewSimulatedPaymentReconciliation(claimId);
+      
+      return res.json({
+        success: true,
+        data: result
+      });
+      
+    } catch (error) {
+      console.error('[PaymentReconciliation] Error previewing simulate:', error);
+      
+      let statusCode = 500;
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+      } else if (error.message.includes('not approved')) {
+        statusCode = 400;
+      }
+      
+      return res.status(statusCode).json({ 
+        success: false,
+        error: error.message
+      });
+    }
+  }
+  
+  /**
+   * GET /api/payment-reconciliation/preview-poll
+   * Preview the poll request bundle (without sending)
+   */
+  async previewPoll(req, res) {
+    try {
+      const { providerId } = req.query;
+      
+      console.log('[PaymentReconciliation] Previewing poll bundle...');
+      
+      const result = await paymentReconciliationService.previewPollBundle(providerId);
+      
+      return res.json({
+        success: true,
+        data: result
+      });
+      
+    } catch (error) {
+      console.error('[PaymentReconciliation] Error previewing poll:', error);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to preview poll bundle',
+        details: error.message
+      });
+    }
+  }
 }
 
 export default new PaymentReconciliationController();
