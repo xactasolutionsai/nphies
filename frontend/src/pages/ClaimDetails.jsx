@@ -114,6 +114,8 @@ export default function ClaimDetails() {
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
   const [payments, setPayments] = useState([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [simulatingPayment, setSimulatingPayment] = useState(false);
+  const [pollingPayments, setPollingPayments] = useState(false);
 
   useEffect(() => {
     loadClaim();
@@ -145,13 +147,88 @@ export default function ClaimDetails() {
       setPaymentsLoading(true);
       // Try to find payments by claim number or nphies claim id
       const claimIdentifier = claim?.nphies_claim_id || claim?.claim_number || id;
-      const response = await api.get(`/payment-reconciliation/claim/${claimIdentifier}`);
-      setPayments(response.data?.data || []);
+      const response = await api.getPaymentReconciliationsForClaim(claimIdentifier);
+      setPayments(response.data || []);
     } catch (error) {
       console.error('Error loading payments:', error);
       setPayments([]);
     } finally {
       setPaymentsLoading(false);
+    }
+  };
+
+  // Simulate payment for testing (generates a mock PaymentReconciliation)
+  const handleSimulatePayment = async () => {
+    if (!claim) return;
+    
+    const isApproved = claim.status === 'approved' || 
+                       claim.status === 'complete' || 
+                       claim.adjudication_outcome === 'approved';
+    
+    if (!isApproved) {
+      alert('Cannot simulate payment: Claim must be approved first.');
+      return;
+    }
+    
+    if (!window.confirm('This will generate a simulated PaymentReconciliation for testing purposes. Continue?')) {
+      return;
+    }
+    
+    try {
+      setSimulatingPayment(true);
+      const response = await api.simulatePaymentReconciliation(id);
+      
+      if (response.success) {
+        alert(`Payment simulated successfully!\n\nAmount: ${response.data.paymentAmount} SAR\nPayment ID: ${response.data.paymentIdentifier}`);
+        // Refresh payments list
+        await loadPayments();
+        // Switch to payments tab
+        setActiveTab('payments');
+      } else {
+        alert(`Failed to simulate payment: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('Error simulating payment:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+      alert(`Error simulating payment: ${errorMessage}`);
+    } finally {
+      setSimulatingPayment(false);
+    }
+  };
+
+  // Poll NPHIES for pending payment reconciliations
+  const handlePollPayments = async () => {
+    if (!window.confirm('This will poll NPHIES for any pending PaymentReconciliation messages. Continue?')) {
+      return;
+    }
+    
+    try {
+      setPollingPayments(true);
+      const response = await api.pollPaymentReconciliations();
+      
+      if (response.success) {
+        const { processed, failed, total } = response.data;
+        
+        if (total === 0) {
+          alert('No pending payment reconciliations found on NPHIES.');
+        } else {
+          alert(`Poll complete!\n\nTotal found: ${total}\nProcessed: ${processed}\nFailed: ${failed}`);
+          // Refresh payments list
+          await loadPayments();
+          // Switch to payments tab if we got new payments
+          if (processed > 0) {
+            setActiveTab('payments');
+          }
+        }
+      } else {
+        alert(`Poll failed: ${response.message}`);
+      }
+    } catch (error) {
+      console.error('Error polling NPHIES:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+      alert(`Error polling NPHIES: ${errorMessage}`);
+    } finally {
+      setPollingPayments(false);
     }
   };
 
@@ -578,6 +655,37 @@ export default function ClaimDetails() {
               Refresh Status
             </Button>
           )}
+          
+          {/* Payment Actions - Show for approved claims */}
+          {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
+            <Button 
+              onClick={handleSimulatePayment} 
+              disabled={simulatingPayment}
+              variant="outline"
+              className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+            >
+              {simulatingPayment ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Banknote className="h-4 w-4 mr-2" />
+              )}
+              {simulatingPayment ? 'Simulating...' : 'Simulate Payment'}
+            </Button>
+          )}
+          
+          <Button 
+            onClick={handlePollPayments} 
+            disabled={pollingPayments}
+            variant="outline"
+            className="border-purple-500 text-purple-600 hover:bg-purple-50"
+          >
+            {pollingPayments ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Wallet className="h-4 w-4 mr-2" />
+            )}
+            {pollingPayments ? 'Polling...' : 'Poll NPHIES Payments'}
+          </Button>
         </div>
       </div>
 

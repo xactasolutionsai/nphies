@@ -162,6 +162,49 @@ class ApiService {
     return this.request(`/payments/${id}`);
   }
 
+  // Payment Reconciliations (nphies)
+  async getPaymentReconciliations(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/payment-reconciliation${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getPaymentReconciliation(id) {
+    return this.request(`/payment-reconciliation/${id}`);
+  }
+
+  async getPaymentReconciliationStats() {
+    return this.request('/payment-reconciliation/stats');
+  }
+
+  async getPaymentReconciliationsForClaim(claimId) {
+    return this.request(`/payment-reconciliation/claim/${claimId}`);
+  }
+
+  async getPaymentReconciliationBundle(id) {
+    return this.request(`/payment-reconciliation/${id}/bundle`);
+  }
+
+  /**
+   * Simulate a payment reconciliation from an approved claim (for testing)
+   * @param {number|string} claimId - The claim ID to simulate payment for
+   */
+  async simulatePaymentReconciliation(claimId) {
+    return this.request(`/payment-reconciliation/simulate/${claimId}`, {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Poll NPHIES for pending PaymentReconciliation messages
+   * @param {string} providerId - Optional provider ID to poll for
+   */
+  async pollPaymentReconciliations(providerId = null) {
+    return this.request('/payment-reconciliation/poll', {
+      method: 'POST',
+      body: JSON.stringify({ providerId })
+    });
+  }
+
   // Dashboard statistics
   async getDashboardStats() {
     return this.request('/dashboard/stats');

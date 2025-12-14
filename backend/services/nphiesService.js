@@ -421,6 +421,173 @@ class NphiesService {
       };
     }
   }
+  
+  /**
+   * Poll NPHIES for pending PaymentReconciliation messages
+   * This sends a poll request to check for any queued payment messages
+   * @param {string} providerId - The provider's nphies ID
+   * @returns {Object} - Response containing any pending PaymentReconciliation bundles
+   */
+  async pollPaymentReconciliations(providerId = 'PR-FHIR') {
+    console.log('[NPHIES] Polling for PaymentReconciliation messages...');
+    
+    // Build the poll request bundle
+    const pollBundle = this.buildPaymentReconciliationPollBundle(providerId);
+    
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/$process-message`,
+        pollBundle,
+        {
+          headers: {
+            'Content-Type': 'application/fhir+json',
+            'Accept': 'application/fhir+json'
+          },
+          timeout: this.timeout,
+          validateStatus: (status) => status < 500
+        }
+      );
+      
+      console.log(`[NPHIES] Poll response received: ${response.status}`);
+      
+      // Check if we got any PaymentReconciliation bundles
+      const paymentReconciliations = this.extractPaymentReconciliationsFromPollResponse(response.data);
+      
+      return {
+        success: true,
+        status: response.status,
+        data: response.data,
+        paymentReconciliations,
+        count: paymentReconciliations.length,
+        message: paymentReconciliations.length > 0 
+          ? `Found ${paymentReconciliations.length} pending payment reconciliation(s)`
+          : 'No pending payment reconciliations found'
+      };
+      
+    } catch (error) {
+      console.error('[NPHIES] Poll error:', error.message);
+      return {
+        success: false,
+        error: this.formatError(error),
+        paymentReconciliations: [],
+        count: 0
+      };
+    }
+  }
+  
+  /**
+   * Build a poll request bundle for PaymentReconciliation messages
+   */
+  buildPaymentReconciliationPollBundle(providerId) {
+    const bundleId = randomUUID();
+    const messageHeaderId = randomUUID();
+    
+    return {
+      resourceType: 'Bundle',
+      id: bundleId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: new Date().toISOString(),
+      entry: [
+        {
+          fullUrl: `urn:uuid:${messageHeaderId}`,
+          resource: {
+            resourceType: 'MessageHeader',
+            id: messageHeaderId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+            },
+            eventCoding: {
+              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+              code: 'poll'
+            },
+            source: {
+              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com'
+            },
+            destination: [{
+              endpoint: 'http://nphies.sa',
+              receiver: {
+                type: 'Organization',
+                identifier: {
+                  system: 'http://nphies.sa/license/nphies-license',
+                  value: 'nphies'
+                }
+              }
+            }],
+            sender: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/provider-license',
+                value: providerId
+              }
+            }
+          }
+        },
+        // Parameters resource to specify we want PaymentReconciliation messages
+        {
+          fullUrl: `urn:uuid:${randomUUID()}`,
+          resource: {
+            resourceType: 'Parameters',
+            parameter: [
+              {
+                name: 'message-type',
+                valueCode: 'payment-reconciliation'
+              },
+              {
+                name: 'count',
+                valueInteger: 50
+              }
+            ]
+          }
+        }
+      ]
+    };
+  }
+  
+  /**
+   * Extract PaymentReconciliation resources from poll response
+   */
+  extractPaymentReconciliationsFromPollResponse(responseData) {
+    const paymentReconciliations = [];
+    
+    if (!responseData) return paymentReconciliations;
+    
+    // Response could be a single bundle or a collection of bundles
+    if (responseData.resourceType === 'Bundle') {
+      // Check if this bundle contains PaymentReconciliation
+      const pr = responseData.entry?.find(
+        e => e.resource?.resourceType === 'PaymentReconciliation'
+      );
+      if (pr) {
+        paymentReconciliations.push(responseData);
+      }
+      
+      // Or it might be a searchset/collection containing multiple bundles
+      if (responseData.type === 'searchset' || responseData.type === 'collection') {
+        for (const entry of responseData.entry || []) {
+          if (entry.resource?.resourceType === 'Bundle') {
+            const nestedPr = entry.resource.entry?.find(
+              e => e.resource?.resourceType === 'PaymentReconciliation'
+            );
+            if (nestedPr) {
+              paymentReconciliations.push(entry.resource);
+            }
+          } else if (entry.resource?.resourceType === 'PaymentReconciliation') {
+            // Wrap single PaymentReconciliation in a bundle
+            paymentReconciliations.push({
+              resourceType: 'Bundle',
+              type: 'collection',
+              entry: [{ resource: entry.resource }]
+            });
+          }
+        }
+      }
+    }
+    
+    return paymentReconciliations;
+  }
 }
 
 export default new NphiesService();

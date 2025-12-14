@@ -252,6 +252,80 @@ class PaymentReconciliationController {
       });
     }
   }
+  
+  /**
+   * POST /api/payment-reconciliation/simulate/:claimId
+   * Generate a simulated PaymentReconciliation from an approved claim
+   * Used for testing/development purposes
+   */
+  async simulatePayment(req, res) {
+    try {
+      const { claimId } = req.params;
+      
+      if (!claimId) {
+        return res.status(400).json({ error: 'Claim ID is required' });
+      }
+      
+      console.log(`[PaymentReconciliation] Simulating payment for claim: ${claimId}`);
+      
+      const result = await paymentReconciliationService.generateSimulatedPaymentReconciliation(claimId);
+      
+      return res.status(201).json({
+        success: true,
+        data: result,
+        message: result.message
+      });
+      
+    } catch (error) {
+      console.error('[PaymentReconciliation] Error simulating payment:', error);
+      
+      // Determine appropriate status code based on error
+      let statusCode = 500;
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+      } else if (error.message.includes('not approved') || error.message.includes('already exists')) {
+        statusCode = 400;
+      }
+      
+      return res.status(statusCode).json({ 
+        success: false,
+        error: error.message
+      });
+    }
+  }
+  
+  /**
+   * POST /api/payment-reconciliation/poll
+   * Poll NPHIES for pending PaymentReconciliation messages
+   */
+  async pollNphies(req, res) {
+    try {
+      const { providerId } = req.body;
+      
+      console.log('[PaymentReconciliation] Initiating poll to NPHIES...');
+      
+      const result = await paymentReconciliationService.pollAndProcessPaymentReconciliations(providerId);
+      
+      return res.json({
+        success: result.success,
+        data: {
+          processed: result.processed,
+          failed: result.failed,
+          total: result.total,
+          results: result.results
+        },
+        message: result.message || result.error
+      });
+      
+    } catch (error) {
+      console.error('[PaymentReconciliation] Error polling NPHIES:', error);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to poll NPHIES for payment reconciliations',
+        details: error.message
+      });
+    }
+  }
 }
 
 export default new PaymentReconciliationController();
