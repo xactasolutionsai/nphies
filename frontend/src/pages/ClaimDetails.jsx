@@ -9,7 +9,8 @@ import {
   ArrowLeft, Send, RefreshCw, XCircle, 
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
-  Code, Activity, Paperclip, History, Eye, X, Copy, ExternalLink
+  Code, Activity, Paperclip, History, Eye, X, Copy, ExternalLink,
+  Wallet, Banknote, ArrowRight
 } from 'lucide-react';
 
 // Helper functions
@@ -111,10 +112,19 @@ export default function ClaimDetails() {
   const [showBundleDialog, setShowBundleDialog] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  const [payments, setPayments] = useState([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
 
   useEffect(() => {
     loadClaim();
   }, [id]);
+
+  // Load payments when claim is loaded
+  useEffect(() => {
+    if (claim?.claim_number || claim?.nphies_claim_id) {
+      loadPayments();
+    }
+  }, [claim?.claim_number, claim?.nphies_claim_id]);
 
   const loadClaim = async () => {
     try {
@@ -127,6 +137,21 @@ export default function ClaimDetails() {
       navigate('/claim-submissions');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPayments = async () => {
+    try {
+      setPaymentsLoading(true);
+      // Try to find payments by claim number or nphies claim id
+      const claimIdentifier = claim?.nphies_claim_id || claim?.claim_number || id;
+      const response = await api.get(`/payment-reconciliation/claim/${claimIdentifier}`);
+      setPayments(response.data?.data || []);
+    } catch (error) {
+      console.error('Error loading payments:', error);
+      setPayments([]);
+    } finally {
+      setPaymentsLoading(false);
     }
   };
 
@@ -579,6 +604,10 @@ export default function ClaimDetails() {
             )}
             <TabButton active={activeTab === 'responses'} onClick={() => setActiveTab('responses')}>
               Responses ({claim.responses?.length || 0})
+            </TabButton>
+            <TabButton active={activeTab === 'payments'} onClick={() => setActiveTab('payments')}>
+              <Wallet className="h-4 w-4 mr-1 inline" />
+              Payments {payments.length > 0 && `(${payments.length})`}
             </TabButton>
           </div>
 
@@ -1272,6 +1301,132 @@ export default function ClaimDetails() {
                   </div>
                 ) : (
                   <p className="text-center text-gray-500 py-4">No responses yet</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Payments Tab */}
+          {activeTab === 'payments' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-emerald-600" />
+                  Payment History
+                </CardTitle>
+                <CardDescription>
+                  Payment reconciliations received from insurers for this claim
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {paymentsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="relative">
+                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-500/20"></div>
+                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-transparent border-t-emerald-500 absolute top-0"></div>
+                    </div>
+                  </div>
+                ) : payments.length > 0 ? (
+                  <div className="space-y-4">
+                    {payments.map((payment, index) => (
+                      <div 
+                        key={payment.id || index} 
+                        className="p-4 border border-emerald-200 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 hover:shadow-md transition-shadow cursor-pointer"
+                        onClick={() => navigate(`/payment-reconciliations/${payment.id}`)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="bg-emerald-100 rounded-lg p-2">
+                              <Banknote className="h-5 w-5 text-emerald-600" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900">
+                                Payment Reconciliation
+                              </p>
+                              <p className="text-sm text-gray-500 font-mono">
+                                {payment.fhir_id || `PR-${payment.id}`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xl font-bold text-emerald-600">
+                              {formatAmount(payment.claim_payment_amount || payment.payment_amount, 'SAR')}
+                            </p>
+                            <Badge 
+                              variant={payment.status === 'active' ? 'default' : 'secondary'}
+                              className={payment.status === 'active' ? 'bg-emerald-500 mt-1' : 'mt-1'}
+                            >
+                              {payment.status}
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-emerald-200/50">
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase tracking-wider">Payment Date</p>
+                            <p className="font-medium text-sm">{formatDate(payment.payment_date || payment.detail_date)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase tracking-wider">Insurer</p>
+                            <p className="font-medium text-sm">{payment.insurer_name || 'Unknown'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase tracking-wider">Total Reconciliation</p>
+                            <p className="font-medium text-sm">{formatAmount(payment.payment_amount, 'SAR')}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-end mt-3 text-emerald-600 text-sm font-medium">
+                          <span>View Full Details</span>
+                          <ArrowRight className="h-4 w-4 ml-1" />
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Summary */}
+                    <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-500">Total Payments Received</p>
+                          <p className="text-2xl font-bold text-emerald-600">
+                            {formatAmount(
+                              payments.reduce((sum, p) => sum + parseFloat(p.claim_payment_amount || p.payment_amount || 0), 0),
+                              'SAR'
+                            )}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500">Number of Payments</p>
+                          <p className="text-2xl font-bold text-gray-900">{payments.length}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                      <Wallet className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Payments Yet</h3>
+                    <p className="text-gray-500 max-w-md mx-auto">
+                      Payment reconciliation records will appear here when the insurer sends payment notifications for this claim.
+                    </p>
+                    {claim.adjudication_outcome === 'approved' || claim.outcome === 'complete' ? (
+                      <div className="mt-4 p-3 bg-blue-50 rounded-lg inline-block">
+                        <p className="text-sm text-blue-700">
+                          <CheckCircle className="h-4 w-4 inline mr-1" />
+                          This claim has been approved. Payment notification is pending from the insurer.
+                        </p>
+                      </div>
+                    ) : claim.status === 'queued' || claim.status === 'pending' ? (
+                      <div className="mt-4 p-3 bg-yellow-50 rounded-lg inline-block">
+                        <p className="text-sm text-yellow-700">
+                          <Clock className="h-4 w-4 inline mr-1" />
+                          This claim is still being processed by the insurer.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
                 )}
               </CardContent>
             </Card>

@@ -35,6 +35,8 @@ import PriorAuthorizationDetails from './pages/PriorAuthorizationDetails';
 import ClaimSubmissionsList from './pages/ClaimSubmissionsList';
 import ClaimSubmissionForm from './pages/ClaimSubmissionForm';
 import ClaimDetails from './pages/ClaimDetails';
+import PaymentReconciliations from './pages/PaymentReconciliations';
+import PaymentReconciliationDetails from './pages/PaymentReconciliationDetails';
 import ChatAssistant from './components/chat/ChatAssistant';
 
 function App() {
@@ -82,6 +84,8 @@ function App() {
           <Route path="/claim-submissions/new" element={<ClaimSubmissionForm />} />
           <Route path="/claim-submissions/:id" element={<ClaimDetails />} />
           <Route path="/claim-submissions/:id/edit" element={<ClaimSubmissionForm />} />
+          <Route path="/payment-reconciliations" element={<PaymentReconciliations />} />
+          <Route path="/payment-reconciliations/:id" element={<PaymentReconciliationDetails />} />
         </Routes>
       </Layout>
       <ChatAssistant />

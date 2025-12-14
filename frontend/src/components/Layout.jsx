@@ -20,7 +20,8 @@ import {
   FileText,
   ClipboardList,
   Eye,
-  Pill
+  Pill,
+  Wallet
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,6 +52,7 @@ const otherNavigation = [
   { name: 'Claims', href: '/claims', icon: Receipt },
   { name: 'Claim Batches', href: '/claim-batches', icon: Package },
   { name: 'Payment Notification', href: '/payments', icon: CreditCard },
+  { name: 'Payment Reconciliation', href: '/payment-reconciliations', icon: Wallet },
   { name: 'Response Viewer', href: '/response-viewer', icon: BarChart3 },
   { name: 'Medicine Search', href: '/medicines', icon: Pill },
 ];
