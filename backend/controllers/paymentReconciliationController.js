@@ -312,7 +312,8 @@ class PaymentReconciliationController {
           processed: result.processed,
           failed: result.failed,
           total: result.total,
-          results: result.results
+          results: result.results,
+          pollRequestBundle: result.pollRequestBundle // Include the poll request bundle
         },
         message: result.message || result.error
       });

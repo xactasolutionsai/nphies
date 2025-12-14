@@ -461,7 +461,8 @@ class NphiesService {
         count: paymentReconciliations.length,
         message: paymentReconciliations.length > 0 
           ? `Found ${paymentReconciliations.length} pending payment reconciliation(s)`
-          : 'No pending payment reconciliations found'
+          : 'No pending payment reconciliations found',
+        pollRequestBundle: pollBundle // Include the poll request bundle
       };
       
     } catch (error) {
@@ -470,7 +471,8 @@ class NphiesService {
         success: false,
         error: this.formatError(error),
         paymentReconciliations: [],
-        count: 0
+        count: 0,
+        pollRequestBundle: pollBundle // Include even on error
       };
     }
   }

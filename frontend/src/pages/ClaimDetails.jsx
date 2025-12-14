@@ -116,6 +116,8 @@ export default function ClaimDetails() {
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [simulatingPayment, setSimulatingPayment] = useState(false);
   const [pollingPayments, setPollingPayments] = useState(false);
+  const [lastSimulateBundle, setLastSimulateBundle] = useState(null);
+  const [lastPollBundle, setLastPollBundle] = useState(null);
 
   useEffect(() => {
     loadClaim();
@@ -179,7 +181,11 @@ export default function ClaimDetails() {
       const response = await api.simulatePaymentReconciliation(id);
       
       if (response.success) {
-        alert(`Payment simulated successfully!\n\nAmount: ${response.data.paymentAmount} SAR\nPayment ID: ${response.data.paymentIdentifier}`);
+        // Store the generated bundle for copying
+        if (response.data?.generatedBundle) {
+          setLastSimulateBundle(response.data.generatedBundle);
+        }
+        alert(`Payment simulated successfully!\n\nAmount: ${response.data.paymentAmount} SAR\nPayment ID: ${response.data.paymentIdentifier}\n\nClick "Copy Simulate JSON" to copy the generated FHIR bundle.`);
         // Refresh payments list
         await loadPayments();
         // Switch to payments tab
@@ -206,13 +212,18 @@ export default function ClaimDetails() {
       setPollingPayments(true);
       const response = await api.pollPaymentReconciliations();
       
+      // Store the poll request bundle for copying
+      if (response.data?.pollRequestBundle) {
+        setLastPollBundle(response.data.pollRequestBundle);
+      }
+      
       if (response.success) {
         const { processed, failed, total } = response.data;
         
         if (total === 0) {
-          alert('No pending payment reconciliations found on NPHIES.');
+          alert('No pending payment reconciliations found on NPHIES.\n\nClick "Copy Poll JSON" to copy the poll request bundle.');
         } else {
-          alert(`Poll complete!\n\nTotal found: ${total}\nProcessed: ${processed}\nFailed: ${failed}`);
+          alert(`Poll complete!\n\nTotal found: ${total}\nProcessed: ${processed}\nFailed: ${failed}\n\nClick "Copy Poll JSON" to copy the poll request bundle.`);
           // Refresh payments list
           await loadPayments();
           // Switch to payments tab if we got new payments
@@ -221,7 +232,7 @@ export default function ClaimDetails() {
           }
         }
       } else {
-        alert(`Poll failed: ${response.message}`);
+        alert(`Poll failed: ${response.message}\n\nClick "Copy Poll JSON" to copy the poll request bundle.`);
       }
     } catch (error) {
       console.error('Error polling NPHIES:', error);
@@ -229,6 +240,36 @@ export default function ClaimDetails() {
       alert(`Error polling NPHIES: ${errorMessage}`);
     } finally {
       setPollingPayments(false);
+    }
+  };
+
+  // Copy simulate bundle to clipboard
+  const handleCopySimulateBundle = async () => {
+    if (!lastSimulateBundle) {
+      alert('No simulate bundle available. Run "Simulate Payment" first.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(lastSimulateBundle, null, 2));
+      alert('Simulate bundle copied to clipboard!');
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      alert('Failed to copy to clipboard');
+    }
+  };
+
+  // Copy poll bundle to clipboard
+  const handleCopyPollBundle = async () => {
+    if (!lastPollBundle) {
+      alert('No poll bundle available. Run "Poll NPHIES Payments" first.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(lastPollBundle, null, 2));
+      alert('Poll bundle copied to clipboard!');
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      alert('Failed to copy to clipboard');
     }
   };
 
@@ -686,6 +727,31 @@ export default function ClaimDetails() {
             )}
             {pollingPayments ? 'Polling...' : 'Poll NPHIES Payments'}
           </Button>
+          
+          {/* Copy JSON Buttons */}
+          {lastSimulateBundle && (
+            <Button 
+              onClick={handleCopySimulateBundle}
+              variant="outline"
+              className="border-green-500 text-green-600 hover:bg-green-50"
+              title="Copy the last generated PaymentReconciliation FHIR bundle"
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copy Simulate JSON
+            </Button>
+          )}
+          
+          {lastPollBundle && (
+            <Button 
+              onClick={handleCopyPollBundle}
+              variant="outline"
+              className="border-blue-500 text-blue-600 hover:bg-blue-50"
+              title="Copy the last poll request FHIR bundle"
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copy Poll JSON
+            </Button>
+          )}
         </div>
       </div>
 

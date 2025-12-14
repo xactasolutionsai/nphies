@@ -621,8 +621,8 @@ class PaymentReconciliationService {
     const dataResult = await query(
       `SELECT 
         pr.*,
-        i.name as insurer_name,
-        p.name as provider_name,
+        i.insurer_name as insurer_name,
+        p.provider_name as provider_name,
         (SELECT COUNT(*) FROM payment_reconciliation_details WHERE reconciliation_id = pr.id) as detail_count,
         (SELECT SUM(amount) FROM payment_reconciliation_details WHERE reconciliation_id = pr.id) as total_detail_amount
       FROM payment_reconciliations pr
@@ -653,9 +653,9 @@ class PaymentReconciliationService {
     const reconciliationResult = await query(
       `SELECT 
         pr.*,
-        i.name as insurer_name,
+        i.insurer_name as insurer_name,
         i.nphies_id as insurer_nphies_id,
-        p.name as provider_name,
+        p.provider_name as provider_name,
         p.nphies_id as provider_nphies_id
       FROM payment_reconciliations pr
       LEFT JOIN insurers i ON pr.payment_issuer_id = i.insurer_id
@@ -704,8 +704,8 @@ class PaymentReconciliationService {
     const result = await query(
       `SELECT DISTINCT
         pr.*,
-        i.name as insurer_name,
-        p.name as provider_name,
+        i.insurer_name as insurer_name,
+        p.provider_name as provider_name,
         d.amount as claim_payment_amount,
         d.detail_date
       FROM payment_reconciliations pr
@@ -757,12 +757,12 @@ class PaymentReconciliationService {
     // Get by insurer
     const byInsurer = await query(`
       SELECT 
-        COALESCE(i.name, 'Unknown') as insurer_name,
+        COALESCE(i.insurer_name, 'Unknown') as insurer_name,
         COUNT(*) as count,
         SUM(pr.payment_amount) as amount
       FROM payment_reconciliations pr
       LEFT JOIN insurers i ON pr.payment_issuer_id = i.insurer_id
-      GROUP BY COALESCE(i.name, 'Unknown')
+      GROUP BY COALESCE(i.insurer_name, 'Unknown')
       ORDER BY amount DESC
       LIMIT 10
     `);
@@ -787,9 +787,9 @@ class PaymentReconciliationService {
     const claimResult = await query(
       `SELECT 
         cs.*,
-        p.name as provider_name,
+        p.provider_name as provider_name,
         p.nphies_id as provider_nphies_id,
-        i.name as insurer_name,
+        i.insurer_name as insurer_name,
         i.nphies_id as insurer_nphies_id,
         pat.full_name as patient_name
       FROM claim_submissions cs
@@ -1061,7 +1061,7 @@ class PaymentReconciliationService {
       throw new Error(`Failed to process simulated payment: ${result.errors?.join(', ')}`);
     }
     
-    // 10. Return the result with additional info
+    // 10. Return the result with additional info including the generated bundle
     return {
       success: true,
       reconciliationId: result.reconciliationId,
@@ -1072,7 +1072,8 @@ class PaymentReconciliationService {
       earlyFee,
       paymentIdentifier: paymentIdentifierValue,
       paymentDate: today,
-      message: `Simulated payment of ${netPayment} ${claim.currency || 'SAR'} generated for claim ${claim.claim_number}`
+      message: `Simulated payment of ${netPayment} ${claim.currency || 'SAR'} generated for claim ${claim.claim_number}`,
+      generatedBundle: bundle // Include the FHIR bundle that was generated
     };
   }
   
@@ -1087,7 +1088,7 @@ class PaymentReconciliationService {
     // 1. Get provider ID if not provided
     if (!providerId) {
       const providerResult = await query(
-        `SELECT nphies_id FROM providers WHERE is_default = true OR provider_id = (SELECT MIN(provider_id) FROM providers) LIMIT 1`
+        `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
       );
       providerId = providerResult.rows[0]?.nphies_id || 'PR-FHIR';
     }
@@ -1102,7 +1103,8 @@ class PaymentReconciliationService {
         error: pollResult.error,
         processed: 0,
         failed: 0,
-        results: []
+        results: [],
+        pollRequestBundle: pollResult.pollRequestBundle // Include even on error
       };
     }
     
@@ -1114,7 +1116,8 @@ class PaymentReconciliationService {
         message: 'No pending payment reconciliations found',
         processed: 0,
         failed: 0,
-        results: []
+        results: [],
+        pollRequestBundle: pollResult.pollRequestBundle
       };
     }
     
@@ -1162,7 +1165,8 @@ class PaymentReconciliationService {
       processed,
       failed,
       total: pollResult.count,
-      results
+      results,
+      pollRequestBundle: pollResult.pollRequestBundle
     };
   }
 }
