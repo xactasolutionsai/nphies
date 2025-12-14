@@ -147,9 +147,9 @@ export default function ClaimDetails() {
   const loadPayments = async () => {
     try {
       setPaymentsLoading(true);
-      // Try to find payments by claim number or nphies claim id
-      const claimIdentifier = claim?.nphies_claim_id || claim?.claim_number || id;
-      const response = await api.getPaymentReconciliationsForClaim(claimIdentifier);
+      // Use the numeric claim ID from URL params (id) for the API call
+      // The backend query searches by claim_submission_id (integer) and claim_identifier_value (string)
+      const response = await api.getPaymentReconciliationsForClaim(id);
       setPayments(response.data || []);
     } catch (error) {
       console.error('Error loading payments:', error);

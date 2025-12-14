@@ -701,6 +701,10 @@ class PaymentReconciliationService {
    * Get reconciliations for a specific claim
    */
   async getByClaimId(claimId) {
+    // Handle both numeric IDs and string claim numbers
+    const numericId = parseInt(claimId, 10);
+    const isNumeric = !isNaN(numericId);
+    
     const result = await query(
       `SELECT DISTINCT
         pr.*,
@@ -712,10 +716,10 @@ class PaymentReconciliationService {
       INNER JOIN payment_reconciliation_details d ON d.reconciliation_id = pr.id
       LEFT JOIN insurers i ON pr.payment_issuer_id = i.insurer_id
       LEFT JOIN providers p ON pr.requestor_id = p.provider_id
-      WHERE d.claim_submission_id = $1 
+      WHERE ${isNumeric ? 'd.claim_submission_id = $1' : 'FALSE'} 
          OR d.claim_identifier_value = $2
       ORDER BY pr.payment_date DESC`,
-      [claimId, claimId]
+      [isNumeric ? numericId : null, String(claimId)]
     );
     
     return result.rows;
