@@ -392,15 +392,27 @@ class PaymentReconciliationService {
    * Try to link reconciliation to existing records
    */
   async linkToExistingRecords(client, reconciliationId, pr) {
-    // Try to match insurer by reference
-    if (pr.paymentIssuer?.reference) {
+    // Try to match insurer by reference, identifier, or display name
+    if (pr.paymentIssuer) {
+      // Extract possible identifiers
+      const refId = this.extractIdFromReference(pr.paymentIssuer.reference);
+      const identifierValue = pr.paymentIssuer.identifier?.value;
+      const displayName = pr.paymentIssuer.display;
+      
+      // Try multiple matching strategies
       const insurerMatch = await client.query(
         `SELECT insurer_id FROM insurers 
-         WHERE nphies_id = $1 OR insurer_name ILIKE $2
+         WHERE nphies_id = $1 
+            OR nphies_id = $2
+            OR insurer_name ILIKE $3
+            OR insurer_name ILIKE $4
+            OR insurer_id::text = $1
          LIMIT 1`,
         [
-          this.extractIdFromReference(pr.paymentIssuer.reference),
-          `%${this.extractIdFromReference(pr.paymentIssuer.reference)}%`
+          refId,
+          identifierValue || refId,
+          displayName ? `%${displayName}%` : '%impossible-match%',
+          `%${refId}%`
         ]
       );
       
@@ -409,18 +421,33 @@ class PaymentReconciliationService {
           `UPDATE payment_reconciliations SET payment_issuer_id = $1 WHERE id = $2`,
           [insurerMatch.rows[0].insurer_id, reconciliationId]
         );
+        console.log(`[PaymentReconciliation] Linked insurer: ${insurerMatch.rows[0].insurer_id}`);
+      } else {
+        console.log(`[PaymentReconciliation] Could not link insurer. Ref: ${refId}, Identifier: ${identifierValue}, Display: ${displayName}`);
       }
     }
     
-    // Try to match provider by reference
-    if (pr.requestor?.reference) {
+    // Try to match provider by reference, identifier, or display name
+    if (pr.requestor) {
+      // Extract possible identifiers
+      const refId = this.extractIdFromReference(pr.requestor.reference);
+      const identifierValue = pr.requestor.identifier?.value;
+      const displayName = pr.requestor.display;
+      
+      // Try multiple matching strategies
       const providerMatch = await client.query(
         `SELECT provider_id FROM providers 
-         WHERE nphies_id = $1 OR provider_name ILIKE $2
+         WHERE nphies_id = $1 
+            OR nphies_id = $2
+            OR provider_name ILIKE $3
+            OR provider_name ILIKE $4
+            OR provider_id::text = $1
          LIMIT 1`,
         [
-          this.extractIdFromReference(pr.requestor.reference),
-          `%${this.extractIdFromReference(pr.requestor.reference)}%`
+          refId,
+          identifierValue || refId,
+          displayName ? `%${displayName}%` : '%impossible-match%',
+          `%${refId}%`
         ]
       );
       
@@ -429,6 +456,9 @@ class PaymentReconciliationService {
           `UPDATE payment_reconciliations SET requestor_id = $1 WHERE id = $2`,
           [providerMatch.rows[0].provider_id, reconciliationId]
         );
+        console.log(`[PaymentReconciliation] Linked provider: ${providerMatch.rows[0].provider_id}`);
+      } else {
+        console.log(`[PaymentReconciliation] Could not link provider. Ref: ${refId}, Identifier: ${identifierValue}, Display: ${displayName}`);
       }
     }
     
