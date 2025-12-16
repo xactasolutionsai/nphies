@@ -210,9 +210,9 @@ export default function NphiesEligibilityForm() {
   useEffect(() => {
     if (selectedPatient && patientMode === 'existing') {
       loadPatientCoverages(selectedPatient);
-    } else {
-      setCoverages([]);
-      setSelectedCoverage('');
+    } else if (patientMode === 'manual' || !selectedPatient) {
+      // Load all coverages when no patient is selected or in manual patient mode
+      loadAllCoverages();
     }
   }, [selectedPatient, patientMode]);
 
@@ -247,6 +247,16 @@ export default function NphiesEligibilityForm() {
       }
     } catch (err) {
       console.error('Error loading coverages:', err);
+      setCoverages([]);
+    }
+  };
+
+  const loadAllCoverages = async () => {
+    try {
+      const res = await api.getCoverages({ limit: 100 });
+      setCoverages(res.data || []);
+    } catch (err) {
+      console.error('Error loading all coverages:', err);
       setCoverages([]);
     }
   };
@@ -483,7 +493,7 @@ export default function NphiesEligibilityForm() {
   // Convert coverages to Select options
   const coverageOptions = coverages.map(c => ({
     value: c.coverage_id.toString(),
-    label: `${c.policy_number} - ${c.plan_name || c.coverage_type}${c.insurer_name ? ` (${c.insurer_name})` : ''}`
+    label: `${c.policy_number || c.member_id || 'N/A'} - ${c.plan_name || c.coverage_type}${c.insurer_name ? ` (${c.insurer_name})` : ''}${c.patient_name && !selectedPatient ? ` [${c.patient_name}]` : ''}`
   }));
 
   if (loadingData) {
@@ -805,16 +815,15 @@ export default function NphiesEligibilityForm() {
                     placeholder="Search and select coverage..."
                     isClearable
                     isSearchable
-                    isDisabled={patientMode !== 'existing' || !selectedPatient}
                   />
-                  {patientMode !== 'existing' && (
-                    <p className="text-sm text-gray-500 mt-2">Select an existing patient first to choose their coverage</p>
+                  {patientMode === 'existing' && selectedPatient && (
+                    <p className="text-sm text-blue-600 mt-2">Showing coverages for selected patient</p>
                   )}
-                  {patientMode === 'existing' && !selectedPatient && (
-                    <p className="text-sm text-gray-500 mt-2">Select a patient first</p>
+                  {(patientMode === 'manual' || !selectedPatient) && (
+                    <p className="text-sm text-gray-500 mt-2">Showing all available coverages</p>
                   )}
-                  {patientMode === 'existing' && selectedPatient && coverages.length === 0 && (
-                    <p className="text-sm text-amber-600 mt-2">No coverage found for this patient. Try manual entry or discovery mode.</p>
+                  {coverages.length === 0 && (
+                    <p className="text-sm text-amber-600 mt-2">No coverages found. Try manual entry or discovery mode.</p>
                   )}
                 </>
               ) : coverageMode === 'manual' ? (

@@ -30,6 +30,7 @@ import nphiesCodesRoutes from './routes/nphiesCodes.js';
 import priorAuthorizationsRoutes from './routes/priorAuthorizations.js';
 import claimSubmissionsRoutes from './routes/claimSubmissions.js';
 import paymentReconciliationRoutes from './routes/paymentReconciliation.js';
+import coveragesRoutes from './routes/coverages.js';
 
 // Load environment variables
 dotenv.config();
@@ -117,6 +118,7 @@ app.use('/api/nphies-codes', nphiesCodesRoutes);
 app.use('/api/prior-authorizations', priorAuthorizationsRoutes);
 app.use('/api/claim-submissions', claimSubmissionsRoutes);
 app.use('/api/payment-reconciliation', paymentReconciliationRoutes);
+app.use('/api/coverages', coveragesRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -148,6 +150,7 @@ app.get('/', (req, res) => {
       priorAuthorizations: '/api/prior-authorizations',
       claimSubmissions: '/api/claim-submissions',
       paymentReconciliation: '/api/payment-reconciliation',
+      coverages: '/api/coverages',
       health: '/health'
     }
   });

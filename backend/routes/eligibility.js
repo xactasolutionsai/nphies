@@ -39,4 +39,7 @@ router.get('/:id/nphies-details', eligibilityController.getNphiesDetails.bind(el
 // GET /api/eligibility/patient/:patientId/coverages - Get patient coverages
 router.get('/patient/:patientId/coverages', eligibilityController.getPatientCoverages.bind(eligibilityController));
 
+// GET /api/coverages - Get all coverages (mounted separately in index.js)
+// This is handled in a separate coverages route
+
 export default router;

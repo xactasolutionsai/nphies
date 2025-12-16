@@ -404,6 +404,11 @@ class ApiService {
     return this.request(`/eligibility/patient/${patientId}/coverages`);
   }
 
+  async getCoverages(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/coverages${queryString ? `?${queryString}` : ''}`);
+  }
+
   // Prior Authorizations (NPHIES-compliant)
   async getPriorAuthorizations(params = {}) {
     const queryString = new URLSearchParams(params).toString();
