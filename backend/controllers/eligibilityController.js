@@ -680,10 +680,10 @@ class EligibilityController extends BaseController {
         }
         coverage = coverageResult.rows[0];
         console.log(`[NPHIES Dynamic] Using existing coverage: ${coverage.policy_number}`);
-      } else if (coverageData && coverageData.policyNumber) {
-        // UPSERT coverage from form data
+      } else if (coverageData && (coverageData.memberId || coverageData.policyNumber)) {
+        // UPSERT coverage from form data - memberId is the primary identifier
         coverage = await nphiesDataService.upsertCoverage({
-          policyNumber: coverageData.policyNumber,
+          policyNumber: coverageData.policyNumber || coverageData.memberId, // Use memberId as policyNumber if not provided
           memberId: coverageData.memberId,
           coverageType: coverageData.coverageType || 'EHCPOL',
           planName: coverageData.planName,
@@ -692,7 +692,7 @@ class EligibilityController extends BaseController {
           startDate: coverageData.startDate,
           endDate: coverageData.endDate
         }, patient.patient_id, insurer.insurer_id);
-        console.log(`[NPHIES Dynamic] Upserted coverage: ${coverage.policy_number}`);
+        console.log(`[NPHIES Dynamic] Upserted coverage: ${coverage.policy_number || coverage.member_id}`);
       } else if (!isDiscoveryMode) {
         return res.status(400).json({
           success: false,

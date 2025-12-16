@@ -165,7 +165,6 @@ export default function NphiesEligibilityForm() {
 
   // Manual entry data for Coverage
   const [coverageData, setCoverageData] = useState({
-    policyNumber: '',
     memberId: '',
     coverageType: 'EHCPOL',
     planName: '',
@@ -284,13 +283,9 @@ export default function NphiesEligibilityForm() {
       return;
     }
 
-    // Coverage validation (not required for discovery mode)
+    // Coverage validation (not required for discovery mode or manual mode)
     if (coverageMode === 'existing' && !selectedCoverage) {
       setError('Please select a coverage');
-      return;
-    }
-    if (coverageMode === 'manual' && !coverageData.policyNumber) {
-      setError('Please enter policy number');
       return;
     }
 
@@ -433,7 +428,6 @@ export default function NphiesEligibilityForm() {
     setProviderData({ name: '', nphiesId: '', locationLicense: 'GACH' });
     setInsurerData({ name: '', nphiesId: '' });
     setCoverageData({
-      policyNumber: '',
       memberId: '',
       coverageType: 'EHCPOL',
       planName: '',
@@ -825,18 +819,6 @@ export default function NphiesEligibilityForm() {
                 </>
               ) : coverageMode === 'manual' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Policy Number <RequiredFieldIndicator />
-                    </label>
-                    <input
-                      type="text"
-                      value={coverageData.policyNumber}
-                      onChange={(e) => setCoverageData({...coverageData, policyNumber: e.target.value})}
-                      className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                      placeholder="e.g. POL-2025-001234"
-                    />
-                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Member ID</label>
                     <input

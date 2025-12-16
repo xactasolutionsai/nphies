@@ -287,14 +287,17 @@ class NphiesDataService {
       nphiesCoverageId
     } = coverageData;
 
-    if (!policyNumber) {
-      throw new Error('Coverage policy number is required');
+    // Use policyNumber or memberId as the primary identifier
+    const coverageIdentifier = policyNumber || memberId;
+    
+    if (!coverageIdentifier) {
+      throw new Error('Coverage identifier (policyNumber or memberId) is required');
     }
 
-    // Check if coverage exists by policy_number + patient_id
+    // Check if coverage exists by policy_number + patient_id OR member_id + patient_id
     const existingCoverage = await query(
-      'SELECT * FROM patient_coverage WHERE policy_number = $1 AND patient_id = $2',
-      [policyNumber, patientId]
+      'SELECT * FROM patient_coverage WHERE (policy_number = $1 OR member_id = $1) AND patient_id = $2',
+      [coverageIdentifier, patientId]
     );
 
     if (existingCoverage.rows.length > 0) {
@@ -312,13 +315,13 @@ class NphiesDataService {
           end_date = COALESCE($9, end_date),
           is_active = COALESCE($10, is_active),
           updated_at = NOW()
-        WHERE policy_number = $11 AND patient_id = $12
+        WHERE coverage_id = $11
         RETURNING *
       `;
       
       const result = await query(updateQuery, [
         insurerId,
-        memberId || subscriberId,
+        memberId || subscriberId || coverageIdentifier,
         coverageType,
         relationship,
         dependentNumber,
@@ -327,11 +330,10 @@ class NphiesDataService {
         startDate,
         endDate,
         isActive,
-        policyNumber,
-        patientId
+        existingCoverage.rows[0].coverage_id
       ]);
       
-      console.log(`[NPHIES Data] Updated coverage: ${policyNumber}`);
+      console.log(`[NPHIES Data] Updated coverage: ${coverageIdentifier}`);
       return result.rows[0];
     } else {
       // Insert new coverage
@@ -347,8 +349,8 @@ class NphiesDataService {
       const result = await query(insertQuery, [
         patientId,
         insurerId,
-        policyNumber,
-        memberId || subscriberId,
+        policyNumber || coverageIdentifier, // Store as policy_number if no explicit policyNumber
+        memberId || subscriberId || coverageIdentifier, // Also store as member_id
         coverageType,
         relationship,
         dependentNumber,
@@ -359,7 +361,7 @@ class NphiesDataService {
         isActive
       ]);
       
-      console.log(`[NPHIES Data] Created new coverage: ${policyNumber}`);
+      console.log(`[NPHIES Data] Created new coverage: ${coverageIdentifier}`);
       return result.rows[0];
     }
   }
