@@ -897,9 +897,9 @@ export default function NphiesEligibilityDetails() {
                 </div>
               )}
               {disposition && (
-                <div>
+                <div className="col-span-full">
                   <p className="text-sm text-gray-600">Disposition</p>
-                  <p className="font-medium text-green-700">{disposition}</p>
+                  <p className={`font-medium ${record?.outcome === 'error' ? 'text-red-700' : 'text-green-700'}`}>{disposition}</p>
                 </div>
               )}
             </div>
