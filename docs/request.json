@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "bcda1722-db2f-4b16-ad26-d53b51d2e8c0",
+  "id": "a4deecf4-6f8d-4659-af08-79d33e9ff664",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-16T22:24:22.356Z",
+  "timestamp": "2025-12-16T22:37:46.038Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:3928c67d-8d3b-4084-92e8-46a87a375681",
+      "fullUrl": "urn:uuid:cc415c06-ee16-468a-8c4d-cf67a6c397c0",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "3928c67d-8d3b-4084-92e8-46a87a375681",
+        "id": "cc415c06-ee16-468a-8c4d-cf67a6c397c0",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Communication/22c7a9fb-6055-4230-9d66-767c36774b15"
+            "reference": "http://provider.com/Communication/1d489e3e-53c5-4ecf-954f-be4a028f2fef"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Communication/22c7a9fb-6055-4230-9d66-767c36774b15",
+      "fullUrl": "http://provider.com/Communication/1d489e3e-53c5-4ecf-954f-be4a028f2fef",
       "resource": {
         "resourceType": "Communication",
-        "id": "22c7a9fb-6055-4230-9d66-767c36774b15",
+        "id": "1d489e3e-53c5-4ecf-954f-be4a028f2fef",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/communication|1.0.0"
@@ -65,7 +65,7 @@
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/communication",
-            "value": "22c7a9fb-6055-4230-9d66-767c36774b15"
+            "value": "1d489e3e-53c5-4ecf-954f-be4a028f2fef"
           }
         ],
         "status": "completed",
@@ -89,11 +89,11 @@
             "type": "Claim",
             "identifier": {
               "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-              "value": "pa-req-1765922397847"
+              "value": "pa-req-1765924645343"
             }
           }
         ],
-        "sent": "2025-12-16T22:24:22.355Z",
+        "sent": "2025-12-16T22:37:46.037Z",
         "sender": {
           "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
           "type": "Organization",
@@ -120,7 +120,7 @@
                 "valuePositiveInt": 1
               }
             ],
-            "contentString": "test"
+            "contentString": "test for result"
           }
         ]
       }
@@ -142,8 +142,8 @@
               "coding": [
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                  "code": "Medical Center",
-                  "display": "Healthcare Provider"
+                  "code": "1",
+                  "display": "Hospital"
                 }
               ]
             }

@@ -317,8 +317,10 @@ class CommunicationMapper {
     
     // Build the 'about' reference using proper identifier system URL format
     // Per NPHIES: use provider's domain for identifier system
+    // NPHIES FIX (BV-00148): The 'about' identifier must be the pre_auth_ref (NPHIES-assigned reference)
+    // NOT the internal request_number or nphies_request_id
     const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
-    const aboutIdentifier = priorAuth.nphies_request_id || priorAuth.request_number;
+    const aboutIdentifier = priorAuth.pre_auth_ref || priorAuth.nphies_request_id || priorAuth.request_number;
     const aboutReference = {
       identifier: {
         system: `http://${providerDomain}.com.sa/identifiers/authorization`,
@@ -396,8 +398,9 @@ class CommunicationMapper {
     const communicationId = this.generateId();
     
     // Build the 'about' reference using proper identifier system URL format
+    // NPHIES FIX (BV-00148): The 'about' identifier must be the pre_auth_ref (NPHIES-assigned reference)
     const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
-    const aboutIdentifier = priorAuth.nphies_request_id || priorAuth.request_number;
+    const aboutIdentifier = priorAuth.pre_auth_ref || priorAuth.nphies_request_id || priorAuth.request_number;
     
     // Use existing about_reference from CommunicationRequest if available, otherwise build new one
     const aboutReference = communicationRequest.about_reference ? 
