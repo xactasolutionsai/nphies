@@ -921,7 +921,10 @@ class PriorAuthorizationsController extends BaseController {
           success: true,
           data: updatedData,
           message: 'Prior authorization cancelled successfully',
-          taskStatus: nphiesResponse.taskStatus
+          taskStatus: nphiesResponse.taskStatus,
+          // Include full NPHIES response for reference
+          nphiesResponse: nphiesResponse.data,
+          requestBundle: cancelBundle
         });
       } else {
         // Store failed response for debugging
@@ -935,7 +938,10 @@ class PriorAuthorizationsController extends BaseController {
           success: false,
           error: nphiesResponse.error || nphiesResponse.errors,
           taskStatus: nphiesResponse.taskStatus,
-          message: 'Failed to cancel prior authorization'
+          message: 'Failed to cancel prior authorization',
+          // Include full NPHIES response for debugging
+          nphiesResponse: nphiesResponse.data,
+          requestBundle: cancelBundle
         });
       }
     } catch (error) {
