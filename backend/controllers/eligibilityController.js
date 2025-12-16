@@ -670,16 +670,16 @@ class EligibilityController extends BaseController {
       const isDiscoveryMode = purpose.includes('discovery') && !coverageId && !coverageData;
 
       if (coverageId) {
-        // Fetch existing coverage
+        // Fetch existing coverage (no patient restriction - coverage can be selected independently)
         const coverageResult = await query(
-          'SELECT * FROM patient_coverage WHERE coverage_id = $1 AND patient_id = $2',
-          [coverageId, patient.patient_id]
+          'SELECT * FROM patient_coverage WHERE coverage_id = $1',
+          [coverageId]
         );
         if (coverageResult.rows.length === 0) {
-          return res.status(404).json({ success: false, error: 'Coverage not found for this patient' });
+          return res.status(404).json({ success: false, error: 'Coverage not found' });
         }
         coverage = coverageResult.rows[0];
-        console.log(`[NPHIES Dynamic] Using existing coverage: ${coverage.policy_number}`);
+        console.log(`[NPHIES Dynamic] Using existing coverage: ${coverage.policy_number || coverage.member_id}`);
       } else if (coverageData && (coverageData.memberId || coverageData.policyNumber)) {
         // UPSERT coverage from form data - memberId is the primary identifier
         coverage = await nphiesDataService.upsertCoverage({
