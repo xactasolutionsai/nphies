@@ -310,6 +310,9 @@ class PriorAuthorizationsController extends BaseController {
         value.status = 'draft';
       }
 
+      // Prepare JSONB fields for PostgreSQL (stringify objects/arrays)
+      this.prepareJsonbFields(value);
+
       // Extract columns and values for main table
       // Note: coverage_id is excluded because DB column is INTEGER but we use UUID from patient_coverage
       const columns = Object.keys(value).filter(key => 
@@ -399,6 +402,9 @@ class PriorAuthorizationsController extends BaseController {
           message: errors[0].message
         });
       }
+
+      // Prepare JSONB fields for PostgreSQL (stringify objects/arrays)
+      this.prepareJsonbFields(value);
 
       // Extract columns and values
       // Note: coverage_id is excluded because DB column is INTEGER but we use UUID from patient_coverage
@@ -1618,21 +1624,24 @@ class PriorAuthorizationsController extends BaseController {
       }
     });
 
-    // JSON-stringify JSONB fields for PostgreSQL
+    return cleanedData;
+  }
+
+  /**
+   * Prepare JSONB fields for PostgreSQL insertion
+   * Must be called AFTER validation but BEFORE database insertion
+   */
+  prepareJsonbFields(data) {
     const jsonbFields = ['vision_prescription', 'lab_observations', 'medication_safety_analysis'];
     jsonbFields.forEach(field => {
-      if (cleanedData[field] !== undefined && cleanedData[field] !== null) {
+      if (data[field] !== undefined && data[field] !== null) {
         // If it's already a string (JSON), leave it; otherwise stringify
-        if (typeof cleanedData[field] !== 'string') {
-          cleanedData[field] = JSON.stringify(cleanedData[field]);
+        if (typeof data[field] !== 'string') {
+          data[field] = JSON.stringify(data[field]);
         }
-      } else if (cleanedData[field] === undefined) {
-        // Remove undefined fields
-        delete cleanedData[field];
       }
     });
-
-    return cleanedData;
+    return data;
   }
 
   /**
