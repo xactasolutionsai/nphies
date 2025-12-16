@@ -796,9 +796,11 @@ class EligibilityController extends BaseController {
 
       console.log(`[NPHIES Dynamic] Eligibility check completed. ID: ${storedResult.eligibilityId}`);
 
-      // Return success response
+      // Return response - success indicates if eligibility was granted, not if API call succeeded
+      // The API call succeeded if we got here, so always include eligibilityId for navigation
       res.json({
         success: parsedResponse.success,
+        apiSuccess: true, // API call itself succeeded
         eligibilityId: storedResult.eligibilityId,
         outcome: parsedResponse.outcome,
         inforce: parsedResponse.inforce,

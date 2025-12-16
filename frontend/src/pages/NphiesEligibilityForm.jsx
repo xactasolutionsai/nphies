@@ -348,13 +348,13 @@ export default function NphiesEligibilityForm() {
       console.log('Response received from NPHIES:', response);
       setResult(response);
       
-      if (!response.success) {
+      // Navigate to details page if we have an eligibilityId (even if outcome is "error")
+      // The eligibilityId means the request was processed and saved
+      if (response.eligibilityId) {
+        navigate(`/nphies-eligibility/${response.eligibilityId}`);
+      } else if (!response.success && !response.apiSuccess) {
+        // Only show error if the API call itself failed (no eligibilityId)
         setError(response.error || 'Eligibility check failed');
-      } else {
-        // Navigate to the detail page on success
-        if (response.eligibilityId) {
-          navigate(`/nphies-eligibility/${response.eligibilityId}`);
-        }
       }
     } catch (err) {
       console.error('Error checking eligibility:', err);
