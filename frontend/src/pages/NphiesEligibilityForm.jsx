@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Shield, CheckCircle, XCircle, AlertCircle, Info, FileText, ChevronDown, ChevronUp, Baby, ArrowRightLeft, User, Building, CreditCard, Search, Calendar, Eye, ArrowLeft } from 'lucide-react';
+import { Shield, CheckCircle, XCircle, AlertCircle, Info, FileText, ChevronDown, ChevronUp, Baby, ArrowRightLeft, User, Building, CreditCard, Search, Calendar, Eye, ArrowLeft, Copy } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import Select from 'react-select';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -369,61 +369,23 @@ export default function NphiesEligibilityForm() {
     });
   };
 
-  // Preview the FHIR bundle without sending to NPHIES
+  // Preview the FHIR bundle without sending to NPHIES (no validation)
   const handlePreview = async () => {
-    // Basic validation
-    if (patientMode === 'existing' && !selectedPatient) {
-      setError('Please select a patient');
-            return;
-          }
-    if (patientMode === 'manual' && !patientData.identifier) {
-      setError('Please enter patient identifier');
-      return;
-    }
-    if (providerMode === 'existing' && !selectedProvider) {
-      setError('Please select a provider');
-      return;
-    }
-    if (providerMode === 'manual' && !providerData.nphiesId) {
-      setError('Please enter provider NPHIES ID');
-      return;
-    }
-    if (insurerMode === 'existing' && !selectedInsurer) {
-      setError('Please select an insurer');
-      return;
-    }
-    if (insurerMode === 'manual' && !insurerData.nphiesId) {
-      setError('Please enter insurer NPHIES ID');
-      return;
-    }
-    if (coverageMode === 'existing' && !selectedCoverage) {
-      setError('Please select a coverage');
-      return;
-    }
-    if (coverageMode === 'manual' && !coverageData.policyNumber) {
-      setError('Please enter policy number');
-      return;
-    }
-    if (selectedPurpose.length === 0) {
-      setError('Please select at least one purpose');
-      return;
-    }
-
     setPreviewLoading(true);
     setError(null);
 
     try {
       const requestData = {
         ...(patientMode === 'existing' 
-          ? { patientId: selectedPatient }
+          ? { patientId: selectedPatient || undefined }
           : { patientData: { ...patientData, birthDate: patientData.birthDate } }
         ),
         ...(providerMode === 'existing'
-          ? { providerId: selectedProvider }
+          ? { providerId: selectedProvider || undefined }
           : { providerData }
         ),
         ...(insurerMode === 'existing'
-          ? { insurerId: selectedInsurer }
+          ? { insurerId: selectedInsurer || undefined }
           : { insurerData }
         ),
         ...(coverageMode === 'existing' && selectedCoverage
@@ -432,10 +394,11 @@ export default function NphiesEligibilityForm() {
           ? { coverageData }
           : {}
         ),
-        purpose: selectedPurpose,
+        purpose: selectedPurpose.length > 0 ? selectedPurpose : ['validation'],
         servicedDate: formatDate(servicedDate),
         isNewborn,
-        isTransfer
+        isTransfer,
+        skipValidation: true // Tell backend to skip validation
       };
 
       const response = await api.previewEligibilityRequest(requestData);
@@ -1050,11 +1013,11 @@ export default function NphiesEligibilityForm() {
                 </button>
               </div>
               <div className="flex space-x-3">
-                {/* Preview Button */}
+                {/* Preview Button - No validation required */}
                 <button
                   type="button"
                   onClick={handlePreview}
-                  disabled={previewLoading || selectedPurpose.length === 0}
+                  disabled={previewLoading}
                   className="px-6 py-3 bg-white border-2 border-primary-purple text-primary-purple rounded-xl hover:bg-purple-50 transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
                   {previewLoading ? (
@@ -1171,11 +1134,11 @@ export default function NphiesEligibilityForm() {
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(JSON.stringify(previewData.fhirBundle, null, 2));
-                  alert('FHIR Bundle copied to clipboard!');
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium flex items-center space-x-2"
               >
-                Copy JSON
+                <Copy className="h-4 w-4" />
+                <span>Copy JSON</span>
               </button>
               <button
                 onClick={() => setShowPreview(false)}
