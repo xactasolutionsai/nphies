@@ -2881,6 +2881,30 @@ export default function PriorAuthorizationForm() {
                   </div>
                 </div>
 
+                {/* Package Item & Maternity checkboxes - For all auth types except pharmacy (pharmacy has its own section) */}
+                {formData.auth_type !== 'pharmacy' && (
+                  <div className="flex items-center gap-6 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={item.is_package || false}
+                        onChange={(e) => handleItemChange(index, 'is_package', e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium text-blue-800">Package Item</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={item.is_maternity || false}
+                        onChange={(e) => handleItemChange(index, 'is_maternity', e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium text-blue-800">Maternity Related</span>
+                    </label>
+                  </div>
+                )}
+
                 {/* Type-specific fields */}
                 {formData.auth_type === 'dental' && (
                   <div className="space-y-4">
