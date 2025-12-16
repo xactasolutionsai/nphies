@@ -960,6 +960,51 @@ export default function PriorAuthorizationDetails() {
                     </div>
                   </>
                 )}
+
+                {/* Cancellation Details Section */}
+                {priorAuth.is_cancelled && (
+                  <>
+                    <hr className="border-gray-200" />
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <XCircle className="h-5 w-5 text-red-600" />
+                        <h3 className="font-semibold text-red-800">Cancellation Details</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-red-700">Cancellation Reason Code</Label>
+                          <p className="font-medium text-red-900">
+                            {priorAuth.cancellation_reason === 'WI' && 'WI - Wrong Information'}
+                            {priorAuth.cancellation_reason === 'NP' && 'NP - Service Not Performed'}
+                            {priorAuth.cancellation_reason === 'TAS' && 'TAS - Transaction Already Submitted'}
+                            {priorAuth.cancellation_reason === 'SU' && 'SU - Service Unavailable'}
+                            {priorAuth.cancellation_reason === 'resubmission' && 'Claim Re-submission'}
+                            {!['WI', 'NP', 'TAS', 'SU', 'resubmission'].includes(priorAuth.cancellation_reason) && 
+                              (priorAuth.cancellation_reason || 'Not specified')}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-red-700">Cancellation Status</Label>
+                          <p className="font-medium text-red-900">
+                            {priorAuth.responses?.find(r => r.response_type === 'cancel')?.outcome === 'complete' 
+                              ? '✓ Confirmed by NPHIES' 
+                              : priorAuth.responses?.find(r => r.response_type === 'cancel')?.outcome === 'error'
+                              ? '✗ Rejected by NPHIES'
+                              : 'Pending'}
+                          </p>
+                        </div>
+                        {priorAuth.responses?.find(r => r.response_type === 'cancel')?.received_at && (
+                          <div>
+                            <Label className="text-red-700">Cancelled At</Label>
+                            <p className="font-medium text-red-900">
+                              {formatDateTime(priorAuth.responses.find(r => r.response_type === 'cancel').received_at)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
