@@ -2821,11 +2821,6 @@ export default function PriorAuthorizationForm() {
                           styles={selectStyles}
                           menuPortalTarget={document.body}
                         />
-                        {item.product_or_service_system === 'http://loinc.org' && (
-                          <p className="text-xs text-blue-600">
-                            💡 LOINC codes required for Test Case #2 (Lab Services)
-                          </p>
-                        )}
                       </div>
                       <div className="space-y-2">
                         <Label>Service/Procedure Code *</Label>
