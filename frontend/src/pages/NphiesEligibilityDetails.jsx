@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,8 @@ import api from '@/services/api';
 import { 
   Shield, CheckCircle, XCircle, AlertCircle, Info, FileText, 
   ChevronDown, ChevronUp, ArrowLeft, RefreshCw, Copy, User, 
-  Building, CreditCard, Calendar, Clock
+  Building, CreditCard, Calendar, Clock, Phone, Heart, Briefcase,
+  Users, MapPin, DollarSign, Network, Hash
 } from 'lucide-react';
 
 // Status display helper
@@ -67,6 +68,127 @@ const formatDateTime = (dateString) => {
   return new Date(dateString).toLocaleString();
 };
 
+// Get gender display text
+const getGenderDisplay = (gender) => {
+  const genders = {
+    'male': 'Male',
+    'female': 'Female',
+    'other': 'Other',
+    'unknown': 'Unknown'
+  };
+  return genders[gender?.toLowerCase()] || gender || 'N/A';
+};
+
+// Get marital status display
+const getMaritalStatusDisplay = (code) => {
+  const statuses = {
+    'A': 'Annulled',
+    'D': 'Divorced',
+    'I': 'Interlocutory',
+    'L': 'Legally Separated',
+    'M': 'Married',
+    'P': 'Polygamous',
+    'S': 'Never Married',
+    'T': 'Domestic Partner',
+    'U': 'Unmarried',
+    'W': 'Widowed',
+    'UNK': 'Unknown'
+  };
+  return statuses[code] || code || 'N/A';
+};
+
+// Get copay type display
+const getCopayTypeDisplay = (code) => {
+  const types = {
+    'gpvisit': 'GP Visit',
+    'spvisit': 'Specialist Visit',
+    'emergency': 'Emergency',
+    'inpatient': 'Inpatient',
+    'outpatient': 'Outpatient',
+    'pharmacy': 'Pharmacy',
+    'vision': 'Vision',
+    'dental': 'Dental',
+    'copaypct': 'Co-pay Percentage',
+    'copay': 'Co-pay',
+    'deductible': 'Deductible',
+    'maxoutofpocket': 'Max Out of Pocket'
+  };
+  return types[code?.toLowerCase()] || code || 'Unknown';
+};
+
+// Get coverage type display
+const getCoverageTypeDisplay = (code) => {
+  const types = {
+    'EHCPOL': 'Extended Healthcare',
+    'PUBLICPOL': 'Public Healthcare',
+    'DENTPRG': 'Dental Program',
+    'DISEASEPRG': 'Disease Management Program',
+    'CANPRG': 'Cancer Program',
+    'MENTPRG': 'Mental Health Program',
+    'SUBPRG': 'Substance Abuse Program',
+    'SUBSIDIZ': 'Subsidized Health Program',
+    'WCBPOL': 'Workers Compensation',
+    'AUTOPOL': 'Automobile',
+    'COL': 'Collision Coverage',
+    'UNINSMOT': 'Uninsured Motorist',
+    'PAY': 'Pay'
+  };
+  return types[code] || code || 'N/A';
+};
+
+// Get relationship display
+const getRelationshipDisplay = (code) => {
+  const relationships = {
+    'self': 'Self',
+    'spouse': 'Spouse',
+    'child': 'Child',
+    'parent': 'Parent',
+    'common': 'Common Law Spouse',
+    'other': 'Other',
+    'injured': 'Injured Party'
+  };
+  return relationships[code?.toLowerCase()] || code || 'N/A';
+};
+
+// Helper to extract data from raw FHIR response
+const extractFromFhirBundle = (bundle) => {
+  if (!bundle || !bundle.entry) return {};
+  
+  const result = {
+    patient: null,
+    coverage: null,
+    insurer: null,
+    eligibilityResponse: null
+  };
+  
+  for (const entry of bundle.entry) {
+    const resource = entry.resource;
+    if (!resource) continue;
+    
+    switch (resource.resourceType) {
+      case 'Patient':
+        result.patient = resource;
+        break;
+      case 'Coverage':
+        result.coverage = resource;
+        break;
+      case 'Organization':
+        // Check if it's an insurer
+        if (resource.meta?.profile?.some(p => p.includes('insurer'))) {
+          result.insurer = resource;
+        } else if (!result.insurer) {
+          result.insurer = resource;
+        }
+        break;
+      case 'CoverageEligibilityResponse':
+        result.eligibilityResponse = resource;
+        break;
+    }
+  }
+  
+  return result;
+};
+
 export default function NphiesEligibilityDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -108,6 +230,80 @@ export default function NphiesEligibilityDetails() {
     }
   };
 
+  // Parse benefits and errors from JSON if needed - must be before any early returns
+  const benefits = useMemo(() => {
+    if (!record) return [];
+    return typeof record.benefits === 'string' ? JSON.parse(record.benefits || '[]') : (record.benefits || []);
+  }, [record]);
+  
+  const errors = useMemo(() => {
+    if (!record) return [];
+    return typeof record.error_codes === 'string' ? JSON.parse(record.error_codes || '[]') : (record.error_codes || record.errors || []);
+  }, [record]);
+  
+  const rawRequest = useMemo(() => {
+    if (!record) return {};
+    return typeof record.raw_request === 'string' ? JSON.parse(record.raw_request || '{}') : (record.raw_request || record.raw?.request || {});
+  }, [record]);
+  
+  const rawResponse = useMemo(() => {
+    if (!record) return {};
+    return typeof record.raw_response === 'string' ? JSON.parse(record.raw_response || '{}') : (record.raw_response || record.raw?.response || {});
+  }, [record]);
+
+  // Extract detailed data from FHIR response bundle
+  const fhirData = useMemo(() => extractFromFhirBundle(rawResponse), [rawResponse]);
+  
+  // Patient details from FHIR
+  const patientData = fhirData.patient || {};
+  const patientName = useMemo(() => {
+    return patientData.name?.[0]?.text || 
+      [patientData.name?.[0]?.given?.join(' '), patientData.name?.[0]?.family].filter(Boolean).join(' ') ||
+      record?.patient_name || record?.patient?.name;
+  }, [patientData, record]);
+  
+  const patientGender = patientData.gender || record?.patient?.gender;
+  const patientBirthDate = patientData.birthDate || record?.patient?.birthDate;
+  const patientPhone = patientData.telecom?.find(t => t.system === 'phone')?.value || record?.patient?.phone;
+  const patientEmail = patientData.telecom?.find(t => t.system === 'email')?.value || record?.patient?.email;
+  const patientMaritalStatus = patientData.maritalStatus?.coding?.[0]?.code || record?.patient?.maritalStatus;
+  const patientOccupation = patientData.extension?.find(e => e.url?.includes('occupation'))?.valueCodeableConcept?.coding?.[0]?.code || record?.patient?.occupation;
+  const patientIdentifier = patientData.identifier?.[0] || {};
+  const patientIdentifierType = patientIdentifier.type?.coding?.[0]?.display || patientIdentifier.type?.coding?.[0]?.code;
+  const patientIdentifierValue = patientIdentifier.value || record?.patient_identifier || record?.patient?.identifier;
+  const patientIdentifierCountry = patientIdentifier.extension?.find(e => e.url?.includes('country'))?.valueCodeableConcept?.coding?.[0]?.display;
+  
+  // Coverage details from FHIR
+  const coverageData = fhirData.coverage || {};
+  const coverageType = coverageData.type?.coding?.[0]?.code || record?.coverage_type || record?.coverage?.type;
+  const coverageTypeDisplay = coverageData.type?.coding?.[0]?.display || getCoverageTypeDisplay(coverageType);
+  const coverageMemberId = coverageData.identifier?.find(i => i.system?.includes('memberid'))?.value || 
+    coverageData.identifier?.[0]?.value || record?.member_id || record?.coverage?.memberId;
+  const coveragePeriod = coverageData.period || record?.coverage?.period;
+  const coverageNetwork = coverageData.network || record?.coverage?.network;
+  const coverageDependent = coverageData.dependent || record?.coverage?.dependent;
+  const coverageRelationship = coverageData.relationship?.coding?.[0]?.code || record?.coverage?.relationship;
+  const coverageSubrogation = coverageData.subrogation;
+  const coverageClasses = coverageData.class || [];
+  const coverageStatus = coverageData.status || record?.coverage?.status;
+  
+  // Cost to Beneficiary (Copays) from FHIR
+  const costToBeneficiary = coverageData.costToBeneficiary || [];
+  
+  // Insurer details from FHIR
+  const insurerData = fhirData.insurer || {};
+  const insurerName = insurerData.name || record?.insurer_name || record?.insurer?.name;
+  const insurerType = insurerData.type?.[0]?.coding?.[0]?.display || insurerData.type?.[0]?.coding?.[0]?.code;
+  const insurerAddress = insurerData.address?.[0];
+  const insurerNphiesId = insurerData.identifier?.find(i => i.system?.includes('nphies') || i.system?.includes('payer'))?.value ||
+    record?.insurer_nphies_id || record?.insurer?.nphiesId;
+  
+  // Eligibility Response details
+  const eligibilityResponse = fhirData.eligibilityResponse || {};
+  const disposition = eligibilityResponse.disposition || record?.disposition;
+  const servicedPeriod = eligibilityResponse.servicedPeriod || record?.serviced_period;
+
+  // Early returns AFTER all hooks
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -135,12 +331,6 @@ export default function NphiesEligibilityDetails() {
       </div>
     );
   }
-
-  // Parse benefits and errors from JSON if needed
-  const benefits = typeof record.benefits === 'string' ? JSON.parse(record.benefits || '[]') : (record.benefits || []);
-  const errors = typeof record.error_codes === 'string' ? JSON.parse(record.error_codes || '[]') : (record.error_codes || record.errors || []);
-  const rawRequest = typeof record.raw_request === 'string' ? JSON.parse(record.raw_request || '{}') : (record.raw_request || record.raw?.request || {});
-  const rawResponse = typeof record.raw_response === 'string' ? JSON.parse(record.raw_response || '{}') : (record.raw_response || record.raw?.response || {});
 
   return (
     <div className="space-y-6">
@@ -300,40 +490,126 @@ export default function NphiesEligibilityDetails() {
         </CardContent>
       </Card>
 
-      {/* Patient, Provider, Insurer Information */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Patient */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center text-lg">
-              <User className="h-5 w-5 text-blue-600 mr-2" />
-              Patient
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
+      {/* Patient Information - Full Width */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-lg">
+            <User className="h-5 w-5 text-blue-600 mr-2" />
+            Patient Information
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Basic Info */}
+            <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-600">Name</p>
-                <p className="font-semibold">{record.patient_name || record.patient?.name || 'N/A'}</p>
+                <p className="text-sm text-gray-600 flex items-center">
+                  <User className="h-3 w-3 mr-1" /> Full Name
+                </p>
+                <p className="font-semibold text-lg">{patientName || 'N/A'}</p>
               </div>
-              {(record.patient_identifier || record.patient?.identifier) && (
+              {patientIdentifierValue && (
                 <div>
-                  <p className="text-sm text-gray-600">Identifier</p>
-                  <p className="font-mono">{record.patient_identifier || record.patient?.identifier}</p>
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <Hash className="h-3 w-3 mr-1" /> {patientIdentifierType || 'Identifier'}
+                  </p>
+                  <p className="font-mono bg-gray-100 px-2 py-1 rounded inline-block text-sm">
+                    {patientIdentifierValue}
+                  </p>
+                  {patientIdentifierCountry && (
+                    <p className="text-xs text-gray-500 mt-1">Country: {patientIdentifierCountry}</p>
+                  )}
                 </div>
               )}
-              {record.patient_is_newborn !== undefined && (
+            </div>
+            
+            {/* Demographics */}
+            <div className="space-y-4">
+              {patientGender && (
                 <div>
-                  <p className="text-sm text-gray-600">Newborn</p>
-                  <Badge variant={record.patient_is_newborn ? 'default' : 'secondary'}>
-                    {record.patient_is_newborn ? 'Yes' : 'No'}
+                  <p className="text-sm text-gray-600">Gender</p>
+                  <Badge variant="outline" className="capitalize">
+                    {getGenderDisplay(patientGender)}
+                  </Badge>
+                </div>
+              )}
+              {patientBirthDate && (
+                <div>
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <Calendar className="h-3 w-3 mr-1" /> Date of Birth
+                  </p>
+                  <p className="font-medium">{formatDate(patientBirthDate)}</p>
+                </div>
+              )}
+              {patientMaritalStatus && (
+                <div>
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <Heart className="h-3 w-3 mr-1" /> Marital Status
+                  </p>
+                  <p className="font-medium">{getMaritalStatusDisplay(patientMaritalStatus)}</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Contact Info */}
+            <div className="space-y-4">
+              {patientPhone && (
+                <div>
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <Phone className="h-3 w-3 mr-1" /> Phone
+                  </p>
+                  <p className="font-medium">{patientPhone}</p>
+                </div>
+              )}
+              {patientEmail && (
+                <div>
+                  <p className="text-sm text-gray-600">Email</p>
+                  <p className="font-medium text-sm">{patientEmail}</p>
+                </div>
+              )}
+              {patientOccupation && (
+                <div>
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <Briefcase className="h-3 w-3 mr-1" /> Occupation
+                  </p>
+                  <Badge variant="secondary" className="capitalize">
+                    {patientOccupation}
                   </Badge>
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
+            
+            {/* Status Info */}
+            <div className="space-y-4">
+              {record.patient_is_newborn !== undefined && (
+                <div>
+                  <p className="text-sm text-gray-600">Newborn Status</p>
+                  <Badge variant={record.patient_is_newborn ? 'default' : 'secondary'}>
+                    {record.patient_is_newborn ? 'Yes - Newborn' : 'No'}
+                  </Badge>
+                </div>
+              )}
+              {patientData.active !== undefined && (
+                <div>
+                  <p className="text-sm text-gray-600">Patient Status</p>
+                  <Badge className={patientData.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                    {patientData.active ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+              )}
+              {patientData.deceasedBoolean !== undefined && patientData.deceasedBoolean && (
+                <div>
+                  <p className="text-sm text-gray-600">Deceased</p>
+                  <Badge variant="destructive">Yes</Badge>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
+      {/* Provider and Insurer Information */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Provider */}
         <Card>
           <CardHeader>
@@ -369,17 +645,41 @@ export default function NphiesEligibilityDetails() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-600">Name</p>
-                <p className="font-semibold">{record.insurer_name || record.insurer?.name || 'N/A'}</p>
-              </div>
-              {(record.insurer_nphies_id || record.insurer?.nphiesId) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
                 <div>
-                  <p className="text-sm text-gray-600">NPHIES ID</p>
-                  <p className="font-mono text-sm bg-gray-100 px-2 py-1 rounded inline-block">
-                    {record.insurer_nphies_id || record.insurer?.nphiesId}
-                  </p>
+                  <p className="text-sm text-gray-600">Name</p>
+                  <p className="font-semibold">{insurerName || 'N/A'}</p>
+                </div>
+                {insurerNphiesId && (
+                  <div>
+                    <p className="text-sm text-gray-600">NPHIES ID</p>
+                    <p className="font-mono text-sm bg-gray-100 px-2 py-1 rounded inline-block">
+                      {insurerNphiesId}
+                    </p>
+                  </div>
+                )}
+                {insurerType && (
+                  <div>
+                    <p className="text-sm text-gray-600">Type</p>
+                    <Badge variant="outline" className="capitalize">{insurerType}</Badge>
+                  </div>
+                )}
+              </div>
+              {insurerAddress && (
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-gray-600 flex items-center">
+                      <MapPin className="h-3 w-3 mr-1" /> Address
+                    </p>
+                    <div className="text-sm">
+                      {insurerAddress.line?.map((line, idx) => (
+                        <p key={idx}>{line}</p>
+                      ))}
+                      {insurerAddress.city && <p>{insurerAddress.city}</p>}
+                      {insurerAddress.country && <p>{insurerAddress.country}</p>}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -387,37 +687,194 @@ export default function NphiesEligibilityDetails() {
         </Card>
       </div>
 
-      {/* Coverage Information */}
-      {(record.policy_number || record.coverage_type || record.coverage) && (
+      {/* Coverage Information - Enhanced */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center">
+              <CreditCard className="h-5 w-5 text-green-600 mr-2" />
+              Coverage Information
+            </span>
+            {coverageStatus && (
+              <Badge className={coverageStatus === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                {coverageStatus.toUpperCase()}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Main Coverage Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600 flex items-center">
+                <Hash className="h-3 w-3 mr-1" /> Member ID
+              </p>
+              <p className="font-mono font-semibold text-lg">{coverageMemberId || record.policy_number || 'N/A'}</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Coverage Type</p>
+              <p className="font-semibold">{coverageTypeDisplay}</p>
+              {coverageType && coverageType !== coverageTypeDisplay && (
+                <p className="text-xs text-gray-500 font-mono">{coverageType}</p>
+              )}
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600 flex items-center">
+                <Users className="h-3 w-3 mr-1" /> Relationship
+              </p>
+              <p className="font-semibold">{getRelationshipDisplay(coverageRelationship)}</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600 flex items-center">
+                <Network className="h-3 w-3 mr-1" /> Network
+              </p>
+              <p className="font-semibold">{coverageNetwork || 'N/A'}</p>
+            </div>
+          </div>
+
+          {/* Coverage Period */}
+          {coveragePeriod && (
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                <Calendar className="h-4 w-4 mr-2" /> Coverage Period
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <p className="text-xs text-blue-600">Start Date</p>
+                  <p className="font-semibold">{formatDate(coveragePeriod.start)}</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <p className="text-xs text-blue-600">End Date</p>
+                  <p className="font-semibold">{formatDate(coveragePeriod.end)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Serviced Period (Eligibility Check Period) */}
+          {servicedPeriod && (
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                <Clock className="h-4 w-4 mr-2" /> Eligibility Check Period (Serviced)
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-purple-50 p-3 rounded-lg">
+                  <p className="text-xs text-purple-600">From</p>
+                  <p className="font-semibold">{formatDate(servicedPeriod.start)}</p>
+                </div>
+                <div className="bg-purple-50 p-3 rounded-lg">
+                  <p className="text-xs text-purple-600">To</p>
+                  <p className="font-semibold">{formatDate(servicedPeriod.end)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Group/Plan Classes */}
+          {coverageClasses.length > 0 && (
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Plan & Group Details</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {coverageClasses.map((cls, idx) => {
+                  const classType = cls.type?.coding?.[0]?.code || 'unknown';
+                  const bgColor = classType === 'group' ? 'bg-amber-50' : 
+                                  classType === 'plan' ? 'bg-emerald-50' : 'bg-gray-50';
+                  const textColor = classType === 'group' ? 'text-amber-700' : 
+                                    classType === 'plan' ? 'text-emerald-700' : 'text-gray-700';
+                  return (
+                    <div key={idx} className={`${bgColor} p-3 rounded-lg border`}>
+                      <p className={`text-xs ${textColor} font-medium uppercase`}>{classType}</p>
+                      <p className="font-semibold">{cls.name || 'N/A'}</p>
+                      <p className="text-sm text-gray-600 font-mono">{cls.value}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Additional Coverage Details */}
+          <div className="border-t pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {coverageDependent && (
+                <div>
+                  <p className="text-sm text-gray-600">Dependent</p>
+                  <p className="font-medium">{coverageDependent}</p>
+                </div>
+              )}
+              {coverageSubrogation !== undefined && (
+                <div>
+                  <p className="text-sm text-gray-600">Subrogation</p>
+                  <Badge variant={coverageSubrogation ? 'default' : 'secondary'}>
+                    {coverageSubrogation ? 'Yes' : 'No'}
+                  </Badge>
+                </div>
+              )}
+              {disposition && (
+                <div>
+                  <p className="text-sm text-gray-600">Disposition</p>
+                  <p className="font-medium text-green-700">{disposition}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Cost to Beneficiary (Copays) */}
+      {costToBeneficiary.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
-              <CreditCard className="h-5 w-5 text-green-600 mr-2" />
-              Coverage Information
+              <DollarSign className="h-5 w-5 text-emerald-600 mr-2" />
+              Cost to Beneficiary (Copays & Deductibles)
             </CardTitle>
+            <CardDescription>
+              Patient cost sharing amounts for different service types
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Policy Number</p>
-                <p className="font-semibold">{record.policy_number || record.coverage?.policyNumber || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Coverage Type</p>
-                <p className="font-semibold">{record.coverage_type || record.coverage?.type || 'N/A'}</p>
-              </div>
-              {record.coverage?.relationship && (
-                <div>
-                  <p className="text-sm text-gray-600">Relationship</p>
-                  <p className="font-semibold capitalize">{record.coverage.relationship}</p>
-                </div>
-              )}
-              {record.coverage?.network && (
-                <div>
-                  <p className="text-sm text-gray-600">Network</p>
-                  <p className="font-semibold">{record.coverage.network}</p>
-                </div>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {costToBeneficiary.map((cost, idx) => {
+                const costType = cost.type?.coding?.[0]?.code;
+                const costTypeDisplay = getCopayTypeDisplay(costType);
+                const hasMoney = cost.valueMoney;
+                const hasQuantity = cost.valueQuantity;
+                
+                return (
+                  <div key={idx} className="bg-gradient-to-br from-emerald-50 to-teal-50 p-4 rounded-lg border border-emerald-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-emerald-800">{costTypeDisplay}</p>
+                      <Badge variant="outline" className="text-xs font-mono">{costType}</Badge>
+                    </div>
+                    <div className="flex items-baseline">
+                      {hasMoney && (
+                        <>
+                          <span className="text-2xl font-bold text-emerald-700">
+                            {cost.valueMoney.value}
+                          </span>
+                          <span className="ml-1 text-sm text-emerald-600">
+                            {cost.valueMoney.currency || 'SAR'}
+                          </span>
+                        </>
+                      )}
+                      {hasQuantity && (
+                        <>
+                          <span className="text-2xl font-bold text-emerald-700">
+                            {cost.valueQuantity.value}
+                          </span>
+                          <span className="ml-1 text-sm text-emerald-600">
+                            {cost.valueQuantity.unit || '%'}
+                          </span>
+                        </>
+                      )}
+                      {!hasMoney && !hasQuantity && (
+                        <span className="text-gray-500">N/A</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
