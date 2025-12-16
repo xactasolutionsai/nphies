@@ -45,8 +45,18 @@ const getEncounterClassDisplay = (encounterClass) => {
 };
 
 const formatAmount = (amount, currency = 'SAR') => {
-  if (amount == null) return '-';
+  if (amount == null || amount === '' || isNaN(parseFloat(amount))) return '-';
   return `${parseFloat(amount).toFixed(2)} ${currency}`;
+};
+
+// Calculate total from items if total_amount is not set
+const calculateTotalFromItems = (items) => {
+  if (!items || items.length === 0) return null;
+  const total = items.reduce((sum, item) => {
+    const netAmount = parseFloat(item.net_amount) || 0;
+    return sum + netAmount;
+  }, 0);
+  return total > 0 ? total : null;
 };
 
 const formatDate = (dateString) => {
@@ -2225,7 +2235,12 @@ export default function PriorAuthorizationDetails() {
             <CardContent className="space-y-4">
               <div className="flex justify-between">
                 <span className="text-gray-500">Requested Amount</span>
-                <span className="font-medium">{formatAmount(priorAuth.total_amount, priorAuth.currency)}</span>
+                <span className="font-medium">
+                  {formatAmount(
+                    priorAuth.total_amount || calculateTotalFromItems(priorAuth.items), 
+                    priorAuth.currency
+                  )}
+                </span>
               </div>
               
               {/* Response totals from NPHIES */}

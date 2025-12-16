@@ -28,7 +28,10 @@ import {
   ChevronUp,
   Inbox,
   Upload,
-  X
+  X,
+  Copy,
+  Eye,
+  Code
 } from 'lucide-react';
 import api from '../../services/api';
 import { selectStyles } from './styles';
@@ -81,6 +84,11 @@ const CommunicationPanel = ({
     compose: true,
     history: true
   });
+  
+  // JSON Preview state
+  const [showJsonPreview, setShowJsonPreview] = useState(false);
+  const [previewJson, setPreviewJson] = useState(null);
+  const [jsonCopied, setJsonCopied] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -151,6 +159,124 @@ const CommunicationPanel = ({
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  // Generate preview JSON for the communication bundle
+  const generatePreviewJson = () => {
+    const payload = {
+      contentType: payloadType,
+      category: communicationCategory,
+      priority: communicationPriority,
+      claimItemSequences: selectedItemSequences.length > 0 ? selectedItemSequences : undefined
+    };
+
+    if (payloadType === 'string') {
+      payload.contentString = freeText;
+    } else if (payloadType === 'attachment' && attachment) {
+      payload.attachment = {
+        contentType: attachment.contentType,
+        title: attachment.title,
+        size: attachment.size,
+        data: attachment.data ? `[BASE64 DATA - ${attachment.size} bytes]` : undefined
+      };
+    }
+
+    // Build a sample FHIR Communication bundle structure
+    const communicationBundle = {
+      resourceType: 'Bundle',
+      id: `preview-${Date.now()}`,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: new Date().toISOString(),
+      entry: [
+        {
+          fullUrl: 'urn:uuid:message-header-id',
+          resource: {
+            resourceType: 'MessageHeader',
+            id: 'message-header-id',
+            eventCoding: {
+              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+              code: 'communication-request'
+            },
+            source: {
+              endpoint: 'http://provider.com'
+            },
+            focus: [{ reference: 'Communication/communication-id' }]
+          }
+        },
+        {
+          fullUrl: 'urn:uuid:communication-id',
+          resource: {
+            resourceType: 'Communication',
+            id: 'communication-id',
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/communication|1.0.0']
+            },
+            status: 'completed',
+            category: [{
+              coding: [{
+                system: 'http://terminology.hl7.org/CodeSystem/communication-category',
+                code: communicationCategory
+              }]
+            }],
+            priority: communicationPriority,
+            subject: {
+              reference: `Patient/patient-id`,
+              type: 'Patient'
+            },
+            about: [{
+              reference: `Claim/prior-auth-${priorAuthId}`,
+              type: 'Claim'
+            }],
+            sent: new Date().toISOString(),
+            payload: payload.contentString ? [{
+              contentString: payload.contentString,
+              ...(selectedItemSequences.length > 0 && {
+                extension: selectedItemSequences.map(seq => ({
+                  url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-claim-item-sequence',
+                  valuePositiveInt: seq
+                }))
+              })
+            }] : payload.attachment ? [{
+              contentAttachment: {
+                contentType: payload.attachment.contentType,
+                title: payload.attachment.title,
+                data: payload.attachment.data
+              }
+            }] : [],
+            ...(communicationType === 'solicited' && selectedRequestId && {
+              basedOn: [{
+                reference: `CommunicationRequest/${selectedRequestId}`,
+                type: 'CommunicationRequest'
+              }]
+            })
+          }
+        }
+      ]
+    };
+
+    return communicationBundle;
+  };
+
+  // Copy JSON to clipboard
+  const copyJsonToClipboard = async () => {
+    const json = generatePreviewJson();
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+      setJsonCopied(true);
+      setTimeout(() => setJsonCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      setError('Failed to copy to clipboard');
+    }
+  };
+
+  // Show JSON preview modal
+  const handleShowPreview = () => {
+    setPreviewJson(generatePreviewJson());
+    setShowJsonPreview(true);
   };
 
   // Toggle item sequence selection
@@ -615,8 +741,40 @@ const CommunicationPanel = ({
                 </div>
               )}
 
-              {/* Send Button */}
-              <div className="flex justify-end">
+              {/* Action Buttons */}
+              <div className="flex justify-between items-center">
+                {/* Preview & Copy JSON Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleShowPreview}
+                    className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    Preview JSON
+                  </button>
+                  <button
+                    onClick={copyJsonToClipboard}
+                    className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${
+                      jsonCopied 
+                        ? 'border-green-500 text-green-700 bg-green-50' 
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {jsonCopied ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy JSON
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Send Button */}
                 <button
                   onClick={handleSend}
                   disabled={isSending}
@@ -720,6 +878,77 @@ const CommunicationPanel = ({
           </div>
         )}
       </div>
+
+      {/* JSON Preview Modal */}
+      {showJsonPreview && previewJson && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center">
+                <Code className="w-5 h-5 text-blue-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">FHIR Communication Bundle Preview</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(JSON.stringify(previewJson, null, 2));
+                      setJsonCopied(true);
+                      setTimeout(() => setJsonCopied(false), 2000);
+                    } catch (err) {
+                      console.error('Failed to copy:', err);
+                    }
+                  }}
+                  className={`flex items-center px-3 py-1.5 rounded-lg transition-colors ${
+                    jsonCopied 
+                      ? 'bg-green-100 text-green-700' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {jsonCopied ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-1" />
+                      Copy
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowJsonPreview(false)}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Modal Body - JSON Content */}
+            <div className="flex-1 overflow-auto p-4 bg-gray-900">
+              <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">
+                {JSON.stringify(previewJson, null, 2)}
+              </pre>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                This is a preview of the FHIR bundle that will be sent to NPHIES
+              </p>
+              <button
+                onClick={() => setShowJsonPreview(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
