@@ -113,7 +113,23 @@ class ProfessionalMapper extends BaseMapper {
     const patientRef = bundleResourceIds.patient;
     
     // Check for lab_observations in priorAuth (new field for LOINC test details)
-    const labObservations = priorAuth.lab_observations || [];
+    // Handle both string (from DB) and array formats
+    let labObservations = priorAuth.lab_observations || [];
+    if (typeof labObservations === 'string') {
+      try {
+        labObservations = JSON.parse(labObservations);
+      } catch (e) {
+        console.error('[ProfessionalMapper] Failed to parse lab_observations:', e);
+        labObservations = [];
+      }
+    }
+    
+    // Ensure it's an array
+    if (!Array.isArray(labObservations)) {
+      labObservations = [];
+    }
+    
+    console.log('[ProfessionalMapper] Building lab observations, count:', labObservations.length);
     
     labObservations.forEach((labObs, index) => {
       const observationId = this.generateId();
