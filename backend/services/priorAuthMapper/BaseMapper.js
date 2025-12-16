@@ -1619,13 +1619,15 @@ class BaseMapper {
       }
     };
 
-    // Add reason - IB-00229: statusReason MUST use coded value from NPHIES ValueSet
+    // Add reason using Task.reasonCode (NOT statusReason)
+    // IB-00229: statusReason uses task-status-reason ValueSet which is for RESPONSE only
+    // For cancel REQUEST, we use reasonCode with task-reason-code ValueSet
     // Reference: https://portal.nphies.sa/ig/ValueSet-task-reason-code.html
     // Valid codes: WI (wrong information), NP (service not performed), 
     //              TAS (transaction already submitted), SU (Product/Service unavailable),
     //              resubmission (Claim Re-submission)
     const reasonCode = this.mapCancelReasonToCode(reason);
-    task.statusReason = {
+    task.reasonCode = {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/task-reason-code',

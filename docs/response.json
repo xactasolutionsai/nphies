@@ -4,20 +4,20 @@
     "message": "Failed to cancel prior authorization",
     "nphiesResponse": {
         "resourceType": "Bundle",
-        "id": "1e711675-891b-41e2-a905-f4b299340141",
+        "id": "bf3b62c6-ec91-49ff-9b31-f073d8c2299b",
         "meta": {
             "profile": [
                 "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
             ]
         },
         "type": "message",
-        "timestamp": "2025-12-16T21:07:23.678+00:00",
+        "timestamp": "2025-12-16T21:15:39.172+00:00",
         "entry": [
             {
-                "fullUrl": "urn:uuid:c3178e67-3f45-4eb2-82c0-f857cbcf0d02",
+                "fullUrl": "urn:uuid:20af348c-504f-473d-baf9-4a0df850eeee",
                 "resource": {
                     "resourceType": "MessageHeader",
-                    "id": "c3178e67-3f45-4eb2-82c0-f857cbcf0d02",
+                    "id": "20af348c-504f-473d-baf9-4a0df850eeee",
                     "meta": {
                         "profile": [
                             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -50,21 +50,21 @@
                         "endpoint": "http://nphies.sa/"
                     },
                     "response": {
-                        "identifier": "c3178e67-3f45-4eb2-82c0-f857cbcf0d02",
+                        "identifier": "20af348c-504f-473d-baf9-4a0df850eeee",
                         "code": "fatal-error"
                     },
                     "focus": [
                         {
-                            "reference": "http://provider.com/Task/c92c56bd-9f6f-4773-980e-33c2cdefc6a7"
+                            "reference": "http://provider.com/Task/ba281776-2dac-4a76-a7d9-a72a24d69b36"
                         }
                     ]
                 }
             },
             {
-                "fullUrl": "http://provider.com/Task/c92c56bd-9f6f-4773-980e-33c2cdefc6a7",
+                "fullUrl": "http://provider.com/Task/ba281776-2dac-4a76-a7d9-a72a24d69b36",
                 "resource": {
                     "resourceType": "Task",
-                    "id": "c92c56bd-9f6f-4773-980e-33c2cdefc6a7",
+                    "id": "ba281776-2dac-4a76-a7d9-a72a24d69b36",
                     "meta": {
                         "profile": [
                             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0"
@@ -84,7 +84,13 @@
                     ],
                     "status": "failed",
                     "statusReason": {
-                        "text": "Test Reason"
+                        "coding": [
+                            {
+                                "system": "http://nphies.sa/terminology/CodeSystem/task-reason-code",
+                                "code": "WI",
+                                "display": "wrong information"
+                            }
+                        ]
                     },
                     "intent": "order",
                     "priority": "routine",
@@ -97,6 +103,7 @@
                         ]
                     },
                     "focus": {
+                        "type": "Claim",
                         "identifier": {
                             "system": "http://saudigeneralhospital.com/identifiers/authorization",
                             "value": "DUP-1765918554947"
@@ -132,31 +139,6 @@
                                         "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
                                         "code": "IB-00229",
                                         "display": "Task statusReason is not using a value from the specified ValueSet"
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            "type": {
-                                "coding": [
-                                    {
-                                        "system": "http://nphies.sa/terminology/ValueSet/task-output-type",
-                                        "code": "error"
-                                    }
-                                ]
-                            },
-                            "valueCodeableConcept": {
-                                "coding": [
-                                    {
-                                        "extension": [
-                                            {
-                                                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                                "valueString": "Bundle.entry[1].resource.focus.type"
-                                            }
-                                        ],
-                                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                        "code": "IC-01428",
-                                        "display": "The element SHALL follow the cardinality specified in the NPHIES profile"
                                     }
                                 ]
                             }
@@ -274,20 +256,20 @@
     },
     "requestBundle": {
         "resourceType": "Bundle",
-        "id": "1e711675-891b-41e2-a905-f4b299340141",
+        "id": "bf3b62c6-ec91-49ff-9b31-f073d8c2299b",
         "meta": {
             "profile": [
                 "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
             ]
         },
         "type": "message",
-        "timestamp": "2025-12-16T21:07:23.678Z",
+        "timestamp": "2025-12-16T21:15:39.172Z",
         "entry": [
             {
-                "fullUrl": "urn:uuid:c3178e67-3f45-4eb2-82c0-f857cbcf0d02",
+                "fullUrl": "urn:uuid:20af348c-504f-473d-baf9-4a0df850eeee",
                 "resource": {
                     "resourceType": "MessageHeader",
-                    "id": "c3178e67-3f45-4eb2-82c0-f857cbcf0d02",
+                    "id": "20af348c-504f-473d-baf9-4a0df850eeee",
                     "meta": {
                         "profile": [
                             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -321,16 +303,16 @@
                     },
                     "focus": [
                         {
-                            "reference": "http://provider.com/Task/c92c56bd-9f6f-4773-980e-33c2cdefc6a7"
+                            "reference": "http://provider.com/Task/ba281776-2dac-4a76-a7d9-a72a24d69b36"
                         }
                     ]
                 }
             },
             {
-                "fullUrl": "http://provider.com/Task/c92c56bd-9f6f-4773-980e-33c2cdefc6a7",
+                "fullUrl": "http://provider.com/Task/ba281776-2dac-4a76-a7d9-a72a24d69b36",
                 "resource": {
                     "resourceType": "Task",
-                    "id": "c92c56bd-9f6f-4773-980e-33c2cdefc6a7",
+                    "id": "ba281776-2dac-4a76-a7d9-a72a24d69b36",
                     "meta": {
                         "profile": [
                             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0"
@@ -354,6 +336,7 @@
                         ]
                     },
                     "focus": {
+                        "type": "Claim",
                         "identifier": {
                             "system": "http://saudigeneralhospital.com/identifiers/authorization",
                             "value": "DUP-1765918554947"
@@ -368,7 +351,13 @@
                         "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                     },
                     "statusReason": {
-                        "text": "Test Reason"
+                        "coding": [
+                            {
+                                "system": "http://nphies.sa/terminology/CodeSystem/task-reason-code",
+                                "code": "WI",
+                                "display": "wrong information"
+                            }
+                        ]
                     }
                 }
             },
