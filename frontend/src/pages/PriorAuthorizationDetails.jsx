@@ -966,6 +966,7 @@ export default function PriorAuthorizationDetails() {
 
           {/* Items Tab */}
           {activeTab === 'items' && (
+            <>
             <Card>
               <CardHeader>
                 <CardTitle>Service Items</CardTitle>
@@ -1088,6 +1089,77 @@ export default function PriorAuthorizationDetails() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Lab Observations Section - Only for Professional auth type */}
+            {priorAuth.auth_type === 'professional' && priorAuth.lab_observations && priorAuth.lab_observations.length > 0 && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-emerald-600" />
+                    Lab Observations (LOINC)
+                  </CardTitle>
+                  <CardDescription>
+                    Laboratory test details linked via supportingInfo
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {(Array.isArray(priorAuth.lab_observations) 
+                      ? priorAuth.lab_observations 
+                      : JSON.parse(priorAuth.lab_observations || '[]')
+                    ).map((obs, index) => (
+                      <div key={index} className="p-4 border rounded-lg bg-emerald-50/50">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-medium">
+                              {obs.sequence || index + 1}
+                            </div>
+                            <div>
+                              <p className="font-medium">{obs.loinc_code}</p>
+                              <p className="text-sm text-gray-600">{obs.loinc_display || obs.test_name || 'Lab Test'}</p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="capitalize">
+                            {obs.status || 'registered'}
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
+                          {obs.value && (
+                            <div>
+                              <p className="text-gray-500">Value</p>
+                              <p className="font-medium">
+                                {obs.value} {obs.unit || obs.unit_code || ''}
+                              </p>
+                            </div>
+                          )}
+                          {obs.effective_date && (
+                            <div>
+                              <p className="text-gray-500">Effective Date</p>
+                              <p className="font-medium">{formatDate(obs.effective_date)}</p>
+                            </div>
+                          )}
+                          {obs.interpretation && (
+                            <div>
+                              <p className="text-gray-500">Interpretation</p>
+                              <p className="font-medium capitalize">{obs.interpretation}</p>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {(obs.note || obs.notes) && (
+                          <div className="mt-3 pt-3 border-t text-sm">
+                            <p className="text-gray-500">Notes</p>
+                            <p className="text-gray-700">{obs.note || obs.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            </>
           )}
 
           {/* Clinical Tab */}

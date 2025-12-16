@@ -179,6 +179,7 @@ class PriorAuthorizationsController extends BaseController {
         pa.medication_safety_analysis,
         pa.drug_interaction_justification,
         pa.drug_interaction_justification_date,
+        pa.lab_observations,
         p.name as patient_name,
         p.identifier as patient_identifier,
         p.gender as patient_gender,
