@@ -283,7 +283,11 @@ export default function NphiesEligibilityForm() {
       return;
     }
 
-    // Coverage is optional - can be sent without it (discovery mode or manual without coverage)
+    // Coverage validation (not required for discovery mode or manual mode)
+    if (coverageMode === 'existing' && !selectedCoverage) {
+      setError('Please select a coverage');
+      return;
+    }
 
     if (selectedPurpose.length === 0) {
       setError('Please select at least one purpose');
@@ -780,7 +784,7 @@ export default function NphiesEligibilityForm() {
               <div className="flex items-center space-x-2 mb-2">
                 <CreditCard className="h-5 w-5 text-green-600" />
                 <label className="text-sm font-medium text-gray-700">
-                  Coverage/Policy <span className="text-gray-400 text-xs">(Optional)</span>
+                  Coverage/Policy {coverageMode !== 'discovery' && <RequiredFieldIndicator />}
                 </label>
               </div>
               

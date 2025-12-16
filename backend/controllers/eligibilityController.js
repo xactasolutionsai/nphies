@@ -693,9 +693,13 @@ class EligibilityController extends BaseController {
           endDate: coverageData.endDate
         }, patient.patient_id, insurer.insurer_id);
         console.log(`[NPHIES Dynamic] Upserted coverage: ${coverage.policy_number || coverage.member_id}`);
+      } else if (!isDiscoveryMode) {
+        return res.status(400).json({
+          success: false,
+          error: 'Coverage is required unless using discovery mode'
+        });
       } else {
-        // Coverage is optional - can proceed without it (discovery mode or just no coverage)
-        console.log('[NPHIES Dynamic] No coverage provided - proceeding without coverage');
+        console.log('[NPHIES Dynamic] Discovery mode - no coverage provided');
       }
 
       // Validate NPHIES IDs
