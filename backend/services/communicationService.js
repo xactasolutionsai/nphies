@@ -39,12 +39,27 @@ class CommunicationService {
       await client.query(`SET search_path TO ${schemaName}`);
 
       // Get Prior Authorization with related data
+      // NPHIES Communication requires full patient/provider/insurer data
       const paResult = await client.query(`
         SELECT 
           pa.*,
-          p.patient_id, p.name as patient_name, p.identifier as patient_identifier,
-          pr.provider_id, pr.provider_name, pr.nphies_id as provider_nphies_id,
-          i.insurer_id, i.insurer_name, i.nphies_id as insurer_nphies_id
+          p.patient_id, 
+          COALESCE(p.name, CONCAT(p.first_name, ' ', p.last_name)) as patient_name, 
+          COALESCE(p.identifier, p.nphies_id) as patient_identifier,
+          p.identifier_type as patient_identifier_type,
+          p.gender as patient_gender,
+          COALESCE(p.birth_date, p.date_of_birth) as patient_birth_date,
+          p.phone as patient_phone,
+          p.address as patient_address,
+          pr.provider_id, 
+          COALESCE(pr.provider_name, pr.name) as provider_name, 
+          pr.nphies_id as provider_nphies_id,
+          pr.type as provider_type,
+          pr.address as provider_address,
+          i.insurer_id, 
+          COALESCE(i.insurer_name, i.name) as insurer_name, 
+          i.nphies_id as insurer_nphies_id,
+          i.address as insurer_address
         FROM prior_authorizations pa
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
@@ -71,15 +86,25 @@ class CommunicationService {
           patient: {
             patient_id: priorAuth.patient_id,
             identifier: priorAuth.patient_identifier,
-            name: priorAuth.patient_name
+            identifier_type: priorAuth.patient_identifier_type || 'national_id',
+            name: priorAuth.patient_name,
+            gender: priorAuth.patient_gender,
+            birth_date: priorAuth.patient_birth_date,
+            phone: priorAuth.patient_phone,
+            address: priorAuth.patient_address
           },
           provider: {
             provider_id: priorAuth.provider_id,
-            nphies_id: priorAuth.provider_nphies_id
+            provider_name: priorAuth.provider_name,
+            nphies_id: priorAuth.provider_nphies_id,
+            provider_type: priorAuth.provider_type,
+            address: priorAuth.provider_address
           },
           insurer: {
             insurer_id: priorAuth.insurer_id,
-            nphies_id: priorAuth.insurer_nphies_id
+            insurer_name: priorAuth.insurer_name,
+            nphies_id: priorAuth.insurer_nphies_id,
+            address: priorAuth.insurer_address
           },
           payloads
         });
@@ -109,15 +134,25 @@ class CommunicationService {
           patient: {
             patient_id: priorAuth.patient_id,
             identifier: priorAuth.patient_identifier,
-            name: priorAuth.patient_name
+            identifier_type: priorAuth.patient_identifier_type || 'national_id',
+            name: priorAuth.patient_name,
+            gender: priorAuth.patient_gender,
+            birth_date: priorAuth.patient_birth_date,
+            phone: priorAuth.patient_phone,
+            address: priorAuth.patient_address
           },
           provider: {
             provider_id: priorAuth.provider_id,
-            nphies_id: priorAuth.provider_nphies_id
+            provider_name: priorAuth.provider_name,
+            nphies_id: priorAuth.provider_nphies_id,
+            provider_type: priorAuth.provider_type,
+            address: priorAuth.provider_address
           },
           insurer: {
             insurer_id: priorAuth.insurer_id,
-            nphies_id: priorAuth.insurer_nphies_id
+            insurer_name: priorAuth.insurer_name,
+            nphies_id: priorAuth.insurer_nphies_id,
+            address: priorAuth.insurer_address
           },
           payloads
         });
@@ -165,12 +200,27 @@ class CommunicationService {
       await client.query(`SET search_path TO ${schemaName}`);
 
       // 1. Get Prior Authorization with related data
+      // NPHIES Communication requires full patient/provider/insurer data
       const paResult = await client.query(`
         SELECT 
           pa.*,
-          p.patient_id, p.name as patient_name, p.identifier as patient_identifier,
-          pr.provider_id, pr.provider_name, pr.nphies_id as provider_nphies_id,
-          i.insurer_id, i.insurer_name, i.nphies_id as insurer_nphies_id
+          p.patient_id, 
+          COALESCE(p.name, CONCAT(p.first_name, ' ', p.last_name)) as patient_name, 
+          COALESCE(p.identifier, p.nphies_id) as patient_identifier,
+          p.identifier_type as patient_identifier_type,
+          p.gender as patient_gender,
+          COALESCE(p.birth_date, p.date_of_birth) as patient_birth_date,
+          p.phone as patient_phone,
+          p.address as patient_address,
+          pr.provider_id, 
+          COALESCE(pr.provider_name, pr.name) as provider_name, 
+          pr.nphies_id as provider_nphies_id,
+          pr.type as provider_type,
+          pr.address as provider_address,
+          i.insurer_id, 
+          COALESCE(i.insurer_name, i.name) as insurer_name, 
+          i.nphies_id as insurer_nphies_id,
+          i.address as insurer_address
         FROM prior_authorizations pa
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
@@ -203,15 +253,25 @@ class CommunicationService {
         patient: {
           patient_id: priorAuth.patient_id,
           identifier: priorAuth.patient_identifier,
-          name: priorAuth.patient_name
+          identifier_type: priorAuth.patient_identifier_type || 'national_id',
+          name: priorAuth.patient_name,
+          gender: priorAuth.patient_gender,
+          birth_date: priorAuth.patient_birth_date,
+          phone: priorAuth.patient_phone,
+          address: priorAuth.patient_address
         },
         provider: {
           provider_id: priorAuth.provider_id,
-          nphies_id: priorAuth.provider_nphies_id
+          provider_name: priorAuth.provider_name,
+          nphies_id: priorAuth.provider_nphies_id,
+          provider_type: priorAuth.provider_type,
+          address: priorAuth.provider_address
         },
         insurer: {
           insurer_id: priorAuth.insurer_id,
-          nphies_id: priorAuth.insurer_nphies_id
+          insurer_name: priorAuth.insurer_name,
+          nphies_id: priorAuth.insurer_nphies_id,
+          address: priorAuth.insurer_address
         },
         payloads
       });
@@ -335,13 +395,24 @@ class CommunicationService {
       await client.query('BEGIN');
       await client.query(`SET search_path TO ${schemaName}`);
 
-      // 1. Get CommunicationRequest
+      // 1. Get CommunicationRequest with full patient/provider/insurer data
       const crResult = await client.query(`
         SELECT cr.*, pa.id as pa_id, pa.nphies_request_id, pa.request_number,
                pa.patient_id, pa.provider_id, pa.insurer_id,
-               p.identifier as patient_identifier, p.name as patient_name,
+               COALESCE(p.identifier, p.nphies_id) as patient_identifier,
+               p.identifier_type as patient_identifier_type,
+               COALESCE(p.name, CONCAT(p.first_name, ' ', p.last_name)) as patient_name,
+               p.gender as patient_gender,
+               COALESCE(p.birth_date, p.date_of_birth) as patient_birth_date,
+               p.phone as patient_phone,
+               p.address as patient_address,
                pr.nphies_id as provider_nphies_id,
-               i.nphies_id as insurer_nphies_id
+               COALESCE(pr.provider_name, pr.name) as provider_name,
+               pr.type as provider_type,
+               pr.address as provider_address,
+               i.nphies_id as insurer_nphies_id,
+               COALESCE(i.insurer_name, i.name) as insurer_name,
+               i.address as insurer_address
         FROM nphies_communication_requests cr
         LEFT JOIN prior_authorizations pa ON cr.prior_auth_id = pa.id
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
@@ -375,15 +446,25 @@ class CommunicationService {
         patient: {
           patient_id: commRequest.patient_id,
           identifier: commRequest.patient_identifier,
-          name: commRequest.patient_name
+          identifier_type: commRequest.patient_identifier_type || 'national_id',
+          name: commRequest.patient_name,
+          gender: commRequest.patient_gender,
+          birth_date: commRequest.patient_birth_date,
+          phone: commRequest.patient_phone,
+          address: commRequest.patient_address
         },
         provider: {
           provider_id: commRequest.provider_id,
-          nphies_id: commRequest.provider_nphies_id
+          provider_name: commRequest.provider_name,
+          nphies_id: commRequest.provider_nphies_id,
+          provider_type: commRequest.provider_type,
+          address: commRequest.provider_address
         },
         insurer: {
           insurer_id: commRequest.insurer_id,
-          nphies_id: commRequest.insurer_nphies_id
+          insurer_name: commRequest.insurer_name,
+          nphies_id: commRequest.insurer_nphies_id,
+          address: commRequest.insurer_address
         },
         payloads
       });
