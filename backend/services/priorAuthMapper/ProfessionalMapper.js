@@ -184,21 +184,33 @@ class ProfessionalMapper extends BaseMapper {
       // NPHIES Fix: Only add value if it's actually provided and non-empty
       // Per NPHIES: Observations with status='registered' should NOT have value fields
       // Error RE-00170 occurs if valueString is empty string ""
+      // IMPORTANT: For status='registered' (pending tests), do NOT include any value
       const hasValue = labObs.value !== undefined && labObs.value !== null && labObs.value !== '';
-      if (hasValue) {
-        if (labObs.value_type === 'string' || typeof labObs.value === 'string') {
-          observation.valueString = String(labObs.value);
-        } else if (labObs.unit) {
+      const isPendingTest = observation.status === 'registered';
+      
+      // Only add value for completed observations (status != 'registered')
+      // NPHIES rejects observations with values when status is 'registered'
+      if (hasValue && !isPendingTest) {
+        // Check if value is numeric - if so, use valueQuantity (NPHIES prefers this for lab results)
+        const numericValue = parseFloat(labObs.value);
+        const isNumeric = !isNaN(numericValue);
+        
+        if (isNumeric && labObs.unit) {
+          // Numeric value with units - use valueQuantity
           observation.valueQuantity = {
-            value: parseFloat(labObs.value),
+            value: numericValue,
             unit: labObs.unit,
             system: 'http://unitsofmeasure.org',
             code: labObs.unit_code || labObs.unit
           };
-        } else {
+        } else if (isNumeric) {
+          // Numeric value without units - still use valueQuantity
           observation.valueQuantity = {
-            value: parseFloat(labObs.value)
+            value: numericValue
           };
+        } else {
+          // Non-numeric value - use valueString
+          observation.valueString = String(labObs.value);
         }
       }
 
