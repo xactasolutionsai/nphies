@@ -52,7 +52,9 @@ class ProfessionalMapper extends BaseMapper {
     
     // Build Observation resources for laboratory tests (LOINC codes)
     // Per NPHIES IG: Lab test details MUST be in Observation resources, NOT in Claim.item.productOrService
+    console.log('[ProfessionalMapper] priorAuth.lab_observations:', priorAuth.lab_observations);
     const observationResources = this.buildLabObservationResources(priorAuth, bundleResourceIds);
+    console.log('[ProfessionalMapper] Built observation resources:', observationResources.length);
     
     // Build Claim resource (passes observation IDs for supportingInfo references)
     const claimResource = this.buildClaimResource(

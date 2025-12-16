@@ -1489,7 +1489,11 @@ class PriorAuthorizationsController extends BaseController {
         transfer_period_end: formData.transfer_period_end || null,
         // Service type for institutional claims
         service_type: formData.service_type || null,
-        sub_type: formData.sub_type || 'op'
+        sub_type: formData.sub_type || 'op',
+        // Lab observations for professional claims (LOINC codes)
+        lab_observations: formData.lab_observations || [],
+        // Medication safety analysis for pharmacy claims
+        medication_safety_analysis: formData.medication_safety_analysis || null
       };
 
       // Build FHIR bundle
