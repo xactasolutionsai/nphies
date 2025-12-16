@@ -143,6 +143,9 @@ class CommunicationMapper {
         }]
       },
       deceasedBoolean: false,
+      // NPHIES FIX (IC-00236): birthDate is REQUIRED, not optional
+      // If not provided, use a placeholder date that indicates unknown
+      birthDate: patient.birth_date ? this.formatDate(patient.birth_date) : '1900-01-01',
       maritalStatus: {
         coding: [{
           system: 'http://terminology.hl7.org/CodeSystem/v3-MaritalStatus',
@@ -154,9 +157,6 @@ class CommunicationMapper {
     // Add optional fields
     if (patient.phone) {
       patientResource.telecom = [{ system: 'phone', value: patient.phone }];
-    }
-    if (patient.birth_date) {
-      patientResource.birthDate = this.formatDate(patient.birth_date);
     }
     if (patient.address) {
       patientResource.address = [{
@@ -499,12 +499,21 @@ class CommunicationMapper {
       };
     }
     
+    // Build Communication identifier per NPHIES requirement (IC-00111)
+    // The identifier system should use provider's domain
+    const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
+    
     const communication = {
       resourceType: 'Communication',
       id,
       meta: {
         profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/communication|1.0.0']
       },
+      // NPHIES FIX (IC-00111): Communication identifier is required
+      identifier: [{
+        system: `http://${providerDomain}.com.sa/communication`,
+        value: id
+      }],
       // Status: 'completed' when sending (we're done composing)
       status: 'completed',
       // Category - Using HL7 standard codes: alert, notification, reminder, instruction
