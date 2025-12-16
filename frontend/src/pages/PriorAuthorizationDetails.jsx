@@ -2612,15 +2612,23 @@ export default function PriorAuthorizationDetails() {
       >
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="cancelReason">Cancellation Reason</Label>
-            <textarea
+            <Label htmlFor="cancelReason">Cancellation Reason (NPHIES Required)</Label>
+            <select
               id="cancelReason"
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
-              placeholder="Enter the reason for cancellation..."
-              rows={3}
               className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-            />
+            >
+              <option value="">-- Select Reason --</option>
+              <option value="NP">Service Not Performed - Service was not performed</option>
+              <option value="WI">Wrong Information - Wrong information submitted</option>
+              <option value="TAS">Transaction Already Submitted - Duplicate transaction</option>
+              <option value="SU">Service Unavailable - Product/Service is unavailable</option>
+              <option value="resubmission">Claim Re-submission - Need to re-submit claim</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Select the appropriate reason code as required by NPHIES
+            </p>
           </div>
         </div>
       </Modal>

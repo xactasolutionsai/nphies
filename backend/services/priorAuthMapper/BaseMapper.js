@@ -1489,6 +1489,58 @@ class BaseMapper {
   // ============================================
 
   /**
+   * Map cancel reason text to NPHIES Task Reason Code
+   * Reference: https://portal.nphies.sa/ig/ValueSet-task-reason-code.html
+   * 
+   * Valid codes:
+   * - WI: wrong information - Wrong information have been submitted
+   * - NP: service not performed - Service was not performed
+   * - TAS: transaction already submitted - Transaction already submitted
+   * - SU: Product/Service is unavailable
+   * - resubmission: Claim Re-submission
+   * 
+   * @param {string} reason - The reason text or code
+   * @returns {Object} { code, display }
+   */
+  mapCancelReasonToCode(reason) {
+    const reasonLower = (reason || '').toLowerCase().trim();
+    
+    // Direct code mapping
+    const codeMap = {
+      'wi': { code: 'WI', display: 'wrong information' },
+      'np': { code: 'NP', display: 'service not performed' },
+      'tas': { code: 'TAS', display: 'transaction already submitted' },
+      'su': { code: 'SU', display: 'Product/Service is unavailable' },
+      'resubmission': { code: 'resubmission', display: 'Claim Re-submission.' }
+    };
+
+    // Check if reason is already a valid code
+    if (codeMap[reasonLower]) {
+      return codeMap[reasonLower];
+    }
+
+    // Try to match by keywords in the reason text
+    if (reasonLower.includes('wrong') || reasonLower.includes('incorrect') || reasonLower.includes('error')) {
+      return codeMap['wi'];
+    }
+    if (reasonLower.includes('not performed') || reasonLower.includes('not done') || reasonLower.includes('cancelled')) {
+      return codeMap['np'];
+    }
+    if (reasonLower.includes('already') || reasonLower.includes('duplicate') || reasonLower.includes('submitted')) {
+      return codeMap['tas'];
+    }
+    if (reasonLower.includes('unavailable') || reasonLower.includes('not available')) {
+      return codeMap['su'];
+    }
+    if (reasonLower.includes('resubmit') || reasonLower.includes('re-submit')) {
+      return codeMap['resubmission'];
+    }
+
+    // Default to "service not performed" for general cancellations
+    return codeMap['np'];
+  }
+
+  /**
    * Build Task resource for Cancel Request
    * Reference: https://portal.nphies.sa/ig/usecase-cancel.html
    * Example: https://portal.nphies.sa/ig/Bundle-c2c63768-a65b-4784-ab91-6c09012c3aca.json.html
@@ -1545,7 +1597,9 @@ class BaseMapper {
       },
       // Focus: the original request to be cancelled
       // Uses the original request identifier (request_number), not pre_auth_ref
+      // IC-01428: Must include 'type' element to indicate what resource is being cancelled
       focus: {
+        type: 'Claim',
         identifier: {
           system: `${providerIdentifierSystem}/authorization`,
           value: priorAuth.request_number || priorAuth.nphies_request_id || priorAuth.pre_auth_ref
@@ -1565,12 +1619,21 @@ class BaseMapper {
       }
     };
 
-    // Add reason if provided
-    if (reason) {
-      task.statusReason = {
-        text: reason
-      };
-    }
+    // Add reason - IB-00229: statusReason MUST use coded value from NPHIES ValueSet
+    // Reference: https://portal.nphies.sa/ig/ValueSet-task-reason-code.html
+    // Valid codes: WI (wrong information), NP (service not performed), 
+    //              TAS (transaction already submitted), SU (Product/Service unavailable),
+    //              resubmission (Claim Re-submission)
+    const reasonCode = this.mapCancelReasonToCode(reason);
+    task.statusReason = {
+      coding: [
+        {
+          system: 'http://nphies.sa/terminology/CodeSystem/task-reason-code',
+          code: reasonCode.code,
+          display: reasonCode.display
+        }
+      ]
+    };
 
     return task;
   }
