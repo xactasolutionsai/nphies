@@ -54,6 +54,24 @@ const CommunicationPanel = ({
   const [attachment, setAttachment] = useState(null);
   const [selectedItemSequences, setSelectedItemSequences] = useState([]);
   const [isSending, setIsSending] = useState(false);
+  const [communicationCategory, setCommunicationCategory] = useState('notification');
+  const [communicationPriority, setCommunicationPriority] = useState('routine');
+  
+  // HL7 Communication Categories
+  // See: https://terminology.hl7.org/CodeSystem-communication-category.html
+  const COMMUNICATION_CATEGORIES = [
+    { value: 'alert', label: 'Alert', description: 'The communication conveys an alert' },
+    { value: 'notification', label: 'Notification', description: 'The communication conveys a notification' },
+    { value: 'reminder', label: 'Reminder', description: 'The communication conveys a reminder' },
+    { value: 'instruction', label: 'Instruction', description: 'The communication conveys an instruction' }
+  ];
+  
+  const PRIORITY_OPTIONS = [
+    { value: 'routine', label: 'Routine' },
+    { value: 'urgent', label: 'Urgent' },
+    { value: 'asap', label: 'ASAP' },
+    { value: 'stat', label: 'STAT (Immediate)' }
+  ];
   
   // Expanded sections
   const [expandedSections, setExpandedSections] = useState({
@@ -161,9 +179,11 @@ const CommunicationPanel = ({
     setError(null);
 
     try {
-      // Build payload
+      // Build payload with category and priority
       const payload = {
         contentType: payloadType,
+        category: communicationCategory,
+        priority: communicationPriority,
         claimItemSequences: selectedItemSequences.length > 0 ? selectedItemSequences : undefined
       };
 
@@ -187,6 +207,8 @@ const CommunicationPanel = ({
         setSelectedItemSequences([]);
         setShowComposeForm(false);
         setSelectedRequestId(null);
+        setCommunicationCategory('notification');
+        setCommunicationPriority('routine');
         
         // Reload data
         await loadData();
@@ -433,6 +455,48 @@ const CommunicationPanel = ({
                   </select>
                 </div>
               )}
+
+              {/* Category & Priority Row */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Communication Category */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Category
+                  </label>
+                  <select
+                    value={communicationCategory}
+                    onChange={(e) => setCommunicationCategory(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {COMMUNICATION_CATEGORIES.map(cat => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {COMMUNICATION_CATEGORIES.find(c => c.value === communicationCategory)?.description}
+                  </p>
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Priority
+                  </label>
+                  <select
+                    value={communicationPriority}
+                    onChange={(e) => setCommunicationPriority(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {PRIORITY_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
               {/* Payload Type */}
               <div>

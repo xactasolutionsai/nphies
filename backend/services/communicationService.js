@@ -41,9 +41,9 @@ class CommunicationService {
       const paResult = await client.query(`
         SELECT 
           pa.*,
-          p.patient_id, p.first_name, p.last_name, p.nphies_id as patient_nphies_id,
-          pr.provider_id, pr.name_en as provider_name, pr.nphies_id as provider_nphies_id,
-          i.insurer_id, i.name_en as insurer_name, i.nphies_id as insurer_nphies_id
+          p.patient_id, p.name as patient_name, p.identifier as patient_identifier,
+          pr.provider_id, pr.provider_name, pr.nphies_id as provider_nphies_id,
+          i.insurer_id, i.insurer_name, i.nphies_id as insurer_nphies_id
         FROM prior_authorizations pa
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
@@ -71,7 +71,8 @@ class CommunicationService {
         },
         patient: {
           patient_id: priorAuth.patient_id,
-          nphies_id: priorAuth.patient_nphies_id
+          identifier: priorAuth.patient_identifier,
+          name: priorAuth.patient_name
         },
         provider: {
           provider_id: priorAuth.provider_id,
@@ -207,7 +208,7 @@ class CommunicationService {
       const crResult = await client.query(`
         SELECT cr.*, pa.id as pa_id, pa.nphies_request_id, pa.request_number,
                pa.patient_id, pa.provider_id, pa.insurer_id,
-               p.nphies_id as patient_nphies_id,
+               p.identifier as patient_identifier, p.name as patient_name,
                pr.nphies_id as provider_nphies_id,
                i.nphies_id as insurer_nphies_id
         FROM nphies_communication_requests cr
@@ -242,7 +243,8 @@ class CommunicationService {
         },
         patient: {
           patient_id: commRequest.patient_id,
-          nphies_id: commRequest.patient_nphies_id
+          identifier: commRequest.patient_identifier,
+          name: commRequest.patient_name
         },
         provider: {
           provider_id: commRequest.provider_id,

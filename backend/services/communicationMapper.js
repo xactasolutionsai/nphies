@@ -159,15 +159,16 @@ class CommunicationMapper {
       },
       // Status: 'completed' when sending (we're done composing)
       status: 'completed',
-      // Category
+      // Category - Using HL7 standard codes: alert, notification, reminder, instruction
+      // See: https://terminology.hl7.org/CodeSystem-communication-category.html
       category: [{
         coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/communication-category',
-          code: 'alert'
+          system: 'http://terminology.hl7.org/CodeSystem/communication-category',
+          code: payloads?.[0]?.category || 'instruction'
         }]
       }],
       // Priority
-      priority: 'routine',
+      priority: payloads?.[0]?.priority || 'routine',
       // Subject (Patient)
       subject: {
         reference: `Patient/${patient.patient_id}`,
