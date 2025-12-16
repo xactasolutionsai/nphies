@@ -1490,11 +1490,32 @@ class BaseMapper {
 
   /**
    * Build Task resource for Cancel Request
+   * Reference: https://portal.nphies.sa/ig/usecase-cancel.html
+   * Example: https://portal.nphies.sa/ig/Bundle-c2c63768-a65b-4784-ab91-6c09012c3aca.json.html
+   * 
+   * Key requirements:
+   * - Task.identifier: unique identifier for the cancel task
+   * - Task.intent: MUST be 'order' (not 'proposal')
+   * - Task.priority: 'routine'
+   * - Task.focus.identifier: the original request identifier to cancel
+   * - Task.requester: reference to Provider Organization
+   * - Task.owner: reference to Insurer Organization
+   * - Task.lastModified: date of the request
    */
-  buildCancelTask(priorAuth, provider, insurer, reason) {
-    const taskId = `task-${this.generateId()}`;
-    const senderNphiesId = provider.nphies_id || 'PR-FHIR';
-    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+  buildCancelTask(priorAuth, provider, insurer, reason, bundleResourceIds) {
+    const taskId = bundleResourceIds.task;
+    const providerId = bundleResourceIds.provider;
+    const insurerId = bundleResourceIds.insurer;
+    
+    // Provider identifier system for the cancel task
+    const providerIdentifierSystem = provider.identifier_system || 
+      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com/identifiers`;
+    
+    // Generate unique cancel task identifier
+    const cancelTaskIdentifier = `Cancel_${priorAuth.request_number || priorAuth.id?.substring(0, 8) || Date.now()}`;
+    
+    // Get current date in YYYY-MM-DD format for authoredOn and lastModified
+    const currentDate = this.formatDate(new Date());
 
     const task = {
       resourceType: 'Task',
@@ -1502,8 +1523,18 @@ class BaseMapper {
       meta: {
         profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0']
       },
+      // Task identifier - required per NPHIES standard
+      identifier: [
+        {
+          system: `${providerIdentifierSystem}/task`,
+          value: cancelTaskIdentifier
+        }
+      ],
       status: 'requested',
-      intent: 'proposal',
+      // MUST be 'order' per NPHIES standard (not 'proposal')
+      intent: 'order',
+      // Priority is required
+      priority: 'routine',
       code: {
         coding: [
           {
@@ -1512,29 +1543,29 @@ class BaseMapper {
           }
         ]
       },
+      // Focus: the original request to be cancelled
+      // Uses the original request identifier (request_number), not pre_auth_ref
       focus: {
         identifier: {
-          system: 'http://nphies.sa/identifiers/priorauth',
-          value: priorAuth.pre_auth_ref
+          system: `${providerIdentifierSystem}/authorization`,
+          value: priorAuth.request_number || priorAuth.nphies_request_id || priorAuth.pre_auth_ref
         }
       },
-      authoredOn: this.formatDateTime(new Date()),
+      // Date only format per NPHIES example
+      authoredOn: currentDate,
+      // lastModified is required per NPHIES standard
+      lastModified: currentDate,
+      // Requester: reference to Provider Organization in the bundle
       requester: {
-        type: 'Organization',
-        identifier: {
-          system: 'http://nphies.sa/license/provider-license',
-          value: senderNphiesId
-        }
+        reference: `Organization/${providerId}`
       },
+      // Owner: reference to Insurer Organization in the bundle
       owner: {
-        type: 'Organization',
-        identifier: {
-          system: 'http://nphies.sa/license/payer-license',
-          value: destinationNphiesId
-        }
+        reference: `Organization/${insurerId}`
       }
     };
 
+    // Add reason if provided
     if (reason) {
       task.statusReason = {
         text: reason
@@ -1546,19 +1577,42 @@ class BaseMapper {
 
   /**
    * Build Cancel Request Bundle
+   * Reference: https://portal.nphies.sa/ig/usecase-cancel.html
+   * 
+   * Bundle structure per NPHIES standard:
+   * 1. MessageHeader (eventCoding = cancel-request)
+   * 2. Task (code = cancel)
+   * 3. Organization (Insurer)
+   * 4. Organization (Provider)
    */
   buildCancelRequestBundle(priorAuth, provider, insurer, reason) {
-    const task = this.buildCancelTask(priorAuth, provider, insurer, reason);
+    // Generate consistent IDs for bundle resources
+    const bundleResourceIds = {
+      task: this.generateId(),
+      provider: provider.provider_id || this.generateId(),
+      insurer: insurer.insurer_id || this.generateId()
+    };
+
+    // Build Provider Organization resource
+    const providerResource = this.buildProviderOrganizationWithId(provider, bundleResourceIds.provider);
+    
+    // Build Insurer Organization resource
+    const insurerResource = this.buildInsurerOrganizationWithId(insurer, bundleResourceIds.insurer);
+    
+    // Build Task resource with references to organizations
+    const task = this.buildCancelTask(priorAuth, provider, insurer, reason, bundleResourceIds);
     const taskEntry = {
       fullUrl: `http://provider.com/Task/${task.id}`,
       resource: task
     };
 
+    // Build MessageHeader
+    const messageHeaderId = this.generateId();
     const messageHeader = {
-      fullUrl: `urn:uuid:${this.generateId()}`,
+      fullUrl: `urn:uuid:${messageHeaderId}`,
       resource: {
         resourceType: 'MessageHeader',
-        id: this.generateId(),
+        id: messageHeaderId,
         meta: {
           profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
         },
@@ -1586,7 +1640,7 @@ class BaseMapper {
           }
         },
         source: {
-          endpoint: 'http://provider.com'
+          endpoint: `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com`
         },
         focus: [
           {
@@ -1596,6 +1650,8 @@ class BaseMapper {
       }
     };
 
+    // Build bundle with all required resources per NPHIES standard:
+    // MessageHeader, Task, Insurer Organization, Provider Organization
     return {
       resourceType: 'Bundle',
       id: this.generateId(),
@@ -1604,7 +1660,12 @@ class BaseMapper {
       },
       type: 'message',
       timestamp: this.formatDateTime(new Date()),
-      entry: [messageHeader, taskEntry]
+      entry: [
+        messageHeader,
+        taskEntry,
+        insurerResource,
+        providerResource
+      ]
     };
   }
 }

@@ -482,7 +482,7 @@ export default function PriorAuthorizationDetails() {
   const handleCancel = async () => {
     try {
       setActionLoading(true);
-      const response = await api.cancelNphiesAuthorization(id, { reason: cancelReason });
+      const response = await api.cancelPriorAuthorization(id, cancelReason);
       
       if (response.success) {
         alert('Prior authorization cancelled successfully');
