@@ -176,24 +176,40 @@ NPHIES → HCP: Completed AuthorizationResponse
    - **Provider:** Select provider
    - **Eligibility Reference:** (Optional) Enter eligibility reference from Step 1
 
-3. **Fill Items Tab:** ⚠️ **IMPORTANT: Must use LOINC codes for lab services**
-   - **Code System:** Select `LOINC (Lab Tests)` from the dropdown
-   - **Service/Procedure Code:** Select one of the required LOINC codes:
+3. **Fill Items Tab:** ⚠️ **IMPORTANT: Use NPHIES Lab Service codes (NOT LOINC)**
+   
+   Per NPHIES IG, `Claim.item.productOrService` MUST use NPHIES service codes:
+   - **Code System:** Select `NPHIES Lab Services` from the dropdown
+   - **Service/Procedure Code:** Select a NPHIES lab service code:
+     - `91.03` - Urinalysis
+     - `91.05` - Clinical chemistry (blood)
+     - `91.06` - Hematology (blood)
+     - `91.07` - Microbiology
+     - `91.09` - Pathology examination
+   - Set quantities and prices
+   - Add at least 1 lab service item (required for Test Case #2)
+
+4. **Fill Lab Observations Tab:** ⚠️ **IMPORTANT: LOINC codes go here**
+   
+   Per NPHIES IG, lab test details MUST be in `Observation` resources with LOINC codes:
+   - Click `+ Add Lab Observation`
+   - **LOINC Code:** Select one of the required codes:
      - `80096-1` - Microalbumin/Creatinine [Ratio] in Urine
      - `43863-0` - Urine specimen collection method
      - `55951-8` - Urine sediment comments by Light microscopy
      - `12419-8` - Sodium [Moles/volume] in Urine
-   - Set quantities and prices
-   - Add at least 1 lab service item with LOINC code (required for Test Case #2)
+   - **Status:** Select `registered` (pending test)
+   - **Notes:** Add clinical notes if needed
+   - These observations are linked to the Claim via `supportingInfo` with `category = laboratory`
 
-4. **Fill Diagnoses Tab:**
+5. **Fill Diagnoses Tab:**
    - Add relevant diagnoses
 
-5. **Save & Submit:**
+6. **Save & Submit:**
    - Save draft
    - Send to NPHIES
 
-6. **Expected Response:**
+7. **Expected Response:**
    - Status: `Queued`
    - Communications tab appears
 

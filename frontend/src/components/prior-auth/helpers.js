@@ -72,3 +72,25 @@ export const getInitialSupportingInfoData = (sequence, category = 'info') => ({
   value_quantity: ''
 });
 
+/**
+ * Get initial data for a lab observation entry
+ * Per NPHIES IG: Lab test details MUST be in Observation resources with LOINC codes
+ * These are referenced via Claim.supportingInfo with category = "laboratory"
+ * 
+ * @param {number} sequence - Observation sequence number
+ * @returns {object} Initial lab observation data object
+ */
+export const getInitialLabObservationData = (sequence) => ({
+  sequence,
+  loinc_code: '',
+  loinc_display: '',
+  test_name: '',
+  value: '',
+  value_type: 'quantity', // 'quantity' or 'string'
+  unit: '',
+  unit_code: '',
+  status: 'registered', // registered = ordered but not yet performed
+  effective_date: '',
+  note: ''
+});
+

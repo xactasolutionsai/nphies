@@ -49,7 +49,17 @@ class ProfessionalMapper extends BaseMapper {
       bundleResourceIds.practitioner
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
-    const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounterResource?.resource, practitioner, bundleResourceIds);
+    
+    // Build Observation resources for laboratory tests (LOINC codes)
+    // Per NPHIES IG: Lab test details MUST be in Observation resources, NOT in Claim.item.productOrService
+    const observationResources = this.buildLabObservationResources(priorAuth, bundleResourceIds);
+    
+    // Build Claim resource (passes observation IDs for supportingInfo references)
+    const claimResource = this.buildClaimResource(
+      priorAuth, patient, provider, insurer, coverage, 
+      encounterResource?.resource, practitioner, bundleResourceIds,
+      observationResources.map(o => o.resource.id)
+    );
     
     // Build MessageHeader (must be first)
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
@@ -63,6 +73,7 @@ class ProfessionalMapper extends BaseMapper {
     }
 
     // Assemble bundle per NPHIES spec order
+    // Observation resources are included after patient but before binary attachments
     const entries = [
       messageHeader,
       claimResource,
@@ -72,6 +83,7 @@ class ProfessionalMapper extends BaseMapper {
       providerResource,
       insurerResource,
       patientResource,
+      ...observationResources,
       ...binaryResources
     ];
 
@@ -88,9 +100,109 @@ class ProfessionalMapper extends BaseMapper {
   }
 
   /**
-   * Build FHIR Claim resource for Professional Prior Authorization
+   * Build Observation resources for laboratory tests
+   * Per NPHIES IG: Lab test details (LOINC codes) MUST be in Observation resources
+   * These are referenced via Claim.supportingInfo with category = "laboratory"
+   * 
+   * @param {Object} priorAuth - Prior authorization data
+   * @param {Object} bundleResourceIds - Resource IDs for bundle references
+   * @returns {Array} Array of Observation bundle entries
    */
-  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds) {
+  buildLabObservationResources(priorAuth, bundleResourceIds) {
+    const observations = [];
+    const patientRef = bundleResourceIds.patient;
+    
+    // Check for lab_observations in priorAuth (new field for LOINC test details)
+    const labObservations = priorAuth.lab_observations || [];
+    
+    labObservations.forEach((labObs, index) => {
+      const observationId = this.generateId();
+      
+      // Store observation ID for later reference in supportingInfo
+      if (!bundleResourceIds.observations) {
+        bundleResourceIds.observations = [];
+      }
+      bundleResourceIds.observations.push(observationId);
+      
+      const observation = {
+        resourceType: 'Observation',
+        id: observationId,
+        meta: {
+          profile: ['http://hl7.org/fhir/StructureDefinition/Observation']
+        },
+        status: labObs.status || 'registered', // registered = ordered but not yet performed
+        category: [
+          {
+            coding: [
+              {
+                system: 'http://terminology.hl7.org/CodeSystem/observation-category',
+                code: 'laboratory',
+                display: 'Laboratory'
+              }
+            ]
+          }
+        ],
+        code: {
+          coding: [
+            {
+              system: 'http://loinc.org',
+              code: labObs.loinc_code,
+              display: labObs.loinc_display || labObs.test_name
+            }
+          ],
+          text: labObs.test_name || labObs.loinc_display
+        },
+        subject: {
+          reference: `Patient/${patientRef}`
+        },
+        effectiveDateTime: this.formatDateTime(labObs.effective_date || priorAuth.encounter_start || new Date())
+      };
+
+      // Add value if provided (for pre-existing results)
+      if (labObs.value !== undefined && labObs.value !== null) {
+        if (labObs.value_type === 'string' || typeof labObs.value === 'string') {
+          observation.valueString = String(labObs.value);
+        } else if (labObs.unit) {
+          observation.valueQuantity = {
+            value: parseFloat(labObs.value),
+            unit: labObs.unit,
+            system: 'http://unitsofmeasure.org',
+            code: labObs.unit_code || labObs.unit
+          };
+        } else {
+          observation.valueQuantity = {
+            value: parseFloat(labObs.value)
+          };
+        }
+      }
+
+      // Add note if provided
+      if (labObs.note) {
+        observation.note = [{ text: labObs.note }];
+      }
+
+      observations.push({
+        fullUrl: `http://provider.com/Observation/${observationId}`,
+        resource: observation
+      });
+    });
+
+    return observations;
+  }
+
+  /**
+   * Build FHIR Claim resource for Professional Prior Authorization
+   * @param {Object} priorAuth - Prior authorization data
+   * @param {Object} patient - Patient data
+   * @param {Object} provider - Provider organization data
+   * @param {Object} insurer - Insurer organization data
+   * @param {Object} coverage - Coverage data
+   * @param {Object} encounter - Encounter resource
+   * @param {Object} practitioner - Practitioner data
+   * @param {Object} bundleResourceIds - Resource IDs for bundle references
+   * @param {Array} observationIds - Array of Observation resource IDs for lab tests
+   */
+  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds, observationIds = []) {
     const claimId = bundleResourceIds.claim;
     const patientRef = bundleResourceIds.patient;
     const providerRef = bundleResourceIds.provider;
@@ -339,12 +451,44 @@ class ProfessionalMapper extends BaseMapper {
       }
     }
     
-    if (supportingInfoList.length > 0) {
-      claim.supportingInfo = supportingInfoList.map((info, idx) => {
-        const seq = idx + 1;
-        supportingInfoSequences.push(seq);
-        return this.buildSupportingInfo({ ...info, sequence: seq });
+    // Build supportingInfo array
+    const supportingInfoArray = [];
+    let sequenceCounter = 1;
+    
+    // Add regular supporting info items
+    supportingInfoList.forEach(info => {
+      supportingInfoSequences.push(sequenceCounter);
+      supportingInfoArray.push(this.buildSupportingInfo({ ...info, sequence: sequenceCounter }));
+      sequenceCounter++;
+    });
+    
+    // Add laboratory supportingInfo entries for Observation references
+    // Per NPHIES IG: Lab tests must be linked via supportingInfo with category = "laboratory"
+    // and valueReference pointing to the Observation resource
+    if (observationIds && observationIds.length > 0) {
+      observationIds.forEach(obsId => {
+        const labSupportingInfo = {
+          sequence: sequenceCounter,
+          category: {
+            coding: [
+              {
+                system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+                code: 'laboratory'
+              }
+            ]
+          },
+          valueReference: {
+            reference: `Observation/${obsId}`
+          }
+        };
+        supportingInfoSequences.push(sequenceCounter);
+        supportingInfoArray.push(labSupportingInfo);
+        sequenceCounter++;
       });
+    }
+    
+    if (supportingInfoArray.length > 0) {
+      claim.supportingInfo = supportingInfoArray;
     }
 
     // Insurance

@@ -266,47 +266,79 @@ export const NPHIES_PROCEDURE_OPTIONS = [
 ];
 
 // ============================================================================
-// LOINC CODES FOR LAB SERVICES (Test Case #2 - Professional Authorization)
+// LOINC CODES FOR LAB OBSERVATIONS (Test Case #2 - Professional Authorization)
 // Reference: https://loinc.org
-// Required for Professional Authorization with Solicited Communication
+// IMPORTANT: These codes are for Observation resources, NOT Claim.item.productOrService
+// Use via supportingInfo with category = "laboratory" and valueReference to Observation
 // ============================================================================
 export const LOINC_LAB_OPTIONS = [
   // Testing LOINC codes specified in NPHIES Test Case #2
-  { value: '80096-1', label: '80096-1 - Microalbumin/Creatinine [Ratio] in Urine', system: 'http://loinc.org' },
-  { value: '43863-0', label: '43863-0 - Urine specimen collection method', system: 'http://loinc.org' },
-  { value: '55951-8', label: '55951-8 - Urine sediment comments by Light microscopy', system: 'http://loinc.org' },
-  { value: '12419-8', label: '12419-8 - Sodium [Moles/volume] in Urine collected for unspecified duration', system: 'http://loinc.org' },
+  { value: '80096-1', label: '80096-1 - Microalbumin/Creatinine [Ratio] in Urine', system: 'http://loinc.org', unit: 'mg/g', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '43863-0', label: '43863-0 - Urine specimen collection method', system: 'http://loinc.org', unit: '', unitSystem: '' },
+  { value: '55951-8', label: '55951-8 - Urine sediment comments by Light microscopy', system: 'http://loinc.org', unit: '', unitSystem: '' },
+  { value: '12419-8', label: '12419-8 - Sodium [Moles/volume] in Urine', system: 'http://loinc.org', unit: 'mmol/L', unitSystem: 'http://unitsofmeasure.org' },
   
   // Common Lab Tests
-  { value: '2093-3', label: '2093-3 - Cholesterol [Mass/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '2085-9', label: '2085-9 - HDL Cholesterol [Mass/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '2089-1', label: '2089-1 - LDL Cholesterol [Mass/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '2571-8', label: '2571-8 - Triglycerides [Mass/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '2339-0', label: '2339-0 - Glucose [Mass/volume] in Blood', system: 'http://loinc.org' },
-  { value: '4548-4', label: '4548-4 - Hemoglobin A1c/Hemoglobin.total in Blood', system: 'http://loinc.org' },
-  { value: '2160-0', label: '2160-0 - Creatinine [Mass/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '3094-0', label: '3094-0 - Urea nitrogen [Mass/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '1742-6', label: '1742-6 - Alanine aminotransferase [Enzymatic activity/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '1920-8', label: '1920-8 - Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '6690-2', label: '6690-2 - Leukocytes [#/volume] in Blood by Automated count', system: 'http://loinc.org' },
-  { value: '789-8', label: '789-8 - Erythrocytes [#/volume] in Blood by Automated count', system: 'http://loinc.org' },
-  { value: '718-7', label: '718-7 - Hemoglobin [Mass/volume] in Blood', system: 'http://loinc.org' },
-  { value: '777-3', label: '777-3 - Platelets [#/volume] in Blood by Automated count', system: 'http://loinc.org' },
-  { value: '2951-2', label: '2951-2 - Sodium [Moles/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '2823-3', label: '2823-3 - Potassium [Moles/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '17861-6', label: '17861-6 - Calcium [Mass/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '3016-3', label: '3016-3 - Thyrotropin [Units/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '3026-2', label: '3026-2 - Thyroxine (T4) [Mass/volume] in Serum or Plasma', system: 'http://loinc.org' },
-  { value: '5767-9', label: '5767-9 - Appearance of Urine', system: 'http://loinc.org' },
-  { value: '5778-6', label: '5778-6 - Color of Urine', system: 'http://loinc.org' },
-  { value: '5803-2', label: '5803-2 - pH of Urine by Test strip', system: 'http://loinc.org' },
-  { value: '5811-5', label: '5811-5 - Specific gravity of Urine by Test strip', system: 'http://loinc.org' }
+  { value: '2093-3', label: '2093-3 - Cholesterol [Mass/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mg/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '2085-9', label: '2085-9 - HDL Cholesterol [Mass/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mg/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '2089-1', label: '2089-1 - LDL Cholesterol [Mass/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mg/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '2571-8', label: '2571-8 - Triglycerides [Mass/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mg/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '2339-0', label: '2339-0 - Glucose [Mass/volume] in Blood', system: 'http://loinc.org', unit: 'mg/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '4548-4', label: '4548-4 - Hemoglobin A1c/Hemoglobin.total in Blood', system: 'http://loinc.org', unit: '%', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '2160-0', label: '2160-0 - Creatinine [Mass/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mg/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '3094-0', label: '3094-0 - Urea nitrogen [Mass/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mg/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '1742-6', label: '1742-6 - Alanine aminotransferase [Enzymatic activity/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'U/L', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '1920-8', label: '1920-8 - Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'U/L', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '6690-2', label: '6690-2 - Leukocytes [#/volume] in Blood by Automated count', system: 'http://loinc.org', unit: '10*3/uL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '789-8', label: '789-8 - Erythrocytes [#/volume] in Blood by Automated count', system: 'http://loinc.org', unit: '10*6/uL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '718-7', label: '718-7 - Hemoglobin [Mass/volume] in Blood', system: 'http://loinc.org', unit: 'g/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '777-3', label: '777-3 - Platelets [#/volume] in Blood by Automated count', system: 'http://loinc.org', unit: '10*3/uL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '2951-2', label: '2951-2 - Sodium [Moles/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mmol/L', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '2823-3', label: '2823-3 - Potassium [Moles/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mmol/L', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '17861-6', label: '17861-6 - Calcium [Mass/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mg/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '3016-3', label: '3016-3 - Thyrotropin [Units/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'mU/L', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '3026-2', label: '3026-2 - Thyroxine (T4) [Mass/volume] in Serum or Plasma', system: 'http://loinc.org', unit: 'ug/dL', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '5767-9', label: '5767-9 - Appearance of Urine', system: 'http://loinc.org', unit: '', unitSystem: '' },
+  { value: '5778-6', label: '5778-6 - Color of Urine', system: 'http://loinc.org', unit: '', unitSystem: '' },
+  { value: '5803-2', label: '5803-2 - pH of Urine by Test strip', system: 'http://loinc.org', unit: '[pH]', unitSystem: 'http://unitsofmeasure.org' },
+  { value: '5811-5', label: '5811-5 - Specific gravity of Urine by Test strip', system: 'http://loinc.org', unit: '', unitSystem: '' }
 ];
 
 // Service Code System Options (for dropdown to select code system)
+// NOTE: For Claim.item.productOrService, ONLY NPHIES codes are valid
+// LOINC codes are for Observation resources, NOT for Claim items
 export const SERVICE_CODE_SYSTEM_OPTIONS = [
   { value: 'nphies', label: 'NPHIES Procedures', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: 'loinc', label: 'LOINC (Lab Tests)', system: 'http://loinc.org' }
+  { value: 'nphies-lab', label: 'NPHIES Lab Services', system: 'http://nphies.sa/terminology/CodeSystem/procedures' }
+];
+
+// ============================================================================
+// NPHIES LAB SERVICE CODES (for Claim.item.productOrService)
+// Reference: http://nphies.sa/terminology/CodeSystem/procedures
+// IMPORTANT: These are SERVICE codes, NOT LOINC codes
+// LOINC codes go in Observation resources, referenced via supportingInfo
+// ============================================================================
+export const NPHIES_LAB_SERVICE_OPTIONS = [
+  // General Lab Services - Use these for Claim.item.productOrService
+  { value: '91.0', label: '91.0 - Laboratory investigation, unspecified', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.01', label: '91.01 - Blood chemistry panel', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.02', label: '91.02 - Complete blood count (CBC)', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.03', label: '91.03 - Urinalysis', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.04', label: '91.04 - Lipid panel', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.05', label: '91.05 - Liver function tests', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.06', label: '91.06 - Kidney function tests', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.07', label: '91.07 - Thyroid function tests', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.08', label: '91.08 - Glucose tolerance test', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.09', label: '91.09 - HbA1c test', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.10', label: '91.10 - Coagulation panel', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.11', label: '91.11 - Electrolyte panel', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '91.12', label: '91.12 - Urine microalbumin test', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  // Specific lab tests
+  { value: '90.59', label: '90.59 - Other microscopic examination', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '90.69', label: '90.69 - Other culture and sensitivity', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '90.79', label: '90.79 - Other serology', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '90.89', label: '90.89 - Other immunology', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: '90.99', label: '90.99 - Other laboratory examination', system: 'http://nphies.sa/terminology/CodeSystem/procedures' }
 ];
 
 // Vision ICD-10 Codes for eye examinations and disorders

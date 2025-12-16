@@ -53,14 +53,16 @@ import {
   DENTAL_PROCEDURE_OPTIONS,
   NPHIES_PROCEDURE_OPTIONS,
   LOINC_LAB_OPTIONS,
-  SERVICE_CODE_SYSTEM_OPTIONS
+  SERVICE_CODE_SYSTEM_OPTIONS,
+  NPHIES_LAB_SERVICE_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
   formatAmount,
   getInitialItemData,
   getInitialDiagnosisData,
-  getInitialSupportingInfoData
+  getInitialSupportingInfoData,
+  getInitialLabObservationData
 } from '@/components/prior-auth/helpers';
 import { TabButton, generateDummyVitalsAndClinical, AIValidationPanel, DrugInteractionJustificationModal, CommunicationPanel } from '@/components/prior-auth';
 
@@ -170,6 +172,10 @@ export default function PriorAuthorizationForm() {
     },
     // Clinical Documents (PDF uploads for future use)
     clinical_documents: [],
+    // Lab Observations for Professional claims (LOINC codes for Observation resources)
+    // Per NPHIES IG: Lab test details MUST be in Observation resources, NOT Claim.item.productOrService
+    // These are referenced via Claim.supportingInfo with category = "laboratory"
+    lab_observations: [],
     // Vision Prescription Data (per NPHIES VisionPrescription-3.json standard)
     vision_prescription: {
       product_type: 'lens', // 'lens' or 'contact'
@@ -2804,30 +2810,36 @@ export default function PriorAuthorizationForm() {
                 {formData.auth_type !== 'dental' && formData.auth_type !== 'pharmacy' && (
                   <div className="space-y-4">
                     {/* Code System Selection */}
+                    {/* Per NPHIES IG: Claim.item.productOrService MUST use NPHIES codes, NOT LOINC */}
+                    {/* LOINC codes are for Observation resources (see Lab Observations section below) */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label>Code System</Label>
                         <Select
                           value={SERVICE_CODE_SYSTEM_OPTIONS.find(opt => 
-                            opt.system === item.product_or_service_system
+                            opt.value === (item.is_lab_service ? 'nphies-lab' : 'nphies')
                           ) || SERVICE_CODE_SYSTEM_OPTIONS[0]}
                           onChange={(option) => {
                             // Clear current code when switching systems
                             handleItemChange(index, 'product_or_service_code', '');
                             handleItemChange(index, 'product_or_service_display', '');
                             handleItemChange(index, 'product_or_service_system', option?.system || 'http://nphies.sa/terminology/CodeSystem/procedures');
+                            handleItemChange(index, 'is_lab_service', option?.value === 'nphies-lab');
                           }}
                           options={SERVICE_CODE_SYSTEM_OPTIONS}
                           styles={selectStyles}
                           menuPortalTarget={document.body}
                         />
+                        <p className="text-xs text-amber-600">
+                          Note: LOINC codes go in Lab Observations section below
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label>Service/Procedure Code *</Label>
                         <Select
                           value={
-                            item.product_or_service_system === 'http://loinc.org'
-                              ? LOINC_LAB_OPTIONS.find(opt => opt.value === item.product_or_service_code)
+                            item.is_lab_service
+                              ? NPHIES_LAB_SERVICE_OPTIONS.find(opt => opt.value === item.product_or_service_code)
                               : NPHIES_PROCEDURE_OPTIONS.find(opt => opt.value === item.product_or_service_code)
                           }
                           onChange={(option) => {
@@ -2837,20 +2849,18 @@ export default function PriorAuthorizationForm() {
                               ? option.label.split(' - ').slice(1).join(' - ')
                               : '';
                             handleItemChange(index, 'product_or_service_display', description);
-                            // Set system based on option or current selection
-                            if (option?.system) {
-                              handleItemChange(index, 'product_or_service_system', option.system);
-                            }
+                            // Always use NPHIES system (not LOINC)
+                            handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/procedures');
                           }}
                           options={
-                            item.product_or_service_system === 'http://loinc.org'
-                              ? LOINC_LAB_OPTIONS
+                            item.is_lab_service
+                              ? NPHIES_LAB_SERVICE_OPTIONS
                               : NPHIES_PROCEDURE_OPTIONS
                           }
                           styles={selectStyles}
                           placeholder={
-                            item.product_or_service_system === 'http://loinc.org'
-                              ? "Select LOINC lab test..."
+                            item.is_lab_service
+                              ? "Select NPHIES lab service..."
                               : "Select procedure..."
                           }
                           isClearable
@@ -3431,6 +3441,197 @@ export default function PriorAuthorizationForm() {
                 </div>
               )}
             </>
+          )}
+
+          {/* Lab Observations Card - Only for Professional auth type */}
+          {/* Per NPHIES IG: Lab test details MUST be in Observation resources with LOINC codes */}
+          {/* These are referenced via Claim.supportingInfo with category = "laboratory" */}
+          {formData.auth_type === 'professional' && (
+            <Card className="border-emerald-200 bg-emerald-50/30 mt-6">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="h-5 w-5 text-emerald-600" />
+                      Lab Observations (LOINC)
+                    </CardTitle>
+                    <CardDescription>
+                      Laboratory test details for Observation resources. Required for lab service items.
+                      <br />
+                      <span className="text-amber-600 font-medium">
+                        Note: Use NPHIES Lab Service codes for items above. LOINC codes go here for Observation resources.
+                      </span>
+                    </CardDescription>
+                  </div>
+                  <Button 
+                    type="button" 
+                    onClick={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        lab_observations: [...prev.lab_observations, getInitialLabObservationData(prev.lab_observations.length + 1)]
+                      }));
+                    }} 
+                    variant="outline" 
+                    size="sm"
+                    className="border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Lab Observation
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {formData.lab_observations.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 bg-white rounded-lg border border-dashed border-emerald-300">
+                    <Activity className="h-8 w-8 mx-auto mb-2 text-emerald-400" />
+                    <p>No lab observations added yet.</p>
+                    <p className="text-sm text-emerald-600 mt-1">
+                      Add LOINC-coded lab tests that will be linked to your lab service items.
+                    </p>
+                  </div>
+                ) : (
+                  formData.lab_observations.map((obs, index) => (
+                    <div key={index} className="p-4 border rounded-lg bg-white space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-medium">
+                            {obs.sequence}
+                          </div>
+                          <span className="font-medium">Lab Observation {obs.sequence}</span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              lab_observations: prev.lab_observations.filter((_, i) => i !== index)
+                                .map((o, i) => ({ ...o, sequence: i + 1 }))
+                            }));
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>LOINC Code *</Label>
+                          <Select
+                            value={LOINC_LAB_OPTIONS.find(opt => opt.value === obs.loinc_code)}
+                            onChange={(option) => {
+                              const newObs = [...formData.lab_observations];
+                              newObs[index] = {
+                                ...newObs[index],
+                                loinc_code: option?.value || '',
+                                loinc_display: option?.label?.includes(' - ') 
+                                  ? option.label.split(' - ').slice(1).join(' - ')
+                                  : '',
+                                unit: option?.unit || '',
+                                unit_code: option?.unit || ''
+                              };
+                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
+                            }}
+                            options={LOINC_LAB_OPTIONS}
+                            styles={selectStyles}
+                            placeholder="Select LOINC lab test..."
+                            isClearable
+                            isSearchable
+                            menuPortalTarget={document.body}
+                          />
+                          <p className="text-xs text-emerald-600">
+                            Required codes: 80096-1, 43863-0, 55951-8, 12419-8
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Test Name</Label>
+                          <Input
+                            value={obs.loinc_display || obs.test_name || ''}
+                            onChange={(e) => {
+                              const newObs = [...formData.lab_observations];
+                              newObs[index] = { ...newObs[index], test_name: e.target.value };
+                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
+                            }}
+                            placeholder="Auto-filled from LOINC selection"
+                            readOnly={!!obs.loinc_display}
+                            className={obs.loinc_display ? "bg-gray-50" : ""}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Value (optional)</Label>
+                          <Input
+                            type={obs.value_type === 'string' ? 'text' : 'number'}
+                            value={obs.value || ''}
+                            onChange={(e) => {
+                              const newObs = [...formData.lab_observations];
+                              newObs[index] = { ...newObs[index], value: e.target.value };
+                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
+                            }}
+                            placeholder="Enter result value"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Unit</Label>
+                          <Input
+                            value={obs.unit || ''}
+                            onChange={(e) => {
+                              const newObs = [...formData.lab_observations];
+                              newObs[index] = { ...newObs[index], unit: e.target.value };
+                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
+                            }}
+                            placeholder="e.g., mg/dL"
+                            readOnly={!!obs.unit_code}
+                            className={obs.unit_code ? "bg-gray-50" : ""}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Status</Label>
+                          <Select
+                            value={[
+                              { value: 'registered', label: 'Registered (Ordered)' },
+                              { value: 'preliminary', label: 'Preliminary' },
+                              { value: 'final', label: 'Final' },
+                              { value: 'amended', label: 'Amended' }
+                            ].find(opt => opt.value === obs.status)}
+                            onChange={(option) => {
+                              const newObs = [...formData.lab_observations];
+                              newObs[index] = { ...newObs[index], status: option?.value || 'registered' };
+                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
+                            }}
+                            options={[
+                              { value: 'registered', label: 'Registered (Ordered)' },
+                              { value: 'preliminary', label: 'Preliminary' },
+                              { value: 'final', label: 'Final' },
+                              { value: 'amended', label: 'Amended' }
+                            ]}
+                            styles={selectStyles}
+                            menuPortalTarget={document.body}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Note (optional)</Label>
+                        <Input
+                          value={obs.note || ''}
+                          onChange={(e) => {
+                            const newObs = [...formData.lab_observations];
+                            newObs[index] = { ...newObs[index], note: e.target.value };
+                            setFormData(prev => ({ ...prev, lab_observations: newObs }));
+                          }}
+                          placeholder="Additional notes about this lab test"
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
