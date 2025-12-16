@@ -8,8 +8,9 @@ router.get('/', async (req, res) => {
   try {
     const { limit = 100, offset = 0, search = '' } = req.query;
 
+    // Use DISTINCT ON to remove duplicates based on policy_number + insurer_id + plan_name
     let queryText = `
-      SELECT 
+      SELECT DISTINCT ON (COALESCE(pc.policy_number, pc.member_id), pc.insurer_id, pc.plan_name)
         pc.coverage_id,
         pc.patient_id,
         pc.insurer_id,
@@ -47,7 +48,8 @@ router.get('/', async (req, res) => {
       paramIndex++;
     }
 
-    queryText += ` ORDER BY pc.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    // ORDER BY must start with DISTINCT ON columns
+    queryText += ` ORDER BY COALESCE(pc.policy_number, pc.member_id), pc.insurer_id, pc.plan_name, pc.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(parseInt(limit), parseInt(offset));
 
     const result = await query(queryText, params);

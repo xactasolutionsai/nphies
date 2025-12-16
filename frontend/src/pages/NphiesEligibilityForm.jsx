@@ -210,7 +210,7 @@ export default function NphiesEligibilityForm() {
   useEffect(() => {
     if (selectedPatient && patientMode === 'existing') {
       loadPatientCoverages(selectedPatient);
-    } else if (patientMode === 'manual' || !selectedPatient) {
+    } else {
       // Load all coverages when no patient is selected or in manual patient mode
       loadAllCoverages();
     }
@@ -490,11 +490,14 @@ export default function NphiesEligibilityForm() {
     label: `${i.insurer_name || i.name}${i.nphies_id ? ` (${i.nphies_id})` : ''}`
   }));
 
-  // Convert coverages to Select options
-  const coverageOptions = coverages.map(c => ({
-    value: c.coverage_id.toString(),
-    label: `${c.policy_number || c.member_id || 'N/A'} - ${c.plan_name || c.coverage_type}${c.insurer_name ? ` (${c.insurer_name})` : ''}${c.patient_name && !selectedPatient ? ` [${c.patient_name}]` : ''}`
-  }));
+  // Convert coverages to Select options (deduplicated by coverage_id)
+  const coverageOptions = [...new Map(coverages.map(c => [
+    c.coverage_id.toString(),
+    {
+      value: c.coverage_id.toString(),
+      label: `${c.policy_number || c.member_id || 'N/A'} - ${c.plan_name || c.coverage_type}${c.insurer_name ? ` (${c.insurer_name})` : ''}`
+    }
+  ])).values()];
 
   if (loadingData) {
     return (
