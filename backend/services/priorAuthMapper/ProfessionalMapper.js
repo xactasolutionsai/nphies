@@ -142,11 +142,13 @@ class ProfessionalMapper extends BaseMapper {
       }
       bundleResourceIds.observations.push(observationId);
       
+      // NPHIES requires the observation profile, NOT generic HL7 profile
+      // Error RE-00170: "Referenced SHALL point to a valid profile"
       const observation = {
         resourceType: 'Observation',
         id: observationId,
         meta: {
-          profile: ['http://hl7.org/fhir/StructureDefinition/Observation']
+          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/observation|1.0.0']
         },
         status: labObs.status || 'registered', // registered = ordered but not yet performed
         category: [
@@ -481,8 +483,10 @@ class ProfessionalMapper extends BaseMapper {
     });
     
     // Add laboratory supportingInfo entries for Observation references
-    // Per NPHIES IG: Lab tests must be linked via supportingInfo with category = "laboratory"
+    // Per NPHIES IG: Lab tests must be linked via supportingInfo with category = "lab-test"
     // and valueReference pointing to the Observation resource
+    // Error IB-00044: category must use valid code from claim-information-category valueSet
+    // Error RE-00165: valueReference must point to valid NPHIES profile
     if (observationIds && observationIds.length > 0) {
       observationIds.forEach(obsId => {
         const labSupportingInfo = {
@@ -491,7 +495,8 @@ class ProfessionalMapper extends BaseMapper {
             coding: [
               {
                 system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-                code: 'laboratory'
+                code: 'lab-test',
+                display: 'Laboratory Test'
               }
             ]
           },
