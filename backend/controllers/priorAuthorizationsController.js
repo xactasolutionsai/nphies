@@ -1618,6 +1618,20 @@ class PriorAuthorizationsController extends BaseController {
       }
     });
 
+    // JSON-stringify JSONB fields for PostgreSQL
+    const jsonbFields = ['vision_prescription', 'lab_observations', 'medication_safety_analysis'];
+    jsonbFields.forEach(field => {
+      if (cleanedData[field] !== undefined && cleanedData[field] !== null) {
+        // If it's already a string (JSON), leave it; otherwise stringify
+        if (typeof cleanedData[field] !== 'string') {
+          cleanedData[field] = JSON.stringify(cleanedData[field]);
+        }
+      } else if (cleanedData[field] === undefined) {
+        // Remove undefined fields
+        delete cleanedData[field];
+      }
+    });
+
     return cleanedData;
   }
 
