@@ -22,6 +22,133 @@ class CommunicationService {
   // ============================================================================
 
   /**
+   * Preview Communication bundle without sending
+   * Returns the exact FHIR bundle that would be sent to NPHIES
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   * @param {Array} payloads - Array of payload objects
+   * @param {string} type - 'unsolicited' or 'solicited'
+   * @param {number} communicationRequestId - For solicited, the request being responded to
+   * @param {string} schemaName - Database schema name
+   * @returns {Object} Preview data with bundle
+   */
+  async previewCommunicationBundle(priorAuthId, payloads, type = 'unsolicited', communicationRequestId = null, schemaName) {
+    const client = await pool.connect();
+    
+    try {
+      await client.query(`SET search_path TO ${schemaName}`);
+
+      // Get Prior Authorization with related data
+      const paResult = await client.query(`
+        SELECT 
+          pa.*,
+          p.patient_id, p.name as patient_name, p.identifier as patient_identifier,
+          pr.provider_id, pr.provider_name, pr.nphies_id as provider_nphies_id,
+          i.insurer_id, i.insurer_name, i.nphies_id as insurer_nphies_id
+        FROM prior_authorizations pa
+        LEFT JOIN patients p ON pa.patient_id = p.patient_id
+        LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
+        LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+        WHERE pa.id = $1
+      `, [priorAuthId]);
+
+      if (paResult.rows.length === 0) {
+        throw new Error('Prior Authorization not found');
+      }
+
+      const priorAuth = paResult.rows[0];
+
+      // Build the bundle based on type
+      let communicationBundle;
+      
+      if (type === 'unsolicited') {
+        communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
+          priorAuth: {
+            nphies_request_id: priorAuth.nphies_request_id,
+            request_number: priorAuth.request_number,
+            pre_auth_ref: priorAuth.pre_auth_ref
+          },
+          patient: {
+            patient_id: priorAuth.patient_id,
+            identifier: priorAuth.patient_identifier,
+            name: priorAuth.patient_name
+          },
+          provider: {
+            provider_id: priorAuth.provider_id,
+            nphies_id: priorAuth.provider_nphies_id
+          },
+          insurer: {
+            insurer_id: priorAuth.insurer_id,
+            nphies_id: priorAuth.insurer_nphies_id
+          },
+          payloads
+        });
+      } else if (type === 'solicited' && communicationRequestId) {
+        // Get the CommunicationRequest
+        const crResult = await client.query(
+          'SELECT * FROM nphies_communication_requests WHERE id = $1',
+          [communicationRequestId]
+        );
+        
+        if (crResult.rows.length === 0) {
+          throw new Error('CommunicationRequest not found');
+        }
+        
+        const commRequest = crResult.rows[0];
+        
+        communicationBundle = this.mapper.buildSolicitedCommunicationBundle({
+          communicationRequest: {
+            request_id: commRequest.request_id,
+            about_reference: commRequest.about_reference,
+            about_type: commRequest.about_type
+          },
+          priorAuth: {
+            nphies_request_id: priorAuth.nphies_request_id,
+            request_number: priorAuth.request_number
+          },
+          patient: {
+            patient_id: priorAuth.patient_id,
+            identifier: priorAuth.patient_identifier,
+            name: priorAuth.patient_name
+          },
+          provider: {
+            provider_id: priorAuth.provider_id,
+            nphies_id: priorAuth.provider_nphies_id
+          },
+          insurer: {
+            insurer_id: priorAuth.insurer_id,
+            nphies_id: priorAuth.insurer_nphies_id
+          },
+          payloads
+        });
+      } else {
+        throw new Error('Invalid communication type or missing communicationRequestId for solicited');
+      }
+
+      return {
+        bundle: communicationBundle,
+        provider: {
+          id: priorAuth.provider_id,
+          name: priorAuth.provider_name,
+          nphies_id: priorAuth.provider_nphies_id
+        },
+        insurer: {
+          id: priorAuth.insurer_id,
+          name: priorAuth.insurer_name,
+          nphies_id: priorAuth.insurer_nphies_id
+        },
+        patient: {
+          id: priorAuth.patient_id,
+          name: priorAuth.patient_name,
+          identifier: priorAuth.patient_identifier
+        }
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Send UNSOLICITED Communication (Test Case #1)
    * HCP proactively sends additional information to HIC
    * 

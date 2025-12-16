@@ -53,6 +53,12 @@ router.get('/:id/bundle', (req, res) => priorAuthorizationsController.getBundle(
 // COMMUNICATION ROUTES
 // ============================================================================
 
+// Preview Communication bundle (without sending)
+// Returns the FHIR bundle that would be sent to NPHIES
+router.post('/:id/communication/preview', (req, res) => 
+  priorAuthorizationsController.previewCommunicationBundle(req, res)
+);
+
 // Send UNSOLICITED Communication (Test Case #1)
 // HCP proactively sends additional information to HIC
 router.post('/:id/communication/unsolicited', (req, res) => 

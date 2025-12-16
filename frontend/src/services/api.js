@@ -583,6 +583,22 @@ class ApiService {
   }
 
   /**
+   * Preview Communication bundle without sending
+   * Returns the exact FHIR bundle that would be sent to NPHIES
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   * @param {Array} payloads - Payload objects
+   * @param {string} type - 'unsolicited' or 'solicited'
+   * @param {number} communicationRequestId - For solicited type
+   */
+  async previewCommunicationBundle(priorAuthId, payloads, type = 'unsolicited', communicationRequestId = null) {
+    return this.request(`/prior-authorizations/${priorAuthId}/communication/preview`, {
+      method: 'POST',
+      body: JSON.stringify({ payloads, type, communicationRequestId })
+    });
+  }
+
+  /**
    * Send SOLICITED Communication (Test Case #2)
    * HCP responds to CommunicationRequest from HIC with additional information/attachments
    * 

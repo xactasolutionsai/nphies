@@ -162,7 +162,8 @@ const CommunicationPanel = ({
   };
 
   // Generate preview JSON for the communication bundle
-  const generatePreviewJson = () => {
+  // Build payload for API calls
+  const buildPayloadForApi = () => {
     const payload = {
       contentType: payloadType,
       category: communicationCategory,
@@ -177,8 +178,37 @@ const CommunicationPanel = ({
         contentType: attachment.contentType,
         title: attachment.title,
         size: attachment.size,
-        data: attachment.data ? `[BASE64 DATA - ${attachment.size} bytes]` : undefined
+        data: attachment.data
       };
+    }
+
+    return payload;
+  };
+
+  // Fetch preview from backend API (returns actual FHIR bundle)
+  const fetchPreviewFromBackend = async () => {
+    try {
+      const payload = buildPayloadForApi();
+      const result = await api.previewCommunicationBundle(
+        priorAuthId,
+        [payload],
+        communicationType,
+        communicationType === 'solicited' ? selectedRequestId : null
+      );
+      return result;
+    } catch (err) {
+      console.error('Error fetching preview:', err);
+      throw err;
+    }
+  };
+
+  // Generate local preview (fallback if API fails)
+  const generateLocalPreviewJson = () => {
+    const payload = buildPayloadForApi();
+    
+    // Truncate base64 data for display
+    if (payload.attachment?.data) {
+      payload.attachment.data = `[BASE64 DATA - ${payload.attachment.size} bytes]`;
     }
 
     // Build a sample FHIR Communication bundle structure
@@ -190,6 +220,7 @@ const CommunicationPanel = ({
       },
       type: 'message',
       timestamp: new Date().toISOString(),
+      _note: 'This is a LOCAL preview. Click "Fetch from Server" for the actual bundle.',
       entry: [
         {
           fullUrl: 'urn:uuid:message-header-id',
@@ -260,23 +291,49 @@ const CommunicationPanel = ({
     return communicationBundle;
   };
 
-  // Copy JSON to clipboard
+  // State for preview loading
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [previewMetadata, setPreviewMetadata] = useState(null);
+
+  // Copy JSON to clipboard (uses backend preview)
   const copyJsonToClipboard = async () => {
-    const json = generatePreviewJson();
+    setIsLoadingPreview(true);
     try {
-      await navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+      const result = await fetchPreviewFromBackend();
+      await navigator.clipboard.writeText(JSON.stringify(result.bundle, null, 2));
       setJsonCopied(true);
       setTimeout(() => setJsonCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
-      setError('Failed to copy to clipboard');
+      // Fallback to local preview
+      const localJson = generateLocalPreviewJson();
+      await navigator.clipboard.writeText(JSON.stringify(localJson, null, 2));
+      setJsonCopied(true);
+      setTimeout(() => setJsonCopied(false), 2000);
+      setError('Used local preview (backend unavailable)');
+    } finally {
+      setIsLoadingPreview(false);
     }
   };
 
-  // Show JSON preview modal
-  const handleShowPreview = () => {
-    setPreviewJson(generatePreviewJson());
-    setShowJsonPreview(true);
+  // Show JSON preview modal (fetches from backend)
+  const handleShowPreview = async () => {
+    setIsLoadingPreview(true);
+    setError(null);
+    try {
+      const result = await fetchPreviewFromBackend();
+      setPreviewJson(result.bundle);
+      setPreviewMetadata(result.metadata);
+    } catch (err) {
+      console.error('Failed to fetch preview:', err);
+      // Fallback to local preview
+      setPreviewJson(generateLocalPreviewJson());
+      setPreviewMetadata(null);
+      setError('Using local preview (backend unavailable)');
+    } finally {
+      setIsLoadingPreview(false);
+      setShowJsonPreview(true);
+    }
   };
 
   // Toggle item sequence selection
@@ -747,14 +804,25 @@ const CommunicationPanel = ({
                 <div className="flex gap-2">
                   <button
                     onClick={handleShowPreview}
-                    className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    disabled={isLoadingPreview}
+                    className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                   >
-                    <Eye className="w-4 h-4 mr-2" />
-                    Preview JSON
+                    {isLoadingPreview ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-4 h-4 mr-2" />
+                        Preview JSON
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={copyJsonToClipboard}
-                    className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${
+                    disabled={isLoadingPreview}
+                    className={`flex items-center px-4 py-2 border rounded-lg transition-colors disabled:opacity-50 ${
                       jsonCopied 
                         ? 'border-green-500 text-green-700 bg-green-50' 
                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -882,12 +950,14 @@ const CommunicationPanel = ({
       {/* JSON Preview Modal */}
       {showJsonPreview && previewJson && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center">
                 <Code className="w-5 h-5 text-blue-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900">FHIR Communication Bundle Preview</h3>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  FHIR Communication Bundle {previewMetadata ? '(Server Preview)' : '(Local Preview)'}
+                </h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -926,6 +996,34 @@ const CommunicationPanel = ({
                 </button>
               </div>
             </div>
+
+            {/* Metadata Panel (if from server) */}
+            {previewMetadata && (
+              <div className="p-4 bg-blue-50 border-b border-blue-200">
+                <h4 className="text-sm font-semibold text-blue-800 mb-2">Bundle Metadata (from database)</h4>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Provider:</span>
+                    <span className="ml-2 font-medium text-gray-900">{previewMetadata.provider?.name || 'N/A'}</span>
+                    <span className="ml-1 text-xs text-blue-600">({previewMetadata.provider?.nphies_id || 'No NPHIES ID'})</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Insurer:</span>
+                    <span className="ml-2 font-medium text-gray-900">{previewMetadata.insurer?.name || 'N/A'}</span>
+                    <span className="ml-1 text-xs text-blue-600">({previewMetadata.insurer?.nphies_id || 'No NPHIES ID'})</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Patient:</span>
+                    <span className="ml-2 font-medium text-gray-900">{previewMetadata.patient?.name || 'N/A'}</span>
+                  </div>
+                </div>
+                {(!previewMetadata.provider?.nphies_id || !previewMetadata.insurer?.nphies_id) && (
+                  <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-yellow-800 text-xs">
+                    ⚠️ Warning: Missing NPHIES IDs may cause errors like BV-00176 or GE-00010
+                  </div>
+                )}
+              </div>
+            )}
             
             {/* Modal Body - JSON Content */}
             <div className="flex-1 overflow-auto p-4 bg-gray-900">
@@ -936,9 +1034,13 @@ const CommunicationPanel = ({
             
             {/* Modal Footer */}
             <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-              <p className="text-sm text-gray-500">
-                This is a preview of the FHIR bundle that will be sent to NPHIES
-              </p>
+              <div className="text-sm text-gray-500">
+                {previewMetadata ? (
+                  <span className="text-green-600">✓ This is the actual bundle that will be sent to NPHIES</span>
+                ) : (
+                  <span className="text-yellow-600">⚠ This is a local preview. Server preview unavailable.</span>
+                )}
+              </div>
               <button
                 onClick={() => setShowJsonPreview(false)}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"

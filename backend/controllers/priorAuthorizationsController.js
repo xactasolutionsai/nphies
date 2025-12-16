@@ -1068,6 +1068,44 @@ class PriorAuthorizationsController extends BaseController {
   // ============================================================================
 
   /**
+   * Preview Communication bundle without sending
+   * Returns the exact FHIR bundle that would be sent to NPHIES
+   */
+  async previewCommunicationBundle(req, res) {
+    try {
+      const { id } = req.params;
+      const { payloads, type = 'unsolicited', communicationRequestId } = req.body;
+      const schemaName = req.schemaName || 'public';
+
+      // Get the bundle from communication service (preview mode)
+      const result = await communicationService.previewCommunicationBundle(
+        parseInt(id), 
+        payloads || [], 
+        type,
+        communicationRequestId,
+        schemaName
+      );
+
+      res.json({
+        success: true,
+        bundle: result.bundle,
+        metadata: {
+          priorAuthId: id,
+          type,
+          provider: result.provider,
+          insurer: result.insurer,
+          patient: result.patient
+        }
+      });
+    } catch (error) {
+      console.error('Error previewing communication bundle:', error);
+      res.status(500).json({ 
+        error: error.message || 'Failed to preview communication bundle'
+      });
+    }
+  }
+
+  /**
    * Send UNSOLICITED Communication (Test Case #1)
    * HCP proactively sends additional information to HIC
    */
