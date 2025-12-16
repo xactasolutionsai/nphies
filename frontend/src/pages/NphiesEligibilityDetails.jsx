@@ -158,7 +158,8 @@ const extractFromFhirBundle = (bundle) => {
     patient: null,
     coverage: null,
     insurer: null,
-    eligibilityResponse: null
+    eligibilityResponse: null,
+    messageHeader: null
   };
   
   for (const entry of bundle.entry) {
@@ -182,6 +183,9 @@ const extractFromFhirBundle = (bundle) => {
         break;
       case 'CoverageEligibilityResponse':
         result.eligibilityResponse = resource;
+        break;
+      case 'MessageHeader':
+        result.messageHeader = resource;
         break;
     }
   }
@@ -302,6 +306,37 @@ export default function NphiesEligibilityDetails() {
   const eligibilityResponse = fhirData.eligibilityResponse || {};
   const disposition = eligibilityResponse.disposition || record?.disposition;
   const servicedPeriod = eligibilityResponse.servicedPeriod || record?.serviced_period;
+  
+  // Site Eligibility from response extension
+  const responseSiteEligibility = eligibilityResponse.extension?.find(
+    e => e.url?.includes('siteEligibility')
+  )?.valueCodeableConcept?.coding?.[0];
+  
+  // Insurance-level site eligibility
+  const insuranceSiteEligibility = eligibilityResponse.insurance?.[0]?.extension?.find(
+    e => e.url?.includes('siteEligibility')
+  )?.valueCodeableConcept?.coding?.[0];
+  
+  // Use the most specific site eligibility
+  const siteEligibility = responseSiteEligibility || insuranceSiteEligibility || record?.siteEligibility;
+  
+  // Message Header details
+  const messageHeader = fhirData.messageHeader || {};
+  const messageResponseCode = messageHeader.response?.code;
+  const messageResponseId = messageHeader.response?.identifier;
+  const messageSender = messageHeader.sender?.identifier?.value;
+  const messageDestination = messageHeader.destination?.[0]?.receiver?.identifier?.value;
+  const messageEventCode = messageHeader.eventCoding?.code;
+  
+  // Patient KSA Gender extension
+  const patientKsaGender = patientData._gender?.extension?.find(
+    e => e.url?.includes('ksa-administrative-gender')
+  )?.valueCodeableConcept?.coding?.[0]?.code;
+  
+  // Coverage references
+  const coverageSubscriber = coverageData.subscriber?.reference;
+  const coverageBeneficiary = coverageData.beneficiary?.reference;
+  const coveragePolicyHolder = coverageData.policyHolder?.reference;
 
   // Early returns AFTER all hooks
   if (loading) {
@@ -392,17 +427,17 @@ export default function NphiesEligibilityDetails() {
       </div>
 
       {/* Site Eligibility Banner */}
-      {record.siteEligibility && (
-        <div className={`rounded-xl p-4 border ${getSiteEligibilityColor(record.siteEligibility.code || record.site_eligibility)}`}>
+      {(siteEligibility || record.siteEligibility || record.site_eligibility) && (
+        <div className={`rounded-xl p-4 border ${getSiteEligibilityColor(siteEligibility?.code || record.siteEligibility?.code || record.site_eligibility)}`}>
           <div className="flex items-center space-x-3">
-            {(record.siteEligibility.code || record.site_eligibility) === 'eligible' ? (
+            {(siteEligibility?.code || record.siteEligibility?.code || record.site_eligibility) === 'eligible' ? (
               <CheckCircle className="h-6 w-6" />
             ) : (
               <XCircle className="h-6 w-6" />
             )}
             <div>
-              <p className="font-semibold">Site Eligibility: {(record.siteEligibility.code || record.site_eligibility)?.toUpperCase()}</p>
-              <p className="text-sm">{record.siteEligibility.display || getSiteEligibilityDisplay(record.siteEligibility.code || record.site_eligibility)}</p>
+              <p className="font-semibold">Site Eligibility: {(siteEligibility?.code || record.siteEligibility?.code || record.site_eligibility)?.toUpperCase()}</p>
+              <p className="text-sm">{siteEligibility?.display || record.siteEligibility?.display || getSiteEligibilityDisplay(siteEligibility?.code || record.siteEligibility?.code || record.site_eligibility)}</p>
             </div>
           </div>
         </div>
@@ -454,6 +489,47 @@ export default function NphiesEligibilityDetails() {
             </div>
           </div>
 
+          {/* Message Header Info */}
+          {(messageResponseCode || messageSender || messageDestination) && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">NPHIES Message Details</h4>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {messageResponseCode && (
+                  <div className="bg-green-50 p-3 rounded-lg">
+                    <p className="text-xs text-green-600 mb-1">Response Code</p>
+                    <Badge className={messageResponseCode === 'ok' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                      {messageResponseCode.toUpperCase()}
+                    </Badge>
+                  </div>
+                )}
+                {messageEventCode && (
+                  <div className="bg-purple-50 p-3 rounded-lg">
+                    <p className="text-xs text-purple-600 mb-1">Event Type</p>
+                    <p className="font-medium text-sm">{messageEventCode}</p>
+                  </div>
+                )}
+                {messageSender && (
+                  <div className="bg-amber-50 p-3 rounded-lg">
+                    <p className="text-xs text-amber-600 mb-1">From (Payer)</p>
+                    <p className="font-mono text-sm">{messageSender}</p>
+                  </div>
+                )}
+                {messageDestination && (
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <p className="text-xs text-blue-600 mb-1">To (Provider)</p>
+                    <p className="font-mono text-sm">{messageDestination}</p>
+                  </div>
+                )}
+              </div>
+              {messageResponseId && (
+                <div className="mt-3 bg-gray-50 p-3 rounded-lg">
+                  <p className="text-xs text-gray-600 mb-1">Original Request ID (Correlation)</p>
+                  <p className="font-mono text-sm">{messageResponseId}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* NPHIES IDs */}
           {(record.nphies_request_id || record.nphies_response_id) && (
             <div className="mt-4 pt-4 border-t border-gray-100">
@@ -475,11 +551,14 @@ export default function NphiesEligibilityDetails() {
           )}
 
           {/* Purpose */}
-          {record.purpose && (
+          {(record.purpose || eligibilityResponse.purpose) && (
             <div className="mt-4 pt-4 border-t border-gray-100">
               <p className="text-sm text-gray-600 mb-2">Request Purpose</p>
               <div className="flex flex-wrap gap-2">
-                {(typeof record.purpose === 'string' ? record.purpose.split(',') : record.purpose).map((p, idx) => (
+                {(typeof (record.purpose || eligibilityResponse.purpose) === 'string' 
+                  ? (record.purpose || eligibilityResponse.purpose).split(',') 
+                  : (record.purpose || eligibilityResponse.purpose)
+                ).map((p, idx) => (
                   <Badge key={idx} variant="outline" className="capitalize">
                     {p.trim()}
                   </Badge>
@@ -528,9 +607,16 @@ export default function NphiesEligibilityDetails() {
               {patientGender && (
                 <div>
                   <p className="text-sm text-gray-600">Gender</p>
-                  <Badge variant="outline" className="capitalize">
-                    {getGenderDisplay(patientGender)}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="capitalize">
+                      {getGenderDisplay(patientGender)}
+                    </Badge>
+                    {patientKsaGender && patientKsaGender !== patientGender && (
+                      <Badge variant="secondary" className="text-xs">
+                        KSA: {getGenderDisplay(patientKsaGender)}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               )}
               {patientBirthDate && (
@@ -818,6 +904,33 @@ export default function NphiesEligibilityDetails() {
               )}
             </div>
           </div>
+
+          {/* Coverage References */}
+          {(coverageSubscriber || coverageBeneficiary || coveragePolicyHolder) && (
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Coverage References</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                {coverageSubscriber && (
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-xs text-gray-600 mb-1">Subscriber</p>
+                    <p className="font-mono text-xs break-all">{coverageSubscriber}</p>
+                  </div>
+                )}
+                {coverageBeneficiary && (
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-xs text-gray-600 mb-1">Beneficiary</p>
+                    <p className="font-mono text-xs break-all">{coverageBeneficiary}</p>
+                  </div>
+                )}
+                {coveragePolicyHolder && (
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-xs text-gray-600 mb-1">Policy Holder</p>
+                    <p className="font-mono text-xs break-all">{coveragePolicyHolder}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
