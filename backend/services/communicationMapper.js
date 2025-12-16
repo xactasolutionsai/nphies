@@ -10,6 +10,11 @@
  * - BV-00233: 'about' must reference Claim or ClaimResponse
  * - BV-00335: CommunicationRequest status must be 'active'
  * - CMRQ001: Payload content must be ONE of: string, attachment, or reference
+ * 
+ * NPHIES Bundle Requirements (per https://portal.nphies.sa/ig/Bundle-16b80922-b538-4ab3-0176-a80b33242163.html):
+ * - Bundle must include full Patient, Provider Organization, and Insurer Organization resources
+ * - MessageHeader event code should be 'communication' when sending Communication (not 'communication-request')
+ * - 'about' reference should use proper identifier system URL format
  */
 
 import { randomUUID } from 'crypto';
@@ -20,12 +25,283 @@ class CommunicationMapper {
   }
 
   // ============================================================================
+  // HELPER METHODS FOR RESOURCE BUILDING
+  // ============================================================================
+
+  /**
+   * Split full name into family and given names
+   */
+  splitName(fullName) {
+    if (!fullName) return { family: '', given: [] };
+    const parts = fullName.trim().split(' ');
+    return {
+      family: parts[parts.length - 1] || '',
+      given: parts.slice(0, -1).length > 0 ? parts.slice(0, -1) : [parts[0]]
+    };
+  }
+
+  /**
+   * Get FHIR marital status code from input
+   */
+  getMaritalStatusCode(status) {
+    if (!status) return 'U'; // Unknown as default
+    const statusMap = {
+      'married': 'M', 'single': 'S', 'divorced': 'D', 'widowed': 'W', 'unknown': 'U',
+      'M': 'M', 'S': 'S', 'D': 'D', 'W': 'W', 'U': 'U'
+    };
+    return statusMap[status.toLowerCase?.()] || 'U';
+  }
+
+  /**
+   * Get identifier configuration based on type
+   */
+  getIdentifierConfig(type) {
+    switch (type) {
+      case 'passport':
+        return { code: 'PPN', display: 'Passport Number', system: 'http://nphies.sa/identifier/passportnumber' };
+      case 'iqama':
+        return { code: 'PRC', display: 'Permanent Resident Card', system: 'http://nphies.sa/identifier/iqama' };
+      case 'mrn':
+        return { code: 'MR', display: 'Medical Record Number', system: 'http://provider.com/identifier/mrn' };
+      case 'national_id':
+      default:
+        return { code: 'NI', display: 'National Identifier', system: 'http://nphies.sa/identifier/nationalid' };
+    }
+  }
+
+  /**
+   * Build Patient resource for Communication bundle
+   * Per NPHIES standard: https://portal.nphies.sa/ig/StructureDefinition-patient.html
+   */
+  buildPatientResource(patient) {
+    const patientId = patient.patient_id?.toString() || this.generateId();
+    const nameInfo = this.splitName(patient.name);
+    const identifierType = patient.identifier_type || 'national_id';
+    const identifierConfig = this.getIdentifierConfig(identifierType);
+    const gender = patient.gender ? patient.gender.toLowerCase() : 'unknown';
+    const occupation = patient.occupation || 'business';
+
+    const patientResource = {
+      resourceType: 'Patient',
+      id: patientId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0']
+      },
+      extension: [
+        {
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation',
+          valueCodeableConcept: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/occupation',
+              code: occupation
+            }]
+          }
+        }
+      ],
+      identifier: [
+        {
+          extension: [
+            {
+              url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country',
+              valueCodeableConcept: {
+                coding: [{
+                  system: 'urn:iso:std:iso:3166',
+                  code: 'SAU',
+                  display: 'Saudi Arabia'
+                }]
+              }
+            }
+          ],
+          type: {
+            coding: [{
+              system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+              code: identifierConfig.code,
+              display: identifierConfig.display
+            }]
+          },
+          system: identifierConfig.system,
+          value: (patient.identifier || patient.patient_id)?.toString() || 'UNKNOWN'
+        }
+      ],
+      active: true,
+      name: [{
+        use: 'official',
+        text: patient.name,
+        family: nameInfo.family,
+        given: nameInfo.given
+      }],
+      gender: gender,
+      _gender: {
+        extension: [{
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender',
+          valueCodeableConcept: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender',
+              code: gender
+            }]
+          }
+        }]
+      },
+      deceasedBoolean: false,
+      maritalStatus: {
+        coding: [{
+          system: 'http://terminology.hl7.org/CodeSystem/v3-MaritalStatus',
+          code: this.getMaritalStatusCode(patient.marital_status)
+        }]
+      }
+    };
+
+    // Add optional fields
+    if (patient.phone) {
+      patientResource.telecom = [{ system: 'phone', value: patient.phone }];
+    }
+    if (patient.birth_date) {
+      patientResource.birthDate = this.formatDate(patient.birth_date);
+    }
+    if (patient.address) {
+      patientResource.address = [{
+        use: 'home',
+        text: patient.address,
+        line: [patient.address],
+        city: patient.city || 'Riyadh',
+        country: 'Saudi Arabia'
+      }];
+    }
+
+    return {
+      fullUrl: `http://provider.com/Patient/${patientId}`,
+      resource: patientResource
+    };
+  }
+
+  /**
+   * Build Provider Organization resource for Communication bundle
+   * Per NPHIES standard: https://portal.nphies.sa/ig/StructureDefinition-provider-organization.html
+   */
+  buildProviderOrganizationResource(provider) {
+    const providerId = provider.provider_id?.toString() || this.generateId();
+    const nphiesId = provider.nphies_id || 'PR-FHIR';
+    const providerName = provider.provider_name || provider.name || 'Provider Organization';
+    const providerType = provider.provider_type || '1';
+
+    const getProviderTypeDisplay = (code) => {
+      const displays = { '1': 'Hospital', '2': 'Polyclinic', '3': 'Pharmacy', '4': 'Optical Shop', '5': 'Clinic' };
+      return displays[code] || 'Healthcare Provider';
+    };
+
+    return {
+      fullUrl: `http://provider.com/Organization/${providerId}`,
+      resource: {
+        resourceType: 'Organization',
+        id: providerId,
+        meta: {
+          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
+        },
+        extension: [{
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type',
+          valueCodeableConcept: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
+              code: providerType,
+              display: getProviderTypeDisplay(providerType)
+            }]
+          }
+        }],
+        identifier: [{
+          system: 'http://nphies.sa/license/provider-license',
+          value: nphiesId
+        }],
+        active: true,
+        type: [{
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
+            code: 'prov',
+            display: 'Healthcare Provider'
+          }]
+        }],
+        name: providerName,
+        ...(provider.address && {
+          address: [{
+            use: 'work',
+            text: provider.address,
+            line: [provider.address],
+            city: provider.city || 'Riyadh',
+            country: 'Saudi Arabia'
+          }]
+        })
+      }
+    };
+  }
+
+  /**
+   * Build Insurer Organization resource for Communication bundle
+   * Per NPHIES standard: https://portal.nphies.sa/ig/StructureDefinition-insurer-organization.html
+   */
+  buildInsurerOrganizationResource(insurer) {
+    const insurerId = insurer.insurer_id?.toString() || this.generateId();
+    const nphiesId = insurer.nphies_id || 'INS-FHIR';
+    const insurerName = insurer.insurer_name || insurer.name || 'Insurance Organization';
+
+    return {
+      fullUrl: `http://provider.com/Organization/${insurerId}`,
+      resource: {
+        resourceType: 'Organization',
+        id: insurerId,
+        meta: {
+          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0']
+        },
+        identifier: [{
+          use: 'official',
+          type: {
+            coding: [{
+              system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+              code: 'NII'
+            }]
+          },
+          system: 'http://nphies.sa/license/payer-license',
+          value: nphiesId
+        }],
+        active: true,
+        type: [{
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
+            code: 'ins',
+            display: 'Insurance Company'
+          }]
+        }],
+        name: insurerName,
+        ...(insurer.address && {
+          address: [{
+            use: 'work',
+            text: insurer.address,
+            line: [insurer.address],
+            city: 'Riyadh',
+            country: 'Saudi Arabia'
+          }]
+        })
+      }
+    };
+  }
+
+  /**
+   * Format date to FHIR date format (YYYY-MM-DD)
+   */
+  formatDate(date) {
+    if (!date) return null;
+    const d = new Date(date);
+    return d.toISOString().split('T')[0];
+  }
+
+  // ============================================================================
   // MAIN BUNDLE BUILDERS
   // ============================================================================
 
   /**
    * Build UNSOLICITED Communication bundle (Test Case #1)
    * HCP proactively sends additional information to HIC
+   * 
+   * Per NPHIES standard (https://portal.nphies.sa/ig/Bundle-16b80922-b538-4ab3-0176-a80b33242163.html):
+   * Bundle must include: MessageHeader, Communication, Provider Organization, Insurer Organization, Patient
    * 
    * @param {Object} options
    * @param {Object} options.priorAuth - Prior authorization data
@@ -39,6 +315,17 @@ class CommunicationMapper {
     const bundleId = this.generateId();
     const communicationId = this.generateId();
     
+    // Build the 'about' reference using proper identifier system URL format
+    // Per NPHIES: use provider's domain for identifier system
+    const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
+    const aboutIdentifier = priorAuth.nphies_request_id || priorAuth.request_number;
+    const aboutReference = {
+      identifier: {
+        system: `http://${providerDomain}.com.sa/identifiers/authorization`,
+        value: aboutIdentifier
+      }
+    };
+    
     // Build the Communication resource
     const communicationResource = this.buildCommunicationResource({
       id: communicationId,
@@ -46,7 +333,7 @@ class CommunicationMapper {
       patient,
       provider,
       insurer,
-      aboutReference: `http://provider.com/Claim/${priorAuth.nphies_request_id || priorAuth.request_number}`,
+      aboutReference: aboutReference,
       aboutType: 'Claim',
       payloads,
       basedOn: null // Unsolicited has no basedOn
@@ -57,12 +344,17 @@ class CommunicationMapper {
       resource: communicationResource
     };
 
-    // Build MessageHeader
+    // Build MessageHeader with correct event code ('communication' for sending Communication)
     const messageHeader = this.buildCommunicationMessageHeader({
       provider,
       insurer,
       focusFullUrl: communicationEntry.fullUrl
     });
+
+    // Build full resources per NPHIES standard
+    const providerResource = this.buildProviderOrganizationResource(provider);
+    const insurerResource = this.buildInsurerOrganizationResource(insurer);
+    const patientResource = this.buildPatientResource(patient);
 
     return {
       resourceType: 'Bundle',
@@ -72,13 +364,23 @@ class CommunicationMapper {
       },
       type: 'message',
       timestamp: this.formatDateTime(new Date()),
-      entry: [messageHeader, communicationEntry]
+      // Entry order per NPHIES example: MessageHeader, Communication, Provider, Insurer, Patient
+      entry: [
+        messageHeader,
+        communicationEntry,
+        providerResource,
+        insurerResource,
+        patientResource
+      ]
     };
   }
 
   /**
    * Build SOLICITED Communication bundle (Test Case #2)
    * HCP responds to CommunicationRequest from HIC
+   * 
+   * Per NPHIES standard (https://portal.nphies.sa/ig/Bundle-16b80922-b538-4ab3-0176-a80b33242163.html):
+   * Bundle must include: MessageHeader, Communication, Provider Organization, Insurer Organization, Patient
    * 
    * @param {Object} options
    * @param {Object} options.communicationRequest - The CommunicationRequest being responded to
@@ -93,6 +395,15 @@ class CommunicationMapper {
     const bundleId = this.generateId();
     const communicationId = this.generateId();
     
+    // Build the 'about' reference using proper identifier system URL format
+    const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
+    const aboutIdentifier = priorAuth.nphies_request_id || priorAuth.request_number;
+    
+    // Use existing about_reference from CommunicationRequest if available, otherwise build new one
+    const aboutReference = communicationRequest.about_reference ? 
+      { identifier: { system: `http://${providerDomain}.com.sa/identifiers/authorization`, value: communicationRequest.about_reference } } :
+      { identifier: { system: `http://${providerDomain}.com.sa/identifiers/authorization`, value: aboutIdentifier } };
+    
     // Build the Communication resource with basedOn reference
     const communicationResource = this.buildCommunicationResource({
       id: communicationId,
@@ -100,8 +411,7 @@ class CommunicationMapper {
       patient,
       provider,
       insurer,
-      aboutReference: communicationRequest.about_reference || 
-        `http://provider.com/Claim/${priorAuth.nphies_request_id || priorAuth.request_number}`,
+      aboutReference: aboutReference,
       aboutType: communicationRequest.about_type || 'Claim',
       payloads,
       basedOn: `CommunicationRequest/${communicationRequest.request_id}`
@@ -112,12 +422,17 @@ class CommunicationMapper {
       resource: communicationResource
     };
 
-    // Build MessageHeader
+    // Build MessageHeader with correct event code ('communication' for sending Communication)
     const messageHeader = this.buildCommunicationMessageHeader({
       provider,
       insurer,
       focusFullUrl: communicationEntry.fullUrl
     });
+
+    // Build full resources per NPHIES standard
+    const providerResource = this.buildProviderOrganizationResource(provider);
+    const insurerResource = this.buildInsurerOrganizationResource(insurer);
+    const patientResource = this.buildPatientResource(patient);
 
     return {
       resourceType: 'Bundle',
@@ -127,7 +442,14 @@ class CommunicationMapper {
       },
       type: 'message',
       timestamp: this.formatDateTime(new Date()),
-      entry: [messageHeader, communicationEntry]
+      // Entry order per NPHIES example: MessageHeader, Communication, Provider, Insurer, Patient
+      entry: [
+        messageHeader,
+        communicationEntry,
+        providerResource,
+        insurerResource,
+        patientResource
+      ]
     };
   }
 
@@ -138,19 +460,45 @@ class CommunicationMapper {
   /**
    * Build Communication resource
    * 
+   * Per NPHIES standard (https://portal.nphies.sa/ig/Bundle-16b80922-b538-4ab3-0176-a80b33242163.html):
+   * - 'about' should use identifier with system URL format
+   * - Subject references Patient in bundle
+   * - Sender/Recipient reference Organizations in bundle
+   * 
    * @param {Object} options
    * @param {string} options.id - Communication ID
    * @param {string} options.type - 'unsolicited' or 'solicited'
    * @param {Object} options.patient - Patient data
    * @param {Object} options.provider - Provider organization
    * @param {Object} options.insurer - Insurer organization
-   * @param {string} options.aboutReference - Reference to Claim/ClaimResponse
+   * @param {Object|string} options.aboutReference - Reference to Claim/ClaimResponse (object with identifier or string)
    * @param {string} options.aboutType - 'Claim' or 'ClaimResponse'
    * @param {Array} options.payloads - Payload content
    * @param {string|null} options.basedOn - CommunicationRequest reference (for solicited)
    * @returns {Object} FHIR Communication resource
    */
   buildCommunicationResource({ id, type, patient, provider, insurer, aboutReference, aboutType, payloads, basedOn }) {
+    const patientId = patient.patient_id?.toString() || patient.id;
+    const providerId = provider.provider_id?.toString() || provider.id;
+    const insurerId = insurer.insurer_id?.toString() || insurer.id;
+    
+    // Build 'about' reference - supports both object (with identifier) and string formats
+    // Per NPHIES example: uses identifier with system URL format
+    let aboutEntry;
+    if (typeof aboutReference === 'object' && aboutReference.identifier) {
+      // New format with identifier system URL (NPHIES compliant)
+      aboutEntry = {
+        type: aboutType,
+        identifier: aboutReference.identifier
+      };
+    } else {
+      // Legacy format with direct reference
+      aboutEntry = {
+        reference: aboutReference,
+        type: aboutType
+      };
+    }
+    
     const communication = {
       resourceType: 'Communication',
       id,
@@ -169,30 +517,29 @@ class CommunicationMapper {
       }],
       // Priority
       priority: payloads?.[0]?.priority || 'routine',
-      // Subject (Patient)
+      // Subject (Patient) - references Patient resource in bundle
       subject: {
-        reference: `Patient/${patient.patient_id}`,
+        reference: `Patient/${patientId}`,
         type: 'Patient'
       },
       // About (BV-00233: must reference Claim or ClaimResponse)
-      about: [{
-        reference: aboutReference,
-        type: aboutType
-      }],
+      // Per NPHIES example: uses identifier with system URL format
+      about: [aboutEntry],
       // Sent timestamp
       sent: this.formatDateTime(new Date()),
-      // Sender (HCP/Provider)
+      // Sender (HCP/Provider) - references Organization in bundle
       sender: {
-        reference: `Organization/${provider.provider_id || provider.nphies_id}`,
+        reference: `Organization/${providerId}`,
         type: 'Organization',
         identifier: {
           system: 'http://nphies.sa/license/provider-license',
           value: provider.nphies_id || 'PR-FHIR'
         }
       },
-      // Recipient (HIC/Insurer)
+      // Recipient (HIC/Insurer) - references Organization in bundle
+      // Per NPHIES example: recipient is the Organization (provider when HIC sends, insurer when HCP sends)
       recipient: [{
-        reference: `Organization/${insurer.insurer_id || insurer.nphies_id}`,
+        reference: `Organization/${insurerId}`,
         type: 'Organization',
         identifier: {
           system: 'http://nphies.sa/license/payer-license',
@@ -276,6 +623,10 @@ class CommunicationMapper {
   /**
    * Build MessageHeader for Communication transaction
    * 
+   * Per NPHIES standard:
+   * - Event code 'communication' is used when HCP SENDS a Communication (response/info)
+   * - Event code 'communication-request' is used when HIC REQUESTS information from HCP
+   * 
    * @param {Object} options
    * @param {Object} options.provider - Provider organization
    * @param {Object} options.insurer - Insurer organization
@@ -297,7 +648,9 @@ class CommunicationMapper {
         },
         eventCoding: {
           system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
-          code: 'communication-request' // Event code for sending Communication
+          // NPHIES FIX: Use 'communication' when HCP sends Communication (not 'communication-request')
+          // 'communication-request' is for when HIC requests information FROM HCP
+          code: 'communication'
         },
         destination: [{
           endpoint: `http://nphies.sa/license/payer-license/${destinationNphiesId}`,
