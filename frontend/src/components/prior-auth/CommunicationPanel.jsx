@@ -127,7 +127,8 @@ const CommunicationPanel = ({
       }
     } catch (err) {
       console.error('Error polling:', err);
-      setError('Failed to poll for updates');
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to poll for updates';
+      setError(errorMessage);
     } finally {
       setIsPolling(false);
     }
