@@ -10,11 +10,15 @@ import {
   ArrowLeft, Edit, Send, RefreshCw, XCircle, ArrowRightLeft,
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
-  Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck, Pill
+  Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck, Pill,
+  MessageSquare
 } from 'lucide-react';
 
 // Import AI Medication Safety Panel
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
+
+// Import Communication Panel for NPHIES communications
+import { CommunicationPanel } from '@/components/prior-auth';
 
 // Helper functions
 const getAuthTypeDisplay = (authType) => {
@@ -864,6 +868,13 @@ export default function PriorAuthorizationDetails() {
               <TabButton active={activeTab === 'nphies'} onClick={() => setActiveTab('nphies')}>
                 <CheckCircle className="h-4 w-4 mr-1 inline" />
                 NPHIES Response
+              </TabButton>
+            )}
+            {/* Communications Tab - Show for queued or pended PAs */}
+            {(priorAuth.status === 'queued' || priorAuth.outcome === 'queued' || priorAuth.adjudication_outcome === 'pended') && (
+              <TabButton active={activeTab === 'communications'} onClick={() => setActiveTab('communications')}>
+                <MessageSquare className="h-4 w-4 mr-1 inline" />
+                Communications
               </TabButton>
             )}
             <TabButton active={activeTab === 'responses'} onClick={() => setActiveTab('responses')}>
@@ -2112,6 +2123,25 @@ export default function PriorAuthorizationDetails() {
                 );
               })()}
             </div>
+          )}
+
+          {/* Communications Tab */}
+          {activeTab === 'communications' && (priorAuth.status === 'queued' || priorAuth.outcome === 'queued' || priorAuth.adjudication_outcome === 'pended') && (
+            <CommunicationPanel
+              priorAuthId={parseInt(id)}
+              priorAuthStatus={priorAuth.status}
+              items={priorAuth.items || []}
+              onStatusUpdate={(updatedPA) => {
+                // Refresh the prior auth data
+                setPriorAuth(prev => ({
+                  ...prev,
+                  status: updatedPA.status,
+                  outcome: updatedPA.outcome,
+                  adjudication_outcome: updatedPA.adjudication_outcome,
+                  disposition: updatedPA.disposition
+                }));
+              }}
+            />
           )}
 
           {/* Responses Tab */}

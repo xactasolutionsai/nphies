@@ -1424,8 +1424,8 @@ export default function PriorAuthorizationForm() {
         <TabButton active={activeTab === 'supporting'} onClick={() => setActiveTab('supporting')} icon={Paperclip}>
           Supporting Info
         </TabButton>
-        {/* Communications Tab - Only show for saved PAs in queued status */}
-        {isEditMode && formData.status === 'queued' && (
+        {/* Communications Tab - Show for saved PAs in queued/pended status */}
+        {isEditMode && (formData.status === 'queued' || formData.outcome === 'queued' || formData.adjudication_outcome === 'pended') && (
           <TabButton active={activeTab === 'communications'} onClick={() => setActiveTab('communications')} icon={MessageSquare}>
             Communications
           </TabButton>
@@ -3526,8 +3526,8 @@ export default function PriorAuthorizationForm() {
         </Card>
       )}
 
-      {/* Communications Tab - Only for queued PAs */}
-      {activeTab === 'communications' && isEditMode && formData.status === 'queued' && (
+      {/* Communications Tab - For queued/pended PAs */}
+      {activeTab === 'communications' && isEditMode && (formData.status === 'queued' || formData.outcome === 'queued' || formData.adjudication_outcome === 'pended') && (
         <Card>
           <CardContent className="pt-6">
             <CommunicationPanel
