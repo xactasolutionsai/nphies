@@ -484,9 +484,15 @@ export const validationSchemas = {
       // Additional optional fields
       patient_share: Joi.number().precision(2).allow(null).optional(),
       payer_share: Joi.number().precision(2).allow(null).optional(),
+      is_package: Joi.boolean().allow(null).optional(),
       is_maternity: Joi.boolean().allow(null).optional(),
+      tax: Joi.number().precision(2).allow(null).optional(),
+      factor: Joi.number().precision(4).allow(null).optional(),
       diagnosis_sequences: Joi.array().items(Joi.number().integer()).allow(null).optional(),
-      information_sequences: Joi.array().items(Joi.number().integer()).allow(null).optional()
+      information_sequences: Joi.array().items(Joi.number().integer()).allow(null).optional(),
+      // Medication fields (for pharmacy items)
+      medication_name: Joi.string().max(255).allow(null, '').optional(),
+      service_description: Joi.string().max(500).allow(null, '').optional()
     })).optional(),
     
     supporting_info: Joi.array().items(Joi.object({
@@ -562,7 +568,23 @@ export const validationSchemas = {
         prism_amount: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
         prism_base: Joi.string().valid('up', 'down', 'in', 'out').allow(null, '').optional()
       }).optional()
-    }).allow(null).optional()
+    }).allow(null).optional(),
+    
+    // Lab Observations for Professional claims (LOINC codes for Observation resources)
+    // Per NPHIES IG: Lab test details MUST be in Observation resources, NOT Claim.item.productOrService
+    // These are referenced via Claim.supportingInfo with category = "laboratory"
+    lab_observations: Joi.array().items(Joi.object({
+      sequence: Joi.number().integer().min(1).required(),
+      loinc_code: Joi.string().max(50).required(),
+      loinc_display: Joi.string().max(255).allow(null, '').optional(),
+      status: Joi.string().valid('registered', 'preliminary', 'final', 'amended', 'cancelled').allow(null, '').optional(),
+      effective_date: Joi.date().allow(null, '').optional(),
+      value_quantity: Joi.number().precision(4).allow(null).optional(),
+      value_quantity_unit: Joi.string().max(50).allow(null, '').optional(),
+      value_string: Joi.string().allow(null, '').optional(),
+      interpretation: Joi.string().max(50).allow(null, '').optional(),
+      notes: Joi.string().allow(null, '').optional()
+    })).optional()
   }),
 
   // Prior Authorization Item validation schema
