@@ -50,17 +50,21 @@ class ProfessionalMapper extends BaseMapper {
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
     
-    // Build Observation resources for laboratory tests (LOINC codes)
-    // Per NPHIES IG: Lab test details MUST be in Observation resources, NOT in Claim.item.productOrService
-    console.log('[ProfessionalMapper] priorAuth.lab_observations:', priorAuth.lab_observations);
-    const observationResources = this.buildLabObservationResources(priorAuth, bundleResourceIds);
-    console.log('[ProfessionalMapper] Built observation resources:', observationResources.length);
+    // NOTE: Observation resources for lab tests are NOT part of standard NPHIES Professional PA
+    // Per official example at: https://portal.nphies.sa/ig/Claim-173086.json.html
+    // The official example does NOT include lab-test supportingInfo or Observation resources.
+    // Commenting out to avoid RE-00165 and RE-00170 errors.
+    //
+    // console.log('[ProfessionalMapper] priorAuth.lab_observations:', priorAuth.lab_observations);
+    // const observationResources = this.buildLabObservationResources(priorAuth, bundleResourceIds);
+    // console.log('[ProfessionalMapper] Built observation resources:', observationResources.length);
+    const observationResources = []; // Empty - not used in standard Professional PA
     
-    // Build Claim resource (passes observation IDs for supportingInfo references)
+    // Build Claim resource (no observation IDs since they're not used)
     const claimResource = this.buildClaimResource(
       priorAuth, patient, provider, insurer, coverage, 
       encounterResource?.resource, practitioner, bundleResourceIds,
-      observationResources.map(o => o.resource.id)
+      [] // No observation IDs - not part of standard Professional PA
     );
     
     // Build MessageHeader (must be first)
@@ -500,33 +504,37 @@ class ProfessionalMapper extends BaseMapper {
       sequenceCounter++;
     });
     
-    // Add laboratory supportingInfo entries for Observation references
-    // Per NPHIES IG: Lab tests must be linked via supportingInfo with category = "lab-test"
-    // and valueReference pointing to the Observation resource
-    // Error IB-00044: category must use valid code from claim-information-category valueSet
-    // Error RE-00165: valueReference must point to valid NPHIES profile
-    if (observationIds && observationIds.length > 0) {
-      observationIds.forEach(obsId => {
-        const labSupportingInfo = {
-          sequence: sequenceCounter,
-          category: {
-            coding: [
-              {
-                system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-                code: 'lab-test',
-                display: 'Laboratory Test'
-              }
-            ]
-          },
-          valueReference: {
-            reference: `Observation/${obsId}`
-          }
-        };
-        supportingInfoSequences.push(sequenceCounter);
-        supportingInfoArray.push(labSupportingInfo);
-        sequenceCounter++;
-      });
-    }
+    // NOTE: lab-test supportingInfo with Observation references is NOT part of standard
+    // NPHIES Professional Prior Authorization per official example at:
+    // https://portal.nphies.sa/ig/Claim-173086.json.html
+    // The official example only uses: vital signs, chief-complaint, investigation-result,
+    // patient-history, treatment-plan, physical-examination, history-of-present-illness
+    // 
+    // Lab observations may be required for specific Communication test cases, not standard PA.
+    // Commenting out to avoid RE-00165 and RE-00170 errors.
+    //
+    // if (observationIds && observationIds.length > 0) {
+    //   observationIds.forEach(obsId => {
+    //     const labSupportingInfo = {
+    //       sequence: sequenceCounter,
+    //       category: {
+    //         coding: [
+    //           {
+    //             system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+    //             code: 'lab-test',
+    //             display: 'Laboratory Test'
+    //           }
+    //         ]
+    //       },
+    //       valueReference: {
+    //         reference: `Observation/${obsId}`
+    //       }
+    //     };
+    //     supportingInfoSequences.push(sequenceCounter);
+    //     supportingInfoArray.push(labSupportingInfo);
+    //     sequenceCounter++;
+    //   });
+    // }
     
     if (supportingInfoArray.length > 0) {
       claim.supportingInfo = supportingInfoArray;
