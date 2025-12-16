@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Select from 'react-select';
 import { 
   MessageSquare, 
   Send, 
@@ -30,6 +31,7 @@ import {
   X
 } from 'lucide-react';
 import api from '../../services/api';
+import { selectStyles } from './styles';
 
 const CommunicationPanel = ({ 
   priorAuthId, 
@@ -441,18 +443,21 @@ const CommunicationPanel = ({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Responding to Request
                   </label>
-                  <select
-                    value={selectedRequestId || ''}
-                    onChange={(e) => setSelectedRequestId(parseInt(e.target.value))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  >
-                    <option value="">Select a request...</option>
-                    {pendingRequests.map(req => (
-                      <option key={req.id} value={req.id}>
-                        {req.request_id} - {formatDate(req.received_at)}
-                      </option>
-                    ))}
-                  </select>
+                  <Select
+                    value={pendingRequests.map(req => ({
+                      value: req.id,
+                      label: `${req.request_id} - ${formatDate(req.received_at)}`
+                    })).find(opt => opt.value === selectedRequestId)}
+                    onChange={(option) => setSelectedRequestId(option?.value || null)}
+                    options={pendingRequests.map(req => ({
+                      value: req.id,
+                      label: `${req.request_id} - ${formatDate(req.received_at)}`
+                    }))}
+                    styles={selectStyles}
+                    menuPortalTarget={document.body}
+                    placeholder="Select a request..."
+                    isClearable
+                  />
                 </div>
               )}
 
@@ -463,17 +468,15 @@ const CommunicationPanel = ({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Category
                   </label>
-                  <select
-                    value={communicationCategory}
-                    onChange={(e) => setCommunicationCategory(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {COMMUNICATION_CATEGORIES.map(cat => (
-                      <option key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select
+                    value={COMMUNICATION_CATEGORIES.find(c => c.value === communicationCategory)}
+                    onChange={(option) => setCommunicationCategory(option?.value || 'instruction')}
+                    options={COMMUNICATION_CATEGORIES}
+                    styles={selectStyles}
+                    menuPortalTarget={document.body}
+                    placeholder="Select category..."
+                    isSearchable={false}
+                  />
                   <p className="text-xs text-gray-500 mt-1">
                     {COMMUNICATION_CATEGORIES.find(c => c.value === communicationCategory)?.description}
                   </p>
@@ -484,17 +487,15 @@ const CommunicationPanel = ({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Priority
                   </label>
-                  <select
-                    value={communicationPriority}
-                    onChange={(e) => setCommunicationPriority(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {PRIORITY_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select
+                    value={PRIORITY_OPTIONS.find(p => p.value === communicationPriority)}
+                    onChange={(option) => setCommunicationPriority(option?.value || 'routine')}
+                    options={PRIORITY_OPTIONS}
+                    styles={selectStyles}
+                    menuPortalTarget={document.body}
+                    placeholder="Select priority..."
+                    isSearchable={false}
+                  />
                 </div>
               </div>
 
