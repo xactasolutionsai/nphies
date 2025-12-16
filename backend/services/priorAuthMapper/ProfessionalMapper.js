@@ -175,11 +175,17 @@ class ProfessionalMapper extends BaseMapper {
         subject: {
           reference: `Patient/${patientRef}`
         },
-        effectiveDateTime: this.formatDateTime(labObs.effective_date || priorAuth.encounter_start || new Date())
+        // NPHIES Fix: Use timezone-aware datetime format (+03:00) instead of UTC (Z)
+        // Per NPHIES examples: "2024-12-16T10:30:00+03:00" format is required
+        effectiveDateTime: this.formatDateTimeWithTimezone(labObs.effective_date || priorAuth.encounter_start || new Date())
       };
 
       // Add value if provided (for pre-existing results)
-      if (labObs.value !== undefined && labObs.value !== null) {
+      // NPHIES Fix: Only add value if it's actually provided and non-empty
+      // Per NPHIES: Observations with status='registered' should NOT have value fields
+      // Error RE-00170 occurs if valueString is empty string ""
+      const hasValue = labObs.value !== undefined && labObs.value !== null && labObs.value !== '';
+      if (hasValue) {
         if (labObs.value_type === 'string' || typeof labObs.value === 'string') {
           observation.valueString = String(labObs.value);
         } else if (labObs.unit) {
