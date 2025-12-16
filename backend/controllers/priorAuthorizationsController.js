@@ -1036,7 +1036,8 @@ class PriorAuthorizationsController extends BaseController {
       if (!pollResult.success) {
         return res.status(500).json({
           error: 'Failed to poll NPHIES',
-          details: pollResult.error
+          details: pollResult.error,
+          pollBundle: pollResult.pollBundle // Include the bundle that was sent for debugging
         });
       }
 
@@ -1060,6 +1061,58 @@ class PriorAuthorizationsController extends BaseController {
     } catch (error) {
       console.error('Error polling for response:', error);
       res.status(500).json({ error: error.message || 'Failed to poll for response' });
+    }
+  }
+
+  /**
+   * Preview Poll bundle without sending
+   * Returns the exact FHIR bundle that would be sent to NPHIES for polling
+   */
+  async previewPollBundle(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Get existing prior authorization
+      const existing = await this.getByIdInternal(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      // Get provider NPHIES ID
+      const providerResult = await query(`
+        SELECT pr.nphies_id as provider_nphies_id, pr.provider_name
+        FROM providers pr
+        WHERE pr.provider_id = $1
+      `, [existing.provider_id]);
+
+      const providerNphiesId = providerResult.rows[0]?.provider_nphies_id;
+      const providerName = providerResult.rows[0]?.provider_name;
+
+      // Build poll bundle (same as what poll() would send)
+      const pollBundle = nphiesService.buildPriorAuthPollBundle(
+        providerNphiesId,
+        ['priorauth-response', 'communication-request', 'communication'],
+        existing.nphies_request_id || existing.request_number
+      );
+
+      res.json({
+        success: true,
+        bundle: pollBundle,
+        metadata: {
+          priorAuthId: id,
+          requestNumber: existing.request_number,
+          nphiesRequestId: existing.nphies_request_id,
+          status: existing.status,
+          provider: {
+            name: providerName,
+            nphiesId: providerNphiesId
+          },
+          messageTypes: ['priorauth-response', 'communication-request', 'communication']
+        }
+      });
+    } catch (error) {
+      console.error('Error generating poll bundle preview:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate poll bundle preview' });
     }
   }
 

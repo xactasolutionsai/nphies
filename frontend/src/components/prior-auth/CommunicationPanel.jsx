@@ -135,10 +135,43 @@ const CommunicationPanel = ({
       }
     } catch (err) {
       console.error('Error polling:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to poll for updates';
+      const errorMessage = err.response?.data?.error || err.response?.data?.details || err.message || 'Failed to poll for updates';
       setError(errorMessage);
     } finally {
       setIsPolling(false);
+    }
+  };
+
+  // Preview poll bundle (without sending)
+  const handlePreviewPollBundle = async () => {
+    setIsLoadingPollPreview(true);
+    setError(null);
+    try {
+      const result = await api.previewPollBundle(priorAuthId);
+      setPollBundle(result.bundle);
+      setPollMetadata(result.metadata);
+      setShowPollPreview(true);
+    } catch (err) {
+      console.error('Error fetching poll bundle preview:', err);
+      setError('Failed to load poll bundle preview: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsLoadingPollPreview(false);
+    }
+  };
+
+  // Copy poll bundle to clipboard
+  const copyPollBundleToClipboard = async () => {
+    setIsLoadingPollPreview(true);
+    try {
+      const result = await api.previewPollBundle(priorAuthId);
+      await navigator.clipboard.writeText(JSON.stringify(result.bundle, null, 2));
+      setPollBundleCopied(true);
+      setTimeout(() => setPollBundleCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy poll bundle:', err);
+      setError('Failed to copy poll bundle: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsLoadingPollPreview(false);
     }
   };
 
@@ -294,6 +327,13 @@ const CommunicationPanel = ({
   // State for preview loading
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [previewMetadata, setPreviewMetadata] = useState(null);
+  
+  // Poll bundle preview state
+  const [showPollPreview, setShowPollPreview] = useState(false);
+  const [pollBundle, setPollBundle] = useState(null);
+  const [pollMetadata, setPollMetadata] = useState(null);
+  const [isLoadingPollPreview, setIsLoadingPollPreview] = useState(false);
+  const [pollBundleCopied, setPollBundleCopied] = useState(false);
 
   // Copy JSON to clipboard (uses backend preview)
   const copyJsonToClipboard = async () => {
@@ -483,28 +523,76 @@ const CommunicationPanel = ({
               : 'Communication is only available for queued authorizations'}
           </p>
         </div>
-        <button
-          onClick={handlePoll}
-          disabled={isPolling}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${isPolling ? 'animate-spin' : ''}`} />
-          {isPolling ? 'Polling...' : 'Poll for Updates'}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Preview Poll Bundle Button */}
+          <button
+            onClick={handlePreviewPollBundle}
+            disabled={isLoadingPollPreview}
+            className="flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            title="Preview Poll Bundle"
+          >
+            <Eye className="w-4 h-4 mr-1" />
+            Preview
+          </button>
+          {/* Copy Poll Bundle Button */}
+          <button
+            onClick={copyPollBundleToClipboard}
+            disabled={isLoadingPollPreview}
+            className={`flex items-center px-3 py-2 border rounded-lg transition-colors disabled:opacity-50 ${
+              pollBundleCopied 
+                ? 'border-green-500 text-green-700 bg-green-50' 
+                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+            title="Copy Poll Bundle JSON"
+          >
+            {pollBundleCopied ? (
+              <>
+                <CheckCircle className="w-4 h-4 mr-1" />
+                Copied!
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4 mr-1" />
+                Copy Bundle
+              </>
+            )}
+          </button>
+          {/* Poll Button */}
+          <button
+            onClick={handlePoll}
+            disabled={isPolling}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isPolling ? 'animate-spin' : ''}`} />
+            {isPolling ? 'Polling...' : 'Poll for Updates'}
+          </button>
+        </div>
       </div>
 
       {/* Error Display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
-          <AlertCircle className="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-red-800">{error}</p>
-            <button 
-              onClick={() => setError(null)}
-              className="text-sm text-red-600 hover:text-red-800 mt-1"
-            >
-              Dismiss
-            </button>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-red-800 font-medium">Error</p>
+              <p className="text-red-700 text-sm mt-1">{typeof error === 'object' ? JSON.stringify(error) : error}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <button 
+                  onClick={() => setError(null)}
+                  className="text-sm text-red-600 hover:text-red-800"
+                >
+                  Dismiss
+                </button>
+                <span className="text-gray-300">|</span>
+                <button 
+                  onClick={handlePreviewPollBundle}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  View Poll Bundle
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1043,6 +1131,118 @@ const CommunicationPanel = ({
               </div>
               <button
                 onClick={() => setShowJsonPreview(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Poll Bundle Preview Modal */}
+      {showPollPreview && pollBundle && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center">
+                <Code className="w-5 h-5 text-purple-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  NPHIES Poll Request Bundle
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(JSON.stringify(pollBundle, null, 2));
+                      setPollBundleCopied(true);
+                      setTimeout(() => setPollBundleCopied(false), 2000);
+                    } catch (err) {
+                      console.error('Failed to copy:', err);
+                    }
+                  }}
+                  className={`flex items-center px-3 py-1.5 rounded-lg transition-colors ${
+                    pollBundleCopied 
+                      ? 'bg-green-100 text-green-700' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {pollBundleCopied ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-1" />
+                      Copy
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowPollPreview(false)}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Metadata Panel */}
+            {pollMetadata && (
+              <div className="p-4 bg-purple-50 border-b border-purple-200">
+                <h4 className="text-sm font-semibold text-purple-800 mb-2">Poll Request Details</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Prior Auth ID:</span>
+                    <span className="ml-2 font-medium text-gray-900">{pollMetadata.priorAuthId}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Request Number:</span>
+                    <span className="ml-2 font-medium text-gray-900">{pollMetadata.requestNumber}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">NPHIES Request ID:</span>
+                    <span className="ml-2 font-medium text-gray-900">{pollMetadata.nphiesRequestId || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Status:</span>
+                    <span className="ml-2 font-medium text-gray-900">{pollMetadata.status}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Provider:</span>
+                    <span className="ml-2 font-medium text-gray-900">{pollMetadata.provider?.name || 'N/A'}</span>
+                    <span className="ml-1 text-xs text-purple-600">({pollMetadata.provider?.nphiesId || 'No NPHIES ID'})</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Message Types:</span>
+                    <span className="ml-2 font-medium text-gray-900">{pollMetadata.messageTypes?.join(', ')}</span>
+                  </div>
+                </div>
+                {!pollMetadata.provider?.nphiesId && (
+                  <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-yellow-800 text-xs">
+                    ⚠️ Warning: Missing Provider NPHIES ID may cause poll to fail
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Modal Body - JSON Content */}
+            <div className="flex-1 overflow-auto p-4 bg-gray-900">
+              <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">
+                {JSON.stringify(pollBundle, null, 2)}
+              </pre>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+              <div className="text-sm text-gray-500">
+                <span className="text-purple-600">This is the exact bundle that will be sent to NPHIES when you click "Poll for Updates"</span>
+              </div>
+              <button
+                onClick={() => setShowPollPreview(false)}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Close

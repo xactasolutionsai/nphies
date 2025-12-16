@@ -46,6 +46,9 @@ router.post('/:id/transfer', (req, res) => priorAuthorizationsController.transfe
 // Poll for response (POST to trigger NPHIES poll)
 router.post('/:id/poll', (req, res) => priorAuthorizationsController.poll(req, res));
 
+// Preview poll bundle (GET to see what would be sent without actually polling)
+router.get('/:id/poll/preview', (req, res) => priorAuthorizationsController.previewPollBundle(req, res));
+
 // FHIR bundle preview
 router.get('/:id/bundle', (req, res) => priorAuthorizationsController.getBundle(req, res));
 

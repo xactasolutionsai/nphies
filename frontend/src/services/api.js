@@ -545,6 +545,14 @@ class ApiService {
     });
   }
 
+  /**
+   * Preview the poll bundle that would be sent to NPHIES (without actually polling)
+   * @param {number} id - Prior Authorization ID
+   */
+  async previewPollBundle(id) {
+    return this.request(`/prior-authorizations/${id}/poll/preview`);
+  }
+
   async getPriorAuthorizationBundle(id) {
     return this.request(`/prior-authorizations/${id}/bundle`);
   }
