@@ -575,10 +575,23 @@ export const validationSchemas = {
     // These are referenced via Claim.supportingInfo with category = "laboratory"
     lab_observations: Joi.array().items(Joi.object({
       sequence: Joi.number().integer().min(1).required(),
-      loinc_code: Joi.string().max(50).required(),
+      loinc_code: Joi.string().max(50).allow(null, '').optional(),
       loinc_display: Joi.string().max(255).allow(null, '').optional(),
+      test_name: Joi.string().max(255).allow(null, '').optional(),
+      value: Joi.alternatives().try(
+        Joi.string().allow(null, ''),
+        Joi.number()
+      ).optional(),
+      value_type: Joi.string().valid('quantity', 'string').allow(null, '').optional(),
+      unit: Joi.string().max(50).allow(null, '').optional(),
+      unit_code: Joi.string().max(50).allow(null, '').optional(),
       status: Joi.string().valid('registered', 'preliminary', 'final', 'amended', 'cancelled').allow(null, '').optional(),
-      effective_date: Joi.date().allow(null, '').optional(),
+      effective_date: Joi.alternatives().try(
+        Joi.date(),
+        Joi.string().allow(null, '')
+      ).optional(),
+      note: Joi.string().allow(null, '').optional(),
+      // Keep these for backwards compatibility
       value_quantity: Joi.number().precision(4).allow(null).optional(),
       value_quantity_unit: Joi.string().max(50).allow(null, '').optional(),
       value_string: Joi.string().allow(null, '').optional(),
