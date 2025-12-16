@@ -909,11 +909,14 @@ class PriorAuthorizationsController extends BaseController {
         `, [reason, id]);
 
         // Store response
+        // Map NPHIES Task status to DB outcome: 'completed' -> 'complete', 'failed' -> 'error'
+        const dbOutcome = nphiesResponse.taskStatus === 'completed' ? 'complete' : 
+                          nphiesResponse.taskStatus === 'failed' ? 'error' : 'complete';
         await query(`
           INSERT INTO prior_authorization_responses 
           (prior_auth_id, response_type, outcome, bundle_json)
           VALUES ($1, $2, $3, $4)
-        `, [id, 'cancel', nphiesResponse.taskStatus || 'complete', JSON.stringify(nphiesResponse.data)]);
+        `, [id, 'cancel', dbOutcome, JSON.stringify(nphiesResponse.data)]);
 
         const updatedData = await this.getByIdInternal(id);
 
