@@ -14,7 +14,7 @@ import {
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
   Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
-  Upload, File, X, RefreshCw, AlertTriangle, Info
+  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare
 } from 'lucide-react';
 
 // Import AI Medication Safety components
@@ -60,7 +60,7 @@ import {
   getInitialDiagnosisData,
   getInitialSupportingInfoData
 } from '@/components/prior-auth/helpers';
-import { TabButton, generateDummyVitalsAndClinical, AIValidationPanel, DrugInteractionJustificationModal } from '@/components/prior-auth';
+import { TabButton, generateDummyVitalsAndClinical, AIValidationPanel, DrugInteractionJustificationModal, CommunicationPanel } from '@/components/prior-auth';
 
 export default function PriorAuthorizationForm() {
   const navigate = useNavigate();
@@ -1424,6 +1424,12 @@ export default function PriorAuthorizationForm() {
         <TabButton active={activeTab === 'supporting'} onClick={() => setActiveTab('supporting')} icon={Paperclip}>
           Supporting Info
         </TabButton>
+        {/* Communications Tab - Only show for saved PAs in queued status */}
+        {isEditMode && formData.status === 'queued' && (
+          <TabButton active={activeTab === 'communications'} onClick={() => setActiveTab('communications')} icon={MessageSquare}>
+            Communications
+          </TabButton>
+        )}
       </div>
 
       {/* Basic Info Tab */}
@@ -3492,6 +3498,29 @@ export default function PriorAuthorizationForm() {
                 </span>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Communications Tab - Only for queued PAs */}
+      {activeTab === 'communications' && isEditMode && formData.status === 'queued' && (
+        <Card>
+          <CardContent className="pt-6">
+            <CommunicationPanel
+              priorAuthId={parseInt(id)}
+              priorAuthStatus={formData.status}
+              items={formData.items || []}
+              onStatusUpdate={(updatedPA) => {
+                // Update form data with new status
+                setFormData(prev => ({
+                  ...prev,
+                  status: updatedPA.status,
+                  outcome: updatedPA.outcome,
+                  disposition: updatedPA.disposition,
+                  pre_auth_ref: updatedPA.pre_auth_ref || prev.pre_auth_ref
+                }));
+              }}
+            />
           </CardContent>
         </Card>
       )}

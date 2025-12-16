@@ -540,7 +540,9 @@ class ApiService {
   }
 
   async pollPriorAuthorizationResponse(id) {
-    return this.request(`/prior-authorizations/${id}/poll`);
+    return this.request(`/prior-authorizations/${id}/poll`, {
+      method: 'POST'
+    });
   }
 
   async getPriorAuthorizationBundle(id) {
@@ -556,6 +558,74 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(formData)
     });
+  }
+
+  // ============================================================================
+  // NPHIES COMMUNICATION METHODS
+  // ============================================================================
+
+  /**
+   * Send UNSOLICITED Communication (Test Case #1)
+   * HCP proactively sends additional information to HIC for a pended authorization
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   * @param {Array} payloads - Array of payload objects
+   * @param {string} payloads[].contentType - 'string', 'attachment', or 'reference'
+   * @param {string} payloads[].contentString - Free text content (for contentType='string')
+   * @param {Object} payloads[].attachment - Attachment object (for contentType='attachment')
+   * @param {number[]} payloads[].claimItemSequences - Array of item sequence numbers this relates to
+   */
+  async sendUnsolicitedCommunication(priorAuthId, payloads) {
+    return this.request(`/prior-authorizations/${priorAuthId}/communication/unsolicited`, {
+      method: 'POST',
+      body: JSON.stringify({ payloads })
+    });
+  }
+
+  /**
+   * Send SOLICITED Communication (Test Case #2)
+   * HCP responds to CommunicationRequest from HIC with additional information/attachments
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   * @param {number} communicationRequestId - CommunicationRequest ID to respond to
+   * @param {Array} payloads - Array of payload objects (typically attachments)
+   */
+  async sendSolicitedCommunication(priorAuthId, communicationRequestId, payloads) {
+    return this.request(`/prior-authorizations/${priorAuthId}/communication/solicited`, {
+      method: 'POST',
+      body: JSON.stringify({ communicationRequestId, payloads })
+    });
+  }
+
+  /**
+   * Get CommunicationRequests from HIC for a Prior Authorization
+   * These are requests from the insurer asking for additional information
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   * @param {boolean} pendingOnly - If true, only return unanswered requests
+   */
+  async getCommunicationRequests(priorAuthId, pendingOnly = false) {
+    const params = pendingOnly ? '?pending=true' : '';
+    return this.request(`/prior-authorizations/${priorAuthId}/communication-requests${params}`);
+  }
+
+  /**
+   * Get sent Communications for a Prior Authorization
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   */
+  async getCommunications(priorAuthId) {
+    return this.request(`/prior-authorizations/${priorAuthId}/communications`);
+  }
+
+  /**
+   * Get a single Communication by ID
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   * @param {number} communicationId - Communication ID
+   */
+  async getCommunication(priorAuthId, communicationId) {
+    return this.request(`/prior-authorizations/${priorAuthId}/communications/${communicationId}`);
   }
 
   // Claim Submissions (NPHIES Claims - use: "claim")

@@ -746,6 +746,339 @@ class NphiesService {
       ]
     };
   }
+
+  // ============================================================================
+  // COMMUNICATION METHODS
+  // ============================================================================
+
+  /**
+   * Send Communication to NPHIES
+   * Used for both unsolicited (Test Case #1) and solicited (Test Case #2) communications
+   * 
+   * @param {Object} communicationBundle - FHIR Bundle containing Communication
+   * @returns {Object} Response with success status and data
+   */
+  async sendCommunication(communicationBundle) {
+    console.log('[NPHIES] ===== SENDING COMMUNICATION =====');
+    console.log('[NPHIES] Bundle ID:', communicationBundle?.id);
+    
+    const communication = communicationBundle?.entry?.find(
+      e => e.resource?.resourceType === 'Communication'
+    )?.resource;
+    console.log('[NPHIES] Communication ID:', communication?.id);
+    console.log('[NPHIES] Communication status:', communication?.status);
+    console.log('[NPHIES] About reference:', communication?.about?.[0]?.reference);
+    console.log('[NPHIES] BasedOn:', communication?.basedOn?.[0]?.reference || 'None (unsolicited)');
+    console.log('[NPHIES] Payload count:', communication?.payload?.length);
+    console.log('[NPHIES] ====================================');
+    
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/$process-message`,
+        communicationBundle,
+        {
+          headers: {
+            'Content-Type': 'application/fhir+json',
+            'Accept': 'application/fhir+json'
+          },
+          timeout: this.timeout,
+          validateStatus: (status) => status < 500
+        }
+      );
+      
+      console.log(`[NPHIES] Communication response status: ${response.status}`);
+      
+      // Log response details
+      if (response.data) {
+        console.log('[NPHIES] Response Bundle ID:', response.data.id);
+        const msgHeader = response.data.entry?.find(
+          e => e.resource?.resourceType === 'MessageHeader'
+        )?.resource;
+        console.log('[NPHIES] Response event:', msgHeader?.eventCoding?.code);
+        console.log('[NPHIES] Response code:', msgHeader?.response?.code);
+      }
+      
+      return {
+        success: response.status >= 200 && response.status < 300,
+        status: response.status,
+        data: response.data,
+        requestBundle: communicationBundle
+      };
+      
+    } catch (error) {
+      console.error('[NPHIES] Communication error:', error.message);
+      return {
+        success: false,
+        error: this.formatError(error),
+        requestBundle: communicationBundle
+      };
+    }
+  }
+
+  /**
+   * Send Poll Request to NPHIES for Prior Authorization messages
+   * Polls for: priorauth-response, communication-request, communication
+   * 
+   * @param {Object} pollBundle - FHIR Bundle containing poll request
+   * @returns {Object} Response with success status and data
+   */
+  async sendPriorAuthPoll(pollBundle) {
+    console.log('[NPHIES] ===== SENDING POLL REQUEST =====');
+    console.log('[NPHIES] Bundle ID:', pollBundle?.id);
+    
+    const params = pollBundle?.entry?.find(
+      e => e.resource?.resourceType === 'Parameters'
+    )?.resource;
+    const messageTypes = params?.parameter
+      ?.filter(p => p.name === 'message-type')
+      ?.map(p => p.valueCode);
+    console.log('[NPHIES] Polling for message types:', messageTypes);
+    console.log('[NPHIES] ==================================');
+    
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/$process-message`,
+        pollBundle,
+        {
+          headers: {
+            'Content-Type': 'application/fhir+json',
+            'Accept': 'application/fhir+json'
+          },
+          timeout: this.timeout,
+          validateStatus: (status) => status < 500
+        }
+      );
+      
+      console.log(`[NPHIES] Poll response status: ${response.status}`);
+      
+      // Log what we received
+      if (response.data) {
+        console.log('[NPHIES] Response Bundle type:', response.data.type);
+        console.log('[NPHIES] Response entries:', response.data.entry?.length || 0);
+        
+        // Count resource types in response
+        const resourceCounts = {};
+        for (const entry of response.data.entry || []) {
+          const type = entry.resource?.resourceType;
+          if (type) {
+            resourceCounts[type] = (resourceCounts[type] || 0) + 1;
+          }
+        }
+        console.log('[NPHIES] Resources received:', resourceCounts);
+      }
+      
+      return {
+        success: response.status >= 200 && response.status < 300,
+        status: response.status,
+        data: response.data,
+        requestBundle: pollBundle
+      };
+      
+    } catch (error) {
+      console.error('[NPHIES] Poll error:', error.message);
+      return {
+        success: false,
+        error: this.formatError(error),
+        requestBundle: pollBundle
+      };
+    }
+  }
+
+  /**
+   * Build a Poll Request bundle for Prior Authorization messages
+   * 
+   * @param {string} providerId - Provider NPHIES ID
+   * @param {Array} messageTypes - Message types to poll for
+   * @param {string} requestIdentifier - Optional: filter by request identifier
+   * @param {number} count - Max messages to retrieve
+   * @returns {Object} FHIR Bundle for poll request
+   */
+  buildPriorAuthPollBundle(providerId, messageTypes = ['priorauth-response', 'communication-request', 'communication'], requestIdentifier = null, count = 50) {
+    const bundleId = randomUUID();
+    const messageHeaderId = randomUUID();
+    const parametersId = randomUUID();
+
+    const parameters = [
+      ...messageTypes.map(type => ({
+        name: 'message-type',
+        valueCode: type
+      })),
+      {
+        name: 'count',
+        valueInteger: count
+      }
+    ];
+
+    // Add request identifier filter if provided
+    if (requestIdentifier) {
+      parameters.push({
+        name: 'request-identifier',
+        valueIdentifier: {
+          system: 'http://provider.com/prior-auth',
+          value: requestIdentifier
+        }
+      });
+    }
+
+    return {
+      resourceType: 'Bundle',
+      id: bundleId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: new Date().toISOString(),
+      entry: [
+        {
+          fullUrl: `urn:uuid:${messageHeaderId}`,
+          resource: {
+            resourceType: 'MessageHeader',
+            id: messageHeaderId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+            },
+            eventCoding: {
+              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+              code: 'poll'
+            },
+            source: {
+              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com'
+            },
+            destination: [{
+              endpoint: 'http://nphies.sa',
+              receiver: {
+                type: 'Organization',
+                identifier: {
+                  system: 'http://nphies.sa/license/nphies-license',
+                  value: 'nphies'
+                }
+              }
+            }],
+            sender: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/provider-license',
+                value: providerId
+              }
+            }
+          }
+        },
+        {
+          fullUrl: `urn:uuid:${parametersId}`,
+          resource: {
+            resourceType: 'Parameters',
+            id: parametersId,
+            parameter: parameters
+          }
+        }
+      ]
+    };
+  }
+
+  /**
+   * Extract ClaimResponses from poll response
+   * 
+   * @param {Object} responseData - Poll response data
+   * @returns {Array} Array of ClaimResponse resources
+   */
+  extractClaimResponsesFromPoll(responseData) {
+    const claimResponses = [];
+    
+    if (!responseData || responseData.resourceType !== 'Bundle') {
+      return claimResponses;
+    }
+
+    for (const entry of responseData.entry || []) {
+      const resource = entry.resource;
+      
+      // Direct ClaimResponse
+      if (resource?.resourceType === 'ClaimResponse') {
+        claimResponses.push(resource);
+      }
+      
+      // Nested in message bundle
+      if (resource?.resourceType === 'Bundle' && resource.type === 'message') {
+        const nestedCR = resource.entry?.find(
+          e => e.resource?.resourceType === 'ClaimResponse'
+        )?.resource;
+        if (nestedCR) {
+          claimResponses.push(nestedCR);
+        }
+      }
+    }
+    
+    return claimResponses;
+  }
+
+  /**
+   * Extract CommunicationRequests from poll response
+   * 
+   * @param {Object} responseData - Poll response data
+   * @returns {Array} Array of CommunicationRequest resources
+   */
+  extractCommunicationRequestsFromPoll(responseData) {
+    const communicationRequests = [];
+    
+    if (!responseData || responseData.resourceType !== 'Bundle') {
+      return communicationRequests;
+    }
+
+    for (const entry of responseData.entry || []) {
+      const resource = entry.resource;
+      
+      // Direct CommunicationRequest
+      if (resource?.resourceType === 'CommunicationRequest') {
+        communicationRequests.push(resource);
+      }
+      
+      // Nested in message bundle
+      if (resource?.resourceType === 'Bundle' && resource.type === 'message') {
+        const nestedCR = resource.entry?.find(
+          e => e.resource?.resourceType === 'CommunicationRequest'
+        )?.resource;
+        if (nestedCR) {
+          communicationRequests.push(nestedCR);
+        }
+      }
+    }
+    
+    return communicationRequests;
+  }
+
+  /**
+   * Extract Communication acknowledgments from poll response
+   * 
+   * @param {Object} responseData - Poll response data
+   * @returns {Array} Array of Communication resources (acknowledgments)
+   */
+  extractCommunicationsFromPoll(responseData) {
+    const communications = [];
+    
+    if (!responseData || responseData.resourceType !== 'Bundle') {
+      return communications;
+    }
+
+    for (const entry of responseData.entry || []) {
+      const resource = entry.resource;
+      
+      // Direct Communication
+      if (resource?.resourceType === 'Communication') {
+        communications.push(resource);
+      }
+      
+      // Nested in message bundle
+      if (resource?.resourceType === 'Bundle' && resource.type === 'message') {
+        const nestedComm = resource.entry?.find(
+          e => e.resource?.resourceType === 'Communication'
+        )?.resource;
+        if (nestedComm) {
+          communications.push(nestedComm);
+        }
+      }
+    }
+    
+    return communications;
+  }
 }
 
 export default new NphiesService();

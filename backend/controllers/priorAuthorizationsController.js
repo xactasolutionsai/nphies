@@ -3,6 +3,7 @@ import { query } from '../db.js';
 import { validationSchemas } from '../models/schema.js';
 import priorAuthMapper, { getMapper } from '../services/priorAuthMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
+import communicationService from '../services/communicationService.js';
 
 class PriorAuthorizationsController extends BaseController {
   constructor() {
@@ -1002,10 +1003,12 @@ class PriorAuthorizationsController extends BaseController {
 
   /**
    * Poll for response (for queued requests)
+   * Polls NPHIES for: priorauth-response, communication-request, communication
    */
   async poll(req, res) {
     try {
       const { id } = req.params;
+      const schemaName = req.schemaName || 'public';
 
       // Get existing prior authorization
       const existing = await this.getByIdInternal(id);
@@ -1021,15 +1024,232 @@ class PriorAuthorizationsController extends BaseController {
         });
       }
 
-      // TODO: Implement actual polling to NPHIES
-      // For now, return current status
+      // Poll NPHIES for messages
+      const pollResult = await communicationService.pollForMessages(id, schemaName);
+
+      if (!pollResult.success) {
+        return res.status(500).json({
+          error: 'Failed to poll NPHIES',
+          details: pollResult.error
+        });
+      }
+
+      // Get updated prior authorization data
+      const updatedPA = await this.getByIdInternal(id);
+
       res.json({
-        data: existing,
-        message: 'Polling not yet implemented - showing current status'
+        success: true,
+        data: updatedPA,
+        pollResults: {
+          claimResponses: pollResult.claimResponses,
+          communicationRequests: pollResult.communicationRequests,
+          acknowledgments: pollResult.acknowledgments
+        },
+        message: pollResult.claimResponses.length > 0 
+          ? 'Received authorization response' 
+          : pollResult.communicationRequests.length > 0
+            ? 'Received communication request(s) from insurer'
+            : 'No new messages'
       });
     } catch (error) {
       console.error('Error polling for response:', error);
       res.status(500).json({ error: error.message || 'Failed to poll for response' });
+    }
+  }
+
+  // ============================================================================
+  // COMMUNICATION METHODS
+  // ============================================================================
+
+  /**
+   * Send UNSOLICITED Communication (Test Case #1)
+   * HCP proactively sends additional information to HIC
+   */
+  async sendUnsolicitedCommunication(req, res) {
+    try {
+      const { id } = req.params;
+      const { payloads } = req.body;
+      const schemaName = req.schemaName || 'public';
+
+      // Validate payloads
+      if (!payloads || !Array.isArray(payloads) || payloads.length === 0) {
+        return res.status(400).json({ 
+          error: 'At least one payload is required',
+          hint: 'Provide payloads array with contentType and content'
+        });
+      }
+
+      // Validate each payload has required fields
+      for (let i = 0; i < payloads.length; i++) {
+        const payload = payloads[i];
+        if (!payload.contentType) {
+          return res.status(400).json({
+            error: `Payload ${i + 1} missing contentType`,
+            hint: 'contentType must be "string", "attachment", or "reference"'
+          });
+        }
+        if (payload.contentType === 'string' && !payload.contentString) {
+          return res.status(400).json({
+            error: `Payload ${i + 1} has contentType "string" but no contentString`
+          });
+        }
+        if (payload.contentType === 'attachment' && !payload.attachment) {
+          return res.status(400).json({
+            error: `Payload ${i + 1} has contentType "attachment" but no attachment object`
+          });
+        }
+      }
+
+      // Send the communication
+      const result = await communicationService.sendUnsolicitedCommunication(
+        id, 
+        payloads, 
+        schemaName
+      );
+
+      res.json({
+        success: result.success,
+        data: result.communication,
+        nphiesResponse: result.nphiesResponse,
+        message: result.success 
+          ? 'Unsolicited communication sent successfully' 
+          : 'Failed to send communication'
+      });
+
+    } catch (error) {
+      console.error('Error sending unsolicited communication:', error);
+      res.status(500).json({ error: error.message || 'Failed to send communication' });
+    }
+  }
+
+  /**
+   * Send SOLICITED Communication (Test Case #2)
+   * HCP responds to CommunicationRequest from HIC
+   */
+  async sendSolicitedCommunication(req, res) {
+    try {
+      const { id } = req.params;
+      const { communicationRequestId, payloads } = req.body;
+      const schemaName = req.schemaName || 'public';
+
+      // Validate communicationRequestId
+      if (!communicationRequestId) {
+        return res.status(400).json({
+          error: 'communicationRequestId is required',
+          hint: 'Provide the ID of the CommunicationRequest you are responding to'
+        });
+      }
+
+      // Validate payloads
+      if (!payloads || !Array.isArray(payloads) || payloads.length === 0) {
+        return res.status(400).json({ 
+          error: 'At least one payload is required',
+          hint: 'For solicited communications, typically include attachments'
+        });
+      }
+
+      // Send the communication
+      const result = await communicationService.sendSolicitedCommunication(
+        communicationRequestId,
+        payloads,
+        schemaName
+      );
+
+      res.json({
+        success: result.success,
+        data: result.communication,
+        nphiesResponse: result.nphiesResponse,
+        message: result.success 
+          ? 'Solicited communication sent successfully' 
+          : 'Failed to send communication'
+      });
+
+    } catch (error) {
+      console.error('Error sending solicited communication:', error);
+      res.status(500).json({ error: error.message || 'Failed to send communication' });
+    }
+  }
+
+  /**
+   * Get CommunicationRequests for a Prior Authorization
+   * These are requests from HIC asking for additional information
+   */
+  async getCommunicationRequests(req, res) {
+    try {
+      const { id } = req.params;
+      const { pending } = req.query;
+      const schemaName = req.schemaName || 'public';
+
+      let requests;
+      if (pending === 'true') {
+        requests = await communicationService.getPendingCommunicationRequests(id, schemaName);
+      } else {
+        requests = await communicationService.getCommunicationRequests(id, schemaName);
+      }
+
+      res.json({
+        success: true,
+        data: requests,
+        count: requests.length,
+        pendingCount: requests.filter(r => !r.responded_at).length
+      });
+
+    } catch (error) {
+      console.error('Error getting communication requests:', error);
+      res.status(500).json({ error: error.message || 'Failed to get communication requests' });
+    }
+  }
+
+  /**
+   * Get Communications sent for a Prior Authorization
+   */
+  async getCommunications(req, res) {
+    try {
+      const { id } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      const communications = await communicationService.getCommunications(id, schemaName);
+
+      res.json({
+        success: true,
+        data: communications,
+        count: communications.length,
+        acknowledgedCount: communications.filter(c => c.acknowledgment_received).length
+      });
+
+    } catch (error) {
+      console.error('Error getting communications:', error);
+      res.status(500).json({ error: error.message || 'Failed to get communications' });
+    }
+  }
+
+  /**
+   * Get a single Communication by ID
+   */
+  async getCommunication(req, res) {
+    try {
+      const { id, communicationId } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      const communication = await communicationService.getCommunication(communicationId, schemaName);
+
+      if (!communication) {
+        return res.status(404).json({ error: 'Communication not found' });
+      }
+
+      // Verify it belongs to the prior auth
+      if (communication.prior_auth_id !== parseInt(id)) {
+        return res.status(403).json({ error: 'Communication does not belong to this prior authorization' });
+      }
+
+      res.json({
+        success: true,
+        data: communication
+      });
+
+    } catch (error) {
+      console.error('Error getting communication:', error);
+      res.status(500).json({ error: error.message || 'Failed to get communication' });
     }
   }
 

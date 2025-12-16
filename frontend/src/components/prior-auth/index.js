@@ -48,4 +48,5 @@ export { generateDummyVitalsAndClinical } from './dummyDataGenerator';
 export { default as TabButton } from './TabButton';
 export { default as AIValidationPanel } from './AIValidationPanel';
 export { default as DrugInteractionJustificationModal } from './DrugInteractionJustificationModal';
+export { default as CommunicationPanel } from './CommunicationPanel';
 
