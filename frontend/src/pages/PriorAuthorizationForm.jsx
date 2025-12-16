@@ -3466,10 +3466,13 @@ export default function PriorAuthorizationForm() {
                   <Button 
                     type="button" 
                     onClick={() => {
-                      setFormData(prev => ({
-                        ...prev,
-                        lab_observations: [...prev.lab_observations, getInitialLabObservationData(prev.lab_observations.length + 1)]
-                      }));
+                      setFormData(prev => {
+                        const currentObs = prev.lab_observations || [];
+                        return {
+                          ...prev,
+                          lab_observations: [...currentObs, getInitialLabObservationData(currentObs.length + 1)]
+                        };
+                      });
                     }} 
                     variant="outline" 
                     size="sm"
@@ -3481,7 +3484,7 @@ export default function PriorAuthorizationForm() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {formData.lab_observations.length === 0 ? (
+                {(!formData.lab_observations || formData.lab_observations.length === 0) ? (
                   <div className="text-center py-8 text-gray-500 bg-white rounded-lg border border-dashed border-emerald-300">
                     <Activity className="h-8 w-8 mx-auto mb-2 text-emerald-400" />
                     <p>No lab observations added yet.</p>
@@ -3507,7 +3510,7 @@ export default function PriorAuthorizationForm() {
                           onClick={() => {
                             setFormData(prev => ({
                               ...prev,
-                              lab_observations: prev.lab_observations.filter((_, i) => i !== index)
+                              lab_observations: (prev.lab_observations || []).filter((_, i) => i !== index)
                                 .map((o, i) => ({ ...o, sequence: i + 1 }))
                             }));
                           }}
