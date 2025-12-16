@@ -169,6 +169,157 @@ class NphiesService {
   }
 
   /**
+   * Submit cancel request to NPHIES
+   * Reference: https://portal.nphies.sa/ig/usecase-cancel.html
+   * 
+   * Cancel requests use Task resource and expect Task response
+   * MessageHeader.eventCoding = cancel-request
+   * Response: Task.status = 'completed' or 'error'
+   */
+  async submitCancelRequest(requestBundle) {
+    let lastError = null;
+    
+    // Debug: Log the request bundle being sent
+    console.log('[NPHIES] ===== OUTGOING CANCEL REQUEST =====');
+    console.log('[NPHIES] Request Bundle ID:', requestBundle?.id);
+    console.log('[NPHIES] Request Bundle Type:', requestBundle?.type);
+    console.log('[NPHIES] Request Bundle Entries:', requestBundle?.entry?.length);
+    const msgHeader = requestBundle?.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+    console.log('[NPHIES] MessageHeader event:', msgHeader?.eventCoding?.code);
+    const task = requestBundle?.entry?.find(e => e.resource?.resourceType === 'Task')?.resource;
+    console.log('[NPHIES] Task code:', task?.code?.coding?.[0]?.code);
+    console.log('[NPHIES] Task focus:', task?.focus?.identifier?.value);
+    console.log('[NPHIES] ======================================');
+    
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      try {
+        console.log(`[NPHIES] Sending cancel request (attempt ${attempt}/${this.retryAttempts})`);
+        
+        const response = await axios.post(
+          `${this.baseURL}/$process-message`,
+          requestBundle,
+          {
+            headers: {
+              'Content-Type': 'application/fhir+json',
+              'Accept': 'application/fhir+json'
+            },
+            timeout: this.timeout,
+            validateStatus: (status) => status < 500
+          }
+        );
+
+        console.log(`[NPHIES] Cancel response received: ${response.status}`);
+        
+        // Debug: Log the response bundle received
+        console.log('[NPHIES] ===== INCOMING CANCEL RESPONSE =====');
+        console.log('[NPHIES] Response Bundle ID:', response.data?.id);
+        console.log('[NPHIES] Response Bundle Type:', response.data?.type);
+        console.log('[NPHIES] Response Bundle Entries:', response.data?.entry?.length);
+        const taskResp = response.data?.entry?.find(e => e.resource?.resourceType === 'Task')?.resource;
+        console.log('[NPHIES] Task ID:', taskResp?.id);
+        console.log('[NPHIES] Task status:', taskResp?.status);
+        console.log('[NPHIES] Task has output:', !!taskResp?.output);
+        console.log('[NPHIES] ========================================');
+        
+        // Validate response for cancel (expects Task)
+        const validationResult = this.validateCancelResponse(response.data);
+        if (!validationResult.valid) {
+          console.error('[NPHIES] Invalid cancel response structure:', validationResult.errors);
+          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
+        }
+
+        // Parse the cancel response
+        const parsedResponse = this.parseCancelResponse(response.data);
+
+        return {
+          success: parsedResponse.success,
+          status: response.status,
+          data: response.data,
+          taskStatus: parsedResponse.taskStatus,
+          errors: parsedResponse.errors
+        };
+
+      } catch (error) {
+        lastError = error;
+        console.error(`[NPHIES] Cancel attempt ${attempt} failed:`, error.message);
+
+        if (error.response && error.response.status >= 400 && error.response.status < 500) {
+          console.log('[NPHIES] Client error detected, not retrying');
+          break;
+        }
+
+        if (attempt < this.retryAttempts) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
+          await this.sleep(waitTime);
+        }
+      }
+    }
+
+    return {
+      success: false,
+      error: this.formatError(lastError)
+    };
+  }
+
+  /**
+   * Parse Cancel Response
+   * Reference: https://portal.nphies.sa/ig/usecase-cancel.html
+   * 
+   * Task.status = 'completed' means cancellation was successful
+   * Task.status = 'error' means cancellation failed
+   * Task.output with type='error' contains error details
+   */
+  parseCancelResponse(responseBundle) {
+    try {
+      const taskResource = responseBundle?.entry?.find(
+        e => e.resource?.resourceType === 'Task'
+      )?.resource;
+
+      if (!taskResource) {
+        return {
+          success: false,
+          taskStatus: 'error',
+          errors: [{ code: 'NO_TASK', message: 'No Task resource in cancel response' }]
+        };
+      }
+
+      const taskStatus = taskResource.status;
+      const isSuccess = taskStatus === 'completed';
+
+      // Extract errors if status is 'error'
+      const errors = [];
+      if (taskStatus === 'error' && taskResource.output) {
+        for (const output of taskResource.output) {
+          if (output.type?.coding?.[0]?.code === 'error') {
+            const errorCode = output.valueCodeableConcept?.coding?.[0]?.code;
+            const errorMessage = output.valueCodeableConcept?.coding?.[0]?.display || 
+                                 output.valueCodeableConcept?.text;
+            errors.push({
+              code: errorCode || 'CANCEL_ERROR',
+              message: errorMessage || 'Cancellation failed'
+            });
+          }
+        }
+      }
+
+      return {
+        success: isSuccess,
+        taskStatus,
+        taskId: taskResource.id,
+        errors: errors.length > 0 ? errors : undefined
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        taskStatus: 'error',
+        errors: [{ code: 'PARSE_ERROR', message: error.message }]
+      };
+    }
+  }
+
+  /**
    * Submit claim request to NPHIES (use: "claim")
    * Same endpoint as prior auth, but with eventCoding = claim-request
    */
@@ -264,6 +415,15 @@ class NphiesService {
    */
   validatePriorAuthResponse(response) {
     return this.validateBundleResponse(response, ['ClaimResponse']);
+  }
+
+  /**
+   * Validate FHIR response bundle structure for Cancel Request
+   * Cancel responses contain Task resource (not ClaimResponse)
+   * Reference: https://portal.nphies.sa/ig/usecase-cancel.html
+   */
+  validateCancelResponse(response) {
+    return this.validateBundleResponse(response, ['Task']);
   }
 
   /**

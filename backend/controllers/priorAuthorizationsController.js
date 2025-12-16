@@ -892,8 +892,10 @@ class PriorAuthorizationsController extends BaseController {
       // Build cancel request bundle
       const cancelBundle = priorAuthMapper.buildCancelRequestBundle(existing, provider, insurer, reason);
 
-      // Send to NPHIES (use submitPriorAuth since cancel is also a Claim operation)
-      const nphiesResponse = await nphiesService.submitPriorAuth(cancelBundle);
+      // Send to NPHIES using dedicated cancel method
+      // Cancel requests return Task response (not ClaimResponse)
+      // Reference: https://portal.nphies.sa/ig/usecase-cancel.html
+      const nphiesResponse = await nphiesService.submitCancelRequest(cancelBundle);
 
       if (nphiesResponse.success) {
         // Update status
@@ -911,19 +913,28 @@ class PriorAuthorizationsController extends BaseController {
           INSERT INTO prior_authorization_responses 
           (prior_auth_id, response_type, outcome, bundle_json)
           VALUES ($1, $2, $3, $4)
-        `, [id, 'cancel', 'complete', JSON.stringify(nphiesResponse.data)]);
+        `, [id, 'cancel', nphiesResponse.taskStatus || 'complete', JSON.stringify(nphiesResponse.data)]);
 
         const updatedData = await this.getByIdInternal(id);
 
         res.json({
           success: true,
           data: updatedData,
-          message: 'Prior authorization cancelled successfully'
+          message: 'Prior authorization cancelled successfully',
+          taskStatus: nphiesResponse.taskStatus
         });
       } else {
+        // Store failed response for debugging
+        await query(`
+          INSERT INTO prior_authorization_responses 
+          (prior_auth_id, response_type, outcome, bundle_json)
+          VALUES ($1, $2, $3, $4)
+        `, [id, 'cancel', 'error', JSON.stringify(nphiesResponse.data || nphiesResponse.error)]);
+
         res.status(502).json({
           success: false,
-          error: nphiesResponse.error,
+          error: nphiesResponse.error || nphiesResponse.errors,
+          taskStatus: nphiesResponse.taskStatus,
           message: 'Failed to cancel prior authorization'
         });
       }
