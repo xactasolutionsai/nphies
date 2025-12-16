@@ -51,7 +51,9 @@ import {
   ENCOUNTER_SERVICE_TYPE_OPTIONS,
   ENCOUNTER_PRIORITY_OPTIONS,
   DENTAL_PROCEDURE_OPTIONS,
-  NPHIES_PROCEDURE_OPTIONS
+  NPHIES_PROCEDURE_OPTIONS,
+  LOINC_LAB_OPTIONS,
+  SERVICE_CODE_SYSTEM_OPTIONS
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -2800,37 +2802,77 @@ export default function PriorAuthorizationForm() {
                 
                 {/* Generic procedure code fields - hidden for dental/pharmacy (they use specialized fields below) */}
                 {formData.auth_type !== 'dental' && formData.auth_type !== 'pharmacy' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Service/Procedure Code *</Label>
-                      <Select
-                        value={NPHIES_PROCEDURE_OPTIONS.find(opt => opt.value === item.product_or_service_code)}
-                        onChange={(option) => {
-                          handleItemChange(index, 'product_or_service_code', option?.value || '');
-                          // Extract description from label (format: "CODE - Description")
-                          const description = option?.label?.includes(' - ') 
-                            ? option.label.split(' - ').slice(1).join(' - ')
-                            : '';
-                          handleItemChange(index, 'product_or_service_display', description);
-                          handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/procedures');
-                        }}
-                        options={NPHIES_PROCEDURE_OPTIONS}
-                        styles={selectStyles}
-                        placeholder="Select procedure..."
-                        isClearable
-                        isSearchable
-                        menuPortalTarget={document.body}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Description</Label>
-                      <Input
-                        value={item.product_or_service_display || ''}
-                        onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
-                        placeholder="Auto-filled from selection"
-                        readOnly
-                        className="bg-gray-50"
-                      />
+                  <div className="space-y-4">
+                    {/* Code System Selection */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Code System</Label>
+                        <Select
+                          value={SERVICE_CODE_SYSTEM_OPTIONS.find(opt => 
+                            opt.system === item.product_or_service_system
+                          ) || SERVICE_CODE_SYSTEM_OPTIONS[0]}
+                          onChange={(option) => {
+                            // Clear current code when switching systems
+                            handleItemChange(index, 'product_or_service_code', '');
+                            handleItemChange(index, 'product_or_service_display', '');
+                            handleItemChange(index, 'product_or_service_system', option?.system || 'http://nphies.sa/terminology/CodeSystem/procedures');
+                          }}
+                          options={SERVICE_CODE_SYSTEM_OPTIONS}
+                          styles={selectStyles}
+                          menuPortalTarget={document.body}
+                        />
+                        {item.product_or_service_system === 'http://loinc.org' && (
+                          <p className="text-xs text-blue-600">
+                            💡 LOINC codes required for Test Case #2 (Lab Services)
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Service/Procedure Code *</Label>
+                        <Select
+                          value={
+                            item.product_or_service_system === 'http://loinc.org'
+                              ? LOINC_LAB_OPTIONS.find(opt => opt.value === item.product_or_service_code)
+                              : NPHIES_PROCEDURE_OPTIONS.find(opt => opt.value === item.product_or_service_code)
+                          }
+                          onChange={(option) => {
+                            handleItemChange(index, 'product_or_service_code', option?.value || '');
+                            // Extract description from label (format: "CODE - Description")
+                            const description = option?.label?.includes(' - ') 
+                              ? option.label.split(' - ').slice(1).join(' - ')
+                              : '';
+                            handleItemChange(index, 'product_or_service_display', description);
+                            // Set system based on option or current selection
+                            if (option?.system) {
+                              handleItemChange(index, 'product_or_service_system', option.system);
+                            }
+                          }}
+                          options={
+                            item.product_or_service_system === 'http://loinc.org'
+                              ? LOINC_LAB_OPTIONS
+                              : NPHIES_PROCEDURE_OPTIONS
+                          }
+                          styles={selectStyles}
+                          placeholder={
+                            item.product_or_service_system === 'http://loinc.org'
+                              ? "Select LOINC lab test..."
+                              : "Select procedure..."
+                          }
+                          isClearable
+                          isSearchable
+                          menuPortalTarget={document.body}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Description</Label>
+                        <Input
+                          value={item.product_or_service_display || ''}
+                          onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
+                          placeholder="Auto-filled from selection"
+                          readOnly
+                          className="bg-gray-50"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}

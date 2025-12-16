@@ -176,9 +176,15 @@ NPHIES → HCP: Completed AuthorizationResponse
    - **Provider:** Select provider
    - **Eligibility Reference:** (Optional) Enter eligibility reference from Step 1
 
-3. **Fill Items Tab:**
-   - Add professional service items
+3. **Fill Items Tab:** ⚠️ **IMPORTANT: Must use LOINC codes for lab services**
+   - **Code System:** Select `LOINC (Lab Tests)` from the dropdown
+   - **Service/Procedure Code:** Select one of the required LOINC codes:
+     - `80096-1` - Microalbumin/Creatinine [Ratio] in Urine
+     - `43863-0` - Urine specimen collection method
+     - `55951-8` - Urine sediment comments by Light microscopy
+     - `12419-8` - Sodium [Moles/volume] in Urine
    - Set quantities and prices
+   - Add at least 1 lab service item with LOINC code (required for Test Case #2)
 
 4. **Fill Diagnoses Tab:**
    - Add relevant diagnoses
@@ -219,16 +225,14 @@ NPHIES → HCP: Completed AuthorizationResponse
    - In the **"Pending Requests from Insurer"** section
    - Click `Respond` on the CommunicationRequest
 
-2. **Compose Response:**
+2. **Compose Response:** ⚠️ **IMPORTANT: Attachment is REQUIRED for Test Case #2**
    - **Communication Type:** Automatically set to `Solicited (Response to Request)`
    - **Responding to Request:** Shows the selected CommunicationRequest
-   - **Category:** Select appropriate category
+   - **Category:** Select appropriate category (e.g., `Notification` or `Instruction`)
    - **Priority:** Match the request priority or set appropriately
-   - **Content Type:** 
-     - `Free Text` - For text response
-     - `Attachment` - For documents (PDF, images)
-   - **Message Content:** Provide the requested information
-   - **Reference Items:** Select relevant claim items if applicable
+   - **Content Type:** Select `Attachment` ⚠️ (Required for Test Case #2)
+     - Upload supporting documents (PDF, images, lab reports)
+   - **Reference Items:** Select relevant claim items (especially the LOINC lab items)
 
 3. **Send Response:**
    - Click `Send Communication`
