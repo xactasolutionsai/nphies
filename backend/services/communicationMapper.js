@@ -423,33 +423,34 @@ class CommunicationMapper {
   }
 
   /**
-   * Get the NPHIES-assigned authorization reference for the 'about' element
+   * Get the authorization reference for the 'about' element
    * 
-   * BV-00148: The 'about' identifier MUST be the pre_auth_ref assigned by NPHIES
-   * This is typically a UUID like: 98118790-5053-4cef-b479-ae744986fbd5
+   * IMPORTANT: The 'about' identifier value MUST match the original Claim.identifier.value
+   * that was sent in the Prior Authorization request. This is the provider-assigned
+   * request_number, NOT the NPHIES-assigned pre_auth_ref from the response.
    * 
    * Priority order:
-   * 1. pre_auth_ref (NPHIES-assigned UUID) - REQUIRED for approved/queued PAs
-   * 2. nphies_request_id (fallback for pending PAs)
-   * 3. request_number (last resort)
+   * 1. request_number (provider-assigned ID used in original Claim) - REQUIRED
+   * 2. nphies_request_id (fallback)
+   * 3. pre_auth_ref (last resort, though may not match original Claim)
    * 
    * @param {Object} priorAuth - Prior authorization data
-   * @returns {string} NPHIES authorization reference
+   * @returns {string} Authorization reference matching original Claim identifier
    */
   getNphiesAuthReference(priorAuth) {
-    // pre_auth_ref is the NPHIES-assigned reference (UUID format)
-    // This is what NPHIES expects in the 'about' element
-    if (priorAuth.pre_auth_ref) {
-      return priorAuth.pre_auth_ref;
+    // request_number is the provider-assigned identifier used in the original Claim
+    // This MUST match the Claim.identifier.value sent in the prior auth request
+    if (priorAuth.request_number) {
+      return priorAuth.request_number;
     }
     
-    // Fallback to nphies_request_id if no pre_auth_ref yet
+    // Fallback to nphies_request_id if no request_number
     if (priorAuth.nphies_request_id) {
       return priorAuth.nphies_request_id;
     }
     
-    // Last resort: use request_number
-    return priorAuth.request_number || `req_${Date.now()}`;
+    // Last resort: use pre_auth_ref (though this may not match original Claim)
+    return priorAuth.pre_auth_ref || `req_${Date.now()}`;
   }
 
   /**
