@@ -50,6 +50,10 @@ const CommunicationPanel = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
+  // Acknowledgment polling state
+  const [pollingAckFor, setPollingAckFor] = useState(null); // Communication ID being polled
+  const [ackPollResult, setAckPollResult] = useState(null);
+  
   // Form state
   const [showComposeForm, setShowComposeForm] = useState(false);
   const [communicationType, setCommunicationType] = useState('unsolicited');
@@ -147,6 +151,67 @@ const CommunicationPanel = ({
       } else {
         errorMessage = errorData || err.response?.data?.details || err.message || 'Failed to poll for updates';
       }
+      setError(errorMessage);
+    } finally {
+      setIsPolling(false);
+    }
+  };
+
+  // Poll for acknowledgment of a specific communication
+  const handlePollAcknowledgment = async (communicationId, communicationDbId) => {
+    setPollingAckFor(communicationId);
+    setAckPollResult(null);
+    setError(null);
+    
+    try {
+      const response = await api.post(
+        `/prior-authorizations/${priorAuthId}/communications/${communicationId}/poll-acknowledgment`
+      );
+      
+      setAckPollResult(response.data);
+      
+      // Reload communications to get updated acknowledgment status
+      await loadData();
+      
+      // Show success/info message
+      if (response.data.acknowledgmentFound) {
+        setAckPollResult({
+          ...response.data,
+          message: `Acknowledgment received: ${response.data.acknowledgmentStatus}`
+        });
+      } else if (response.data.alreadyAcknowledged) {
+        setAckPollResult({
+          ...response.data,
+          message: 'Communication was already acknowledged'
+        });
+      }
+    } catch (err) {
+      console.error('Error polling for acknowledgment:', err);
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to poll for acknowledgment';
+      setError(errorMessage);
+    } finally {
+      setPollingAckFor(null);
+    }
+  };
+
+  // Poll for all queued acknowledgments
+  const handlePollAllAcknowledgments = async () => {
+    setIsPolling(true);
+    setAckPollResult(null);
+    setError(null);
+    
+    try {
+      const response = await api.post(
+        `/prior-authorizations/${priorAuthId}/communications/poll-all-acknowledgments`
+      );
+      
+      setAckPollResult(response.data);
+      
+      // Reload communications to get updated acknowledgment status
+      await loadData();
+    } catch (err) {
+      console.error('Error polling for all acknowledgments:', err);
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to poll for acknowledgments';
       setError(errorMessage);
     } finally {
       setIsPolling(false);
@@ -533,9 +598,28 @@ const CommunicationPanel = ({
     return new Date(dateStr).toLocaleString();
   };
 
-  // Get status badge
-  const getStatusBadge = (status, acknowledged) => {
-    if (acknowledged) {
+  // Get status badge - handles acknowledgment status including queued messages
+  const getStatusBadge = (status, acknowledged, acknowledgmentStatus) => {
+    // Check acknowledgment status first
+    if (acknowledgmentStatus === 'queued') {
+      return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+          <Clock className="w-3 h-3 mr-1" />
+          Queued at NPHIES
+        </span>
+      );
+    }
+    
+    if (acknowledgmentStatus === 'fatal-error' || acknowledgmentStatus === 'transient-error') {
+      return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+          <AlertCircle className="w-3 h-3 mr-1" />
+          {acknowledgmentStatus === 'fatal-error' ? 'Error' : 'Transient Error'}
+        </span>
+      );
+    }
+    
+    if (acknowledged || acknowledgmentStatus === 'ok') {
       return (
         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
           <CheckCircle className="w-3 h-3 mr-1" />
@@ -543,6 +627,7 @@ const CommunicationPanel = ({
         </span>
       );
     }
+    
     if (status === 'completed') {
       return (
         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -551,8 +636,9 @@ const CommunicationPanel = ({
         </span>
       );
     }
+    
     return (
-      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
         <Clock className="w-3 h-3 mr-1" />
         Pending
       </span>
@@ -677,6 +763,66 @@ const CommunicationPanel = ({
               <p>• Acknowledgments: {pollResult.pollResults.acknowledgments?.length || 0}</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Acknowledgment Poll Result */}
+      {ackPollResult && (
+        <div className={`border rounded-lg p-4 ${
+          ackPollResult.acknowledgmentFound 
+            ? 'bg-green-50 border-green-200' 
+            : ackPollResult.alreadyAcknowledged
+            ? 'bg-blue-50 border-blue-200'
+            : 'bg-yellow-50 border-yellow-200'
+        }`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className={`font-medium ${
+                ackPollResult.acknowledgmentFound 
+                  ? 'text-green-800' 
+                  : ackPollResult.alreadyAcknowledged
+                  ? 'text-blue-800'
+                  : 'text-yellow-800'
+              }`}>
+                {ackPollResult.acknowledgmentFound && (
+                  <><CheckCircle className="w-4 h-4 inline mr-1" /> Acknowledgment Received!</>
+                )}
+                {ackPollResult.alreadyAcknowledged && (
+                  <><CheckCircle className="w-4 h-4 inline mr-1" /> Already Acknowledged</>
+                )}
+                {!ackPollResult.acknowledgmentFound && !ackPollResult.alreadyAcknowledged && (
+                  <><Clock className="w-4 h-4 inline mr-1" /> No Acknowledgment Yet</>
+                )}
+              </p>
+              <p className={`text-sm mt-1 ${
+                ackPollResult.acknowledgmentFound 
+                  ? 'text-green-700' 
+                  : ackPollResult.alreadyAcknowledged
+                  ? 'text-blue-700'
+                  : 'text-yellow-700'
+              }`}>
+                {ackPollResult.message}
+              </p>
+              {ackPollResult.acknowledgmentStatus && (
+                <p className="text-sm mt-1">
+                  Status: <span className="font-medium">{ackPollResult.acknowledgmentStatus}</span>
+                </p>
+              )}
+              {ackPollResult.queuedCount !== undefined && (
+                <p className="text-sm mt-1">
+                  Polled: {ackPollResult.queuedCount} communication(s) | 
+                  Acknowledged: {ackPollResult.acknowledgedCount || 0} | 
+                  Still queued: {ackPollResult.stillQueuedCount || 0}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => setAckPollResult(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -1023,18 +1169,43 @@ const CommunicationPanel = ({
 
       {/* Communication History */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <button
-          onClick={() => toggleSection('history')}
-          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex items-center">
+        <div className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+          <button
+            onClick={() => toggleSection('history')}
+            className="flex items-center flex-1"
+          >
             <MessageSquare className="w-5 h-5 text-gray-600 mr-2" />
             <span className="font-medium text-gray-800">
               Communication History ({communications.length})
             </span>
+            {/* Show count of queued communications */}
+            {communications.filter(c => c.acknowledgment_status === 'queued' || (!c.acknowledgment_received && c.status === 'completed')).length > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full">
+                {communications.filter(c => c.acknowledgment_status === 'queued' || (!c.acknowledgment_received && c.status === 'completed')).length} awaiting ack
+              </span>
+            )}
+          </button>
+          <div className="flex items-center gap-2">
+            {/* Poll All Acknowledgments button */}
+            {communications.filter(c => c.acknowledgment_status === 'queued' || (!c.acknowledgment_received && c.status === 'completed')).length > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePollAllAcknowledgments();
+                }}
+                disabled={isPolling}
+                className="flex items-center px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Poll for all pending acknowledgments"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
+                {isPolling ? 'Polling...' : 'Poll All Acks'}
+              </button>
+            )}
+            <button onClick={() => toggleSection('history')}>
+              {expandedSections.history ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
           </div>
-          {expandedSections.history ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </button>
+        </div>
 
         {expandedSections.history && (
           <div className="p-4 pt-0">
@@ -1054,7 +1225,7 @@ const CommunicationPanel = ({
                           }`}>
                             {comm.communication_type === 'unsolicited' ? 'Unsolicited' : 'Solicited'}
                           </span>
-                          {getStatusBadge(comm.status, comm.acknowledgment_received)}
+                          {getStatusBadge(comm.status, comm.acknowledgment_received, comm.acknowledgment_status)}
                         </div>
                         <p className="text-sm text-gray-600 mt-2">
                           Sent: {formatDate(comm.sent_at)}
@@ -1066,6 +1237,18 @@ const CommunicationPanel = ({
                         )}
                       </div>
                       <div className="flex items-center gap-2">
+                        {/* Poll for Acknowledgment button - show when queued or not acknowledged */}
+                        {(!comm.acknowledgment_received || comm.acknowledgment_status === 'queued') && (
+                          <button
+                            onClick={() => handlePollAcknowledgment(comm.communication_id, comm.id)}
+                            disabled={pollingAckFor === comm.communication_id}
+                            className="flex items-center px-2 py-1 text-xs bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            title="Poll NPHIES for acknowledgment"
+                          >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${pollingAckFor === comm.communication_id ? 'animate-spin' : ''}`} />
+                            {pollingAckFor === comm.communication_id ? 'Polling...' : 'Poll Ack'}
+                          </button>
+                        )}
                         <button
                           onClick={() => handleViewResponse(comm)}
                           className="flex items-center px-2 py-1 text-xs bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 transition-colors"
@@ -1328,7 +1511,7 @@ const CommunicationPanel = ({
                   </div>
                   <div>
                     <span className="text-gray-500">Status:</span>
-                    <p>{getStatusBadge(selectedCommunication.status, selectedCommunication.acknowledgment_received)}</p>
+                    <p>{getStatusBadge(selectedCommunication.status, selectedCommunication.acknowledgment_received, selectedCommunication.acknowledgment_status)}</p>
                   </div>
                   <div>
                     <span className="text-gray-500">Category:</span>

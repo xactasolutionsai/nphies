@@ -298,11 +298,13 @@ class CommunicationService {
       // The response may contain:
       // - MessageHeader.response.identifier: references our original request
       // - MessageHeader.response.code: 'ok', 'transient-error', 'fatal-error'
+      // - MessageHeader.meta.tag with 'queued-messages': indicates deferred delivery
       // - Communication resource with NPHIES-assigned ID (if acknowledgment includes it)
       // - MessageHeader.id from the response bundle
       let nphiesCommunicationId = null;
       let acknowledgmentReceived = false;
       let acknowledgmentStatus = null;
+      let isQueuedMessage = false;
       
       if (nphiesResponse.data && nphiesResponse.data.entry) {
         // Find MessageHeader in response
@@ -311,13 +313,29 @@ class CommunicationService {
         )?.resource;
         
         if (responseMessageHeader) {
+          // Check for 'queued-messages' tag - indicates NPHIES couldn't deliver within 1 minute
+          // Message is stored at NPHIES for later delivery to insurer
+          const metaTags = responseMessageHeader.meta?.tag || [];
+          isQueuedMessage = metaTags.some(
+            tag => tag.code === 'queued-messages' || 
+                   tag.system === 'http://nphies.sa/terminology/CodeSystem/meta-tags'
+          );
+          
           // Extract acknowledgment status from response.code
           if (responseMessageHeader.response?.code) {
-            acknowledgmentReceived = true;
-            acknowledgmentStatus = responseMessageHeader.response.code; // 'ok', 'transient-error', 'fatal-error'
+            if (isQueuedMessage) {
+              // Message queued at NPHIES - not yet delivered to insurer
+              // Need to poll later for actual acknowledgment
+              acknowledgmentReceived = false;
+              acknowledgmentStatus = 'queued';
+            } else {
+              // Direct acknowledgment from insurer
+              acknowledgmentReceived = true;
+              acknowledgmentStatus = responseMessageHeader.response.code; // 'ok', 'transient-error', 'fatal-error'
+            }
           }
           
-          // Use MessageHeader ID as NPHIES Communication ID
+          // Use MessageHeader ID as NPHIES Communication ID (for polling reference)
           if (responseMessageHeader.id) {
             nphiesCommunicationId = responseMessageHeader.id;
           }
@@ -334,7 +352,8 @@ class CommunicationService {
       
       console.log(`[CommunicationService] Our Communication ID: ${communicationId}`);
       console.log(`[CommunicationService] NPHIES Communication ID: ${nphiesCommunicationId || 'Not provided in response'}`);
-      console.log(`[CommunicationService] Acknowledgment: ${acknowledgmentReceived ? acknowledgmentStatus : 'Not received'}`);
+      console.log(`[CommunicationService] Queued at NPHIES: ${isQueuedMessage}`);
+      console.log(`[CommunicationService] Acknowledgment: ${acknowledgmentReceived ? acknowledgmentStatus : (isQueuedMessage ? 'queued' : 'Not received')}`);
 
       // 7. Store Communication in database (including nphies_communication_id and acknowledgment for polling)
       const insertResult = await client.query(`
@@ -543,6 +562,7 @@ class CommunicationService {
       let nphiesCommunicationId = null;
       let acknowledgmentReceived = false;
       let acknowledgmentStatus = null;
+      let isQueuedMessage = false;
       
       if (nphiesResponse.data && nphiesResponse.data.entry) {
         // Find MessageHeader in response
@@ -551,13 +571,27 @@ class CommunicationService {
         )?.resource;
         
         if (responseMessageHeader) {
+          // Check for 'queued-messages' tag - indicates NPHIES couldn't deliver within 1 minute
+          const metaTags = responseMessageHeader.meta?.tag || [];
+          isQueuedMessage = metaTags.some(
+            tag => tag.code === 'queued-messages' || 
+                   tag.system === 'http://nphies.sa/terminology/CodeSystem/meta-tags'
+          );
+          
           // Extract acknowledgment status from response.code
           if (responseMessageHeader.response?.code) {
-            acknowledgmentReceived = true;
-            acknowledgmentStatus = responseMessageHeader.response.code; // 'ok', 'transient-error', 'fatal-error'
+            if (isQueuedMessage) {
+              // Message queued at NPHIES - not yet delivered to insurer
+              acknowledgmentReceived = false;
+              acknowledgmentStatus = 'queued';
+            } else {
+              // Direct acknowledgment from insurer
+              acknowledgmentReceived = true;
+              acknowledgmentStatus = responseMessageHeader.response.code;
+            }
           }
           
-          // Use MessageHeader ID as NPHIES Communication ID
+          // Use MessageHeader ID as NPHIES Communication ID (for polling reference)
           if (responseMessageHeader.id) {
             nphiesCommunicationId = responseMessageHeader.id;
           }
@@ -574,7 +608,8 @@ class CommunicationService {
       
       console.log(`[CommunicationService] Solicited Communication ID: ${communicationId}`);
       console.log(`[CommunicationService] NPHIES Communication ID: ${nphiesCommunicationId || 'Not provided in response'}`);
-      console.log(`[CommunicationService] Acknowledgment: ${acknowledgmentReceived ? acknowledgmentStatus : 'Not received'}`);
+      console.log(`[CommunicationService] Queued at NPHIES: ${isQueuedMessage}`);
+      console.log(`[CommunicationService] Acknowledgment: ${acknowledgmentReceived ? acknowledgmentStatus : (isQueuedMessage ? 'queued' : 'Not received')}`);
 
       // 7. Store Communication (including nphies_communication_id and acknowledgment for polling)
       const insertResult = await client.query(`
@@ -948,6 +983,219 @@ class CommunicationService {
       acknowledgmentStatus: parsed.status,
       acknowledgedAt: result.rows[0].acknowledgment_at
     };
+  }
+
+  // ============================================================================
+  // POLL FOR ACKNOWLEDGMENTS
+  // ============================================================================
+
+  /**
+   * Poll NPHIES for acknowledgment of a specific Communication
+   * Use this when a communication has acknowledgment_status = 'queued'
+   * 
+   * @param {number} communicationDbId - Database ID of the communication
+   * @param {string} schemaName - Database schema name
+   * @returns {Object} Poll result with acknowledgment status
+   */
+  async pollForAcknowledgment(communicationDbId, schemaName) {
+    const client = await pool.connect();
+    
+    try {
+      await client.query(`SET search_path TO ${schemaName}`);
+
+      // 1. Get the Communication record
+      const commResult = await client.query(`
+        SELECT nc.*, 
+               pr.nphies_id as provider_nphies_id,
+               pa.nphies_request_id,
+               pa.request_number
+        FROM nphies_communications nc
+        LEFT JOIN prior_authorizations pa ON nc.prior_auth_id = pa.id
+        LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
+        WHERE nc.id = $1
+      `, [communicationDbId]);
+
+      if (commResult.rows.length === 0) {
+        throw new Error('Communication not found');
+      }
+
+      const communication = commResult.rows[0];
+
+      // 2. Check if already acknowledged
+      if (communication.acknowledgment_received && communication.acknowledgment_status !== 'queued') {
+        return {
+          success: true,
+          alreadyAcknowledged: true,
+          acknowledgmentStatus: communication.acknowledgment_status,
+          acknowledgmentAt: communication.acknowledgment_at,
+          message: 'Communication already acknowledged'
+        };
+      }
+
+      // 3. Build poll request for communication acknowledgments
+      const pollBundle = this.mapper.buildPollRequestBundle(
+        communication.provider_nphies_id,
+        ['communication'],  // Poll for communication messages
+        10  // Limit
+      );
+
+      console.log(`[CommunicationService] Polling for acknowledgment of Communication: ${communication.communication_id}`);
+
+      // 4. Send poll request to NPHIES
+      const pollResponse = await nphiesService.sendPriorAuthPoll(pollBundle);
+
+      if (!pollResponse.success) {
+        return {
+          success: false,
+          error: pollResponse.error,
+          pollBundle,
+          message: 'Poll request failed'
+        };
+      }
+
+      // 5. Extract Communications from poll response
+      const communications = nphiesService.extractCommunicationsFromPoll(pollResponse.data);
+      
+      console.log(`[CommunicationService] Poll returned ${communications.length} communication(s)`);
+
+      // 6. Find acknowledgment for our communication
+      let acknowledgmentFound = false;
+      let acknowledgmentData = null;
+
+      for (const comm of communications) {
+        const parsed = this.mapper.parseCommunication(comm);
+        
+        // Check if this is a response to our communication
+        // Can match by inResponseTo or by about reference
+        if (parsed.inResponseTo) {
+          const referencedId = this.mapper.extractIdFromReference(parsed.inResponseTo);
+          if (referencedId === communication.communication_id) {
+            acknowledgmentFound = true;
+            acknowledgmentData = {
+              status: parsed.status,
+              bundle: comm
+            };
+            break;
+          }
+        }
+      }
+
+      // 7. Update database if acknowledgment found
+      if (acknowledgmentFound) {
+        await client.query(`
+          UPDATE nphies_communications
+          SET acknowledgment_received = TRUE,
+              acknowledgment_at = NOW(),
+              acknowledgment_status = $1,
+              acknowledgment_bundle = $2
+          WHERE id = $3
+        `, [
+          acknowledgmentData.status || 'ok',
+          JSON.stringify(acknowledgmentData.bundle),
+          communicationDbId
+        ]);
+
+        return {
+          success: true,
+          acknowledgmentFound: true,
+          acknowledgmentStatus: acknowledgmentData.status || 'ok',
+          acknowledgmentAt: new Date(),
+          pollBundle,
+          responseBundle: pollResponse.data,
+          message: 'Acknowledgment received and saved'
+        };
+      }
+
+      // 8. No acknowledgment found yet
+      return {
+        success: true,
+        acknowledgmentFound: false,
+        currentStatus: communication.acknowledgment_status,
+        pollBundle,
+        responseBundle: pollResponse.data,
+        communicationsInPoll: communications.length,
+        message: 'No acknowledgment found yet. The insurer may not have responded.'
+      };
+
+    } catch (error) {
+      console.error('[CommunicationService] Error polling for acknowledgment:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Poll for acknowledgments for all queued communications of a Prior Authorization
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   * @param {string} schemaName - Database schema name
+   * @returns {Object} Poll results for all queued communications
+   */
+  async pollForAllQueuedAcknowledgments(priorAuthId, schemaName) {
+    const client = await pool.connect();
+    
+    try {
+      await client.query(`SET search_path TO ${schemaName}`);
+
+      // 1. Get all queued communications for this prior auth
+      const queuedResult = await client.query(`
+        SELECT id, communication_id, acknowledgment_status
+        FROM nphies_communications
+        WHERE prior_auth_id = $1
+          AND (acknowledgment_status = 'queued' OR acknowledgment_received = FALSE)
+        ORDER BY sent_at DESC
+      `, [priorAuthId]);
+
+      if (queuedResult.rows.length === 0) {
+        return {
+          success: true,
+          queuedCount: 0,
+          results: [],
+          message: 'No queued communications to poll'
+        };
+      }
+
+      console.log(`[CommunicationService] Found ${queuedResult.rows.length} queued communication(s) to poll`);
+
+      // 2. Poll for each queued communication
+      const results = [];
+      for (const comm of queuedResult.rows) {
+        try {
+          const pollResult = await this.pollForAcknowledgment(comm.id, schemaName);
+          results.push({
+            communicationId: comm.communication_id,
+            dbId: comm.id,
+            ...pollResult
+          });
+        } catch (error) {
+          results.push({
+            communicationId: comm.communication_id,
+            dbId: comm.id,
+            success: false,
+            error: error.message
+          });
+        }
+      }
+
+      const acknowledged = results.filter(r => r.acknowledgmentFound).length;
+      const stillQueued = results.filter(r => r.success && !r.acknowledgmentFound && !r.alreadyAcknowledged).length;
+
+      return {
+        success: true,
+        queuedCount: queuedResult.rows.length,
+        acknowledgedCount: acknowledged,
+        stillQueuedCount: stillQueued,
+        results,
+        message: `Polled ${queuedResult.rows.length} communication(s): ${acknowledged} acknowledged, ${stillQueued} still queued`
+      };
+
+    } catch (error) {
+      console.error('[CommunicationService] Error polling for all queued acknowledgments:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   // ============================================================================

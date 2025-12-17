@@ -90,5 +90,16 @@ router.get('/:id/communications/:communicationId', (req, res) =>
   priorAuthorizationsController.getCommunication(req, res)
 );
 
+// Poll for acknowledgment of a specific Communication
+// Use when communication has acknowledgment_status = 'queued'
+router.post('/:id/communications/:communicationId/poll-acknowledgment', (req, res) => 
+  priorAuthorizationsController.pollCommunicationAcknowledgment(req, res)
+);
+
+// Poll for all queued acknowledgments for a Prior Authorization
+router.post('/:id/communications/poll-all-acknowledgments', (req, res) => 
+  priorAuthorizationsController.pollAllQueuedAcknowledgments(req, res)
+);
+
 export default router;
 

@@ -1378,6 +1378,62 @@ class PriorAuthorizationsController extends BaseController {
   }
 
   /**
+   * Poll for acknowledgment of a specific Communication
+   * Use when communication has acknowledgment_status = 'queued'
+   */
+  async pollCommunicationAcknowledgment(req, res) {
+    try {
+      const { id, communicationId } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      // First verify the communication exists and belongs to this PA
+      const communication = await communicationService.getCommunication(communicationId, schemaName);
+
+      if (!communication) {
+        return res.status(404).json({ error: 'Communication not found' });
+      }
+
+      if (communication.prior_auth_id !== parseInt(id)) {
+        return res.status(403).json({ error: 'Communication does not belong to this prior authorization' });
+      }
+
+      // Poll for acknowledgment
+      const result = await communicationService.pollForAcknowledgment(communication.id, schemaName);
+
+      res.json(result);
+
+    } catch (error) {
+      console.error('Error polling for communication acknowledgment:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message || 'Failed to poll for acknowledgment' 
+      });
+    }
+  }
+
+  /**
+   * Poll for all queued acknowledgments for a Prior Authorization
+   */
+  async pollAllQueuedAcknowledgments(req, res) {
+    try {
+      const { id } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      // Poll for all queued acknowledgments
+      const result = await communicationService.pollForAllQueuedAcknowledgments(id, schemaName);
+
+      res.json(result);
+
+    } catch (error) {
+      console.error('Error polling for all queued acknowledgments:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message || 'Failed to poll for acknowledgments' 
+      });
+    }
+  }
+
+  /**
    * Get FHIR bundle preview for saved PA
    */
   async getBundle(req, res) {
