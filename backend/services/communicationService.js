@@ -1032,24 +1032,24 @@ class CommunicationService {
         };
       }
 
-      // 3. Build poll request Parameters for $poll operation
-      // IMPORTANT: Poll uses $poll operation with Parameters resource, NOT a Bundle with MessageHeader
-      const pollParameters = this.mapper.buildPollParameters(
-        ['communication'],  // Poll for communication messages
-        10  // Limit
+      // 3. Build poll request Bundle with Task resource (per NPHIES IG)
+      // https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
+      const pollBundle = this.mapper.buildPollRequestBundle(
+        communication.provider_nphies_id,
+        'Healthcare Provider'  // Provider name
       );
 
       console.log(`[CommunicationService] Polling for acknowledgment of Communication: ${communication.communication_id}`);
-      console.log(`[CommunicationService] Using $poll operation with Parameters resource`);
+      console.log(`[CommunicationService] Using poll-request Task message to $process-message`);
 
-      // 4. Send poll request to NPHIES using $poll endpoint
-      const pollResponse = await nphiesService.sendPoll(pollParameters);
+      // 4. Send poll request to NPHIES
+      const pollResponse = await nphiesService.sendPoll(pollBundle);
 
       if (!pollResponse.success) {
         return {
           success: false,
           error: pollResponse.error,
-          pollBundle: pollParameters,  // Return the Parameters for debugging
+          pollBundle: pollBundle,  // Return the Bundle for debugging
           message: 'Poll request failed'
         };
       }
@@ -1101,7 +1101,7 @@ class CommunicationService {
           acknowledgmentFound: true,
           acknowledgmentStatus: acknowledgmentData.status || 'ok',
           acknowledgmentAt: new Date(),
-          pollBundle: pollParameters,  // The Parameters resource sent to $poll
+          pollBundle: pollBundle,  // The full Bundle sent to NPHIES
           responseBundle: pollResponse.data,
           message: 'Acknowledgment received and saved'
         };
@@ -1112,7 +1112,7 @@ class CommunicationService {
         success: true,
         acknowledgmentFound: false,
         currentStatus: communication.acknowledgment_status,
-        pollBundle: pollParameters,  // The Parameters resource sent to $poll
+        pollBundle: pollBundle,  // The full Bundle sent to NPHIES
         responseBundle: pollResponse.data,
         communicationsInPoll: communications.length,
         message: 'No acknowledgment found yet. The insurer may not have responded.'

@@ -1034,20 +1034,157 @@ class CommunicationMapper {
    * @returns {Object} FHIR Bundle for poll request
    */
   /**
-   * Build Poll Request Parameters
+   * Build Poll Request Bundle for NPHIES
    * 
-   * IMPORTANT: NPHIES Poll uses the $poll operation with a Parameters resource.
-   * It is NOT a FHIR Message (no Bundle, no MessageHeader).
+   * Based on official NPHIES IG example:
+   * https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
    * 
-   * HTTP Request:
-   *   POST {{baseUrl}}/$poll
-   *   Content-Type: application/fhir+json
-   *   Body: Parameters resource
+   * NPHIES Poll uses a FHIR Message Bundle with:
+   * - MessageHeader with eventCoding: 'poll-request'
+   * - Task resource with profile 'poll-request' and code 'poll'
+   * - Organization resources for requester (Provider) and owner (NPHIES)
    * 
-   * @param {Array} messageTypes - Types to poll for: 'communication', 'priorauth-response', etc.
-   * @param {number} count - Max messages to retrieve (default 10)
-   * @param {string} identifier - Optional: filter by specific request identifier
-   * @returns {Object} FHIR Parameters resource for $poll operation
+   * The MessageHeader.focus points to the Task resource.
+   * 
+   * @param {string} providerId - Provider license ID
+   * @param {string} providerName - Provider organization name (optional)
+   * @returns {Object} FHIR Bundle for poll request
+   */
+  buildPollRequestBundle(providerId, providerName = 'Healthcare Provider') {
+    const bundleId = this.generateId();
+    const messageHeaderId = this.generateId();
+    const taskId = this.generateId();
+    const providerOrgId = this.generateId();
+    const timestamp = this.formatDateTime(new Date());
+    const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
+
+    return {
+      resourceType: 'Bundle',
+      id: bundleId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: timestamp,
+      entry: [
+        // 1. MessageHeader
+        {
+          fullUrl: `urn:uuid:${messageHeaderId}`,
+          resource: {
+            resourceType: 'MessageHeader',
+            id: messageHeaderId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+            },
+            eventCoding: {
+              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+              code: 'poll-request'
+            },
+            destination: [{
+              endpoint: 'https://nphies.sa/fhir/$process-message',
+              receiver: {
+                type: 'Organization',
+                identifier: {
+                  system: 'http://nphies.sa/license/nphies',
+                  value: 'NPHIES'
+                }
+              }
+            }],
+            sender: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/provider-license',
+                value: providerId
+              }
+            },
+            source: {
+              endpoint: providerEndpoint
+            },
+            focus: [{
+              reference: `${providerEndpoint}/Task/${taskId}`
+            }]
+          }
+        },
+        // 2. Task (poll-request)
+        {
+          fullUrl: `${providerEndpoint}/Task/${taskId}`,
+          resource: {
+            resourceType: 'Task',
+            id: taskId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
+            },
+            identifier: [{
+              system: `${providerEndpoint}/identifiers/poll-request`,
+              value: `poll_${Date.now()}`
+            }],
+            status: 'requested',
+            intent: 'order',
+            priority: 'routine',
+            code: {
+              coding: [{
+                system: 'http://nphies.sa/terminology/CodeSystem/task-code',
+                code: 'poll'
+              }]
+            },
+            authoredOn: timestamp,
+            lastModified: timestamp,
+            requester: {
+              reference: `Organization/${providerOrgId}`
+            },
+            owner: {
+              reference: 'Organization/NPHIES'
+            }
+          }
+        },
+        // 3. Provider Organization
+        {
+          fullUrl: `${providerEndpoint}/Organization/${providerOrgId}`,
+          resource: {
+            resourceType: 'Organization',
+            id: providerOrgId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
+            },
+            identifier: [{
+              system: 'http://nphies.sa/license/provider-license',
+              value: providerId
+            }],
+            active: true,
+            type: [{
+              coding: [{
+                system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
+                code: 'prov'
+              }]
+            }],
+            name: providerName
+          }
+        },
+        // 4. NPHIES Organization
+        {
+          fullUrl: `${providerEndpoint}/Organization/NPHIES`,
+          resource: {
+            resourceType: 'Organization',
+            id: 'NPHIES',
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
+            },
+            identifier: [{
+              use: 'official',
+              system: 'http://nphies.sa/license/nphies',
+              value: 'NPHIES'
+            }],
+            active: true,
+            name: 'National Program for Health Information Exchange Services'
+          }
+        }
+      ]
+    };
+  }
+
+  /**
+   * Build Poll Parameters (simple format for reference)
+   * Note: NPHIES requires full Bundle with MessageHeader, use buildPollRequestBundle instead
    */
   buildPollParameters(messageTypes = ['communication'], count = 10, identifier = null) {
     const parameters = {
@@ -1055,7 +1192,6 @@ class CommunicationMapper {
       parameter: []
     };
 
-    // Add message-type parameters (can have multiple)
     for (const messageType of messageTypes) {
       parameters.parameter.push({
         name: 'message-type',
@@ -1063,13 +1199,11 @@ class CommunicationMapper {
       });
     }
 
-    // Add count
     parameters.parameter.push({
       name: 'count',
       valueInteger: count
     });
 
-    // Add identifier filter if provided
     if (identifier) {
       parameters.parameter.push({
         name: 'identifier',
@@ -1078,16 +1212,6 @@ class CommunicationMapper {
     }
 
     return parameters;
-  }
-
-  /**
-   * @deprecated Use buildPollParameters instead. Poll is an operation, not a message.
-   * Kept for backward compatibility but will be removed.
-   */
-  buildPollRequestBundle(providerId, messageTypes = ['priorauth-response', 'communication-request', 'communication'], count = 50) {
-    console.warn('[CommunicationMapper] buildPollRequestBundle is deprecated. Use buildPollParameters for $poll operation.');
-    // Return the correct Parameters format instead
-    return this.buildPollParameters(messageTypes, count);
   }
 
   /**

@@ -54,6 +54,151 @@ const CommunicationPanel = ({
   const [pollingAckFor, setPollingAckFor] = useState(null); // Communication ID being polled
   const [ackPollResult, setAckPollResult] = useState(null);
   const [ackPollJsonCopied, setAckPollJsonCopied] = useState(null); // 'request' or 'response'
+  const [pollPreviewCopied, setPollPreviewCopied] = useState(false);
+
+  // Generate the full Poll Request Bundle that will be sent to NPHIES
+  // Based on official NPHIES IG: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
+  // NPHIES Poll uses MessageHeader with eventCoding: 'poll-request' and Task resource
+  const generatePollRequestBundle = () => {
+    const bundleId = crypto.randomUUID();
+    const messageHeaderId = crypto.randomUUID();
+    const taskId = crypto.randomUUID();
+    const providerOrgId = crypto.randomUUID();
+    const providerId = priorAuth?.provider_nphies_id || 'UNKNOWN';
+    const providerName = 'Healthcare Provider';
+    const providerEndpoint = 'http://provider.com/fhir';
+    const timestamp = new Date().toISOString();
+
+    return {
+      resourceType: 'Bundle',
+      id: bundleId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: timestamp,
+      entry: [
+        // 1. MessageHeader
+        {
+          fullUrl: `urn:uuid:${messageHeaderId}`,
+          resource: {
+            resourceType: 'MessageHeader',
+            id: messageHeaderId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+            },
+            eventCoding: {
+              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+              code: 'poll-request'
+            },
+            destination: [{
+              endpoint: 'https://nphies.sa/fhir/$process-message',
+              receiver: {
+                type: 'Organization',
+                identifier: {
+                  system: 'http://nphies.sa/license/nphies',
+                  value: 'NPHIES'
+                }
+              }
+            }],
+            sender: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/provider-license',
+                value: providerId
+              }
+            },
+            source: {
+              endpoint: providerEndpoint
+            },
+            focus: [{
+              reference: `${providerEndpoint}/Task/${taskId}`
+            }]
+          }
+        },
+        // 2. Task (poll-request)
+        {
+          fullUrl: `${providerEndpoint}/Task/${taskId}`,
+          resource: {
+            resourceType: 'Task',
+            id: taskId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
+            },
+            identifier: [{
+              system: `${providerEndpoint}/identifiers/poll-request`,
+              value: `poll_${Date.now()}`
+            }],
+            status: 'requested',
+            intent: 'order',
+            priority: 'routine',
+            code: {
+              coding: [{
+                system: 'http://nphies.sa/terminology/CodeSystem/task-code',
+                code: 'poll'
+              }]
+            },
+            authoredOn: timestamp,
+            lastModified: timestamp,
+            requester: {
+              reference: `Organization/${providerOrgId}`
+            },
+            owner: {
+              reference: 'Organization/NPHIES'
+            }
+          }
+        },
+        // 3. Provider Organization
+        {
+          fullUrl: `${providerEndpoint}/Organization/${providerOrgId}`,
+          resource: {
+            resourceType: 'Organization',
+            id: providerOrgId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
+            },
+            identifier: [{
+              system: 'http://nphies.sa/license/provider-license',
+              value: providerId
+            }],
+            active: true,
+            type: [{
+              coding: [{
+                system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
+                code: 'prov'
+              }]
+            }],
+            name: providerName
+          }
+        },
+        // 4. NPHIES Organization
+        {
+          fullUrl: `${providerEndpoint}/Organization/NPHIES`,
+          resource: {
+            resourceType: 'Organization',
+            id: 'NPHIES',
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
+            },
+            identifier: [{
+              use: 'official',
+              system: 'http://nphies.sa/license/nphies',
+              value: 'NPHIES'
+            }],
+            active: true,
+            name: 'National Program for Health Information Exchange Services'
+          }
+        }
+      ]
+    };
+  };
+
+  const handleCopyPollJson = async () => {
+    const pollBundle = generatePollRequestBundle();
+    await navigator.clipboard.writeText(JSON.stringify(pollBundle, null, 2));
+    setPollPreviewCopied(true);
+    setTimeout(() => setPollPreviewCopied(false), 2000);
+  };
   
   // Form state
   const [showComposeForm, setShowComposeForm] = useState(false);
@@ -817,7 +962,7 @@ const CommunicationPanel = ({
               {(ackPollResult.pollBundle || ackPollResult.responseBundle) && (
                 <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-gray-200">
                   <p className="text-xs text-gray-500">
-                    <strong>$poll Operation:</strong> POST /fhir/$poll with Parameters resource
+                    <strong>Poll Request:</strong> POST /$process-message with poll-request Bundle
                   </p>
                   <div className="flex items-center gap-2">
                     {ackPollResult.pollBundle && (
@@ -830,7 +975,7 @@ const CommunicationPanel = ({
                         className="flex items-center px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                       >
                         <Copy className="w-3 h-3 mr-1" />
-                        {ackPollJsonCopied === 'request' ? '✓ Copied!' : 'Copy $poll Parameters'}
+                        {ackPollJsonCopied === 'request' ? '✓ Copied!' : 'Copy Poll Bundle'}
                       </button>
                     )}
                     {ackPollResult.responseBundle && (
@@ -1270,18 +1415,28 @@ const CommunicationPanel = ({
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {/* Poll for Acknowledgment button - show when queued or not acknowledged */}
                         {(!comm.acknowledgment_received || comm.acknowledgment_status === 'queued') && (
-                          <button
-                            onClick={() => handlePollAcknowledgment(comm.communication_id)}
-                            disabled={pollingAckFor === comm.communication_id}
-                            className="flex items-center px-2 py-1 text-xs bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            title="Poll NPHIES for acknowledgment"
-                          >
-                            <RefreshCw className={`w-3 h-3 mr-1 ${pollingAckFor === comm.communication_id ? 'animate-spin' : ''}`} />
-                            {pollingAckFor === comm.communication_id ? 'Polling...' : 'Poll Ack'}
-                          </button>
+                          <>
+                            <button
+                              onClick={handleCopyPollJson}
+                              className="flex items-center px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+                              title="Copy the $poll Parameters JSON that will be sent to NPHIES"
+                            >
+                              <Copy className="w-3 h-3 mr-1" />
+                              {pollPreviewCopied ? '✓ Copied!' : 'Copy Poll JSON'}
+                            </button>
+                            <button
+                              onClick={() => handlePollAcknowledgment(comm.communication_id)}
+                              disabled={pollingAckFor === comm.communication_id}
+                              className="flex items-center px-2 py-1 text-xs bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              title="Poll NPHIES for acknowledgment"
+                            >
+                              <RefreshCw className={`w-3 h-3 mr-1 ${pollingAckFor === comm.communication_id ? 'animate-spin' : ''}`} />
+                              {pollingAckFor === comm.communication_id ? 'Polling...' : 'Poll Ack'}
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => handleViewResponse(comm)}

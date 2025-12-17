@@ -1034,31 +1034,41 @@ class NphiesService {
   }
 
   /**
-   * Send Poll Request to NPHIES using the $poll operation
+   * Send Poll Request to NPHIES
    * 
-   * IMPORTANT: NPHIES Poll is an OPERATION, not a message exchange.
-   * - Endpoint: POST {{baseUrl}}/$poll
-   * - Body: Parameters resource (NOT a Bundle with MessageHeader)
-   * - Returns: Bundle containing queued messages
+   * NPHIES Poll is a FHIR Message sent to $process-message:
+   * - Endpoint: POST {{baseUrl}}/$process-message
+   * - Body: Bundle with MessageHeader (eventCoding: 'poll-request') + Parameters
+   * - Returns: Bundle containing queued messages (poll-response)
    * 
-   * @param {Object} pollParameters - FHIR Parameters resource for $poll
+   * @param {Object} pollBundle - FHIR Bundle with MessageHeader and Parameters
    * @returns {Object} Response with success status and data
    */
-  async sendPoll(pollParameters) {
-    console.log('[NPHIES] ===== SENDING $poll OPERATION =====');
+  async sendPoll(pollBundle) {
+    console.log('[NPHIES] ===== SENDING POLL REQUEST =====');
+    console.log('[NPHIES] Bundle ID:', pollBundle?.id);
     
     // Extract message types for logging
-    const messageTypes = pollParameters?.parameter
+    const params = pollBundle?.entry?.find(
+      e => e.resource?.resourceType === 'Parameters'
+    )?.resource;
+    const messageTypes = params?.parameter
       ?.filter(p => p.name === 'message-type')
       ?.map(p => p.valueCode);
     console.log('[NPHIES] Polling for message types:', messageTypes);
-    console.log('[NPHIES] Endpoint: $poll');
+    
+    // Verify eventCoding
+    const messageHeader = pollBundle?.entry?.find(
+      e => e.resource?.resourceType === 'MessageHeader'
+    )?.resource;
+    console.log('[NPHIES] EventCoding:', messageHeader?.eventCoding?.code);
+    console.log('[NPHIES] Endpoint: $process-message');
     console.log('[NPHIES] =====================================');
     
     try {
       const response = await axios.post(
-        `${this.baseURL}/$poll`,  // Correct endpoint for poll operation
-        pollParameters,           // Parameters resource, NOT a Bundle
+        `${this.baseURL}/$process-message`,  // Poll uses $process-message
+        pollBundle,                           // Full Bundle with MessageHeader
         {
           headers: {
             'Content-Type': 'application/fhir+json',
@@ -1094,7 +1104,7 @@ class NphiesService {
         success: response.status >= 200 && response.status < 300,
         status: response.status,
         data: response.data,
-        pollParameters: pollParameters  // Include the poll parameters for debugging
+        pollBundle: pollBundle  // Include the poll bundle for debugging
       };
       
     } catch (error) {
@@ -1102,44 +1112,16 @@ class NphiesService {
       return {
         success: false,
         error: this.formatError(error),
-        pollParameters: pollParameters
+        pollBundle: pollBundle
       };
     }
   }
 
   /**
-   * @deprecated Use sendPoll with Parameters resource instead.
-   * Kept for backward compatibility.
+   * Send Poll Request (alias for backward compatibility)
    */
   async sendPriorAuthPoll(pollBundle) {
-    console.warn('[NPHIES] sendPriorAuthPoll is deprecated. Use sendPoll with Parameters resource.');
-    
-    // If it's already a Parameters resource, use it directly
-    if (pollBundle?.resourceType === 'Parameters') {
-      return this.sendPoll(pollBundle);
-    }
-    
-    // If it's a Bundle, extract Parameters or convert
-    if (pollBundle?.resourceType === 'Bundle') {
-      const params = pollBundle.entry?.find(
-        e => e.resource?.resourceType === 'Parameters'
-      )?.resource;
-      
-      if (params) {
-        return this.sendPoll(params);
-      }
-    }
-    
-    // Fallback: create default poll parameters
-    console.warn('[NPHIES] Could not extract Parameters, using default poll');
-    const defaultParams = {
-      resourceType: 'Parameters',
-      parameter: [
-        { name: 'message-type', valueCode: 'communication' },
-        { name: 'count', valueInteger: 10 }
-      ]
-    };
-    return this.sendPoll(defaultParams);
+    return this.sendPoll(pollBundle);
   }
 
   /**
