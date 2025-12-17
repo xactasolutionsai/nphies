@@ -288,16 +288,59 @@ class CommunicationService {
       // 4. Send to NPHIES
       const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
 
-      // 5. Extract Communication ID from bundle
+      // 5. Extract Communication ID from our request bundle
       const communicationResource = communicationBundle.entry?.find(
         e => e.resource?.resourceType === 'Communication'
       )?.resource;
       const communicationId = communicationResource?.id || randomUUID();
 
-      // 6. Store Communication in database
+      // 6. Extract NPHIES Communication ID and Acknowledgment from response
+      // The response may contain:
+      // - MessageHeader.response.identifier: references our original request
+      // - MessageHeader.response.code: 'ok', 'transient-error', 'fatal-error'
+      // - Communication resource with NPHIES-assigned ID (if acknowledgment includes it)
+      // - MessageHeader.id from the response bundle
+      let nphiesCommunicationId = null;
+      let acknowledgmentReceived = false;
+      let acknowledgmentStatus = null;
+      
+      if (nphiesResponse.data && nphiesResponse.data.entry) {
+        // Find MessageHeader in response
+        const responseMessageHeader = nphiesResponse.data.entry.find(
+          e => e.resource?.resourceType === 'MessageHeader'
+        )?.resource;
+        
+        if (responseMessageHeader) {
+          // Extract acknowledgment status from response.code
+          if (responseMessageHeader.response?.code) {
+            acknowledgmentReceived = true;
+            acknowledgmentStatus = responseMessageHeader.response.code; // 'ok', 'transient-error', 'fatal-error'
+          }
+          
+          // Use MessageHeader ID as NPHIES Communication ID
+          if (responseMessageHeader.id) {
+            nphiesCommunicationId = responseMessageHeader.id;
+          }
+        }
+        
+        // Also check for Communication resource in response (may have different ID)
+        const responseCommunication = nphiesResponse.data.entry.find(
+          e => e.resource?.resourceType === 'Communication'
+        )?.resource;
+        if (responseCommunication?.id) {
+          nphiesCommunicationId = responseCommunication.id;
+        }
+      }
+      
+      console.log(`[CommunicationService] Our Communication ID: ${communicationId}`);
+      console.log(`[CommunicationService] NPHIES Communication ID: ${nphiesCommunicationId || 'Not provided in response'}`);
+      console.log(`[CommunicationService] Acknowledgment: ${acknowledgmentReceived ? acknowledgmentStatus : 'Not received'}`);
+
+      // 7. Store Communication in database (including nphies_communication_id and acknowledgment for polling)
       const insertResult = await client.query(`
         INSERT INTO nphies_communications (
           communication_id,
+          nphies_communication_id,
           prior_auth_id,
           patient_id,
           communication_type,
@@ -309,12 +352,16 @@ class CommunicationService {
           sender_identifier,
           recipient_identifier,
           sent_at,
+          acknowledgment_received,
+          acknowledgment_at,
+          acknowledgment_status,
           request_bundle,
           response_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING *
       `, [
         communicationId,
+        nphiesCommunicationId,
         priorAuthId,
         priorAuth.patient_id,
         'unsolicited',
@@ -326,6 +373,9 @@ class CommunicationService {
         priorAuth.provider_nphies_id,
         priorAuth.insurer_nphies_id,
         new Date(),
+        acknowledgmentReceived,
+        acknowledgmentReceived ? new Date() : null,
+        acknowledgmentStatus,
         JSON.stringify(communicationBundle),
         nphiesResponse.data ? JSON.stringify(nphiesResponse.data) : null
       ]);
@@ -483,16 +533,54 @@ class CommunicationService {
       // 4. Send to NPHIES
       const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
 
-      // 5. Extract Communication ID
+      // 5. Extract Communication ID from our request bundle
       const communicationResource = communicationBundle.entry?.find(
         e => e.resource?.resourceType === 'Communication'
       )?.resource;
       const communicationId = communicationResource?.id || randomUUID();
 
-      // 6. Store Communication
+      // 6. Extract NPHIES Communication ID and Acknowledgment from response
+      let nphiesCommunicationId = null;
+      let acknowledgmentReceived = false;
+      let acknowledgmentStatus = null;
+      
+      if (nphiesResponse.data && nphiesResponse.data.entry) {
+        // Find MessageHeader in response
+        const responseMessageHeader = nphiesResponse.data.entry.find(
+          e => e.resource?.resourceType === 'MessageHeader'
+        )?.resource;
+        
+        if (responseMessageHeader) {
+          // Extract acknowledgment status from response.code
+          if (responseMessageHeader.response?.code) {
+            acknowledgmentReceived = true;
+            acknowledgmentStatus = responseMessageHeader.response.code; // 'ok', 'transient-error', 'fatal-error'
+          }
+          
+          // Use MessageHeader ID as NPHIES Communication ID
+          if (responseMessageHeader.id) {
+            nphiesCommunicationId = responseMessageHeader.id;
+          }
+        }
+        
+        // Also check for Communication resource in response (may have different ID)
+        const responseCommunication = nphiesResponse.data.entry.find(
+          e => e.resource?.resourceType === 'Communication'
+        )?.resource;
+        if (responseCommunication?.id) {
+          nphiesCommunicationId = responseCommunication.id;
+        }
+      }
+      
+      console.log(`[CommunicationService] Solicited Communication ID: ${communicationId}`);
+      console.log(`[CommunicationService] NPHIES Communication ID: ${nphiesCommunicationId || 'Not provided in response'}`);
+      console.log(`[CommunicationService] Acknowledgment: ${acknowledgmentReceived ? acknowledgmentStatus : 'Not received'}`);
+
+      // 7. Store Communication (including nphies_communication_id and acknowledgment for polling)
       const insertResult = await client.query(`
         INSERT INTO nphies_communications (
           communication_id,
+          nphies_communication_id,
           prior_auth_id,
           patient_id,
           communication_type,
@@ -505,12 +593,16 @@ class CommunicationService {
           sender_identifier,
           recipient_identifier,
           sent_at,
+          acknowledgment_received,
+          acknowledgment_at,
+          acknowledgment_status,
           request_bundle,
           response_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         RETURNING *
       `, [
         communicationId,
+        nphiesCommunicationId,
         commRequest.pa_id,
         commRequest.patient_id,
         'solicited',
@@ -523,6 +615,9 @@ class CommunicationService {
         commRequest.provider_nphies_id,
         commRequest.insurer_nphies_id,
         new Date(),
+        acknowledgmentReceived,
+        acknowledgmentReceived ? new Date() : null,
+        acknowledgmentStatus,
         JSON.stringify(communicationBundle),
         nphiesResponse.data ? JSON.stringify(nphiesResponse.data) : null
       ]);
