@@ -141,6 +141,23 @@ class NphiesService {
         console.log('[NPHIES] Response Bundle Type:', response.data?.type);
         console.log('[NPHIES] Response Bundle Entries:', response.data?.entry?.length);
         
+        // IMPORTANT: Check if NPHIES returned an OperationOutcome directly (not in a Bundle)
+        // This happens when there's a validation error with the request
+        if (response.data?.resourceType === 'OperationOutcome') {
+          console.error('[NPHIES] Received direct OperationOutcome (validation error)');
+          console.error('[NPHIES] OperationOutcome:', JSON.stringify(response.data, null, 2));
+          
+          const issues = response.data.issue || [];
+          const nphiesErrors = issues.map(i => {
+            const code = i.details?.coding?.[0]?.code || i.code || 'UNKNOWN';
+            const display = i.details?.coding?.[0]?.display || i.diagnostics || i.details?.text || 'Unknown error';
+            const expression = i.expression ? ` [${i.expression.join(', ')}]` : '';
+            return `${i.severity?.toUpperCase() || 'ERROR'}: ${code} - ${display}${expression}`;
+          }).join('; ');
+          
+          throw new Error(`NPHIES Validation Error: ${nphiesErrors || 'Unknown validation error'}`);
+        }
+        
         // Log ClaimResponse details if present
         const claimResp = response.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
         if (claimResp) {
@@ -150,10 +167,10 @@ class NphiesService {
           console.log('[NPHIES] ClaimResponse has extensions:', !!claimResp?.extension, 'count:', claimResp?.extension?.length);
         }
         
-        // Check for OperationOutcome errors in the response
+        // Check for OperationOutcome errors inside the Bundle
         const operationOutcome = response.data?.entry?.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
         if (operationOutcome?.issue) {
-          console.log('[NPHIES] OperationOutcome issues:', JSON.stringify(operationOutcome.issue, null, 2));
+          console.log('[NPHIES] OperationOutcome issues in Bundle:', JSON.stringify(operationOutcome.issue, null, 2));
         }
         console.log('[NPHIES] ==============================');
         
@@ -163,11 +180,14 @@ class NphiesService {
           console.error('[NPHIES] Invalid prior auth response structure:', validationResult.errors);
           console.error('[NPHIES] Full response data:', JSON.stringify(response.data, null, 2).substring(0, 2000));
           
-          // If we got an OperationOutcome, include those errors
+          // If we got an OperationOutcome inside the bundle, include those errors
           if (operationOutcome?.issue) {
-            const nphiesErrors = operationOutcome.issue.map(i => 
-              `${i.severity}: ${i.details?.coding?.[0]?.code || i.code} - ${i.details?.coding?.[0]?.display || i.diagnostics || 'Unknown error'}`
-            ).join('; ');
+            const nphiesErrors = operationOutcome.issue.map(i => {
+              const code = i.details?.coding?.[0]?.code || i.code || 'UNKNOWN';
+              const display = i.details?.coding?.[0]?.display || i.diagnostics || i.details?.text || 'Unknown error';
+              const expression = i.expression ? ` [${i.expression.join(', ')}]` : '';
+              return `${i.severity?.toUpperCase() || 'ERROR'}: ${code} - ${display}${expression}`;
+            }).join('; ');
             throw new Error(`NPHIES Error: ${nphiesErrors}`);
           }
           
