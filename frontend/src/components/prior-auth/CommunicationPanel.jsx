@@ -64,7 +64,8 @@ const CommunicationPanel = ({
     const messageHeaderId = crypto.randomUUID();
     const taskId = crypto.randomUUID();
     const providerOrgId = crypto.randomUUID();
-    const providerId = priorAuth?.provider_nphies_id || 'UNKNOWN';
+    // Get provider ID from the first communication if available, otherwise use placeholder
+    const providerId = communications?.[0]?.provider_nphies_id || 'PR-FHIR';
     const providerName = 'Healthcare Provider';
     const providerEndpoint = 'http://provider.com/fhir';
     const timestamp = new Date().toISOString();
