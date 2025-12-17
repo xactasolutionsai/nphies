@@ -158,30 +158,28 @@ const CommunicationPanel = ({
   };
 
   // Poll for acknowledgment of a specific communication
-  const handlePollAcknowledgment = async (communicationId, communicationDbId) => {
+  const handlePollAcknowledgment = async (communicationId) => {
     setPollingAckFor(communicationId);
     setAckPollResult(null);
     setError(null);
     
     try {
-      const response = await api.post(
-        `/prior-authorizations/${priorAuthId}/communications/${communicationId}/poll-acknowledgment`
-      );
+      const result = await api.pollCommunicationAcknowledgment(priorAuthId, communicationId);
       
-      setAckPollResult(response.data);
+      setAckPollResult(result);
       
       // Reload communications to get updated acknowledgment status
       await loadData();
       
       // Show success/info message
-      if (response.data.acknowledgmentFound) {
+      if (result.acknowledgmentFound) {
         setAckPollResult({
-          ...response.data,
-          message: `Acknowledgment received: ${response.data.acknowledgmentStatus}`
+          ...result,
+          message: `Acknowledgment received: ${result.acknowledgmentStatus}`
         });
-      } else if (response.data.alreadyAcknowledged) {
+      } else if (result.alreadyAcknowledged) {
         setAckPollResult({
-          ...response.data,
+          ...result,
           message: 'Communication was already acknowledged'
         });
       }
@@ -201,11 +199,9 @@ const CommunicationPanel = ({
     setError(null);
     
     try {
-      const response = await api.post(
-        `/prior-authorizations/${priorAuthId}/communications/poll-all-acknowledgments`
-      );
+      const result = await api.pollAllQueuedAcknowledgments(priorAuthId);
       
-      setAckPollResult(response.data);
+      setAckPollResult(result);
       
       // Reload communications to get updated acknowledgment status
       await loadData();
@@ -1240,7 +1236,7 @@ const CommunicationPanel = ({
                         {/* Poll for Acknowledgment button - show when queued or not acknowledged */}
                         {(!comm.acknowledgment_received || comm.acknowledgment_status === 'queued') && (
                           <button
-                            onClick={() => handlePollAcknowledgment(comm.communication_id, comm.id)}
+                            onClick={() => handlePollAcknowledgment(comm.communication_id)}
                             disabled={pollingAckFor === comm.communication_id}
                             className="flex items-center px-2 py-1 text-xs bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             title="Poll NPHIES for acknowledgment"

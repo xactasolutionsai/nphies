@@ -652,6 +652,30 @@ class ApiService {
     return this.request(`/prior-authorizations/${priorAuthId}/communications/${communicationId}`);
   }
 
+  /**
+   * Poll for acknowledgment of a specific Communication
+   * Use when communication has acknowledgment_status = 'queued'
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   * @param {string} communicationId - Communication UUID
+   */
+  async pollCommunicationAcknowledgment(priorAuthId, communicationId) {
+    return this.request(`/prior-authorizations/${priorAuthId}/communications/${communicationId}/poll-acknowledgment`, {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Poll for all queued acknowledgments for a Prior Authorization
+   * 
+   * @param {number} priorAuthId - Prior Authorization ID
+   */
+  async pollAllQueuedAcknowledgments(priorAuthId) {
+    return this.request(`/prior-authorizations/${priorAuthId}/communications/poll-all-acknowledgments`, {
+      method: 'POST'
+    });
+  }
+
   // Claim Submissions (NPHIES Claims - use: "claim")
   async getClaimSubmissions(params = {}) {
     const queryString = new URLSearchParams(params).toString();
