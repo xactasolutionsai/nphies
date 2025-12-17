@@ -135,7 +135,14 @@ const CommunicationPanel = ({
       }
     } catch (err) {
       console.error('Error polling:', err);
-      const errorMessage = err.response?.data?.error || err.response?.data?.details || err.message || 'Failed to poll for updates';
+      // Handle error object properly - extract message string
+      const errorData = err.response?.data?.error;
+      let errorMessage;
+      if (typeof errorData === 'object' && errorData !== null) {
+        errorMessage = errorData.message || errorData.details || JSON.stringify(errorData);
+      } else {
+        errorMessage = errorData || err.response?.data?.details || err.message || 'Failed to poll for updates';
+      }
       setError(errorMessage);
     } finally {
       setIsPolling(false);
@@ -473,11 +480,25 @@ const CommunicationPanel = ({
         // Reload data
         await loadData();
       } else {
-        setError(result.message || 'Failed to send communication');
+        // Handle error object properly
+        const errMsg = result.message;
+        if (typeof errMsg === 'object' && errMsg !== null) {
+          setError(errMsg.message || errMsg.details || JSON.stringify(errMsg));
+        } else {
+          setError(errMsg || 'Failed to send communication');
+        }
       }
     } catch (err) {
       console.error('Error sending communication:', err);
-      setError(err.message || 'Failed to send communication');
+      // Handle error object properly - extract message string
+      const errorData = err.response?.data?.error;
+      let errorMessage;
+      if (typeof errorData === 'object' && errorData !== null) {
+        errorMessage = errorData.message || errorData.details || JSON.stringify(errorData);
+      } else {
+        errorMessage = errorData || err.response?.data?.message || err.message || 'Failed to send communication';
+      }
+      setError(errorMessage);
     } finally {
       setIsSending(false);
     }
@@ -610,7 +631,11 @@ const CommunicationPanel = ({
             <AlertCircle className="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-red-800 font-medium">Error</p>
-              <p className="text-red-700 text-sm mt-1">{typeof error === 'object' ? JSON.stringify(error) : error}</p>
+              <p className="text-red-700 text-sm mt-1">
+                {typeof error === 'object' 
+                  ? (error.message || error.details || error.code || JSON.stringify(error)) 
+                  : String(error)}
+              </p>
               <div className="flex items-center gap-2 mt-2">
                 <button 
                   onClick={() => setError(null)}

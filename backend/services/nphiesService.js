@@ -116,24 +116,62 @@ class NphiesService {
 
         console.log(`[NPHIES] Response received: ${response.status}`);
         
-        // Debug: Log the response bundle received
+        // Debug: Log the raw response for troubleshooting
         console.log('[NPHIES] ===== INCOMING RESPONSE =====');
+        console.log('[NPHIES] Response Status:', response.status);
+        console.log('[NPHIES] Response Headers:', JSON.stringify(response.headers, null, 2));
+        
+        // Check if response is valid JSON/Bundle
+        if (!response.data) {
+          console.error('[NPHIES] Empty response received');
+          throw new Error('NPHIES returned an empty response');
+        }
+        
+        // Check if response is HTML (usually indicates auth error or server error)
+        if (typeof response.data === 'string') {
+          console.error('[NPHIES] Received string response instead of JSON:', response.data.substring(0, 500));
+          if (response.data.includes('<html') || response.data.includes('<!DOCTYPE')) {
+            throw new Error('NPHIES returned an HTML error page. This usually indicates an authentication or server error. Check your NPHIES credentials and connectivity.');
+          }
+          throw new Error(`NPHIES returned unexpected response: ${response.data.substring(0, 200)}`);
+        }
+        
+        console.log('[NPHIES] Response resourceType:', response.data?.resourceType);
         console.log('[NPHIES] Response Bundle ID:', response.data?.id);
         console.log('[NPHIES] Response Bundle Type:', response.data?.type);
         console.log('[NPHIES] Response Bundle Entries:', response.data?.entry?.length);
-        // Log ClaimResponse details
+        
+        // Log ClaimResponse details if present
         const claimResp = response.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
-        console.log('[NPHIES] ClaimResponse ID:', claimResp?.id);
-        console.log('[NPHIES] ClaimResponse outcome:', claimResp?.outcome);
-        console.log('[NPHIES] ClaimResponse preAuthRef:', claimResp?.preAuthRef);
-        console.log('[NPHIES] ClaimResponse has extensions:', !!claimResp?.extension, 'count:', claimResp?.extension?.length);
+        if (claimResp) {
+          console.log('[NPHIES] ClaimResponse ID:', claimResp?.id);
+          console.log('[NPHIES] ClaimResponse outcome:', claimResp?.outcome);
+          console.log('[NPHIES] ClaimResponse preAuthRef:', claimResp?.preAuthRef);
+          console.log('[NPHIES] ClaimResponse has extensions:', !!claimResp?.extension, 'count:', claimResp?.extension?.length);
+        }
+        
+        // Check for OperationOutcome errors in the response
+        const operationOutcome = response.data?.entry?.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
+        if (operationOutcome?.issue) {
+          console.log('[NPHIES] OperationOutcome issues:', JSON.stringify(operationOutcome.issue, null, 2));
+        }
         console.log('[NPHIES] ==============================');
         
         // Validate response for prior auth (expects ClaimResponse)
         const validationResult = this.validatePriorAuthResponse(response.data);
         if (!validationResult.valid) {
           console.error('[NPHIES] Invalid prior auth response structure:', validationResult.errors);
-          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
+          console.error('[NPHIES] Full response data:', JSON.stringify(response.data, null, 2).substring(0, 2000));
+          
+          // If we got an OperationOutcome, include those errors
+          if (operationOutcome?.issue) {
+            const nphiesErrors = operationOutcome.issue.map(i => 
+              `${i.severity}: ${i.details?.coding?.[0]?.code || i.code} - ${i.details?.coding?.[0]?.display || i.diagnostics || 'Unknown error'}`
+            ).join('; ');
+            throw new Error(`NPHIES Error: ${nphiesErrors}`);
+          }
+          
+          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}. Response type: ${response.data?.resourceType || 'unknown'}`);
         }
 
         return {
