@@ -528,8 +528,8 @@ const CommunicationPanel = ({
     );
   };
 
-  // Check if can send communication
-  const canSendCommunication = priorAuthStatus === 'queued';
+  // Check if can send communication - allow for queued and approved PAs
+  const canSendCommunication = priorAuthStatus === 'queued' || priorAuthStatus === 'approved';
 
   if (loading) {
     return (
@@ -554,7 +554,7 @@ const CommunicationPanel = ({
           <p className="text-sm text-gray-600 mt-1">
             {canSendCommunication 
               ? 'Send additional information to the insurer or respond to their requests'
-              : 'Communication is only available for queued authorizations'}
+              : 'Communication is only available for queued or approved authorizations'}
           </p>
         </div>
         <div className="flex items-center gap-2">
