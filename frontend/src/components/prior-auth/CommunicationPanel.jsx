@@ -1310,8 +1310,6 @@ const CommunicationPanel = ({
                     <span className="text-gray-500">NPHIES Communication ID:</span>
                     <p className="font-mono text-gray-900 break-all text-xs">
                       {selectedCommunication.nphies_communication_id || 
-                        // Extract from response_bundle if not in DB
-                        selectedCommunication.response_bundle?.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource?.id ||
                         <span className="text-gray-400 italic">Not assigned</span>
                       }
                     </p>
@@ -1345,36 +1343,38 @@ const CommunicationPanel = ({
                     <p className="font-medium">{formatDate(selectedCommunication.sent_at)}</p>
                   </div>
                   <div>
-                    <span className="text-gray-500">Acknowledgment Status:</span>
-                    {(() => {
-                      // Check DB field first, then extract from response_bundle
-                      const dbAckStatus = selectedCommunication.acknowledgment_status;
-                      const responseAckStatus = selectedCommunication.response_bundle?.entry?.find(
-                        e => e.resource?.resourceType === 'MessageHeader'
-                      )?.resource?.response?.code;
-                      const ackStatus = dbAckStatus || responseAckStatus;
-                      const isAcknowledged = selectedCommunication.acknowledgment_received || responseAckStatus;
-                      
-                      if (!isAcknowledged) {
-                        return <p className="text-gray-400 italic">Pending</p>;
-                      }
-                      
-                      return (
-                        <p className="font-medium">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
-                            ackStatus === 'ok' 
-                              ? 'bg-green-100 text-green-800'
-                              : ackStatus === 'transient-error'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {ackStatus === 'ok' ? '✓ OK' : ackStatus?.toUpperCase() || 'Unknown'}
-                          </span>
-                        </p>
-                      );
-                    })()}
+                    <span className="text-gray-500">Acknowledgment Received:</span>
+                    <p className="font-medium">
+                      {selectedCommunication.acknowledgment_received ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                          ✓ Yes
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
+                          No
+                        </span>
+                      )}
+                    </p>
                   </div>
-                  {(selectedCommunication.acknowledgment_received || selectedCommunication.acknowledgment_at) && (
+                  <div>
+                    <span className="text-gray-500">Acknowledgment Status:</span>
+                    <p className="font-medium">
+                      {selectedCommunication.acknowledgment_status ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
+                          selectedCommunication.acknowledgment_status === 'ok' 
+                            ? 'bg-green-100 text-green-800'
+                            : selectedCommunication.acknowledgment_status === 'transient-error'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {selectedCommunication.acknowledgment_status === 'ok' ? '✓ OK' : selectedCommunication.acknowledgment_status?.toUpperCase()}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </p>
+                  </div>
+                  {selectedCommunication.acknowledgment_at && (
                     <div>
                       <span className="text-gray-500">Acknowledged At:</span>
                       <p className="font-medium text-green-600">{formatDate(selectedCommunication.acknowledgment_at)}</p>
