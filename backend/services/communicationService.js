@@ -1290,7 +1290,7 @@ class CommunicationService {
   }
 
   /**
-   * Get a single Communication by ID
+   * Get a single Communication by ID (supports both integer DB id and UUID communication_id)
    */
   async getCommunication(communicationId, schemaName) {
     const client = await pool.connect();
@@ -1298,13 +1298,16 @@ class CommunicationService {
     try {
       await client.query(`SET search_path TO ${schemaName}`);
 
+      // Check if it's a UUID (contains dashes) or integer ID
+      const isUUID = typeof communicationId === 'string' && communicationId.includes('-');
+      
       const result = await client.query(`
         SELECT c.*,
                cr.request_id as based_on_request_nphies_id,
                cr.payload_content_string as request_payload
         FROM nphies_communications c
         LEFT JOIN nphies_communication_requests cr ON c.based_on_request_id = cr.id
-        WHERE c.id = $1
+        WHERE ${isUUID ? 'c.communication_id' : 'c.id'} = $1
       `, [communicationId]);
 
       if (result.rows.length === 0) {
