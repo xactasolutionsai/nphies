@@ -59,20 +59,11 @@ class CommunicationService {
           i.insurer_id, 
           i.insurer_name as insurer_name, 
           i.nphies_id as insurer_nphies_id,
-          i.address as insurer_address,
-          c.coverage_id,
-          c.member_id as coverage_member_id,
-          c.coverage_type,
-          c.relationship as coverage_relationship,
-          c.plan_name as coverage_plan_name,
-          c.network_type as coverage_network,
-          c.start_date as coverage_start_date,
-          c.end_date as coverage_end_date
+          i.address as insurer_address
         FROM prior_authorizations pa
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
         LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
-        LEFT JOIN patient_coverage c ON pa.coverage_id = c.coverage_id
         WHERE pa.id = $1
       `, [priorAuthId]);
 
@@ -82,17 +73,9 @@ class CommunicationService {
 
       const priorAuth = paResult.rows[0];
 
-      // Build coverage object if coverage data exists
-      const coverageData = priorAuth.coverage_id ? {
-        coverage_id: priorAuth.coverage_id,
-        member_id: priorAuth.coverage_member_id,
-        coverage_type: priorAuth.coverage_type,
-        relationship: priorAuth.coverage_relationship,
-        plan_name: priorAuth.coverage_plan_name,
-        network: priorAuth.coverage_network,
-        start_date: priorAuth.coverage_start_date,
-        end_date: priorAuth.coverage_end_date
-      } : null;
+      // Coverage data is not joined due to type mismatch (integer vs uuid)
+      // Coverage is optional for Communication bundles
+      const coverageData = null;
 
       // Build the bundle based on type
       let communicationBundle;
@@ -245,20 +228,11 @@ class CommunicationService {
           i.insurer_id, 
           i.insurer_name as insurer_name, 
           i.nphies_id as insurer_nphies_id,
-          i.address as insurer_address,
-          c.coverage_id,
-          c.member_id as coverage_member_id,
-          c.coverage_type,
-          c.relationship as coverage_relationship,
-          c.plan_name as coverage_plan_name,
-          c.network_type as coverage_network,
-          c.start_date as coverage_start_date,
-          c.end_date as coverage_end_date
+          i.address as insurer_address
         FROM prior_authorizations pa
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
         LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
-        LEFT JOIN patient_coverage c ON pa.coverage_id = c.coverage_id
         WHERE pa.id = $1
       `, [priorAuthId]);
 
@@ -307,16 +281,7 @@ class CommunicationService {
           nphies_id: priorAuth.insurer_nphies_id,
           address: priorAuth.insurer_address
         },
-        coverage: priorAuth.coverage_id ? {
-          coverage_id: priorAuth.coverage_id,
-          member_id: priorAuth.coverage_member_id,
-          coverage_type: priorAuth.coverage_type,
-          relationship: priorAuth.coverage_relationship,
-          plan_name: priorAuth.coverage_plan_name,
-          network: priorAuth.coverage_network,
-          start_date: priorAuth.coverage_start_date,
-          end_date: priorAuth.coverage_end_date
-        } : null,
+        coverage: null, // Coverage JOIN removed due to type mismatch
         payloads
       });
 
@@ -456,21 +421,12 @@ class CommunicationService {
                pr.address as provider_address,
                i.nphies_id as insurer_nphies_id,
                i.insurer_name as insurer_name,
-               i.address as insurer_address,
-               c.coverage_id as coverage_id,
-               c.member_id as coverage_member_id,
-               c.coverage_type,
-               c.relationship as coverage_relationship,
-               c.plan_name as coverage_plan_name,
-               c.network_type as coverage_network,
-               c.start_date as coverage_start_date,
-               c.end_date as coverage_end_date
+               i.address as insurer_address
         FROM nphies_communication_requests cr
         LEFT JOIN prior_authorizations pa ON cr.prior_auth_id = pa.id
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
         LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
-        LEFT JOIN patient_coverage c ON pa.coverage_id = c.coverage_id
         WHERE cr.id = $1
       `, [communicationRequestId]);
 
@@ -520,16 +476,7 @@ class CommunicationService {
           nphies_id: commRequest.insurer_nphies_id,
           address: commRequest.insurer_address
         },
-        coverage: commRequest.coverage_id ? {
-          coverage_id: commRequest.coverage_id,
-          member_id: commRequest.coverage_member_id,
-          coverage_type: commRequest.coverage_type,
-          relationship: commRequest.coverage_relationship,
-          plan_name: commRequest.coverage_plan_name,
-          network: commRequest.coverage_network,
-          start_date: commRequest.coverage_start_date,
-          end_date: commRequest.coverage_end_date
-        } : null,
+        coverage: null, // Coverage JOIN removed due to type mismatch
         payloads
       });
 
