@@ -423,41 +423,33 @@ class CommunicationMapper {
   }
 
   /**
-   * Format authorization identifier to NPHIES format
-   * NPHIES expects format: req_XXXXXX (e.g., req_1188070)
-   * Converts various formats:
-   * - pa-req-XXXXXX -> req_XXXXXX
-   * - PA-REQ-XXXXXX -> req_XXXXXX  
-   * - Already formatted req_XXXXXX -> req_XXXXXX
-   * - Other formats -> req_XXXXXX (extracts numeric part)
+   * Get the NPHIES-assigned authorization reference for the 'about' element
    * 
-   * @param {string} identifier - The raw identifier
-   * @returns {string} NPHIES-formatted identifier
+   * BV-00148: The 'about' identifier MUST be the pre_auth_ref assigned by NPHIES
+   * This is typically a UUID like: 98118790-5053-4cef-b479-ae744986fbd5
+   * 
+   * Priority order:
+   * 1. pre_auth_ref (NPHIES-assigned UUID) - REQUIRED for approved/queued PAs
+   * 2. nphies_request_id (fallback for pending PAs)
+   * 3. request_number (last resort)
+   * 
+   * @param {Object} priorAuth - Prior authorization data
+   * @returns {string} NPHIES authorization reference
    */
-  formatNphiesAuthIdentifier(identifier) {
-    if (!identifier) return `req_${Date.now()}`;
-    
-    const idStr = String(identifier);
-    
-    // If already in correct format (req_XXXXX), return as-is
-    if (/^req_\d+$/.test(idStr)) {
-      return idStr;
+  getNphiesAuthReference(priorAuth) {
+    // pre_auth_ref is the NPHIES-assigned reference (UUID format)
+    // This is what NPHIES expects in the 'about' element
+    if (priorAuth.pre_auth_ref) {
+      return priorAuth.pre_auth_ref;
     }
     
-    // Convert pa-req-XXXXX or PA-REQ-XXXXX to req_XXXXX
-    const paReqMatch = idStr.match(/^pa-req-(\d+)$/i);
-    if (paReqMatch) {
-      return `req_${paReqMatch[1]}`;
+    // Fallback to nphies_request_id if no pre_auth_ref yet
+    if (priorAuth.nphies_request_id) {
+      return priorAuth.nphies_request_id;
     }
     
-    // Extract numeric part from any format and create req_XXXXX
-    const numericMatch = idStr.match(/(\d+)/);
-    if (numericMatch) {
-      return `req_${numericMatch[1]}`;
-    }
-    
-    // Fallback: use timestamp
-    return `req_${Date.now()}`;
+    // Last resort: use request_number
+    return priorAuth.request_number || `req_${Date.now()}`;
   }
 
   /**
@@ -579,12 +571,10 @@ class CommunicationMapper {
     const communicationId = this.generateId();
     
     // Build the 'about' reference using proper identifier system URL format
-    // Per NPHIES: use provider's domain for identifier system
-    // NPHIES FIX (BV-00148): The 'about' identifier must be the pre_auth_ref (NPHIES-assigned reference)
-    // Format: req_XXXXXX per NPHIES standard
+    // NPHIES FIX (BV-00148): The 'about' identifier MUST be the pre_auth_ref (NPHIES-assigned UUID)
+    // Example: 98118790-5053-4cef-b479-ae744986fbd5
     const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
-    const rawIdentifier = priorAuth.pre_auth_ref || priorAuth.nphies_request_id || priorAuth.request_number;
-    const aboutIdentifier = this.formatNphiesAuthIdentifier(rawIdentifier);
+    const aboutIdentifier = this.getNphiesAuthReference(priorAuth);
     const aboutReference = {
       identifier: {
         system: `http://${providerDomain}.com.sa/identifiers/authorization`,
@@ -684,15 +674,14 @@ class CommunicationMapper {
     const communicationId = this.generateId();
     
     // Build the 'about' reference using proper identifier system URL format
-    // NPHIES FIX (BV-00148): The 'about' identifier must be the pre_auth_ref (NPHIES-assigned reference)
-    // Format: req_XXXXXX per NPHIES standard
+    // NPHIES FIX (BV-00148): The 'about' identifier MUST be the pre_auth_ref (NPHIES-assigned UUID)
+    // Example: 98118790-5053-4cef-b479-ae744986fbd5
     const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
-    const rawIdentifier = priorAuth.pre_auth_ref || priorAuth.nphies_request_id || priorAuth.request_number;
-    const aboutIdentifier = this.formatNphiesAuthIdentifier(rawIdentifier);
+    const aboutIdentifier = this.getNphiesAuthReference(priorAuth);
     
     // Use existing about_reference from CommunicationRequest if available, otherwise build new one
     const aboutReference = communicationRequest.about_reference ? 
-      { identifier: { system: `http://${providerDomain}.com.sa/identifiers/authorization`, value: this.formatNphiesAuthIdentifier(communicationRequest.about_reference) } } :
+      { identifier: { system: `http://${providerDomain}.com.sa/identifiers/authorization`, value: communicationRequest.about_reference } } :
       { identifier: { system: `http://${providerDomain}.com.sa/identifiers/authorization`, value: aboutIdentifier } };
     
     // Build basedOn identifier per NPHIES example format
