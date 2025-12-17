@@ -24,7 +24,7 @@ import {
   Eye,
   RefreshCw
 } from 'lucide-react';
-import api from '@/services/api';
+import api, { extractErrorMessage } from '@/services/api';
 
 export default function PaymentReconciliationDetails() {
   const { id } = useParams();
@@ -87,7 +87,7 @@ export default function PaymentReconciliationDetails() {
       }
     } catch (error) {
       console.error('Error previewing acknowledgement:', error);
-      alert(`Error: ${error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     }
   };
   

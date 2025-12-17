@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import api from '@/services/api';
+import api, { extractErrorMessage } from '@/services/api';
 import { 
   ArrowLeft, Edit, Send, RefreshCw, XCircle, ArrowRightLeft,
   FileText, User, Building, Shield, Stethoscope, Receipt, 
@@ -170,7 +170,7 @@ export default function PriorAuthorizationDetails() {
       setShowBundleDialog(true);
     } catch (error) {
       console.error('Error loading bundle:', error);
-      alert(`Error: ${error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setActionLoading(false);
     }
@@ -459,7 +459,7 @@ export default function PriorAuthorizationDetails() {
       }
     } catch (error) {
       console.error('Error sending to NPHIES:', error);
-      alert(`Error: ${error.response?.data?.error || error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setActionLoading(false);
     }
@@ -473,7 +473,7 @@ export default function PriorAuthorizationDetails() {
       alert(response.message || 'Polling complete');
     } catch (error) {
       console.error('Error polling:', error);
-      alert(`Error: ${error.response?.data?.error || error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setActionLoading(false);
     }
@@ -493,7 +493,7 @@ export default function PriorAuthorizationDetails() {
       }
     } catch (error) {
       console.error('Error cancelling:', error);
-      alert(`Error: ${error.response?.data?.error || error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setActionLoading(false);
     }
@@ -531,7 +531,7 @@ export default function PriorAuthorizationDetails() {
       }
     } catch (error) {
       console.error('Error creating/submitting claim:', error);
-      alert(`Error: ${error.response?.data?.error || error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setActionLoading(false);
     }
@@ -604,7 +604,7 @@ export default function PriorAuthorizationDetails() {
       setShowClaimBundleDialog(true);
     } catch (error) {
       console.error('Error previewing claim bundle:', error);
-      alert(`Error: ${error.response?.data?.error || error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setClaimBundleLoading(false);
     }

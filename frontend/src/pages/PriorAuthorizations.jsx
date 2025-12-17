@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import DataTable from '@/components/DataTable';
-import api from '@/services/api';
+import api, { extractErrorMessage } from '@/services/api';
 import { 
   FileText, Plus, Edit, Trash2, Eye, Send, RefreshCw, 
   XCircle, ArrowRightLeft, Clock, CheckCircle, AlertCircle,
@@ -112,8 +112,7 @@ export default function PriorAuthorizations() {
         await loadAuthorizations();
       } catch (error) {
         console.error('Error deleting prior authorization:', error);
-        const errorMsg = error.response?.data?.error || 'Error deleting prior authorization. Please try again.';
-        alert(errorMsg);
+        alert(`Error: ${extractErrorMessage(error)}`);
         await loadAuthorizations();
       } finally {
         setLoading(false);
@@ -134,7 +133,7 @@ export default function PriorAuthorizations() {
         await loadAuthorizations();
       } catch (error) {
         console.error('Error sending to NPHIES:', error);
-        alert(`Error: ${error.response?.data?.error || error.message}`);
+        alert(`Error: ${extractErrorMessage(error)}`);
         await loadAuthorizations();
       } finally {
         setLoading(false);
@@ -150,7 +149,7 @@ export default function PriorAuthorizations() {
       alert(response.message || 'Polling complete');
     } catch (error) {
       console.error('Error polling:', error);
-      alert(`Error: ${error.response?.data?.error || error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -167,7 +166,7 @@ export default function PriorAuthorizations() {
         navigate(`/prior-authorizations/${newId}/edit`);
       } catch (error) {
         console.error('Error duplicating prior authorization:', error);
-        alert(`Error: ${error.response?.data?.error || error.message}`);
+        alert(`Error: ${extractErrorMessage(error)}`);
       } finally {
         setLoading(false);
       }

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import api from '@/services/api';
+import api, { extractErrorMessage } from '@/services/api';
 import { 
   ArrowLeft, Send, RefreshCw, XCircle, 
   FileText, User, Building, Shield, Stethoscope, Receipt, 
@@ -334,7 +334,7 @@ export default function ClaimDetails() {
       setShowBundleDialog(true);
     } catch (error) {
       console.error('Error loading bundle:', error);
-      alert(`Error: ${error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setActionLoading(false);
     }
@@ -634,7 +634,7 @@ export default function ClaimDetails() {
       }
     } catch (error) {
       console.error('Error sending to NPHIES:', error);
-      alert(`Error: ${error.response?.data?.error || error.message}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setActionLoading(false);
     }

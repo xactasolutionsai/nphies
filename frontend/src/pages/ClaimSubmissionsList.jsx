@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import DataTable from '@/components/DataTable';
-import api from '@/services/api';
+import api, { extractErrorMessage } from '@/services/api';
 import { 
   FileText, Edit, Trash2, Eye, Send, RefreshCw, 
   XCircle, Clock, CheckCircle, AlertCircle,
@@ -134,7 +134,7 @@ export default function ClaimSubmissionsList() {
         await loadClaims();
       } catch (error) {
         console.error('Error sending to NPHIES:', error);
-        alert(`Error: ${error.response?.data?.error || error.message}`);
+        alert(`Error: ${extractErrorMessage(error)}`);
         await loadClaims();
       } finally {
         setLoading(false);
@@ -151,7 +151,7 @@ export default function ClaimSubmissionsList() {
         navigate(`/claim-submissions/${id}/edit`);
       } catch (error) {
         console.error('Error duplicating claim:', error);
-        alert(`Error: ${error.response?.data?.error || error.message}`);
+        alert(`Error: ${extractErrorMessage(error)}`);
       } finally {
         setLoading(false);
       }

@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import api from '@/services/api';
+import api, { extractErrorMessage } from '@/services/api';
 import aiValidationService from '@/services/aiValidationService';
 import AIValidationModal from '@/components/AIValidationModal';
 import InlineValidationWarning from '@/components/InlineValidationWarning';
@@ -540,8 +540,7 @@ export default function EyeApprovalsForm() {
       navigate('/eye-approvals');
     } catch (error) {
       console.error('Error saving form:', error);
-      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to save form';
-      alert(`Error: ${errorMessage}`);
+      alert(`Error: ${extractErrorMessage(error)}`);
     } finally {
       setSaving(false);
     }

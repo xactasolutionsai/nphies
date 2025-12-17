@@ -9,7 +9,7 @@ import DatePicker from 'react-datepicker';
 import Select from 'react-select';
 import AsyncSelect from 'react-select/async';
 import 'react-datepicker/dist/react-datepicker.css';
-import api from '@/services/api';
+import api, { extractErrorMessage } from '@/services/api';
 import { 
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
@@ -1105,7 +1105,7 @@ export default function PriorAuthorizationForm() {
       navigate(`/prior-authorizations/${response.data.id}`);
     } catch (error) {
       console.error('Error saving prior authorization:', error);
-      const errorMsg = error.response?.data?.error || error.message;
+      const errorMsg = extractErrorMessage(error);
       setErrors([{ field: 'general', message: errorMsg }]);
       alert(`Error: ${errorMsg}`);
     } finally {
@@ -1201,7 +1201,7 @@ export default function PriorAuthorizationForm() {
       }
     } catch (error) {
       console.error('Error sending to NPHIES:', error);
-      const errorMsg = error.response?.data?.error || error.message;
+      const errorMsg = extractErrorMessage(error);
       setErrors([{ field: 'general', message: errorMsg }]);
       alert(`Error: ${errorMsg}`);
     } finally {
@@ -1305,7 +1305,7 @@ export default function PriorAuthorizationForm() {
       setShowPreview(true);
     } catch (error) {
       console.error('Error generating preview:', error);
-      const errorMsg = error.response?.data?.error || error.message;
+      const errorMsg = extractErrorMessage(error);
       alert(`Error: ${errorMsg}`);
     } finally {
       setPreviewLoading(false);

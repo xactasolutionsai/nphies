@@ -955,4 +955,27 @@ class ApiService {
   }
 }
 
+/**
+ * Extract a human-readable error message from an error object
+ * Handles cases where error.response.data.error is an object instead of a string
+ * @param {Error} error - The error object from a catch block
+ * @returns {string} - A human-readable error message
+ */
+export function extractErrorMessage(error) {
+  const errorData = error?.response?.data?.error;
+  
+  // If errorData is a string, return it directly
+  if (typeof errorData === 'string') {
+    return errorData;
+  }
+  
+  // If errorData is an object, extract the message
+  if (typeof errorData === 'object' && errorData !== null) {
+    return errorData.message || errorData.details || errorData.code || JSON.stringify(errorData);
+  }
+  
+  // Fallback to other possible error locations
+  return error?.response?.data?.message || error?.message || 'An unexpected error occurred';
+}
+
 export default new ApiService();
