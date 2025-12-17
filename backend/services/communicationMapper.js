@@ -1050,13 +1050,18 @@ class CommunicationMapper {
    * @param {string} providerName - Provider organization name (optional)
    * @returns {Object} FHIR Bundle for poll request
    */
-  buildPollRequestBundle(providerId, providerName = 'Healthcare Provider') {
+  buildPollRequestBundle(providerId, providerName = 'Healthcare Provider', providerType = '1') {
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
     const taskId = this.generateId();
     const providerOrgId = this.generateId();
     const timestamp = this.formatDateTime(new Date());
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
+
+    // Use urn:uuid format for internal references (fixes RE-00100)
+    const taskFullUrl = `urn:uuid:${taskId}`;
+    const providerOrgFullUrl = `urn:uuid:${providerOrgId}`;
+    const nphiesOrgFullUrl = `urn:uuid:nphies-org`;
 
     return {
       resourceType: 'Bundle',
@@ -1100,14 +1105,15 @@ class CommunicationMapper {
             source: {
               endpoint: providerEndpoint
             },
+            // Focus must reference using same format as fullUrl (fixes RE-00100)
             focus: [{
-              reference: `${providerEndpoint}/Task/${taskId}`
+              reference: taskFullUrl
             }]
           }
         },
         // 2. Task (poll-request)
         {
-          fullUrl: `${providerEndpoint}/Task/${taskId}`,
+          fullUrl: taskFullUrl,
           resource: {
             resourceType: 'Task',
             id: taskId,
@@ -1129,23 +1135,35 @@ class CommunicationMapper {
             },
             authoredOn: timestamp,
             lastModified: timestamp,
+            // References must match fullUrl format
             requester: {
-              reference: `Organization/${providerOrgId}`
+              reference: providerOrgFullUrl
             },
             owner: {
-              reference: 'Organization/NPHIES'
+              reference: nphiesOrgFullUrl
             }
           }
         },
-        // 3. Provider Organization
+        // 3. Provider Organization (with required extension-provider-type - fixes IC-01428, IC-01574)
         {
-          fullUrl: `${providerEndpoint}/Organization/${providerOrgId}`,
+          fullUrl: providerOrgFullUrl,
           resource: {
             resourceType: 'Organization',
             id: providerOrgId,
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
             },
+            // Required extension for provider-organization profile
+            extension: [{
+              url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type',
+              valueCodeableConcept: {
+                coding: [{
+                  system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
+                  code: providerType,
+                  display: providerType === '1' ? 'Hospital' : 'Clinic'
+                }]
+              }
+            }],
             identifier: [{
               system: 'http://nphies.sa/license/provider-license',
               value: providerId
@@ -1162,7 +1180,7 @@ class CommunicationMapper {
         },
         // 4. NPHIES Organization
         {
-          fullUrl: `${providerEndpoint}/Organization/NPHIES`,
+          fullUrl: nphiesOrgFullUrl,
           resource: {
             resourceType: 'Organization',
             id: 'NPHIES',
