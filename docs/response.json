@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "461f9867-690f-40ad-bdf3-396589684dcd",
+    "id": "04a19cb5-8871-4235-811f-64b36e1d17cc",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-17T18:30:04.347+03:00",
+    "timestamp": "2025-12-17T18:39:41.353+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/6ef5f9d8-ec03-4d9a-b79a-56e8af3fd0b9",
+            "fullUrl": "http://nphies.sa/MessageHeader/53fa2bb3-05c2-437b-a8a7-43f746f0e084",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "6ef5f9d8-ec03-4d9a-b79a-56e8af3fd0b9",
+                "id": "53fa2bb3-05c2-437b-a8a7-43f746f0e084",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -52,16 +52,16 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "ad26649f-c642-48dc-8557-f9bc1e3fafc8",
+                    "identifier": "b05b788c-b018-42cb-9cf1-28be95e69ff3",
                     "code": "fatal-error"
                 }
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Task/43c2b6b7-8112-46ad-a528-415a2b20aee5",
+            "fullUrl": "http://nphies.sa/Task/566a237d-9b39-4f1b-999a-01ea714e1ed0",
             "resource": {
                 "resourceType": "Task",
-                "id": "43c2b6b7-8112-46ad-a528-415a2b20aee5",
+                "id": "566a237d-9b39-4f1b-999a-01ea714e1ed0",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0"
@@ -76,7 +76,7 @@
                 "identifier": [
                     {
                         "system": "http://provider.com/fhir/identifiers/poll-request",
-                        "value": "482"
+                        "value": "906"
                     }
                 ],
                 "status": "failed",
@@ -90,10 +90,10 @@
                         }
                     ]
                 },
-                "authoredOn": "2025-12-17T15:29:55.774Z",
-                "lastModified": "2025-12-17T15:29:55.774Z",
+                "authoredOn": "2025-12-17T15:38:00.289Z",
+                "lastModified": "2025-12-17T15:38:00.289Z",
                 "requester": {
-                    "reference": "Organization/10effb13-2833-4407-8cd1-00a1bb86e901"
+                    "reference": "urn:uuid:45078eb5-6ef8-43aa-a7f1-eb35e8b40de9"
                 },
                 "owner": {
                     "identifier": {
@@ -151,70 +151,34 @@
                                 }
                             ]
                         }
-                    },
-                    {
-                        "type": {
-                            "coding": [
-                                {
-                                    "system": "http://nphies.sa/terminology/ValueSet/task-output-type",
-                                    "code": "error"
-                                }
-                            ]
-                        },
-                        "valueCodeableConcept": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[2].resource.extension"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "IC-01428",
-                                    "display": "The element SHALL follow the cardinality specified in the NPHIES profile"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "type": {
-                            "coding": [
-                                {
-                                    "system": "http://nphies.sa/terminology/ValueSet/task-output-type",
-                                    "code": "error"
-                                }
-                            ]
-                        },
-                        "valueCodeableConcept": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[2].resource.extension[0].providerType"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "IC-01574",
-                                    "display": "'Organization ProviderType' is not following the specified cardinality within the message profile"
-                                }
-                            ]
-                        }
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://provider.com/fhir/Organization/10effb13-2833-4407-8cd1-00a1bb86e901",
+            "fullUrl": "urn:uuid:45078eb5-6ef8-43aa-a7f1-eb35e8b40de9",
             "resource": {
                 "resourceType": "Organization",
-                "id": "10effb13-2833-4407-8cd1-00a1bb86e901",
+                "id": "45078eb5-6ef8-43aa-a7f1-eb35e8b40de9",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
                     ]
                 },
+                "extension": [
+                    {
+                        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
+                        "valueCodeableConcept": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
+                                    "code": "1",
+                                    "display": "Hospital"
+                                }
+                            ]
+                        }
+                    }
+                ],
                 "identifier": [
                     {
                         "system": "http://nphies.sa/license/provider-license",
@@ -236,7 +200,7 @@
             }
         },
         {
-            "fullUrl": "http://provider.com/fhir/Organization/NPHIES",
+            "fullUrl": "urn:uuid:nphies-org",
             "resource": {
                 "resourceType": "Organization",
                 "id": "NPHIES",

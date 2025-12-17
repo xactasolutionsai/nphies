@@ -1053,15 +1053,16 @@ class CommunicationMapper {
   buildPollRequestBundle(providerId, providerName = 'Healthcare Provider', providerType = '1') {
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
-    const taskId = this.generateId();
+    const taskId = Date.now().toString(); // Simple numeric ID like in NPHIES example
     const providerOrgId = this.generateId();
     const timestamp = this.formatDateTime(new Date());
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
 
-    // Use urn:uuid format for internal references (fixes RE-00100)
-    const taskFullUrl = `urn:uuid:${taskId}`;
-    const providerOrgFullUrl = `urn:uuid:${providerOrgId}`;
-    const nphiesOrgFullUrl = `urn:uuid:nphies-org`;
+    // Use provider endpoint URLs for resources (matching official NPHIES example)
+    // https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
+    const taskFullUrl = `${providerEndpoint}/Task/${taskId}`;
+    const providerOrgFullUrl = `${providerEndpoint}/Organization/${providerOrgId}`;
+    const nphiesOrgFullUrl = `${providerEndpoint}/Organization/NPHIES`;
 
     return {
       resourceType: 'Bundle',
@@ -1105,7 +1106,7 @@ class CommunicationMapper {
             source: {
               endpoint: providerEndpoint
             },
-            // Focus must reference using same format as fullUrl (fixes RE-00100)
+            // Focus references the Task using its fullUrl
             focus: [{
               reference: taskFullUrl
             }]
@@ -1122,7 +1123,7 @@ class CommunicationMapper {
             },
             identifier: [{
               system: `${providerEndpoint}/identifiers/poll-request`,
-              value: `poll_${Date.now()}`
+              value: `req_${taskId}`
             }],
             status: 'requested',
             intent: 'order',
@@ -1135,16 +1136,17 @@ class CommunicationMapper {
             },
             authoredOn: timestamp,
             lastModified: timestamp,
-            // References must match fullUrl format
+            // Requester references Provider Organization
             requester: {
-              reference: providerOrgFullUrl
+              reference: `Organization/${providerOrgId}`
             },
+            // Owner references NPHIES Organization
             owner: {
-              reference: nphiesOrgFullUrl
+              reference: 'Organization/NPHIES'
             }
           }
         },
-        // 3. Provider Organization (with required extension-provider-type - fixes IC-01428, IC-01574)
+        // 3. Provider Organization (with required extension-provider-type)
         {
           fullUrl: providerOrgFullUrl,
           resource: {
@@ -1175,7 +1177,11 @@ class CommunicationMapper {
                 code: 'prov'
               }]
             }],
-            name: providerName
+            name: providerName,
+            address: [{
+              use: 'work',
+              text: 'Saudi Arabia'
+            }]
           }
         },
         // 4. NPHIES Organization

@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "765569d7-8b39-4478-8cea-d01271be49e6",
+  "id": "4fb93fe6-c58b-4328-ac87-444b49aa1b19",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-17T15:29:55.774Z",
+  "timestamp": "2025-12-17T15:38:00.289Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:ad26649f-c642-48dc-8557-f9bc1e3fafc8",
+      "fullUrl": "urn:uuid:b05b788c-b018-42cb-9cf1-28be95e69ff3",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "ad26649f-c642-48dc-8557-f9bc1e3fafc8",
+        "id": "b05b788c-b018-42cb-9cf1-28be95e69ff3",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/fhir/Task/b82719ad-c62b-4413-a3a5-30c78e095f41"
+            "reference": "urn:uuid:aedc5fd7-39b6-456d-9d80-8a066c7cd987"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/fhir/Task/b82719ad-c62b-4413-a3a5-30c78e095f41",
+      "fullUrl": "urn:uuid:aedc5fd7-39b6-456d-9d80-8a066c7cd987",
       "resource": {
         "resourceType": "Task",
-        "id": "b82719ad-c62b-4413-a3a5-30c78e095f41",
+        "id": "aedc5fd7-39b6-456d-9d80-8a066c7cd987",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0"
@@ -65,7 +65,7 @@
         "identifier": [
           {
             "system": "http://provider.com/fhir/identifiers/poll-request",
-            "value": "poll_1765985395774"
+            "value": "poll_1765985880289"
           }
         ],
         "status": "requested",
@@ -79,26 +79,40 @@
             }
           ]
         },
-        "authoredOn": "2025-12-17T15:29:55.774Z",
-        "lastModified": "2025-12-17T15:29:55.774Z",
+        "authoredOn": "2025-12-17T15:38:00.289Z",
+        "lastModified": "2025-12-17T15:38:00.289Z",
         "requester": {
-          "reference": "Organization/10effb13-2833-4407-8cd1-00a1bb86e901"
+          "reference": "urn:uuid:45078eb5-6ef8-43aa-a7f1-eb35e8b40de9"
         },
         "owner": {
-          "reference": "Organization/NPHIES"
+          "reference": "urn:uuid:nphies-org"
         }
       }
     },
     {
-      "fullUrl": "http://provider.com/fhir/Organization/10effb13-2833-4407-8cd1-00a1bb86e901",
+      "fullUrl": "urn:uuid:45078eb5-6ef8-43aa-a7f1-eb35e8b40de9",
       "resource": {
         "resourceType": "Organization",
-        "id": "10effb13-2833-4407-8cd1-00a1bb86e901",
+        "id": "45078eb5-6ef8-43aa-a7f1-eb35e8b40de9",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
           ]
         },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
+                  "code": "1",
+                  "display": "Hospital"
+                }
+              ]
+            }
+          }
+        ],
         "identifier": [
           {
             "system": "http://nphies.sa/license/provider-license",
@@ -120,7 +134,7 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/fhir/Organization/NPHIES",
+      "fullUrl": "urn:uuid:nphies-org",
       "resource": {
         "resourceType": "Organization",
         "id": "NPHIES",

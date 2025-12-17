@@ -62,7 +62,7 @@ const CommunicationPanel = ({
   const generatePollRequestBundle = () => {
     const bundleId = crypto.randomUUID();
     const messageHeaderId = crypto.randomUUID();
-    const taskId = crypto.randomUUID();
+    const taskId = Date.now().toString(); // Simple numeric ID like in NPHIES example
     const providerOrgId = crypto.randomUUID();
     // Get provider ID from the first communication if available, otherwise use placeholder
     const providerId = communications?.[0]?.provider_nphies_id || 'PR-FHIR';
@@ -70,10 +70,10 @@ const CommunicationPanel = ({
     const providerEndpoint = 'http://provider.com/fhir';
     const timestamp = new Date().toISOString();
 
-    // Use urn:uuid format for internal references (fixes RE-00100)
-    const taskFullUrl = `urn:uuid:${taskId}`;
-    const providerOrgFullUrl = `urn:uuid:${providerOrgId}`;
-    const nphiesOrgFullUrl = 'urn:uuid:nphies-org';
+    // Use provider endpoint URLs for resources (matching official NPHIES example)
+    const taskFullUrl = `${providerEndpoint}/Task/${taskId}`;
+    const providerOrgFullUrl = `${providerEndpoint}/Organization/${providerOrgId}`;
+    const nphiesOrgFullUrl = `${providerEndpoint}/Organization/NPHIES`;
 
     return {
       resourceType: 'Bundle',
@@ -117,7 +117,7 @@ const CommunicationPanel = ({
             source: {
               endpoint: providerEndpoint
             },
-            // Focus must reference using same format as fullUrl (fixes RE-00100)
+            // Focus references the Task using its fullUrl
             focus: [{
               reference: taskFullUrl
             }]
@@ -134,7 +134,7 @@ const CommunicationPanel = ({
             },
             identifier: [{
               system: `${providerEndpoint}/identifiers/poll-request`,
-              value: `poll_${Date.now()}`
+              value: `req_${taskId}`
             }],
             status: 'requested',
             intent: 'order',
@@ -147,16 +147,17 @@ const CommunicationPanel = ({
             },
             authoredOn: timestamp,
             lastModified: timestamp,
-            // References must match fullUrl format
+            // Requester references Provider Organization
             requester: {
-              reference: providerOrgFullUrl
+              reference: `Organization/${providerOrgId}`
             },
+            // Owner references NPHIES Organization
             owner: {
-              reference: nphiesOrgFullUrl
+              reference: 'Organization/NPHIES'
             }
           }
         },
-        // 3. Provider Organization (with required extension-provider-type - fixes IC-01428, IC-01574)
+        // 3. Provider Organization (with required extension-provider-type)
         {
           fullUrl: providerOrgFullUrl,
           resource: {
@@ -187,7 +188,11 @@ const CommunicationPanel = ({
                 code: 'prov'
               }]
             }],
-            name: providerName
+            name: providerName,
+            address: [{
+              use: 'work',
+              text: 'Saudi Arabia'
+            }]
           }
         },
         // 4. NPHIES Organization
