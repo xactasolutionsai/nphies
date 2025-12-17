@@ -53,6 +53,7 @@ const CommunicationPanel = ({
   // Acknowledgment polling state
   const [pollingAckFor, setPollingAckFor] = useState(null); // Communication ID being polled
   const [ackPollResult, setAckPollResult] = useState(null);
+  const [ackPollJsonCopied, setAckPollJsonCopied] = useState(null); // 'request' or 'response'
   
   // Form state
   const [showComposeForm, setShowComposeForm] = useState(false);
@@ -772,7 +773,7 @@ const CommunicationPanel = ({
             : 'bg-yellow-50 border-yellow-200'
         }`}>
           <div className="flex items-start justify-between">
-            <div>
+            <div className="flex-1">
               <p className={`font-medium ${
                 ackPollResult.acknowledgmentFound 
                   ? 'text-green-800' 
@@ -811,10 +812,42 @@ const CommunicationPanel = ({
                   Still queued: {ackPollResult.stillQueuedCount || 0}
                 </p>
               )}
+              
+              {/* Copy JSON Buttons */}
+              {(ackPollResult.pollBundle || ackPollResult.responseBundle) && (
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                  {ackPollResult.pollBundle && (
+                    <button
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(JSON.stringify(ackPollResult.pollBundle, null, 2));
+                        setAckPollJsonCopied('request');
+                        setTimeout(() => setAckPollJsonCopied(null), 2000);
+                      }}
+                      className="flex items-center px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                    >
+                      <Copy className="w-3 h-3 mr-1" />
+                      {ackPollJsonCopied === 'request' ? '✓ Copied!' : 'Copy Poll Request JSON'}
+                    </button>
+                  )}
+                  {ackPollResult.responseBundle && (
+                    <button
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(JSON.stringify(ackPollResult.responseBundle, null, 2));
+                        setAckPollJsonCopied('response');
+                        setTimeout(() => setAckPollJsonCopied(null), 2000);
+                      }}
+                      className="flex items-center px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                    >
+                      <Copy className="w-3 h-3 mr-1" />
+                      {ackPollJsonCopied === 'response' ? '✓ Copied!' : 'Copy Response JSON'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <button
               onClick={() => setAckPollResult(null)}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-600 ml-2"
             >
               <X className="w-4 h-4" />
             </button>
