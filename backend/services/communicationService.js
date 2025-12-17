@@ -1032,23 +1032,24 @@ class CommunicationService {
         };
       }
 
-      // 3. Build poll request for communication acknowledgments
-      const pollBundle = this.mapper.buildPollRequestBundle(
-        communication.provider_nphies_id,
+      // 3. Build poll request Parameters for $poll operation
+      // IMPORTANT: Poll uses $poll operation with Parameters resource, NOT a Bundle with MessageHeader
+      const pollParameters = this.mapper.buildPollParameters(
         ['communication'],  // Poll for communication messages
         10  // Limit
       );
 
       console.log(`[CommunicationService] Polling for acknowledgment of Communication: ${communication.communication_id}`);
+      console.log(`[CommunicationService] Using $poll operation with Parameters resource`);
 
-      // 4. Send poll request to NPHIES
-      const pollResponse = await nphiesService.sendPriorAuthPoll(pollBundle);
+      // 4. Send poll request to NPHIES using $poll endpoint
+      const pollResponse = await nphiesService.sendPoll(pollParameters);
 
       if (!pollResponse.success) {
         return {
           success: false,
           error: pollResponse.error,
-          pollBundle,
+          pollBundle: pollParameters,  // Return the Parameters for debugging
           message: 'Poll request failed'
         };
       }
@@ -1100,7 +1101,7 @@ class CommunicationService {
           acknowledgmentFound: true,
           acknowledgmentStatus: acknowledgmentData.status || 'ok',
           acknowledgmentAt: new Date(),
-          pollBundle,
+          pollBundle: pollParameters,  // The Parameters resource sent to $poll
           responseBundle: pollResponse.data,
           message: 'Acknowledgment received and saved'
         };
@@ -1111,7 +1112,7 @@ class CommunicationService {
         success: true,
         acknowledgmentFound: false,
         currentStatus: communication.acknowledgment_status,
-        pollBundle,
+        pollBundle: pollParameters,  // The Parameters resource sent to $poll
         responseBundle: pollResponse.data,
         communicationsInPoll: communications.length,
         message: 'No acknowledgment found yet. The insurer may not have responded.'

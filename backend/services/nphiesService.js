@@ -1034,29 +1034,31 @@ class NphiesService {
   }
 
   /**
-   * Send Poll Request to NPHIES for Prior Authorization messages
-   * Polls for: priorauth-response, communication-request, communication
+   * Send Poll Request to NPHIES using the $poll operation
    * 
-   * @param {Object} pollBundle - FHIR Bundle containing poll request
+   * IMPORTANT: NPHIES Poll is an OPERATION, not a message exchange.
+   * - Endpoint: POST {{baseUrl}}/$poll
+   * - Body: Parameters resource (NOT a Bundle with MessageHeader)
+   * - Returns: Bundle containing queued messages
+   * 
+   * @param {Object} pollParameters - FHIR Parameters resource for $poll
    * @returns {Object} Response with success status and data
    */
-  async sendPriorAuthPoll(pollBundle) {
-    console.log('[NPHIES] ===== SENDING POLL REQUEST =====');
-    console.log('[NPHIES] Bundle ID:', pollBundle?.id);
+  async sendPoll(pollParameters) {
+    console.log('[NPHIES] ===== SENDING $poll OPERATION =====');
     
-    const params = pollBundle?.entry?.find(
-      e => e.resource?.resourceType === 'Parameters'
-    )?.resource;
-    const messageTypes = params?.parameter
+    // Extract message types for logging
+    const messageTypes = pollParameters?.parameter
       ?.filter(p => p.name === 'message-type')
       ?.map(p => p.valueCode);
     console.log('[NPHIES] Polling for message types:', messageTypes);
-    console.log('[NPHIES] ==================================');
+    console.log('[NPHIES] Endpoint: $poll');
+    console.log('[NPHIES] =====================================');
     
     try {
       const response = await axios.post(
-        `${this.baseURL}/$process-message`,
-        pollBundle,
+        `${this.baseURL}/$poll`,  // Correct endpoint for poll operation
+        pollParameters,           // Parameters resource, NOT a Bundle
         {
           headers: {
             'Content-Type': 'application/fhir+json',
@@ -1071,25 +1073,28 @@ class NphiesService {
       
       // Log what we received
       if (response.data) {
-        console.log('[NPHIES] Response Bundle type:', response.data.type);
-        console.log('[NPHIES] Response entries:', response.data.entry?.length || 0);
-        
-        // Count resource types in response
-        const resourceCounts = {};
-        for (const entry of response.data.entry || []) {
-          const type = entry.resource?.resourceType;
-          if (type) {
-            resourceCounts[type] = (resourceCounts[type] || 0) + 1;
+        console.log('[NPHIES] Response type:', response.data.resourceType);
+        if (response.data.resourceType === 'Bundle') {
+          console.log('[NPHIES] Bundle type:', response.data.type);
+          console.log('[NPHIES] Response entries:', response.data.entry?.length || 0);
+          
+          // Count resource types in response
+          const resourceCounts = {};
+          for (const entry of response.data.entry || []) {
+            const type = entry.resource?.resourceType;
+            if (type) {
+              resourceCounts[type] = (resourceCounts[type] || 0) + 1;
+            }
           }
+          console.log('[NPHIES] Resources received:', resourceCounts);
         }
-        console.log('[NPHIES] Resources received:', resourceCounts);
       }
       
       return {
         success: response.status >= 200 && response.status < 300,
         status: response.status,
         data: response.data,
-        requestBundle: pollBundle
+        pollParameters: pollParameters  // Include the poll parameters for debugging
       };
       
     } catch (error) {
@@ -1097,9 +1102,44 @@ class NphiesService {
       return {
         success: false,
         error: this.formatError(error),
-        requestBundle: pollBundle
+        pollParameters: pollParameters
       };
     }
+  }
+
+  /**
+   * @deprecated Use sendPoll with Parameters resource instead.
+   * Kept for backward compatibility.
+   */
+  async sendPriorAuthPoll(pollBundle) {
+    console.warn('[NPHIES] sendPriorAuthPoll is deprecated. Use sendPoll with Parameters resource.');
+    
+    // If it's already a Parameters resource, use it directly
+    if (pollBundle?.resourceType === 'Parameters') {
+      return this.sendPoll(pollBundle);
+    }
+    
+    // If it's a Bundle, extract Parameters or convert
+    if (pollBundle?.resourceType === 'Bundle') {
+      const params = pollBundle.entry?.find(
+        e => e.resource?.resourceType === 'Parameters'
+      )?.resource;
+      
+      if (params) {
+        return this.sendPoll(params);
+      }
+    }
+    
+    // Fallback: create default poll parameters
+    console.warn('[NPHIES] Could not extract Parameters, using default poll');
+    const defaultParams = {
+      resourceType: 'Parameters',
+      parameter: [
+        { name: 'message-type', valueCode: 'communication' },
+        { name: 'count', valueInteger: 10 }
+      ]
+    };
+    return this.sendPoll(defaultParams);
   }
 
   /**

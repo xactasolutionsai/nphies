@@ -815,33 +815,38 @@ const CommunicationPanel = ({
               
               {/* Copy JSON Buttons */}
               {(ackPollResult.pollBundle || ackPollResult.responseBundle) && (
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
-                  {ackPollResult.pollBundle && (
-                    <button
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(JSON.stringify(ackPollResult.pollBundle, null, 2));
-                        setAckPollJsonCopied('request');
-                        setTimeout(() => setAckPollJsonCopied(null), 2000);
-                      }}
-                      className="flex items-center px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                    >
-                      <Copy className="w-3 h-3 mr-1" />
-                      {ackPollJsonCopied === 'request' ? '✓ Copied!' : 'Copy Poll Request JSON'}
-                    </button>
-                  )}
-                  {ackPollResult.responseBundle && (
-                    <button
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(JSON.stringify(ackPollResult.responseBundle, null, 2));
-                        setAckPollJsonCopied('response');
-                        setTimeout(() => setAckPollJsonCopied(null), 2000);
-                      }}
-                      className="flex items-center px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                    >
-                      <Copy className="w-3 h-3 mr-1" />
-                      {ackPollJsonCopied === 'response' ? '✓ Copied!' : 'Copy Response JSON'}
-                    </button>
-                  )}
+                <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-gray-200">
+                  <p className="text-xs text-gray-500">
+                    <strong>$poll Operation:</strong> POST /fhir/$poll with Parameters resource
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {ackPollResult.pollBundle && (
+                      <button
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(JSON.stringify(ackPollResult.pollBundle, null, 2));
+                          setAckPollJsonCopied('request');
+                          setTimeout(() => setAckPollJsonCopied(null), 2000);
+                        }}
+                        className="flex items-center px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        {ackPollJsonCopied === 'request' ? '✓ Copied!' : 'Copy $poll Parameters'}
+                      </button>
+                    )}
+                    {ackPollResult.responseBundle && (
+                      <button
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(JSON.stringify(ackPollResult.responseBundle, null, 2));
+                          setAckPollJsonCopied('response');
+                          setTimeout(() => setAckPollJsonCopied(null), 2000);
+                        }}
+                        className="flex items-center px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        {ackPollJsonCopied === 'response' ? '✓ Copied!' : 'Copy Response JSON'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

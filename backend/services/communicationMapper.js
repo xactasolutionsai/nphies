@@ -1033,74 +1033,61 @@ class CommunicationMapper {
    * @param {number} count - Max messages to retrieve (default 50)
    * @returns {Object} FHIR Bundle for poll request
    */
-  buildPollRequestBundle(providerId, messageTypes = ['priorauth-response', 'communication-request', 'communication'], count = 50) {
-    const bundleId = this.generateId();
-    const messageHeaderId = this.generateId();
-    const parametersId = this.generateId();
-
-    return {
-      resourceType: 'Bundle',
-      id: bundleId,
-      meta: {
-        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
-      },
-      type: 'message',
-      timestamp: this.formatDateTime(new Date()),
-      entry: [
-        {
-          fullUrl: `urn:uuid:${messageHeaderId}`,
-          resource: {
-            resourceType: 'MessageHeader',
-            id: messageHeaderId,
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
-            },
-            eventCoding: {
-              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
-              code: 'poll'
-            },
-            source: {
-              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com'
-            },
-            destination: [{
-              endpoint: 'http://nphies.sa',
-              receiver: {
-                type: 'Organization',
-                identifier: {
-                  system: 'http://nphies.sa/license/nphies-license',
-                  value: 'nphies'
-                }
-              }
-            }],
-            sender: {
-              type: 'Organization',
-              identifier: {
-                system: 'http://nphies.sa/license/provider-license',
-                value: providerId
-              }
-            }
-          }
-        },
-        {
-          fullUrl: `urn:uuid:${parametersId}`,
-          resource: {
-            resourceType: 'Parameters',
-            id: parametersId,
-            parameter: [
-              // Multiple message types
-              ...messageTypes.map(type => ({
-                name: 'message-type',
-                valueCode: type
-              })),
-              {
-                name: 'count',
-                valueInteger: count
-              }
-            ]
-          }
-        }
-      ]
+  /**
+   * Build Poll Request Parameters
+   * 
+   * IMPORTANT: NPHIES Poll uses the $poll operation with a Parameters resource.
+   * It is NOT a FHIR Message (no Bundle, no MessageHeader).
+   * 
+   * HTTP Request:
+   *   POST {{baseUrl}}/$poll
+   *   Content-Type: application/fhir+json
+   *   Body: Parameters resource
+   * 
+   * @param {Array} messageTypes - Types to poll for: 'communication', 'priorauth-response', etc.
+   * @param {number} count - Max messages to retrieve (default 10)
+   * @param {string} identifier - Optional: filter by specific request identifier
+   * @returns {Object} FHIR Parameters resource for $poll operation
+   */
+  buildPollParameters(messageTypes = ['communication'], count = 10, identifier = null) {
+    const parameters = {
+      resourceType: 'Parameters',
+      parameter: []
     };
+
+    // Add message-type parameters (can have multiple)
+    for (const messageType of messageTypes) {
+      parameters.parameter.push({
+        name: 'message-type',
+        valueCode: messageType
+      });
+    }
+
+    // Add count
+    parameters.parameter.push({
+      name: 'count',
+      valueInteger: count
+    });
+
+    // Add identifier filter if provided
+    if (identifier) {
+      parameters.parameter.push({
+        name: 'identifier',
+        valueString: identifier
+      });
+    }
+
+    return parameters;
+  }
+
+  /**
+   * @deprecated Use buildPollParameters instead. Poll is an operation, not a message.
+   * Kept for backward compatibility but will be removed.
+   */
+  buildPollRequestBundle(providerId, messageTypes = ['priorauth-response', 'communication-request', 'communication'], count = 50) {
+    console.warn('[CommunicationMapper] buildPollRequestBundle is deprecated. Use buildPollParameters for $poll operation.');
+    // Return the correct Parameters format instead
+    return this.buildPollParameters(messageTypes, count);
   }
 
   /**
