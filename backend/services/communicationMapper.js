@@ -284,12 +284,234 @@ class CommunicationMapper {
   }
 
   /**
+   * Build Coverage resource for Communication bundle
+   * Per NPHIES standard: https://portal.nphies.sa/ig/StructureDefinition-coverage.html
+   */
+  buildCoverageResource(coverage, patient, insurer) {
+    const coverageId = coverage?.coverage_id?.toString() || coverage?.id?.toString() || this.generateId();
+    const patientId = patient.patient_id?.toString() || patient.id;
+    const insurerId = insurer.insurer_id?.toString() || insurer.id;
+
+    const coverageResource = {
+      resourceType: 'Coverage',
+      id: coverageId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0']
+      },
+      identifier: [
+        {
+          system: 'http://payer.com/memberid',
+          value: coverage?.member_id || patient.identifier || `MEM-${Date.now()}`
+        }
+      ],
+      status: 'active',
+      type: {
+        coding: [
+          {
+            system: 'http://nphies.sa/terminology/CodeSystem/coverage-type',
+            code: coverage?.coverage_type || coverage?.type || 'EHCPOL',
+            display: this.getCoverageTypeDisplay(coverage?.coverage_type || coverage?.type || 'EHCPOL')
+          }
+        ]
+      },
+      policyHolder: {
+        reference: `Patient/${patientId}`
+      },
+      subscriber: {
+        reference: `Patient/${patientId}`
+      },
+      beneficiary: {
+        reference: `Patient/${patientId}`
+      },
+      relationship: {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/subscriber-relationship',
+            code: coverage?.relationship || 'self',
+            display: this.getRelationshipDisplay(coverage?.relationship || 'self')
+          }
+        ]
+      },
+      payor: [
+        {
+          reference: `Organization/${insurerId}`
+        }
+      ],
+      class: [
+        {
+          type: {
+            coding: [
+              {
+                system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
+                code: 'plan'
+              }
+            ]
+          },
+          value: coverage?.plan_id || coverage?.class_value || 'default-plan',
+          name: coverage?.plan_name || coverage?.class_name || 'Insurance Plan'
+        }
+      ]
+    };
+
+    // Add period if available
+    if (coverage?.period_start || coverage?.start_date) {
+      coverageResource.period = {
+        start: this.formatDate(coverage.period_start || coverage.start_date)
+      };
+      if (coverage?.period_end || coverage?.end_date) {
+        coverageResource.period.end = this.formatDate(coverage.period_end || coverage.end_date);
+      }
+    }
+
+    // Add network class if available
+    if (coverage?.network) {
+      coverageResource.class.push({
+        type: {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
+              code: 'network'
+            }
+          ]
+        },
+        value: coverage.network,
+        name: coverage.network_name || 'Network'
+      });
+    }
+
+    return {
+      fullUrl: `http://provider.com/Coverage/${coverageId}`,
+      resource: coverageResource
+    };
+  }
+
+  /**
+   * Get coverage type display name
+   */
+  getCoverageTypeDisplay(code) {
+    const displays = {
+      'EHCPOL': 'Extended Healthcare',
+      'PUBLICPOL': 'Public Healthcare',
+      'DENTAL': 'Dental',
+      'VISION': 'Vision',
+      'MENTPRG': 'Mental Health Program'
+    };
+    return displays[code] || 'Healthcare Coverage';
+  }
+
+  /**
+   * Get relationship display name
+   */
+  getRelationshipDisplay(code) {
+    const displays = {
+      'self': 'Self',
+      'spouse': 'Spouse',
+      'child': 'Child',
+      'parent': 'Parent',
+      'other': 'Other'
+    };
+    return displays[code] || 'Self';
+  }
+
+  /**
    * Format date to FHIR date format (YYYY-MM-DD)
    */
   formatDate(date) {
     if (!date) return null;
     const d = new Date(date);
     return d.toISOString().split('T')[0];
+  }
+
+  /**
+   * Build Location resource for Communication bundle (optional)
+   * Per NPHIES standard: https://portal.nphies.sa/ig/StructureDefinition-location.html
+   * 
+   * @param {Object} location - Location data
+   * @param {Object} provider - Provider organization data
+   * @returns {Object} FHIR Location entry or null if no location data
+   */
+  buildLocationResource(location, provider) {
+    if (!location) return null;
+
+    const locationId = location.location_id?.toString() || location.id?.toString() || this.generateId();
+    const providerId = provider.provider_id?.toString() || provider.id;
+
+    const locationResource = {
+      resourceType: 'Location',
+      id: locationId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0']
+      },
+      identifier: [
+        {
+          system: 'http://nphies.sa/identifier/location',
+          value: location.identifier || locationId
+        }
+      ],
+      status: location.status || 'active',
+      name: location.name || provider.provider_name || 'Healthcare Facility',
+      mode: 'instance',
+      type: [
+        {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/v3-RoleCode',
+              code: location.type_code || 'HOSP',
+              display: location.type_display || 'Hospital'
+            }
+          ]
+        }
+      ],
+      managingOrganization: {
+        reference: `Organization/${providerId}`
+      }
+    };
+
+    // Add address if available
+    if (location.address || provider.address) {
+      const addr = location.address || provider.address;
+      locationResource.address = {
+        use: 'work',
+        type: 'physical',
+        line: Array.isArray(addr.line) ? addr.line : (addr.line ? [addr.line] : [addr.text || addr]),
+        city: addr.city || '',
+        state: addr.state || '',
+        postalCode: addr.postalCode || addr.postal_code || '',
+        country: addr.country || 'Saudi Arabia'
+      };
+    }
+
+    // Add telecom if available
+    if (location.phone || location.telecom) {
+      locationResource.telecom = [];
+      if (location.phone) {
+        locationResource.telecom.push({
+          system: 'phone',
+          value: location.phone,
+          use: 'work'
+        });
+      }
+      if (location.email) {
+        locationResource.telecom.push({
+          system: 'email',
+          value: location.email,
+          use: 'work'
+        });
+      }
+    }
+
+    // Add position (coordinates) if available
+    if (location.latitude && location.longitude) {
+      locationResource.position = {
+        longitude: parseFloat(location.longitude),
+        latitude: parseFloat(location.latitude)
+      };
+    }
+
+    return {
+      fullUrl: `http://provider.com/Location/${locationId}`,
+      resource: locationResource
+    };
   }
 
   // ============================================================================
@@ -300,18 +522,21 @@ class CommunicationMapper {
    * Build UNSOLICITED Communication bundle (Test Case #1)
    * HCP proactively sends additional information to HIC
    * 
-   * Per NPHIES standard (https://portal.nphies.sa/ig/Bundle-16b80922-b538-4ab3-0176-a80b33242163.html):
-   * Bundle must include: MessageHeader, Communication, Provider Organization, Insurer Organization, Patient
+   * Per NPHIES standard (https://portal.nphies.sa/ig/usecase-information-submission.html):
+   * Bundle must include: MessageHeader, Communication, Patient, Provider Organization, Insurer Organization
+   * Optional: Coverage, Location, any additional resources
    * 
    * @param {Object} options
    * @param {Object} options.priorAuth - Prior authorization data
    * @param {Object} options.patient - Patient data
    * @param {Object} options.provider - Provider organization data
    * @param {Object} options.insurer - Insurer organization data
+   * @param {Object} options.coverage - Coverage data (optional but recommended)
+   * @param {Object} options.location - Location data (optional)
    * @param {Array} options.payloads - Array of payload objects
    * @returns {Object} FHIR Bundle
    */
-  buildUnsolicitedCommunicationBundle({ priorAuth, patient, provider, insurer, payloads }) {
+  buildUnsolicitedCommunicationBundle({ priorAuth, patient, provider, insurer, coverage, location, payloads }) {
     const bundleId = this.generateId();
     const communicationId = this.generateId();
     
@@ -354,9 +579,35 @@ class CommunicationMapper {
     });
 
     // Build full resources per NPHIES standard
+    const patientResource = this.buildPatientResource(patient);
     const providerResource = this.buildProviderOrganizationResource(provider);
     const insurerResource = this.buildInsurerOrganizationResource(insurer);
-    const patientResource = this.buildPatientResource(patient);
+    
+    // Build Coverage resource if coverage data is provided
+    const coverageResource = coverage ? this.buildCoverageResource(coverage, patient, insurer) : null;
+    
+    // Build Location resource if location data is provided (optional per NPHIES spec)
+    const locationResource = location ? this.buildLocationResource(location, provider) : null;
+
+    // Entry order per NPHIES example: MessageHeader, Communication, Provider, Insurer, Patient
+    // Optional resources (Coverage, Location) come after main resources
+    const entries = [
+      messageHeader,
+      communicationEntry,
+      providerResource,
+      insurerResource,
+      patientResource
+    ];
+    
+    // Add Coverage if available (per NPHIES bundle example)
+    if (coverageResource) {
+      entries.push(coverageResource);
+    }
+    
+    // Add Location if available (optional per NPHIES spec)
+    if (locationResource) {
+      entries.push(locationResource);
+    }
 
     return {
       resourceType: 'Bundle',
@@ -366,14 +617,7 @@ class CommunicationMapper {
       },
       type: 'message',
       timestamp: this.formatDateTime(new Date()),
-      // Entry order per NPHIES example: MessageHeader, Communication, Provider, Insurer, Patient
-      entry: [
-        messageHeader,
-        communicationEntry,
-        providerResource,
-        insurerResource,
-        patientResource
-      ]
+      entry: entries
     };
   }
 
@@ -381,8 +625,9 @@ class CommunicationMapper {
    * Build SOLICITED Communication bundle (Test Case #2)
    * HCP responds to CommunicationRequest from HIC
    * 
-   * Per NPHIES standard (https://portal.nphies.sa/ig/Bundle-16b80922-b538-4ab3-0176-a80b33242163.html):
-   * Bundle must include: MessageHeader, Communication, Provider Organization, Insurer Organization, Patient
+   * Per NPHIES standard (https://portal.nphies.sa/ig/usecase-information-submission.html):
+   * Bundle must include: MessageHeader, Communication, Patient, Provider Organization, Insurer Organization
+   * Optional: Coverage, Location, any additional resources
    * 
    * @param {Object} options
    * @param {Object} options.communicationRequest - The CommunicationRequest being responded to
@@ -390,10 +635,12 @@ class CommunicationMapper {
    * @param {Object} options.patient - Patient data
    * @param {Object} options.provider - Provider organization data
    * @param {Object} options.insurer - Insurer organization data
+   * @param {Object} options.coverage - Coverage data (optional but recommended)
+   * @param {Object} options.location - Location data (optional)
    * @param {Array} options.payloads - Array of payload objects (typically attachments)
    * @returns {Object} FHIR Bundle
    */
-  buildSolicitedCommunicationBundle({ communicationRequest, priorAuth, patient, provider, insurer, payloads }) {
+  buildSolicitedCommunicationBundle({ communicationRequest, priorAuth, patient, provider, insurer, coverage, location, payloads }) {
     const bundleId = this.generateId();
     const communicationId = this.generateId();
     
@@ -407,7 +654,15 @@ class CommunicationMapper {
       { identifier: { system: `http://${providerDomain}.com.sa/identifiers/authorization`, value: communicationRequest.about_reference } } :
       { identifier: { system: `http://${providerDomain}.com.sa/identifiers/authorization`, value: aboutIdentifier } };
     
-    // Build the Communication resource with basedOn reference
+    // Build basedOn identifier per NPHIES example format
+    // Per NPHIES: { identifier: { system: "http://sni.com.sa/identifiers/communicationrequest", value: "CommReq_12361231" } }
+    const insurerDomain = (insurer.insurer_name || insurer.name || 'insurer').toLowerCase().replace(/\s+/g, '');
+    const basedOnIdentifier = {
+      system: `http://${insurerDomain}.com.sa/identifiers/communicationrequest`,
+      value: communicationRequest.request_id || `CommReq_${communicationId}`
+    };
+
+    // Build the Communication resource with basedOn identifier
     const communicationResource = this.buildCommunicationResource({
       id: communicationId,
       type: 'solicited',
@@ -417,7 +672,7 @@ class CommunicationMapper {
       aboutReference: aboutReference,
       aboutType: communicationRequest.about_type || 'Claim',
       payloads,
-      basedOn: `CommunicationRequest/${communicationRequest.request_id}`
+      basedOn: { identifier: basedOnIdentifier }
     });
 
     const communicationEntry = {
@@ -433,9 +688,35 @@ class CommunicationMapper {
     });
 
     // Build full resources per NPHIES standard
+    const patientResource = this.buildPatientResource(patient);
     const providerResource = this.buildProviderOrganizationResource(provider);
     const insurerResource = this.buildInsurerOrganizationResource(insurer);
-    const patientResource = this.buildPatientResource(patient);
+    
+    // Build Coverage resource if coverage data is provided
+    const coverageResource = coverage ? this.buildCoverageResource(coverage, patient, insurer) : null;
+    
+    // Build Location resource if location data is provided (optional per NPHIES spec)
+    const locationResource = location ? this.buildLocationResource(location, provider) : null;
+
+    // Entry order per NPHIES example: MessageHeader, Communication, Provider, Insurer, Patient
+    // Optional resources (Coverage, Location) come after main resources
+    const entries = [
+      messageHeader,
+      communicationEntry,
+      providerResource,
+      insurerResource,
+      patientResource
+    ];
+    
+    // Add Coverage if available (per NPHIES bundle example)
+    if (coverageResource) {
+      entries.push(coverageResource);
+    }
+    
+    // Add Location if available (optional per NPHIES spec)
+    if (locationResource) {
+      entries.push(locationResource);
+    }
 
     return {
       resourceType: 'Bundle',
@@ -445,14 +726,7 @@ class CommunicationMapper {
       },
       type: 'message',
       timestamp: this.formatDateTime(new Date()),
-      // Entry order per NPHIES example: MessageHeader, Communication, Provider, Insurer, Patient
-      entry: [
-        messageHeader,
-        communicationEntry,
-        providerResource,
-        insurerResource,
-        patientResource
-      ]
+      entry: entries
     };
   }
 
@@ -512,10 +786,11 @@ class CommunicationMapper {
       meta: {
         profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/communication|1.0.0']
       },
-      // NPHIES FIX (IC-00111): Communication identifier is required
+      // NPHIES FIX (IC-00111): Communication identifier is required per NPHIES spec
+      // Per NPHIES example: http://saudigeneralhospital.com.sa/identifiers/communication
       identifier: [{
-        system: `http://${providerDomain}.com.sa/communication`,
-        value: id
+        system: `http://${providerDomain}.com.sa/identifiers/communication`,
+        value: `Communication_${id.replace(/-/g, '')}`
       }],
       // Status: 'completed' when sending (we're done composing)
       status: 'completed',
@@ -563,10 +838,31 @@ class CommunicationMapper {
     };
 
     // Add basedOn for solicited communications (Test Case #2)
+    // Per NPHIES example: uses identifier format instead of reference
+    // Example: { identifier: { system: "http://sni.com.sa/identifiers/communicationrequest", value: "CommReq_12361231" } }
     if (basedOn) {
-      communication.basedOn = [{
-        reference: basedOn
-      }];
+      // basedOn can be either a string (legacy) or an object with identifier info
+      if (typeof basedOn === 'object' && basedOn.identifier) {
+        communication.basedOn = [{
+          identifier: basedOn.identifier
+        }];
+      } else if (typeof basedOn === 'object' && basedOn.system && basedOn.value) {
+        communication.basedOn = [{
+          identifier: {
+            system: basedOn.system,
+            value: basedOn.value
+          }
+        }];
+      } else {
+        // Legacy string format - convert to identifier format
+        const insurerDomain = (insurer.insurer_name || insurer.name || 'insurer').toLowerCase().replace(/\s+/g, '');
+        communication.basedOn = [{
+          identifier: {
+            system: `http://${insurerDomain}.com.sa/identifiers/communicationrequest`,
+            value: typeof basedOn === 'string' ? basedOn.replace('CommunicationRequest/', '') : String(basedOn)
+          }
+        }];
+      }
     }
 
     return communication;
@@ -894,6 +1190,9 @@ class CommunicationMapper {
   /**
    * Parse CommunicationRequest resource
    * 
+   * Per NPHIES example (https://portal.nphies.sa/ig/Bundle-16b80922-b538-4ab3-0176-a80b33242163.json.html):
+   * Extracts identifier, subject, and all standard CommunicationRequest fields
+   * 
    * @param {Object} resource - FHIR CommunicationRequest
    * @returns {Object} Parsed data
    */
@@ -907,37 +1206,89 @@ class CommunicationMapper {
       occurrenceDateTime: resource.occurrenceDateTime
     };
 
+    // Parse identifier (per NPHIES spec - contains request identifier system/value)
+    if (resource.identifier && resource.identifier.length > 0) {
+      const identifier = resource.identifier[0];
+      parsed.identifier = identifier.value;
+      parsed.identifierSystem = identifier.system;
+      parsed.identifierUse = identifier.use;
+    }
+
+    // Parse subject reference (Patient reference)
+    if (resource.subject) {
+      parsed.subjectReference = resource.subject.reference;
+      parsed.subjectType = resource.subject.type || 'Patient';
+    }
+
     // Parse about reference (BV-00233)
+    // Supports both direct reference and identifier-based reference formats
     if (resource.about && resource.about.length > 0) {
       const about = resource.about[0];
       parsed.aboutReference = about.reference;
       parsed.aboutType = about.type || this.extractTypeFromReference(about.reference);
+      
+      // Also extract identifier if present (NPHIES uses identifier format)
+      if (about.identifier) {
+        parsed.aboutIdentifier = about.identifier.value;
+        parsed.aboutIdentifierSystem = about.identifier.system;
+      }
     }
 
     // Parse sender
     if (resource.sender) {
       parsed.senderType = resource.sender.type;
       parsed.senderIdentifier = resource.sender.identifier?.value;
+      parsed.senderIdentifierSystem = resource.sender.identifier?.system;
     }
 
     // Parse recipient
     if (resource.recipient && resource.recipient.length > 0) {
       parsed.recipientType = resource.recipient[0].type;
       parsed.recipientIdentifier = resource.recipient[0].identifier?.value;
+      parsed.recipientIdentifierSystem = resource.recipient[0].identifier?.system;
     }
 
-    // Parse payload
+    // Parse payload (may have multiple payloads)
+    parsed.payloads = [];
     if (resource.payload && resource.payload.length > 0) {
-      const payload = resource.payload[0];
-      if (payload.contentString) {
+      for (const payload of resource.payload) {
+        const parsedPayload = {};
+        
+        // Extract ClaimItemSequence extension if present
+        if (payload.extension) {
+          const itemSequences = payload.extension
+            .filter(ext => ext.url?.includes('claimItemSequence'))
+            .map(ext => ext.valuePositiveInt);
+          if (itemSequences.length > 0) {
+            parsedPayload.claimItemSequences = itemSequences;
+          }
+        }
+        
+        if (payload.contentString) {
+          parsedPayload.contentType = 'string';
+          parsedPayload.contentString = payload.contentString;
+        } else if (payload.contentAttachment) {
+          parsedPayload.contentType = 'attachment';
+          parsedPayload.attachment = payload.contentAttachment;
+        } else if (payload.contentReference) {
+          parsedPayload.contentType = 'reference';
+          parsedPayload.reference = payload.contentReference;
+        }
+        
+        parsed.payloads.push(parsedPayload);
+      }
+      
+      // For backwards compatibility, also set the first payload fields
+      const firstPayload = resource.payload[0];
+      if (firstPayload.contentString) {
         parsed.payloadContentType = 'string';
-        parsed.payloadContentString = payload.contentString;
-      } else if (payload.contentAttachment) {
+        parsed.payloadContentString = firstPayload.contentString;
+      } else if (firstPayload.contentAttachment) {
         parsed.payloadContentType = 'attachment';
-        parsed.payloadAttachment = payload.contentAttachment;
-      } else if (payload.contentReference) {
+        parsed.payloadAttachment = firstPayload.contentAttachment;
+      } else if (firstPayload.contentReference) {
         parsed.payloadContentType = 'reference';
-        parsed.payloadReference = payload.contentReference;
+        parsed.payloadReference = firstPayload.contentReference;
       }
     }
 

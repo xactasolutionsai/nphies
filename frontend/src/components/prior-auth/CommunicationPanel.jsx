@@ -54,9 +54,9 @@ const CommunicationPanel = ({
   const [showComposeForm, setShowComposeForm] = useState(false);
   const [communicationType, setCommunicationType] = useState('unsolicited');
   const [selectedRequestId, setSelectedRequestId] = useState(null);
-  const [payloadType, setPayloadType] = useState('string');
+  // NPHIES supports multiple payloads: text + attachments together
   const [freeText, setFreeText] = useState('');
-  const [attachment, setAttachment] = useState(null);
+  const [attachments, setAttachments] = useState([]); // Changed to array for multiple files
   const [selectedItemSequences, setSelectedItemSequences] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [communicationCategory, setCommunicationCategory] = useState('notification');
@@ -175,56 +175,90 @@ const CommunicationPanel = ({
     }
   };
 
-  // Handle file upload
+  // Handle file upload - supports multiple files per NPHIES spec
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      // Convert to base64
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    
+    // Process each file
+    files.forEach(file => {
       const reader = new FileReader();
       reader.onload = () => {
         const base64 = reader.result.split(',')[1];
-        setAttachment({
+        setAttachments(prev => [...prev, {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           contentType: file.type,
           data: base64,
           title: file.name,
           size: file.size
-        });
+        }]);
       };
       reader.readAsDataURL(file);
-    }
+    });
+    
+    // Reset input to allow selecting same file again
+    e.target.value = '';
+  };
+  
+  // Remove a specific attachment
+  const removeAttachment = (attachmentId) => {
+    setAttachments(prev => prev.filter(a => a.id !== attachmentId));
   };
 
   // Generate preview JSON for the communication bundle
-  // Build payload for API calls
-  const buildPayloadForApi = () => {
-    const payload = {
-      contentType: payloadType,
-      category: communicationCategory,
-      priority: communicationPriority,
-      claimItemSequences: selectedItemSequences.length > 0 ? selectedItemSequences : undefined
-    };
-
-    if (payloadType === 'string') {
-      payload.contentString = freeText;
-    } else if (payloadType === 'attachment' && attachment) {
-      payload.attachment = {
-        contentType: attachment.contentType,
-        title: attachment.title,
-        size: attachment.size,
-        data: attachment.data
-      };
+  // Build payloads for API calls - supports multiple payloads per NPHIES spec
+  // NPHIES allows: text + multiple attachments in a single Communication
+  const buildPayloadsForApi = () => {
+    const payloads = [];
+    
+    // Add text payload if free text is provided
+    if (freeText.trim()) {
+      payloads.push({
+        contentType: 'string',
+        contentString: freeText,
+        category: communicationCategory,
+        priority: communicationPriority,
+        claimItemSequences: selectedItemSequences.length > 0 ? selectedItemSequences : undefined
+      });
     }
-
-    return payload;
+    
+    // Add attachment payloads for each file
+    attachments.forEach(attachment => {
+      payloads.push({
+        contentType: 'attachment',
+        attachment: {
+          contentType: attachment.contentType,
+          title: attachment.title,
+          size: attachment.size,
+          data: attachment.data
+        },
+        category: communicationCategory,
+        priority: communicationPriority
+        // Note: claimItemSequences typically only apply to text payloads
+      });
+    });
+    
+    return payloads;
+  };
+  
+  // Legacy single payload builder for backwards compatibility
+  const buildPayloadForApi = () => {
+    const payloads = buildPayloadsForApi();
+    return payloads.length > 0 ? payloads[0] : {
+      contentType: 'string',
+      contentString: '',
+      category: communicationCategory,
+      priority: communicationPriority
+    };
   };
 
   // Fetch preview from backend API (returns actual FHIR bundle)
   const fetchPreviewFromBackend = async () => {
     try {
-      const payload = buildPayloadForApi();
+      const payloads = buildPayloadsForApi();
       const result = await api.previewCommunicationBundle(
         priorAuthId,
-        [payload],
+        payloads.length > 0 ? payloads : [buildPayloadForApi()], // Fallback to single payload
         communicationType,
         communicationType === 'solicited' ? selectedRequestId : null
       );
@@ -237,12 +271,31 @@ const CommunicationPanel = ({
 
   // Generate local preview (fallback if API fails)
   const generateLocalPreviewJson = () => {
-    const payload = buildPayloadForApi();
+    const payloads = buildPayloadsForApi();
     
-    // Truncate base64 data for display
-    if (payload.attachment?.data) {
-      payload.attachment.data = `[BASE64 DATA - ${payload.attachment.size} bytes]`;
-    }
+    // Build FHIR payload array with truncated base64 data for display
+    const fhirPayloads = payloads.map(p => {
+      if (p.contentType === 'string') {
+        return {
+          contentString: p.contentString,
+          ...(p.claimItemSequences?.length > 0 && {
+            extension: p.claimItemSequences.map(seq => ({
+              url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-claim-item-sequence',
+              valuePositiveInt: seq
+            }))
+          })
+        };
+      } else if (p.contentType === 'attachment' && p.attachment) {
+        return {
+          contentAttachment: {
+            contentType: p.attachment.contentType,
+            title: p.attachment.title,
+            data: `[BASE64 DATA - ${p.attachment.size} bytes]`
+          }
+        };
+      }
+      return null;
+    }).filter(Boolean);
 
     // Build a sample FHIR Communication bundle structure
     const communicationBundle = {
@@ -262,7 +315,7 @@ const CommunicationPanel = ({
             id: 'message-header-id',
             eventCoding: {
               system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
-              code: 'communication-request'
+              code: 'communication'
             },
             source: {
               endpoint: 'http://provider.com'
@@ -291,29 +344,19 @@ const CommunicationPanel = ({
               type: 'Patient'
             },
             about: [{
-              reference: `Claim/prior-auth-${priorAuthId}`,
-              type: 'Claim'
+              identifier: {
+                system: 'http://provider.com.sa/identifiers/authorization',
+                value: `prior-auth-${priorAuthId}`
+              }
             }],
             sent: new Date().toISOString(),
-            payload: payload.contentString ? [{
-              contentString: payload.contentString,
-              ...(selectedItemSequences.length > 0 && {
-                extension: selectedItemSequences.map(seq => ({
-                  url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-claim-item-sequence',
-                  valuePositiveInt: seq
-                }))
-              })
-            }] : payload.attachment ? [{
-              contentAttachment: {
-                contentType: payload.attachment.contentType,
-                title: payload.attachment.title,
-                data: payload.attachment.data
-              }
-            }] : [],
+            payload: fhirPayloads.length > 0 ? fhirPayloads : [{ contentString: '(No content provided)' }],
             ...(communicationType === 'solicited' && selectedRequestId && {
               basedOn: [{
-                reference: `CommunicationRequest/${selectedRequestId}`,
-                type: 'CommunicationRequest'
+                identifier: {
+                  system: 'http://insurer.com.sa/identifiers/communicationrequest',
+                  value: `CommReq_${selectedRequestId}`
+                }
               }]
             })
           }
@@ -387,13 +430,9 @@ const CommunicationPanel = ({
 
   // Send communication
   const handleSend = async () => {
-    // Validate
-    if (payloadType === 'string' && !freeText.trim()) {
-      setError('Please enter some text');
-      return;
-    }
-    if (payloadType === 'attachment' && !attachment) {
-      setError('Please select a file');
+    // Validate - must have at least text OR attachment(s)
+    if (!freeText.trim() && attachments.length === 0) {
+      setError('Please enter some text or attach at least one file');
       return;
     }
     if (communicationType === 'solicited' && !selectedRequestId) {
@@ -405,31 +444,26 @@ const CommunicationPanel = ({
     setError(null);
 
     try {
-      // Build payload with category and priority
-      const payload = {
-        contentType: payloadType,
-        category: communicationCategory,
-        priority: communicationPriority,
-        claimItemSequences: selectedItemSequences.length > 0 ? selectedItemSequences : undefined
-      };
-
-      if (payloadType === 'string') {
-        payload.contentString = freeText;
-      } else if (payloadType === 'attachment') {
-        payload.attachment = attachment;
+      // Build payloads array - supports text + multiple attachments per NPHIES spec
+      const payloads = buildPayloadsForApi();
+      
+      if (payloads.length === 0) {
+        setError('No content to send');
+        setIsSending(false);
+        return;
       }
 
       let result;
       if (communicationType === 'unsolicited') {
-        result = await api.sendUnsolicitedCommunication(priorAuthId, [payload]);
+        result = await api.sendUnsolicitedCommunication(priorAuthId, payloads);
       } else {
-        result = await api.sendSolicitedCommunication(priorAuthId, selectedRequestId, [payload]);
+        result = await api.sendSolicitedCommunication(priorAuthId, selectedRequestId, payloads);
       }
 
       if (result.success) {
         // Reset form
         setFreeText('');
-        setAttachment(null);
+        setAttachments([]);
         setSelectedItemSequences([]);
         setShowComposeForm(false);
         setSelectedRequestId(null);
@@ -771,89 +805,87 @@ const CommunicationPanel = ({
                 </div>
               </div>
 
-              {/* Payload Type */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Content Type
-                </label>
-                <div className="flex space-x-4">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      value="string"
-                      checked={payloadType === 'string'}
-                      onChange={(e) => setPayloadType(e.target.value)}
-                      className="mr-2"
-                    />
-                    <FileText className="w-4 h-4 mr-1 text-gray-500" />
-                    <span className="text-sm">Free Text</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      value="attachment"
-                      checked={payloadType === 'attachment'}
-                      onChange={(e) => setPayloadType(e.target.value)}
-                      className="mr-2"
-                    />
-                    <Paperclip className="w-4 h-4 mr-1 text-gray-500" />
-                    <span className="text-sm">Attachment</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Content Input */}
-              {payloadType === 'string' ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+              {/* Content Section - NPHIES supports multiple payloads: text + attachments */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium text-gray-700">
                     Message Content
                   </label>
+                  <span className="text-xs text-gray-500">
+                    NPHIES supports text + attachments together
+                  </span>
+                </div>
+                
+                {/* Text Content */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileText className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-600">Text Message (optional)</span>
+                  </div>
                   <textarea
                     value={freeText}
                     onChange={(e) => setFreeText(e.target.value)}
-                    rows={4}
+                    rows={3}
                     placeholder="Enter additional information for the insurer..."
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-              ) : (
+
+                {/* Attachments Section */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Attachment
-                  </label>
-                  {attachment ? (
-                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3">
-                      <div className="flex items-center">
-                        <Paperclip className="w-4 h-4 text-gray-500 mr-2" />
-                        <span className="text-sm">{attachment.title}</span>
-                        <span className="text-xs text-gray-500 ml-2">
-                          ({Math.round(attachment.size / 1024)} KB)
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => setAttachment(null)}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Paperclip className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-600">Attachments (optional)</span>
+                    {attachments.length > 0 && (
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                        {attachments.length} file{attachments.length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Display existing attachments */}
+                  {attachments.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      {attachments.map((att) => (
+                        <div key={att.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-2">
+                          <div className="flex items-center">
+                            <Paperclip className="w-4 h-4 text-gray-500 mr-2" />
+                            <span className="text-sm truncate max-w-xs">{att.title}</span>
+                            <span className="text-xs text-gray-500 ml-2">
+                              ({Math.round(att.size / 1024)} KB)
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => removeAttachment(att.id)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                            title="Remove attachment"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
-                    <label className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
-                      <div className="text-center">
-                        <Upload className="w-8 h-8 text-gray-400 mx-auto" />
-                        <p className="mt-2 text-sm text-gray-500">Click to upload file</p>
-                        <p className="text-xs text-gray-400">PDF, Images, Documents</p>
-                      </div>
-                      <input
-                        type="file"
-                        onChange={handleFileChange}
-                        className="hidden"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      />
-                    </label>
                   )}
+                  
+                  {/* Upload area */}
+                  <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
+                    <div className="text-center">
+                      <Upload className="w-6 h-6 text-gray-400 mx-auto" />
+                      <p className="mt-1 text-sm text-gray-500">
+                        {attachments.length > 0 ? 'Add more files' : 'Click to upload files'}
+                      </p>
+                      <p className="text-xs text-gray-400">PDF, Images, Documents (multiple allowed)</p>
+                    </div>
+                    <input
+                      type="file"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.tiff,.bmp"
+                      multiple
+                    />
+                  </label>
                 </div>
-              )}
+              </div>
 
               {/* Item Sequence Selection */}
               {items.length > 0 && (

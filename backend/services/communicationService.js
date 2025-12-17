@@ -39,7 +39,7 @@ class CommunicationService {
       await client.query(`SET search_path TO ${schemaName}`);
 
       // Get Prior Authorization with related data
-      // NPHIES Communication requires full patient/provider/insurer data
+      // NPHIES Communication requires full patient/provider/insurer/coverage data
       const paResult = await client.query(`
         SELECT 
           pa.*,
@@ -59,11 +59,21 @@ class CommunicationService {
           i.insurer_id, 
           i.insurer_name as insurer_name, 
           i.nphies_id as insurer_nphies_id,
-          i.address as insurer_address
+          i.address as insurer_address,
+          c.coverage_id,
+          c.member_id as coverage_member_id,
+          c.coverage_type,
+          c.relationship as coverage_relationship,
+          c.plan_id as coverage_plan_id,
+          c.plan_name as coverage_plan_name,
+          c.network as coverage_network,
+          c.start_date as coverage_start_date,
+          c.end_date as coverage_end_date
         FROM prior_authorizations pa
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
         LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+        LEFT JOIN coverages c ON pa.coverage_id = c.coverage_id
         WHERE pa.id = $1
       `, [priorAuthId]);
 
@@ -72,6 +82,19 @@ class CommunicationService {
       }
 
       const priorAuth = paResult.rows[0];
+
+      // Build coverage object if coverage data exists
+      const coverageData = priorAuth.coverage_id ? {
+        coverage_id: priorAuth.coverage_id,
+        member_id: priorAuth.coverage_member_id,
+        coverage_type: priorAuth.coverage_type,
+        relationship: priorAuth.coverage_relationship,
+        plan_id: priorAuth.coverage_plan_id,
+        plan_name: priorAuth.coverage_plan_name,
+        network: priorAuth.coverage_network,
+        start_date: priorAuth.coverage_start_date,
+        end_date: priorAuth.coverage_end_date
+      } : null;
 
       // Build the bundle based on type
       let communicationBundle;
@@ -106,6 +129,7 @@ class CommunicationService {
             nphies_id: priorAuth.insurer_nphies_id,
             address: priorAuth.insurer_address
           },
+          coverage: coverageData,
           payloads
         });
       } else if (type === 'solicited' && communicationRequestId) {
@@ -129,7 +153,8 @@ class CommunicationService {
           },
           priorAuth: {
             nphies_request_id: priorAuth.nphies_request_id,
-            request_number: priorAuth.request_number
+            request_number: priorAuth.request_number,
+            pre_auth_ref: priorAuth.pre_auth_ref
           },
           patient: {
             patient_id: priorAuth.patient_id,
@@ -154,6 +179,7 @@ class CommunicationService {
             nphies_id: priorAuth.insurer_nphies_id,
             address: priorAuth.insurer_address
           },
+          coverage: coverageData,
           payloads
         });
       } else {
@@ -176,7 +202,8 @@ class CommunicationService {
           id: priorAuth.patient_id,
           name: priorAuth.patient_name,
           identifier: priorAuth.patient_identifier
-        }
+        },
+        coverage: coverageData
       };
     } finally {
       client.release();
@@ -200,7 +227,7 @@ class CommunicationService {
       await client.query(`SET search_path TO ${schemaName}`);
 
       // 1. Get Prior Authorization with related data
-      // NPHIES Communication requires full patient/provider/insurer data
+      // NPHIES Communication requires full patient/provider/insurer/coverage data
       const paResult = await client.query(`
         SELECT 
           pa.*,
@@ -220,11 +247,21 @@ class CommunicationService {
           i.insurer_id, 
           i.insurer_name as insurer_name, 
           i.nphies_id as insurer_nphies_id,
-          i.address as insurer_address
+          i.address as insurer_address,
+          c.coverage_id,
+          c.member_id as coverage_member_id,
+          c.coverage_type,
+          c.relationship as coverage_relationship,
+          c.plan_id as coverage_plan_id,
+          c.plan_name as coverage_plan_name,
+          c.network as coverage_network,
+          c.start_date as coverage_start_date,
+          c.end_date as coverage_end_date
         FROM prior_authorizations pa
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
         LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+        LEFT JOIN coverages c ON pa.coverage_id = c.coverage_id
         WHERE pa.id = $1
       `, [priorAuthId]);
 
@@ -243,7 +280,7 @@ class CommunicationService {
         throw new Error(`Cannot send communication for PA with status '${priorAuth.status}'. Expected 'queued' or 'pended'.`);
       }
 
-      // 3. Build Communication bundle
+      // 3. Build Communication bundle with coverage data
       const communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
         priorAuth: {
           nphies_request_id: priorAuth.nphies_request_id,
@@ -273,6 +310,17 @@ class CommunicationService {
           nphies_id: priorAuth.insurer_nphies_id,
           address: priorAuth.insurer_address
         },
+        coverage: priorAuth.coverage_id ? {
+          coverage_id: priorAuth.coverage_id,
+          member_id: priorAuth.coverage_member_id,
+          coverage_type: priorAuth.coverage_type,
+          relationship: priorAuth.coverage_relationship,
+          plan_id: priorAuth.coverage_plan_id,
+          plan_name: priorAuth.coverage_plan_name,
+          network: priorAuth.coverage_network,
+          start_date: priorAuth.coverage_start_date,
+          end_date: priorAuth.coverage_end_date
+        } : null,
         payloads
       });
 
@@ -395,10 +443,10 @@ class CommunicationService {
       await client.query('BEGIN');
       await client.query(`SET search_path TO ${schemaName}`);
 
-      // 1. Get CommunicationRequest with full patient/provider/insurer data
+      // 1. Get CommunicationRequest with full patient/provider/insurer/coverage data
       const crResult = await client.query(`
-        SELECT cr.*, pa.id as pa_id, pa.nphies_request_id, pa.request_number,
-               pa.patient_id, pa.provider_id, pa.insurer_id,
+        SELECT cr.*, pa.id as pa_id, pa.nphies_request_id, pa.request_number, pa.pre_auth_ref,
+               pa.patient_id, pa.provider_id, pa.insurer_id, pa.coverage_id,
                p.identifier as patient_identifier,
                p.identifier_type as patient_identifier_type,
                p.name as patient_name,
@@ -412,12 +460,22 @@ class CommunicationService {
                pr.address as provider_address,
                i.nphies_id as insurer_nphies_id,
                i.insurer_name as insurer_name,
-               i.address as insurer_address
+               i.address as insurer_address,
+               c.coverage_id as coverage_id,
+               c.member_id as coverage_member_id,
+               c.coverage_type,
+               c.relationship as coverage_relationship,
+               c.plan_id as coverage_plan_id,
+               c.plan_name as coverage_plan_name,
+               c.network as coverage_network,
+               c.start_date as coverage_start_date,
+               c.end_date as coverage_end_date
         FROM nphies_communication_requests cr
         LEFT JOIN prior_authorizations pa ON cr.prior_auth_id = pa.id
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
         LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+        LEFT JOIN coverages c ON pa.coverage_id = c.coverage_id
         WHERE cr.id = $1
       `, [communicationRequestId]);
 
@@ -432,7 +490,7 @@ class CommunicationService {
         throw new Error('CommunicationRequest has already been responded to');
       }
 
-      // 3. Build Communication bundle with basedOn reference
+      // 3. Build Communication bundle with basedOn reference and coverage data
       const communicationBundle = this.mapper.buildSolicitedCommunicationBundle({
         communicationRequest: {
           request_id: commRequest.request_id,
@@ -441,7 +499,8 @@ class CommunicationService {
         },
         priorAuth: {
           nphies_request_id: commRequest.nphies_request_id,
-          request_number: commRequest.request_number
+          request_number: commRequest.request_number,
+          pre_auth_ref: commRequest.pre_auth_ref
         },
         patient: {
           patient_id: commRequest.patient_id,
@@ -466,6 +525,17 @@ class CommunicationService {
           nphies_id: commRequest.insurer_nphies_id,
           address: commRequest.insurer_address
         },
+        coverage: commRequest.coverage_id ? {
+          coverage_id: commRequest.coverage_id,
+          member_id: commRequest.coverage_member_id,
+          coverage_type: commRequest.coverage_type,
+          relationship: commRequest.coverage_relationship,
+          plan_id: commRequest.coverage_plan_id,
+          plan_name: commRequest.coverage_plan_name,
+          network: commRequest.coverage_network,
+          start_date: commRequest.coverage_start_date,
+          end_date: commRequest.coverage_end_date
+        } : null,
         payloads
       });
 
