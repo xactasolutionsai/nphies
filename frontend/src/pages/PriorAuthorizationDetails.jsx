@@ -49,6 +49,36 @@ const formatAmount = (amount, currency = 'SAR') => {
   return `${parseFloat(amount).toFixed(2)} ${currency}`;
 };
 
+// Calculate age from birth date with appropriate units (days, months, years)
+const calculateAge = (birthDate) => {
+  if (!birthDate) return null;
+  const today = new Date();
+  const birth = new Date(birthDate);
+  
+  // Calculate difference in milliseconds
+  const diffMs = today - birth;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  // Less than 1 month - show days
+  if (diffDays < 30) {
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+  }
+  
+  // Less than 2 years - show months
+  const diffMonths = Math.floor(diffDays / 30.44); // Average days per month
+  if (diffMonths < 24) {
+    return `${diffMonths} month${diffMonths !== 1 ? 's' : ''}`;
+  }
+  
+  // 2 years or more - show years
+  let years = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    years--;
+  }
+  return `${years} year${years !== 1 ? 's' : ''}`;
+};
+
 // Calculate total from items if total_amount is not set
 const calculateTotalFromItems = (items) => {
   if (!items || items.length === 0) return null;
@@ -2437,6 +2467,19 @@ export default function PriorAuthorizationDetails() {
             <CardContent>
               <p className="font-medium">{priorAuth.patient_name || '-'}</p>
               <p className="text-sm text-gray-500">{priorAuth.patient_identifier}</p>
+              {(priorAuth.patient_birth_date || priorAuth.patient_gender) && (
+                <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
+                  {priorAuth.patient_birth_date && (
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {calculateAge(priorAuth.patient_birth_date)}
+                    </span>
+                  )}
+                  {priorAuth.patient_gender && (
+                    <span className="capitalize">{priorAuth.patient_gender}</span>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
