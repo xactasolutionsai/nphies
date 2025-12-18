@@ -330,13 +330,16 @@ class InstitutionalMapper extends BaseMapper {
     // Add birth-weight supportingInfo for newborn patients
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     // Per NPHIES Test Case 8: Newborn authorization should include birth-weight
+    // BV-00509: birth-weight valueQuantity SHALL use 'kg' code from UCUM
     if (priorAuth.is_newborn && priorAuth.birth_weight) {
       const hasBirthWeight = supportingInfoList.some(info => info.category === 'birth-weight');
       if (!hasBirthWeight) {
+        // Convert grams to kilograms for NPHIES (BV-00509 requires kg)
+        const weightInKg = parseFloat(priorAuth.birth_weight) / 1000;
         supportingInfoList.push({
           category: 'birth-weight',
-          value_quantity: parseFloat(priorAuth.birth_weight),
-          value_quantity_unit: 'g'  // grams per NPHIES standard
+          value_quantity: weightInKg,
+          value_quantity_unit: 'kg'  // NPHIES BV-00509: must use 'kg' from UCUM
         });
       }
     }
