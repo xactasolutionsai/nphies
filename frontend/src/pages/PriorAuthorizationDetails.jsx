@@ -301,6 +301,18 @@ export default function PriorAuthorizationDetails() {
       return parts[parts.length - 1];
     };
 
+    // Extract adjudication outcome from extension
+    const adjudicationOutcome = claimResponse.extension?.find(
+      ext => ext.url?.includes('extension-adjudication-outcome')
+    )?.valueCodeableConcept?.coding?.[0]?.code;
+
+    // Extract process notes (important for referral/transfer info)
+    const processNotes = claimResponse.processNote?.map(note => ({
+      number: note.number,
+      type: note.type,
+      text: note.text
+    })) || [];
+
     return {
       id: claimResponse.id,
       profile: claimResponse.meta?.profile?.[0],
@@ -313,10 +325,12 @@ export default function PriorAuthorizationDetails() {
       subType: claimResponse.subType?.coding?.[0]?.code,
       use: claimResponse.use,
       outcome: claimResponse.outcome,
+      adjudicationOutcome: adjudicationOutcome,
       preAuthRef: claimResponse.preAuthRef,
       preAuthPeriod: claimResponse.preAuthPeriod,
       created: claimResponse.created,
       disposition: claimResponse.disposition,
+      processNotes: processNotes,
       // References
       patientReference: claimResponse.patient?.reference,
       patientId: extractIdFromRef(claimResponse.patient?.reference),
@@ -1949,6 +1963,68 @@ export default function PriorAuthorizationDetails() {
                           </div>
                         </>
                       )}
+
+                      {/* Adjudication Outcome */}
+                      {claimResponseDetails.adjudicationOutcome && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className={`p-4 rounded-lg border ${
+                            claimResponseDetails.adjudicationOutcome === 'approved' ? 'bg-green-50 border-green-200' :
+                            claimResponseDetails.adjudicationOutcome === 'rejected' ? 'bg-red-50 border-red-200' :
+                            claimResponseDetails.adjudicationOutcome === 'pended' ? 'bg-yellow-50 border-yellow-200' :
+                            'bg-gray-50 border-gray-200'
+                          }`}>
+                            <Label className={`${
+                              claimResponseDetails.adjudicationOutcome === 'approved' ? 'text-green-700' :
+                              claimResponseDetails.adjudicationOutcome === 'rejected' ? 'text-red-700' :
+                              claimResponseDetails.adjudicationOutcome === 'pended' ? 'text-yellow-700' :
+                              'text-gray-700'
+                            }`}>Adjudication Outcome</Label>
+                            <Badge 
+                              className={`mt-2 text-lg px-3 py-1 ${
+                                claimResponseDetails.adjudicationOutcome === 'approved' ? 'bg-green-500' :
+                                claimResponseDetails.adjudicationOutcome === 'rejected' ? 'bg-red-500' :
+                                claimResponseDetails.adjudicationOutcome === 'pended' ? 'bg-yellow-500 text-yellow-900' :
+                                'bg-gray-500'
+                              }`}
+                            >
+                              {claimResponseDetails.adjudicationOutcome.toUpperCase()}
+                            </Badge>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Process Notes - Important for referral/transfer info */}
+                      {claimResponseDetails.processNotes && claimResponseDetails.processNotes.length > 0 && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500 flex items-center gap-2">
+                              <MessageSquare className="h-4 w-4" />
+                              Process Notes
+                            </Label>
+                            <div className="mt-2 space-y-2">
+                              {claimResponseDetails.processNotes.map((note, idx) => (
+                                <div key={idx} className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    {note.number && (
+                                      <Badge variant="outline" className="text-amber-700 border-amber-400">
+                                        #{note.number}
+                                      </Badge>
+                                    )}
+                                    {note.type && (
+                                      <Badge variant="outline" className="text-amber-600 border-amber-300 capitalize">
+                                        {note.type}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-amber-800">{note.text}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -2565,6 +2641,43 @@ export default function PriorAuthorizationDetails() {
                     <p className="font-mono text-sm">{priorAuth.nphies_response_id}</p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Transfer Authorization Card - NPHIES Test Case 9 */}
+          {priorAuth.transfer_auth_number && (
+            <Card className="border-blue-300 bg-blue-50">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-blue-700">
+                  <RefreshCw className="h-5 w-5" />
+                  Transfer Authorization
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <p className="text-sm text-blue-600">Transfer Authorization Number</p>
+                  <p className="font-mono text-lg font-bold text-blue-700">{priorAuth.transfer_auth_number}</p>
+                </div>
+                {(priorAuth.transfer_period_start || priorAuth.transfer_period_end) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {priorAuth.transfer_period_start && (
+                      <div>
+                        <p className="text-sm text-blue-600">Valid From</p>
+                        <p className="font-medium">{formatDate(priorAuth.transfer_period_start)}</p>
+                      </div>
+                    )}
+                    {priorAuth.transfer_period_end && (
+                      <div>
+                        <p className="text-sm text-blue-600">Valid Until</p>
+                        <p className="font-medium">{formatDate(priorAuth.transfer_period_end)}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-blue-600 mt-2">
+                  This authorization has been approved for transfer to another provider
+                </p>
               </CardContent>
             </Card>
           )}

@@ -628,8 +628,11 @@ class PriorAuthorizationsController extends BaseController {
               claim_response_status = $20,
               claim_response_use = $21,
               claim_response_created = $22,
+              transfer_auth_number = $23,
+              transfer_period_start = $24,
+              transfer_period_end = $25,
               updated_at = CURRENT_TIMESTAMP
-          WHERE id = $23
+          WHERE id = $26
         `, [
           newStatus,
           parsedResponse.outcome,
@@ -654,6 +657,10 @@ class PriorAuthorizationsController extends BaseController {
           parsedResponse.claimResponseStatus,
           parsedResponse.claimResponseUse,
           parsedResponse.claimResponseCreated,
+          // Transfer authorization response fields (NPHIES Test Case 9)
+          parsedResponse.transfer?.authNumber || null,
+          parsedResponse.transfer?.period?.start || null,
+          parsedResponse.transfer?.period?.end || null,
           id
         ]);
 
