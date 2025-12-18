@@ -125,6 +125,13 @@ export default function PriorAuthorizationForm() {
     triage_date: '', // Required for EMER: datetime of triage assessment
     service_type: '', // Service type: acute-care, sub-acute-care, etc.
     encounter_priority: '', // For EMER: EM, UR, S, etc.
+    // Newborn extension fields (per NPHIES Test Case 8)
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    is_newborn: false, // Flag indicating if this is a newborn patient authorization
+    birth_weight: '', // Birth weight in grams (required when is_newborn is true)
+    // Transfer extension fields (per NPHIES Test Case 9)
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-transfer.html
+    is_transfer: false, // Flag indicating if this is a transfer/referral request
     // Eligibility response (per NPHIES Claim-173086.json)
     eligibility_response_id: '', // Identifier-based reference (preferred)
     eligibility_response_system: '', // System for the identifier
@@ -1949,6 +1956,40 @@ export default function PriorAuthorizationForm() {
                   isSearchable
                   menuPortalTarget={document.body}
                 />
+                
+                {/* Newborn Extension - Per NPHIES Test Case 8 */}
+                {/* Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html */}
+                <div className="mt-3 p-3 bg-pink-50 rounded-lg border border-pink-200">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="is_newborn"
+                      checked={formData.is_newborn || false}
+                      onChange={(e) => handleChange('is_newborn', e.target.checked)}
+                      className="h-4 w-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                    />
+                    <Label htmlFor="is_newborn" className="flex items-center gap-2 cursor-pointer text-pink-700">
+                      <User className="h-4 w-4 text-pink-500" />
+                      <span>Newborn Patient</span>
+                    </Label>
+                  </div>
+                  {formData.is_newborn && (
+                    <div className="mt-3 space-y-2">
+                      <Label htmlFor="birth_weight" className="text-pink-700">Birth Weight (grams) *</Label>
+                      <Input
+                        id="birth_weight"
+                        type="number"
+                        placeholder="e.g., 3200"
+                        value={formData.birth_weight || ''}
+                        onChange={(e) => handleChange('birth_weight', e.target.value)}
+                        className="w-full border-pink-300 focus:border-pink-500"
+                      />
+                      <p className="text-xs text-pink-600">
+                        Required for newborn authorization requests. Patient birth date should be less than 90 days old.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Provider */}
@@ -1967,6 +2008,29 @@ export default function PriorAuthorizationForm() {
                   isSearchable
                   menuPortalTarget={document.body}
                 />
+                
+                {/* Transfer Extension - Per NPHIES Test Case 9 */}
+                {/* Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-transfer.html */}
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="is_transfer"
+                      checked={formData.is_transfer || false}
+                      onChange={(e) => handleChange('is_transfer', e.target.checked)}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <Label htmlFor="is_transfer" className="flex items-center gap-2 cursor-pointer text-blue-700">
+                      <RefreshCw className="h-4 w-4 text-blue-500" />
+                      <span>Transfer/Referral Request</span>
+                    </Label>
+                  </div>
+                  {formData.is_transfer && (
+                    <p className="mt-2 text-xs text-blue-600">
+                      This authorization is a referral request to transfer services to another provider
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Practice Code - NPHIES careTeam.qualification */}

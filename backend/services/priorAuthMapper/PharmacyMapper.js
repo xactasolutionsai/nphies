@@ -203,6 +203,15 @@ class PharmacyMapper extends BaseMapper {
       });
     }
 
+    // Newborn extension - for newborn patient authorization requests
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    if (priorAuth.is_newborn) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-newborn',
+        valueBoolean: true
+      });
+    }
+
     // Eligibility reference (optional - must be valid FHIR reference format)
     if (priorAuth.eligibility_ref && priorAuth.eligibility_ref.includes('/')) {
       extensions.push({
@@ -384,6 +393,24 @@ class PharmacyMapper extends BaseMapper {
         supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence: currentSequence }));
         currentSequence++;
       });
+    }
+
+    // Add birth-weight supportingInfo for newborn patients
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    // Per NPHIES Test Case 8: Newborn authorization should include birth-weight
+    if (priorAuth.is_newborn && priorAuth.birth_weight) {
+      const hasBirthWeight = supportingInfoList.some(info => 
+        info.category?.coding?.[0]?.code === 'birth-weight' || info.category === 'birth-weight'
+      );
+      if (!hasBirthWeight) {
+        supportingInfoList.push(this.buildSupportingInfo({
+          sequence: currentSequence,
+          category: 'birth-weight',
+          value_quantity: parseFloat(priorAuth.birth_weight),
+          value_quantity_unit: 'g'  // grams per NPHIES standard
+        }));
+        currentSequence++;
+      }
     }
     
     claim.supportingInfo = supportingInfoList;

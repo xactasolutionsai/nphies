@@ -2462,6 +2462,11 @@ export default function PriorAuthorizationDetails() {
               <CardTitle className="text-lg flex items-center gap-2">
                 <User className="h-5 w-5" />
                 Patient
+                {priorAuth.is_newborn && (
+                  <Badge className="bg-pink-100 text-pink-700 border-pink-300 ml-2">
+                    Newborn
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2480,6 +2485,14 @@ export default function PriorAuthorizationDetails() {
                   )}
                 </div>
               )}
+              {/* Newborn Extension Details */}
+              {priorAuth.is_newborn && priorAuth.birth_weight && (
+                <div className="mt-3 p-2 bg-pink-50 rounded-md border border-pink-200">
+                  <p className="text-sm text-pink-700">
+                    <span className="font-medium">Birth Weight:</span> {priorAuth.birth_weight} g
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -2489,11 +2502,24 @@ export default function PriorAuthorizationDetails() {
               <CardTitle className="text-lg flex items-center gap-2">
                 <Building className="h-5 w-5" />
                 Provider
+                {priorAuth.is_transfer && (
+                  <Badge className="bg-blue-100 text-blue-700 border-blue-300 ml-2">
+                    Transfer
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="font-medium">{priorAuth.provider_name || '-'}</p>
               <p className="text-sm text-gray-500 font-mono">{priorAuth.provider_nphies_id}</p>
+              {/* Transfer Extension Details */}
+              {priorAuth.is_transfer && (
+                <div className="mt-3 p-2 bg-blue-50 rounded-md border border-blue-200">
+                  <p className="text-sm text-blue-700">
+                    This is a referral/transfer request to another provider
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

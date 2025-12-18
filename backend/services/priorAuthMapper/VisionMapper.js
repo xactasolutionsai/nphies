@@ -174,6 +174,15 @@ class VisionMapper extends BaseMapper {
       });
     }
 
+    // Newborn extension - for newborn patient authorization requests
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    if (priorAuth.is_newborn) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-newborn',
+        valueBoolean: true
+      });
+    }
+
     // Only add eligibility reference if it's a valid FHIR reference format
     // Must be in format "ResourceType/id" (e.g., "CoverageEligibilityResponse/uuid")
     if (priorAuth.eligibility_ref && priorAuth.eligibility_ref.includes('/')) {
@@ -327,6 +336,20 @@ class VisionMapper extends BaseMapper {
     // SupportingInfo
     let supportingInfoSequences = [];
     let supportingInfoList = [...(priorAuth.supporting_info || [])];
+
+    // Add birth-weight supportingInfo for newborn patients
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    // Per NPHIES Test Case 8: Newborn authorization should include birth-weight
+    if (priorAuth.is_newborn && priorAuth.birth_weight) {
+      const hasBirthWeight = supportingInfoList.some(info => info.category === 'birth-weight');
+      if (!hasBirthWeight) {
+        supportingInfoList.push({
+          category: 'birth-weight',
+          value_quantity: parseFloat(priorAuth.birth_weight),
+          value_quantity_unit: 'g'  // grams per NPHIES standard
+        });
+      }
+    }
     
     if (supportingInfoList.length > 0) {
       claim.supportingInfo = supportingInfoList.map((info, idx) => {

@@ -288,6 +288,15 @@ class ProfessionalMapper extends BaseMapper {
       });
     }
 
+    // Newborn extension - for newborn patient authorization requests
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    if (priorAuth.is_newborn) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-newborn',
+        valueBoolean: true
+      });
+    }
+
     // Add eligibility response extension
     // NPHIES supports two formats:
     // 1. Identifier-based (preferred per Claim-173086.json): { identifier: { system, value } }
@@ -489,6 +498,20 @@ class ProfessionalMapper extends BaseMapper {
         supportingInfoList.unshift({
           category: 'chief-complaint',
           code_text: 'Patient presenting for evaluation'
+        });
+      }
+    }
+
+    // Add birth-weight supportingInfo for newborn patients
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    // Per NPHIES Test Case 8: Newborn authorization should include birth-weight
+    if (priorAuth.is_newborn && priorAuth.birth_weight) {
+      const hasBirthWeight = supportingInfoList.some(info => info.category === 'birth-weight');
+      if (!hasBirthWeight) {
+        supportingInfoList.push({
+          category: 'birth-weight',
+          value_quantity: parseFloat(priorAuth.birth_weight),
+          value_quantity_unit: 'g'  // grams per NPHIES standard
         });
       }
     }

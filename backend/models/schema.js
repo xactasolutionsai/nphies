@@ -420,6 +420,11 @@ export const validationSchemas = {
     is_cancelled: Joi.boolean().allow(null).optional(),
     cancellation_reason: Joi.string().allow(null, '').optional(),
     
+    // Newborn Extension - per NPHIES Test Case 8
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    is_newborn: Joi.boolean().allow(null).optional(),
+    birth_weight: Joi.number().precision(2).allow(null).optional(), // Weight in grams
+    
     // Eligibility Reference
     eligibility_ref: Joi.string().max(100).allow(null, '').optional(),
     eligibility_offline_date: Joi.date().allow(null, '').optional(),
