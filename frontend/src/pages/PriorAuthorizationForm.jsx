@@ -551,7 +551,8 @@ export default function PriorAuthorizationForm() {
         original_outcome: data.outcome
       });
       
-      // Parse existing supporting_info into structured fields (same as loadPriorAuthorization)
+      // Parse existing supporting_info into structured fields
+      // Uses the same logic as loadPriorAuthorization for consistency
       const supportingInfo = data.supporting_info || [];
       const vitalSigns = {
         systolic: '', diastolic: '', height: '', weight: '',
@@ -559,9 +560,9 @@ export default function PriorAuthorizationForm() {
         measurement_time: null
       };
       const clinicalInfo = {
-        chief_complaint_format: 'snomed',
+        chief_complaint_format: 'snomed', // Default format
         chief_complaint_code: '', chief_complaint_display: '',
-        chief_complaint_text: '',
+        chief_complaint_text: '', // Free text option
         patient_history: '', history_of_present_illness: '',
         physical_examination: '', treatment_plan: '',
         investigation_result: ''
@@ -570,57 +571,79 @@ export default function PriorAuthorizationForm() {
         admission_weight: '', estimated_length_of_stay: ''
       };
       
+      // Track which supporting_info items are parsed into structured fields
       const parsedCategories = new Set();
       
       supportingInfo.forEach(info => {
-        if (info.category === 'vital-signs') {
-          parsedCategories.add('vital-signs');
-          if (info.code === 'systolic') vitalSigns.systolic = info.value;
-          else if (info.code === 'diastolic') vitalSigns.diastolic = info.value;
-          else if (info.code === 'height') vitalSigns.height = info.value;
-          else if (info.code === 'weight') vitalSigns.weight = info.value;
-          else if (info.code === 'pulse') vitalSigns.pulse = info.value;
-          else if (info.code === 'temperature') vitalSigns.temperature = info.value;
-          else if (info.code === 'oxygen-saturation') vitalSigns.oxygen_saturation = info.value;
-          else if (info.code === 'respiratory-rate') vitalSigns.respiratory_rate = info.value;
-          if (info.timing) vitalSigns.measurement_time = new Date(info.timing);
-        } else if (info.category === 'chief-complaint') {
-          parsedCategories.add('chief-complaint');
-          clinicalInfo.chief_complaint_code = info.code || '';
-          clinicalInfo.chief_complaint_display = info.display || '';
-          clinicalInfo.chief_complaint_text = info.value || '';
-        } else if (info.category === 'patient-history') {
-          parsedCategories.add('patient-history');
-          clinicalInfo.patient_history = info.value || '';
-        } else if (info.category === 'history-of-present-illness') {
-          parsedCategories.add('history-of-present-illness');
-          clinicalInfo.history_of_present_illness = info.value || '';
-        } else if (info.category === 'physical-examination') {
-          parsedCategories.add('physical-examination');
-          clinicalInfo.physical_examination = info.value || '';
-        } else if (info.category === 'treatment-plan') {
-          parsedCategories.add('treatment-plan');
-          clinicalInfo.treatment_plan = info.value || '';
-        } else if (info.category === 'investigation-result') {
-          parsedCategories.add('investigation-result');
-          clinicalInfo.investigation_result = info.code || '';
-        } else if (info.category === 'admission-info') {
-          parsedCategories.add('admission-info');
-          if (info.code === 'admission-weight') admissionInfo.admission_weight = info.value;
-          else if (info.code === 'estimated-length-of-stay') admissionInfo.estimated_length_of_stay = info.value;
+        // Vital signs - use VITAL_SIGNS_FIELDS constant for proper matching
+        const vitalField = VITAL_SIGNS_FIELDS.find(f => f.category === info.category);
+        if (vitalField && info.value_quantity != null) {
+          vitalSigns[vitalField.key] = String(info.value_quantity);
+          if (info.timing_period_start && !vitalSigns.measurement_time) {
+            vitalSigns.measurement_time = info.timing_period_start;
+          }
+          parsedCategories.add(info.category);
+        }
+        
+        // Clinical text fields - use CLINICAL_TEXT_FIELDS constant
+        const clinicalField = CLINICAL_TEXT_FIELDS.find(f => f.category === info.category);
+        if (clinicalField && info.value_string) {
+          clinicalInfo[clinicalField.key] = info.value_string;
+          parsedCategories.add(info.category);
+        }
+        
+        // Chief complaint - supports both SNOMED code and free text formats
+        if (info.category === 'chief-complaint') {
+          if (info.code_text) {
+            // Free text format
+            clinicalInfo.chief_complaint_format = 'text';
+            clinicalInfo.chief_complaint_text = info.code_text;
+            clinicalInfo.chief_complaint_code = '';
+            clinicalInfo.chief_complaint_display = '';
+          } else if (info.code) {
+            // SNOMED code format
+            clinicalInfo.chief_complaint_format = 'snomed';
+            clinicalInfo.chief_complaint_code = info.code;
+            clinicalInfo.chief_complaint_display = info.code_display || '';
+            clinicalInfo.chief_complaint_text = '';
+          } else if (info.value_string) {
+            // Legacy: value_string format
+            clinicalInfo.chief_complaint_format = 'text';
+            clinicalInfo.chief_complaint_text = info.value_string;
+            clinicalInfo.chief_complaint_code = '';
+            clinicalInfo.chief_complaint_display = '';
+          }
+          parsedCategories.add(info.category);
+        }
+        
+        // Investigation result
+        if (info.category === 'investigation-result' && info.code) {
+          clinicalInfo.investigation_result = info.code;
+          parsedCategories.add(info.category);
+        }
+        
+        // Admission fields - use ADMISSION_FIELDS constant
+        const admissionField = ADMISSION_FIELDS.find(f => f.category === info.category);
+        if (admissionField && info.value_quantity != null) {
+          admissionInfo[admissionField.key] = String(info.value_quantity);
+          parsedCategories.add(info.category);
         }
       });
       
-      const remainingSupportingInfo = supportingInfo.filter(info => 
-        !parsedCategories.has(info.category)
-      );
+      // Filter out parsed items from supporting_info (keep only manual/other entries)
+      const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
       
-      // Process items
-      const processedItems = (data.items || []).map((item, idx) => ({
-        ...getInitialItemData(idx + 1),
-        ...item,
-        sequence: idx + 1
-      }));
+      // Process items to preserve/infer manual_code_entry flag
+      const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
+        const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
+        const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
+        
+        return {
+          ...item,
+          manual_code_entry: hasManualCodeEntry,
+          manual_prescribed_code_entry: hasManualPrescribedCodeEntry
+        };
+      });
       
       // Pre-fill form with source data but reset status for new submission
       setFormData({
@@ -634,7 +657,7 @@ export default function PriorAuthorizationForm() {
         response_date: undefined, // Clear response
         request_bundle: undefined, // Clear previous bundle
         response_bundle: undefined, // Clear previous response
-        items: processedItems.length > 0 ? processedItems : [getInitialItemData(1)],
+        items: processedItems,
         diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
         supporting_info: remainingSupportingInfo,
         attachments: data.attachments || [],
@@ -1515,6 +1538,13 @@ export default function PriorAuthorizationForm() {
       if (id) {
         dataToPreview.id = id;
         dataToPreview.prior_auth_id = id;
+      }
+      
+      // Include resubmission data if this is a resubmission
+      // This ensures the preview shows the Claim.related structure with ex-relatedclaimrelationship
+      if (resubmissionData) {
+        dataToPreview.is_resubmission = resubmissionData.is_resubmission;
+        dataToPreview.related_claim_identifier = resubmissionData.related_claim_identifier;
       }
 
       const response = await api.previewPriorAuthorizationBundle(dataToPreview);
