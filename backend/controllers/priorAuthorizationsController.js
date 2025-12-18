@@ -681,9 +681,23 @@ class PriorAuthorizationsController extends BaseController {
 
         // Update item adjudication if present
         if (parsedResponse.itemResults) {
+          // Map NPHIES adjudication outcome to database-compatible status
+          const mapAdjudicationStatus = (nphiesOutcome) => {
+            const statusMap = {
+              'approved': 'approved',
+              'rejected': 'denied',    // NPHIES uses 'rejected', DB uses 'denied'
+              'denied': 'denied',
+              'partial': 'partial',
+              'pended': 'pending',     // NPHIES uses 'pended', DB uses 'pending'
+              'pending': 'pending',
+              'queued': 'pending'
+            };
+            return statusMap[nphiesOutcome?.toLowerCase()] || null;
+          };
+
           for (const itemResult of parsedResponse.itemResults) {
             // Use item-level outcome extension if available, otherwise derive from adjudication
-            const adjStatus = itemResult.outcome || 
+            const adjStatus = mapAdjudicationStatus(itemResult.outcome) || 
                              (itemResult.adjudication?.find(a => a.category === 'eligible') ? 'approved' :
                               itemResult.adjudication?.find(a => a.category === 'denied') ? 'denied' : 'pending');
             const adjAmount = itemResult.benefitAmount || 
