@@ -826,14 +826,14 @@ export default function PriorAuthorizationDetails() {
   return (
     <div className="space-y-6 pb-10">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate('/prior-authorizations')}>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/prior-authorizations')} className="mt-1">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-gray-900">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 truncate">
                 {priorAuth.request_number || `PA-${priorAuth.id}`}
               </h1>
               {getStatusBadge(priorAuth.status)}
@@ -852,73 +852,79 @@ export default function PriorAuthorizationDetails() {
                 const config = adjConfig[adjOutcome] || { className: 'bg-gray-500 text-white', label: adjOutcome };
                 
                 return (
-                  <Badge className={`gap-1 text-sm px-2 py-1 ${config.className}`}>
-                    Adjudication: {config.label}
+                  <Badge className={`gap-1 text-xs px-2 py-0.5 ${config.className}`}>
+                    {config.label}
                   </Badge>
                 );
               })()}
             </div>
-            <p className="text-gray-600 mt-1">
+            <p className="text-gray-600 text-sm mt-1">
               {getAuthTypeDisplay(priorAuth.auth_type)} Authorization
               {priorAuth.pre_auth_ref && (
-                <span className="ml-2 text-green-600 font-mono">
-                  • Pre-Auth Ref: {priorAuth.pre_auth_ref}
+                <span className="ml-2 text-green-600 font-mono text-xs">
+                  • {priorAuth.pre_auth_ref}
                 </span>
               )}
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleLoadBundle} disabled={actionLoading}>
-            <Code className="h-4 w-4 mr-2" />
-            View FHIR Bundle
+        <div className="flex flex-wrap gap-2 justify-end">
+          {/* Always visible: View Bundle */}
+          <Button variant="outline" size="sm" onClick={handleLoadBundle} disabled={actionLoading}>
+            <Code className="h-4 w-4 mr-1" />
+            FHIR Bundle
           </Button>
           
+          {/* Draft/Error status actions */}
           {(priorAuth.status === 'draft' || priorAuth.status === 'error') && (
             <>
-              <Button variant="outline" onClick={() => navigate(`/prior-authorizations/${id}/edit`)}>
-                <Edit className="h-4 w-4 mr-2" />
+              <Button variant="outline" size="sm" onClick={() => navigate(`/prior-authorizations/${id}/edit`)}>
+                <Edit className="h-4 w-4 mr-1" />
                 Edit
               </Button>
-              <Button onClick={handleSendToNphies} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
-                <Send className="h-4 w-4 mr-2" />
-                Send to NPHIES
+              <Button size="sm" onClick={handleSendToNphies} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
+                <Send className="h-4 w-4 mr-1" />
+                Send
               </Button>
             </>
           )}
           
+          {/* Queued status: Poll */}
           {priorAuth.status === 'queued' && (
-            <Button onClick={handlePoll} disabled={actionLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${actionLoading ? 'animate-spin' : ''}`} />
-              Poll Response
+            <Button size="sm" onClick={handlePoll} disabled={actionLoading}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${actionLoading ? 'animate-spin' : ''}`} />
+              Poll
             </Button>
           )}
           
+          {/* Approved status actions */}
           {priorAuth.status === 'approved' && (
             <>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={handlePreviewClaimBundle}
                 disabled={actionLoading || claimBundleLoading}
                 className="text-blue-600 border-blue-300 hover:bg-blue-50"
               >
-                <Code className="h-4 w-4 mr-2" />
-                {claimBundleLoading ? 'Loading...' : 'Preview Claim JSON'}
+                <Code className="h-4 w-4 mr-1" />
+                {claimBundleLoading ? '...' : 'Claim JSON'}
               </Button>
               <Button
+                size="sm"
                 onClick={handleSubmitAsClaimWithResponse}
                 disabled={actionLoading}
                 className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
               >
-                <Receipt className="h-4 w-4 mr-2" />
-                Submit as Claim
+                <Receipt className="h-4 w-4 mr-1" />
+                Submit Claim
               </Button>
-              <Button variant="outline" onClick={handleCreateUpdate} disabled={actionLoading}>
-                <Edit className="h-4 w-4 mr-2" />
-                Create Update
+              <Button variant="outline" size="sm" onClick={handleCreateUpdate} disabled={actionLoading}>
+                <Edit className="h-4 w-4 mr-1" />
+                Update
               </Button>
-              <Button variant="outline" onClick={() => setShowCancelDialog(true)} className="text-red-500 border-red-300 hover:bg-red-50">
-                <XCircle className="h-4 w-4 mr-2" />
+              <Button variant="outline" size="sm" onClick={() => setShowCancelDialog(true)} className="text-red-500 border-red-300 hover:bg-red-50">
+                <XCircle className="h-4 w-4 mr-1" />
                 Cancel
               </Button>
             </>
@@ -927,12 +933,13 @@ export default function PriorAuthorizationDetails() {
           {/* Resubmit button for rejected or partial authorizations */}
           {(priorAuth.status === 'rejected' || priorAuth.adjudication_outcome === 'partial' || priorAuth.outcome === 'partial') && (
             <Button 
+              size="sm"
               onClick={handleResubmit} 
               disabled={actionLoading}
               className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
             >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Resubmit Authorization
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Resubmit
             </Button>
           )}
         </div>
