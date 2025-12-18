@@ -208,6 +208,7 @@ export default function PriorAuthorizationForm() {
   }, [id]);
 
   // Auto-analyze medication safety when pharmacy items change
+  // NOTE: This is disabled when AI_FEATURES_ENABLED is false in api.js
   useEffect(() => {
     // Only run for pharmacy auth type
     if (formData.auth_type !== 'pharmacy') {
@@ -288,6 +289,12 @@ export default function PriorAuthorizationForm() {
         }
       );
 
+      // Handle disabled AI features - don't show error, just silently skip
+      if (response.disabled) {
+        setSafetyLoading(false);
+        return;
+      }
+
       if (response.success && response.analysis) {
         setMedicationSafetyAnalysis(response.analysis);
       } else {
@@ -325,6 +332,13 @@ export default function PriorAuthorizationForm() {
         patientGender,
         formData.sub_type === 'emr'
       );
+
+      // Handle disabled AI features
+      if (response.disabled) {
+        setSuggestionsError('AI features are currently disabled');
+        setSuggestionsLoading(false);
+        return;
+      }
 
       if (response.success && response.suggestions) {
         setMedicationSuggestions(response.suggestions);
@@ -736,6 +750,18 @@ export default function PriorAuthorizationForm() {
 
       const response = await api.validatePriorAuth(validationData);
       
+      // Handle disabled AI features
+      if (response.disabled) {
+        setAiValidationResult({
+          success: false,
+          error: 'AI features are currently disabled',
+          riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+          suggestions: []
+        });
+        setAiValidationLoading(false);
+        return;
+      }
+      
       if (response.success) {
         setAiValidationResult(response);
       } else {
@@ -876,6 +902,13 @@ export default function PriorAuthorizationForm() {
       console.log('📋 Context:', context);
 
       const response = await api.enhanceClinicalText(currentText, field, context);
+      
+      // Handle disabled AI features
+      if (response.disabled) {
+        alert('AI features are currently disabled. Please enable them in the configuration.');
+        setEnhancingField(null);
+        return;
+      }
       
       if (response.success && response.enhancedText && response.enhancedText !== currentText) {
         setFormData(prev => ({

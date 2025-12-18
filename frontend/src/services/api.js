@@ -1,5 +1,10 @@
 const API_BASE_URL = 'http://localhost:8001/api';
 
+// AI Features Configuration
+// Set to false to disable AI medication safety analysis and suggestions
+// This prevents unnecessary API calls when the AI server (medbot) is not running
+const AI_FEATURES_ENABLED = false;
+
 // Request throttling and caching
 const requestQueue = new Map();
 const cache = new Map();
@@ -803,6 +808,10 @@ class ApiService {
    * @param {Object} patientContext - Patient context (age, gender, pregnant, allergies, diagnosis)
    */
   async analyzeMedicationSafety(medications, patientContext = {}) {
+    // Return early if AI features are disabled
+    if (!AI_FEATURES_ENABLED) {
+      return { success: false, disabled: true, message: 'AI features are currently disabled' };
+    }
     return this.request('/medication-safety/analyze', {
       method: 'POST',
       body: JSON.stringify({ medications, patientContext })
@@ -817,6 +826,10 @@ class ApiService {
    * @param {boolean} emergencyCase - Is this an emergency case
    */
   async getMedicationSuggestions(diagnosis, patientAge, patientGender, emergencyCase = false) {
+    // Return early if AI features are disabled
+    if (!AI_FEATURES_ENABLED) {
+      return { success: false, disabled: true, message: 'AI features are currently disabled' };
+    }
     return this.request('/medication-safety/suggest', {
       method: 'POST',
       body: JSON.stringify({ diagnosis, patientAge, patientGender, emergencyCase })
@@ -828,6 +841,10 @@ class ApiService {
    * @param {Array} medications - Array of medication objects
    */
   async checkDrugInteractions(medications) {
+    // Return early if AI features are disabled
+    if (!AI_FEATURES_ENABLED) {
+      return { success: false, disabled: true, message: 'AI features are currently disabled' };
+    }
     return this.request('/medication-safety/check-interactions', {
       method: 'POST',
       body: JSON.stringify({ medications })
@@ -844,6 +861,10 @@ class ApiService {
    * @param {Object} formData - Complete prior authorization form data
    */
   async validatePriorAuth(formData) {
+    // Return early if AI features are disabled
+    if (!AI_FEATURES_ENABLED) {
+      return { success: false, disabled: true, message: 'AI features are currently disabled' };
+    }
     return this.request('/ai-validation/validate-prior-auth', {
       method: 'POST',
       body: JSON.stringify(formData)
@@ -858,6 +879,10 @@ class ApiService {
    * @param {Object} context - Additional context (chief complaint, diagnosis, requested service)
    */
   async enhanceClinicalText(text, field, context = {}) {
+    // Return early if AI features are disabled
+    if (!AI_FEATURES_ENABLED) {
+      return { success: false, disabled: true, message: 'AI features are currently disabled' };
+    }
     return this.request('/ai-validation/enhance-clinical', {
       method: 'POST',
       body: JSON.stringify({ text, field, context })
