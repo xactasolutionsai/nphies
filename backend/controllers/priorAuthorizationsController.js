@@ -1734,15 +1734,17 @@ class PriorAuthorizationsController extends BaseController {
         INSERT INTO prior_authorization_items 
         (prior_auth_id, sequence, product_or_service_code, product_or_service_system,
          product_or_service_display, tooth_number, tooth_surface, eye,
-         medication_code, medication_system, days_supply, quantity, unit_price,
+         medication_code, medication_system, medication_name, days_supply, quantity, unit_price,
          net_amount, currency, serviced_date, serviced_period_start, serviced_period_end,
-         body_site_code, body_site_system, sub_site_code, description, notes)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+         body_site_code, body_site_system, sub_site_code, description, notes,
+         manual_code_entry, manual_prescribed_code_entry, prescribed_medication_code,
+         pharmacist_selection_reason, pharmacist_substitute, patient_share, is_package, is_maternity)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
       `;
       await query(itemQuery, [
         priorAuthId,
         item.sequence,
-        item.product_or_service_code,
+        item.product_or_service_code || item.medication_code || null, // For pharmacy, use medication_code if no product code
         item.product_or_service_system || null,
         item.product_or_service_display || null,
         item.tooth_number || null,
@@ -1750,6 +1752,7 @@ class PriorAuthorizationsController extends BaseController {
         item.eye || null,
         item.medication_code || null,
         item.medication_system || null,
+        item.medication_name || null,
         item.days_supply || null,
         item.quantity || null,
         item.unit_price || null,
@@ -1762,7 +1765,15 @@ class PriorAuthorizationsController extends BaseController {
         item.body_site_system || null,
         item.sub_site_code || null,
         item.description || null,
-        item.notes || null
+        item.notes || null,
+        item.manual_code_entry || false,
+        item.manual_prescribed_code_entry || false,
+        item.prescribed_medication_code || null,
+        item.pharmacist_selection_reason || null,
+        item.pharmacist_substitute || null,
+        item.patient_share || null,
+        item.is_package || false,
+        item.is_maternity || false
       ]);
     }
   }

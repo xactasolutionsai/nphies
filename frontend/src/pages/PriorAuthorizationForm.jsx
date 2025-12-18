@@ -446,9 +446,24 @@ export default function PriorAuthorizationForm() {
       // Filter out parsed items from supporting_info (keep only manual/other entries)
       const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
       
+      // Process items to preserve/infer manual_code_entry flag
+      // If items have medication_code, check if manual_code_entry was saved or infer it
+      const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
+        // If manual_code_entry was explicitly saved as true, use it
+        // Otherwise, infer: if there's a medication_code but it was entered manually (flag saved), keep it
+        const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
+        const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
+        
+        return {
+          ...item,
+          manual_code_entry: hasManualCodeEntry,
+          manual_prescribed_code_entry: hasManualPrescribedCodeEntry
+        };
+      });
+      
       setFormData({
         ...data,
-        items: data.items?.length > 0 ? data.items : [getInitialItemData(1)],
+        items: processedItems,
         diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
         supporting_info: remainingSupportingInfo,
         attachments: data.attachments || [],
