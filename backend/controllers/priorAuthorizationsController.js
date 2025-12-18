@@ -162,7 +162,8 @@ class PriorAuthorizationsController extends BaseController {
         pa.coverage_id, pa.practitioner_id, pa.status, pa.outcome, pa.adjudication_outcome,
         pa.disposition, pa.pre_auth_ref, pa.nphies_request_id, pa.nphies_response_id,
         pa.is_nphies_generated, pa.encounter_class, pa.encounter_start, pa.encounter_end,
-        pa.is_update, pa.related_auth_id, pa.is_transfer, pa.transfer_provider_id,
+        pa.is_update, pa.related_auth_id, pa.is_resubmission, pa.related_claim_identifier,
+        pa.is_transfer, pa.transfer_provider_id,
         pa.transfer_auth_number, pa.transfer_period_start, pa.transfer_period_end,
         pa.is_newborn, pa.birth_weight,
         pa.is_cancelled, pa.cancellation_reason, pa.eligibility_ref, pa.eligibility_offline_ref,
@@ -1595,7 +1596,10 @@ class PriorAuthorizationsController extends BaseController {
         // Lab observations for professional claims (LOINC codes)
         lab_observations: formData.lab_observations || [],
         // Medication safety analysis for pharmacy claims
-        medication_safety_analysis: formData.medication_safety_analysis || null
+        medication_safety_analysis: formData.medication_safety_analysis || null,
+        // Resubmission fields - for rejected/partial authorization resubmission
+        is_resubmission: formData.is_resubmission || false,
+        related_claim_identifier: formData.related_claim_identifier || null
       };
 
       // Build FHIR bundle

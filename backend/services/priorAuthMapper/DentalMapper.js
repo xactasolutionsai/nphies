@@ -263,25 +263,10 @@ class DentalMapper extends BaseMapper {
       }
     };
 
-    if (priorAuth.is_update && priorAuth.pre_auth_ref) {
-      claim.related = [
-        {
-          claim: {
-            identifier: {
-              system: 'http://nphies.sa/identifiers/priorauth',
-              value: priorAuth.pre_auth_ref
-            }
-          },
-          relationship: {
-            coding: [
-              {
-                system: 'http://terminology.hl7.org/CodeSystem/ex-relatedclaimrelationship',
-                code: 'prior'
-              }
-            ]
-          }
-        }
-      ];
+    // Related (for resubmission of rejected/partial authorizations or updates)
+    const related = this.buildClaimRelated(priorAuth, providerIdentifierSystem);
+    if (related) {
+      claim.related = related;
     }
 
     // CareTeam

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -68,8 +68,15 @@ import { TabButton, generateDummyVitalsAndClinical, AIValidationPanel, DrugInter
 
 export default function PriorAuthorizationForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const isEditMode = !!id;
+  
+  // Parse query params for resubmission
+  const queryParams = new URLSearchParams(location.search);
+  const isResubmission = queryParams.get('resubmit') === 'true';
+  const relatedClaimIdentifier = queryParams.get('related_claim_identifier');
+  const sourceId = queryParams.get('source_id');
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -109,6 +116,9 @@ export default function PriorAuthorizationForm() {
   const [showJustificationModal, setShowJustificationModal] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState(null); // 'save' or 'saveAndSend'
   const [drugInteractionJustification, setDrugInteractionJustification] = useState('');
+  
+  // Resubmission state - tracks the original PA being resubmitted
+  const [resubmissionData, setResubmissionData] = useState(null);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -211,8 +221,11 @@ export default function PriorAuthorizationForm() {
     loadReferenceData();
     if (isEditMode) {
       loadPriorAuthorization();
+    } else if (isResubmission && sourceId) {
+      // Load source PA data for resubmission
+      loadSourceForResubmission();
     }
-  }, [id]);
+  }, [id, isResubmission, sourceId]);
 
   // Auto-analyze medication safety when pharmacy items change
   // NOTE: This is disabled when AI_FEATURES_ENABLED is false in api.js
@@ -512,6 +525,143 @@ export default function PriorAuthorizationForm() {
     } catch (error) {
       console.error('Error loading prior authorization:', error);
       alert('Error loading prior authorization');
+      navigate('/prior-authorizations');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Load source PA data for resubmission
+   * Pre-fills the form with the original PA data but creates a new request
+   * linked to the original via Claim.related
+   */
+  const loadSourceForResubmission = async () => {
+    try {
+      setLoading(true);
+      const response = await api.getPriorAuthorization(sourceId);
+      const data = response.data;
+      
+      // Store resubmission metadata
+      setResubmissionData({
+        is_resubmission: true,
+        related_claim_identifier: relatedClaimIdentifier || data.request_number,
+        source_id: sourceId,
+        original_status: data.status,
+        original_outcome: data.outcome
+      });
+      
+      // Parse existing supporting_info into structured fields (same as loadPriorAuthorization)
+      const supportingInfo = data.supporting_info || [];
+      const vitalSigns = {
+        systolic: '', diastolic: '', height: '', weight: '',
+        pulse: '', temperature: '', oxygen_saturation: '', respiratory_rate: '',
+        measurement_time: null
+      };
+      const clinicalInfo = {
+        chief_complaint_format: 'snomed',
+        chief_complaint_code: '', chief_complaint_display: '',
+        chief_complaint_text: '',
+        patient_history: '', history_of_present_illness: '',
+        physical_examination: '', treatment_plan: '',
+        investigation_result: ''
+      };
+      const admissionInfo = {
+        admission_weight: '', estimated_length_of_stay: ''
+      };
+      
+      const parsedCategories = new Set();
+      
+      supportingInfo.forEach(info => {
+        if (info.category === 'vital-signs') {
+          parsedCategories.add('vital-signs');
+          if (info.code === 'systolic') vitalSigns.systolic = info.value;
+          else if (info.code === 'diastolic') vitalSigns.diastolic = info.value;
+          else if (info.code === 'height') vitalSigns.height = info.value;
+          else if (info.code === 'weight') vitalSigns.weight = info.value;
+          else if (info.code === 'pulse') vitalSigns.pulse = info.value;
+          else if (info.code === 'temperature') vitalSigns.temperature = info.value;
+          else if (info.code === 'oxygen-saturation') vitalSigns.oxygen_saturation = info.value;
+          else if (info.code === 'respiratory-rate') vitalSigns.respiratory_rate = info.value;
+          if (info.timing) vitalSigns.measurement_time = new Date(info.timing);
+        } else if (info.category === 'chief-complaint') {
+          parsedCategories.add('chief-complaint');
+          clinicalInfo.chief_complaint_code = info.code || '';
+          clinicalInfo.chief_complaint_display = info.display || '';
+          clinicalInfo.chief_complaint_text = info.value || '';
+        } else if (info.category === 'patient-history') {
+          parsedCategories.add('patient-history');
+          clinicalInfo.patient_history = info.value || '';
+        } else if (info.category === 'history-of-present-illness') {
+          parsedCategories.add('history-of-present-illness');
+          clinicalInfo.history_of_present_illness = info.value || '';
+        } else if (info.category === 'physical-examination') {
+          parsedCategories.add('physical-examination');
+          clinicalInfo.physical_examination = info.value || '';
+        } else if (info.category === 'treatment-plan') {
+          parsedCategories.add('treatment-plan');
+          clinicalInfo.treatment_plan = info.value || '';
+        } else if (info.category === 'investigation-result') {
+          parsedCategories.add('investigation-result');
+          clinicalInfo.investigation_result = info.code || '';
+        } else if (info.category === 'admission-info') {
+          parsedCategories.add('admission-info');
+          if (info.code === 'admission-weight') admissionInfo.admission_weight = info.value;
+          else if (info.code === 'estimated-length-of-stay') admissionInfo.estimated_length_of_stay = info.value;
+        }
+      });
+      
+      const remainingSupportingInfo = supportingInfo.filter(info => 
+        !parsedCategories.has(info.category)
+      );
+      
+      // Process items
+      const processedItems = (data.items || []).map((item, idx) => ({
+        ...getInitialItemData(idx + 1),
+        ...item,
+        sequence: idx + 1
+      }));
+      
+      // Pre-fill form with source data but reset status for new submission
+      setFormData({
+        ...data,
+        id: undefined, // Clear ID - this is a new record
+        request_number: undefined, // Will be generated
+        status: 'draft', // Reset to draft
+        pre_auth_ref: undefined, // Clear payer reference
+        outcome: undefined, // Clear outcome
+        disposition: undefined, // Clear disposition
+        response_date: undefined, // Clear response
+        request_bundle: undefined, // Clear previous bundle
+        response_bundle: undefined, // Clear previous response
+        items: processedItems.length > 0 ? processedItems : [getInitialItemData(1)],
+        diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
+        supporting_info: remainingSupportingInfo,
+        attachments: data.attachments || [],
+        vital_signs: vitalSigns,
+        clinical_info: clinicalInfo,
+        admission_info: admissionInfo,
+        vision_prescription: data.vision_prescription || {
+          product_type: 'lens',
+          date_written: null,
+          prescriber_license: '',
+          right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
+          left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
+        }
+      });
+      
+      // Load coverages for the patient
+      if (data.patient_id) {
+        try {
+          const coveragesRes = await api.getPatientCoverages(data.patient_id);
+          setCoverages(coveragesRes?.data || []);
+        } catch (coverageError) {
+          console.error('Error loading patient coverages:', coverageError);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading source PA for resubmission:', error);
+      alert('Error loading prior authorization for resubmission');
       navigate('/prior-authorizations');
     } finally {
       setLoading(false);
@@ -1148,6 +1298,12 @@ export default function PriorAuthorizationForm() {
         dataToSave.drug_interaction_justification = justification;
         dataToSave.drug_interaction_justification_date = new Date().toISOString();
       }
+      
+      // Include resubmission data if this is a resubmission of a rejected/partial PA
+      if (resubmissionData) {
+        dataToSave.is_resubmission = resubmissionData.is_resubmission;
+        dataToSave.related_claim_identifier = resubmissionData.related_claim_identifier;
+      }
 
       let response;
       if (isEditMode) {
@@ -1234,6 +1390,12 @@ export default function PriorAuthorizationForm() {
       if (justification) {
         dataToSave.drug_interaction_justification = justification;
         dataToSave.drug_interaction_justification_date = new Date().toISOString();
+      }
+      
+      // Include resubmission data if this is a resubmission of a rejected/partial PA
+      if (resubmissionData) {
+        dataToSave.is_resubmission = resubmissionData.is_resubmission;
+        dataToSave.related_claim_identifier = resubmissionData.related_claim_identifier;
       }
 
       // Save first
@@ -1414,11 +1576,21 @@ export default function PriorAuthorizationForm() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {isEditMode ? 'Edit Prior Authorization' : 'New Prior Authorization'}
+              {isEditMode ? 'Edit Prior Authorization' : isResubmission ? 'Resubmit Prior Authorization' : 'New Prior Authorization'}
             </h1>
             <p className="text-gray-600">
-              {isEditMode ? `Request #: ${formData.request_number}` : 'Create a new NPHIES prior authorization request'}
+              {isEditMode 
+                ? `Request #: ${formData.request_number}` 
+                : isResubmission 
+                  ? `Resubmitting rejected/partial authorization: ${relatedClaimIdentifier}`
+                  : 'Create a new NPHIES prior authorization request'}
             </p>
+            {isResubmission && (
+              <Badge className="mt-1 bg-orange-100 text-orange-800 border-orange-300">
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Linked to original: {relatedClaimIdentifier}
+              </Badge>
+            )}
           </div>
         </div>
         <div className="flex gap-2">

@@ -1010,6 +1010,65 @@ class BaseMapper {
   }
 
   // ============================================
+  // CLAIM RELATED BUILDER - For resubmission and update scenarios
+  // ============================================
+
+  /**
+   * Build Claim.related structure for resubmission or update scenarios
+   * 
+   * Resubmission (is_resubmission): When a prior authorization is rejected or partially approved,
+   * a new request can be submitted referencing the original request_number.
+   * Reference: NPHIES Test Case 6 - Rejected Authorization Resubmission
+   * 
+   * Update (is_update): For modifications to an existing authorization using pre_auth_ref.
+   * 
+   * @param {Object} priorAuth - Prior authorization data
+   * @param {string} providerIdentifierSystem - Provider's identifier system URL
+   * @returns {Array|null} Array with related claim structure, or null if not applicable
+   */
+  buildClaimRelated(priorAuth, providerIdentifierSystem) {
+    // Resubmission: rejected/partial authorization being resubmitted
+    // Uses the original request_number (provider's request identifier)
+    if (priorAuth.is_resubmission && priorAuth.related_claim_identifier) {
+      return [{
+        claim: {
+          identifier: {
+            system: `${providerIdentifierSystem}/authorization`,
+            value: priorAuth.related_claim_identifier // original request_number
+          }
+        },
+        relationship: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/ex-relatedclaimrelationship',
+            code: 'prior'
+          }]
+        }
+      }];
+    }
+    
+    // Existing update logic (backward compatible)
+    // Uses the pre_auth_ref (payer's response identifier)
+    if (priorAuth.is_update && priorAuth.pre_auth_ref) {
+      return [{
+        claim: {
+          identifier: {
+            system: 'http://nphies.sa/identifiers/priorauth',
+            value: priorAuth.pre_auth_ref
+          }
+        },
+        relationship: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/ex-relatedclaimrelationship',
+            code: 'prior'
+          }]
+        }
+      }];
+    }
+    
+    return null;
+  }
+
+  // ============================================
   // CLAIM ITEM BUILDER - Base implementation
   // ============================================
 

@@ -11,7 +11,7 @@ import {
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck, Pill,
-  MessageSquare
+  MessageSquare, RotateCcw
 } from 'lucide-react';
 
 // Import AI Medication Safety Panel
@@ -547,6 +547,21 @@ export default function PriorAuthorizationDetails() {
     navigate(`/prior-authorizations/${id}/edit?update=true`);
   };
 
+  /**
+   * Handle resubmission of rejected/partial authorization
+   * Creates a new PA request linked to the original via Claim.related
+   */
+  const handleResubmit = () => {
+    // Navigate to new PA form with resubmission params
+    // The form will use the original request_number as related_claim_identifier
+    const params = new URLSearchParams({
+      resubmit: 'true',
+      related_claim_identifier: priorAuth.request_number,
+      source_id: id
+    });
+    navigate(`/prior-authorizations/new?${params.toString()}`);
+  };
+
   const handleSubmitAsClaim = async () => {
     if (!window.confirm('Create and submit a claim to NPHIES from this approved prior authorization?')) return;
     
@@ -907,6 +922,18 @@ export default function PriorAuthorizationDetails() {
                 Cancel
               </Button>
             </>
+          )}
+          
+          {/* Resubmit button for rejected or partial authorizations */}
+          {(priorAuth.status === 'rejected' || priorAuth.adjudication_outcome === 'partial' || priorAuth.outcome === 'partial') && (
+            <Button 
+              onClick={handleResubmit} 
+              disabled={actionLoading}
+              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Resubmit Authorization
+            </Button>
           )}
         </div>
       </div>

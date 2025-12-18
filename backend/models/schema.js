@@ -412,6 +412,9 @@ export const validationSchemas = {
     // Workflow
     is_update: Joi.boolean().allow(null).optional(),
     related_auth_id: Joi.number().integer().allow(null).optional(),
+    // Resubmission - for rejected/partial authorizations being resubmitted
+    is_resubmission: Joi.boolean().allow(null).optional(),
+    related_claim_identifier: Joi.string().max(255).allow(null, '').optional(),
     is_transfer: Joi.boolean().allow(null).optional(),
     transfer_provider_id: Joi.string().uuid().allow(null, '').optional(),
     transfer_auth_number: Joi.string().max(100).allow(null, '').optional(),
