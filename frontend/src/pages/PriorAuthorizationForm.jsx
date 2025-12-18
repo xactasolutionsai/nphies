@@ -3066,87 +3066,149 @@ export default function PriorAuthorizationForm() {
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Medication *</Label>
-                        <AsyncSelect
-                          value={item.medication_code ? {
-                            value: item.medication_code,
-                            label: `${item.medication_code}${item.medication_name ? ' - ' + item.medication_name : ''}`
-                          } : null}
-                          onChange={(option) => {
-                            // Update medication code
-                            handleItemChange(index, 'medication_code', option?.value || '');
-                            // Auto-fill medication name from selection
-                            if (option?.medication) {
-                              handleItemChange(index, 'medication_name', option.medication.display || '');
-                            } else {
-                              handleItemChange(index, 'medication_name', '');
-                            }
-                          }}
-                          loadOptions={async (inputValue) => {
-                            try {
-                              const results = await api.searchMedicationCodes(inputValue, 50);
-                              return results;
-                            } catch (error) {
-                              console.error('Error loading medications:', error);
-                              return [];
-                            }
-                          }}
-                          defaultOptions
-                          cacheOptions
-                          styles={selectStyles}
-                          placeholder="Search medications by name, code, or ingredient..."
-                          isClearable
-                          isSearchable
-                          menuPortalTarget={document.body}
-                          noOptionsMessage={({ inputValue }) => 
-                            inputValue ? `No medications found for "${inputValue}"` : 'Type to search medications...'
-                          }
-                          loadingMessage={() => 'Searching medications...'}
-                        />
-                        <p className="text-xs text-gray-500">Search by medication name, GTIN code, or ingredient</p>
+                        <div className="flex items-center justify-between">
+                          <Label>Medication Code *</Label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={item.manual_code_entry || false}
+                              onChange={(e) => {
+                                handleItemChange(index, 'manual_code_entry', e.target.checked);
+                                // Clear medication code when switching modes
+                                if (e.target.checked) {
+                                  handleItemChange(index, 'medication_code', '');
+                                  handleItemChange(index, 'medication_name', '');
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                            <span className="text-xs text-purple-700 font-medium">Manual Entry</span>
+                          </label>
+                        </div>
+                        {item.manual_code_entry ? (
+                          <>
+                            <Input
+                              value={item.medication_code || ''}
+                              onChange={(e) => handleItemChange(index, 'medication_code', e.target.value)}
+                              placeholder="Enter GTIN/drug code (e.g., 06285097000056)"
+                              className="font-mono"
+                            />
+                            <p className="text-xs text-purple-600">
+                              Enter the drug code manually. Use codes like 06285097000056 or 99999999999999 for unlisted drugs.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <AsyncSelect
+                              value={item.medication_code ? {
+                                value: item.medication_code,
+                                label: `${item.medication_code}${item.medication_name ? ' - ' + item.medication_name : ''}`
+                              } : null}
+                              onChange={(option) => {
+                                // Update medication code
+                                handleItemChange(index, 'medication_code', option?.value || '');
+                                // Auto-fill medication name from selection
+                                if (option?.medication) {
+                                  handleItemChange(index, 'medication_name', option.medication.display || '');
+                                } else {
+                                  handleItemChange(index, 'medication_name', '');
+                                }
+                              }}
+                              loadOptions={async (inputValue) => {
+                                try {
+                                  const results = await api.searchMedicationCodes(inputValue, 50);
+                                  return results;
+                                } catch (error) {
+                                  console.error('Error loading medications:', error);
+                                  return [];
+                                }
+                              }}
+                              defaultOptions
+                              cacheOptions
+                              styles={selectStyles}
+                              placeholder="Search medications by name, code, or ingredient..."
+                              isClearable
+                              isSearchable
+                              menuPortalTarget={document.body}
+                              noOptionsMessage={({ inputValue }) => 
+                                inputValue ? `No medications found for "${inputValue}"` : 'Type to search medications...'
+                              }
+                              loadingMessage={() => 'Searching medications...'}
+                            />
+                            <p className="text-xs text-gray-500">Search by medication name, GTIN code, or ingredient</p>
+                          </>
+                        )}
                       </div>
                       <div className="space-y-2">
-                        <Label>Medication Name</Label>
+                        <Label>Medication Name {item.manual_code_entry && '*'}</Label>
                         <Input
                           value={item.medication_name || ''}
                           onChange={(e) => handleItemChange(index, 'medication_name', e.target.value)}
-                          placeholder="Auto-filled from selection"
-                          readOnly
-                          className="bg-gray-50"
+                          placeholder={item.manual_code_entry ? "Enter medication name" : "Auto-filled from selection"}
+                          readOnly={!item.manual_code_entry}
+                          className={!item.manual_code_entry ? "bg-gray-50" : ""}
                         />
+                        {item.manual_code_entry && (
+                          <p className="text-xs text-purple-600">Enter the medication/drug name for this code</p>
+                        )}
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Prescribed Medication Code</Label>
-                        <AsyncSelect
-                          value={item.prescribed_medication_code ? {
-                            value: item.prescribed_medication_code,
-                            label: item.prescribed_medication_code
-                          } : null}
-                          onChange={(option) => {
-                            handleItemChange(index, 'prescribed_medication_code', option?.value || '');
-                          }}
-                          loadOptions={async (inputValue) => {
-                            try {
-                              const results = await api.searchMedicationCodes(inputValue, 50);
-                              return results;
-                            } catch (error) {
-                              console.error('Error loading medications:', error);
-                              return [];
+                        <div className="flex items-center justify-between">
+                          <Label>Prescribed Medication Code</Label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={item.manual_prescribed_code_entry || false}
+                              onChange={(e) => {
+                                handleItemChange(index, 'manual_prescribed_code_entry', e.target.checked);
+                                if (e.target.checked) {
+                                  handleItemChange(index, 'prescribed_medication_code', '');
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                            <span className="text-xs text-purple-700 font-medium">Manual</span>
+                          </label>
+                        </div>
+                        {item.manual_prescribed_code_entry ? (
+                          <Input
+                            value={item.prescribed_medication_code || ''}
+                            onChange={(e) => handleItemChange(index, 'prescribed_medication_code', e.target.value)}
+                            placeholder="Enter prescribed drug code"
+                            className="font-mono"
+                          />
+                        ) : (
+                          <AsyncSelect
+                            value={item.prescribed_medication_code ? {
+                              value: item.prescribed_medication_code,
+                              label: item.prescribed_medication_code
+                            } : null}
+                            onChange={(option) => {
+                              handleItemChange(index, 'prescribed_medication_code', option?.value || '');
+                            }}
+                            loadOptions={async (inputValue) => {
+                              try {
+                                const results = await api.searchMedicationCodes(inputValue, 50);
+                                return results;
+                              } catch (error) {
+                                console.error('Error loading medications:', error);
+                                return [];
+                              }
+                            }}
+                            defaultOptions
+                            cacheOptions
+                            styles={selectStyles}
+                            placeholder="Search original prescription..."
+                            isClearable
+                            isSearchable
+                            menuPortalTarget={document.body}
+                            noOptionsMessage={({ inputValue }) => 
+                              inputValue ? `No medications found` : 'Type to search...'
                             }
-                          }}
-                          defaultOptions
-                          cacheOptions
-                          styles={selectStyles}
-                          placeholder="Search original prescription..."
-                          isClearable
-                          isSearchable
-                          menuPortalTarget={document.body}
-                          noOptionsMessage={({ inputValue }) => 
-                            inputValue ? `No medications found` : 'Type to search...'
-                          }
-                        />
+                          />
+                        )}
                         <p className="text-xs text-gray-500">Original prescribed medication (if substituting)</p>
                       </div>
                       <div className="space-y-2">
