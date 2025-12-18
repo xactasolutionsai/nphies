@@ -778,6 +778,26 @@ export default function PriorAuthorizationDetails() {
                 {priorAuth.request_number || `PA-${priorAuth.id}`}
               </h1>
               {getStatusBadge(priorAuth.status)}
+              {/* Show adjudication outcome if different from status and response exists */}
+              {(() => {
+                const adjOutcome = priorAuth.adjudication_outcome || getAdjudicationOutcome();
+                if (!adjOutcome || adjOutcome === priorAuth.status) return null;
+                
+                const adjConfig = {
+                  approved: { className: 'bg-green-500 text-white', label: 'Approved' },
+                  partial: { className: 'bg-orange-500 text-white', label: 'Partial' },
+                  rejected: { className: 'bg-red-500 text-white', label: 'Rejected' },
+                  denied: { className: 'bg-red-500 text-white', label: 'Denied' },
+                  pended: { className: 'bg-yellow-500 text-black', label: 'Pended' }
+                };
+                const config = adjConfig[adjOutcome] || { className: 'bg-gray-500 text-white', label: adjOutcome };
+                
+                return (
+                  <Badge className={`gap-1 text-sm px-2 py-1 ${config.className}`}>
+                    Adjudication: {config.label}
+                  </Badge>
+                );
+              })()}
             </div>
             <p className="text-gray-600 mt-1">
               {getAuthTypeDisplay(priorAuth.auth_type)} Authorization
