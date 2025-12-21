@@ -42,14 +42,31 @@ const PORT = process.env.PORT || 8001;
 app.use(helmet());
 
 // CORS configuration (must be before rate limiting)
-const corsOptions = {
-  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:5173', 'http://localhost:5174'],
+// CORS configuration (FIXED)
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:5175'
+    ];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow server-to-server, Postman, curl
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS blocked: ${origin}`));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
-};
+}));
 
-app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
