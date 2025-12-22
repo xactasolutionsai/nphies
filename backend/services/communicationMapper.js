@@ -1059,12 +1059,16 @@ class CommunicationMapper {
     const timestamp = this.formatDateTime(new Date());
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
     const nphiesBaseURL = process.env.NPHIES_BASE_URL || 'http://176.105.150.83';
-
-    // Use urn:uuid: format for fullUrl values (matching NPHIES specification example)
-    // Example: fullUrl uses "urn:uuid:task-001" while Task.id is "poll-task-001"
-    const taskFullUrl = `urn:uuid:task-001`;
-    const providerOrgFullUrl = `urn:uuid:org-provider-001`;
-    const nphiesOrgFullUrl = 'urn:uuid:org-nphies';
+    
+    // Extract base URL from provider endpoint (remove /fhir if present)
+    // Example: http://provider.com/fhir -> http://provider.com
+    const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
+    
+    // Use absolute URLs for fullUrl values (matching NPHIES specification example)
+    // Example from spec: http://saudigeneralhospital.com.sa/Task/560082
+    const taskFullUrl = `${providerBaseUrl}/Task/${taskId}`;
+    const providerOrgFullUrl = `${providerBaseUrl}/Organization/${providerOrgId}`;
+    const nphiesOrgFullUrl = `${providerBaseUrl}/Organization/NPHIES`;
 
     return {
       resourceType: 'Bundle',
@@ -1096,7 +1100,7 @@ class CommunicationMapper {
               }
             },
             source: {
-              endpoint: providerEndpoint
+              endpoint: providerBaseUrl
             },
             destination: [{
               endpoint: `${nphiesBaseURL}/$process-message`,
@@ -1108,7 +1112,7 @@ class CommunicationMapper {
                 }
               }
             }],
-            // Focus uses full URL (urn:uuid format)
+            // Focus uses full URL matching Task fullUrl exactly
             focus: [{
               reference: taskFullUrl
             }]
@@ -1124,7 +1128,7 @@ class CommunicationMapper {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
             },
             identifier: [{
-              system: 'http://provider.com/fhir/identifiers/poll-request',
+              system: `${providerBaseUrl}/identifiers/poll-request`,
               value: `req_${taskId}`
             }],
             status: 'requested',
@@ -1136,10 +1140,10 @@ class CommunicationMapper {
               }]
             },
             requester: {
-              reference: providerOrgFullUrl
+              reference: `Organization/${providerOrgId}`
             },
             owner: {
-              reference: nphiesOrgFullUrl
+              reference: 'Organization/NPHIES'
             },
             authoredOn: timestamp
           }
@@ -1177,6 +1181,7 @@ class CommunicationMapper {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
             },
             identifier: [{
+              use: 'official',
               system: 'http://nphies.sa/license/nphies',
               value: 'NPHIES'
             }],

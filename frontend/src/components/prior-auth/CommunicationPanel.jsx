@@ -70,12 +70,16 @@ const CommunicationPanel = ({
     const providerEndpoint = 'http://provider.com/fhir';
     const nphiesBaseURL = 'http://176.105.150.83'; // Should match backend env
     const timestamp = new Date().toISOString();
-
-    // Use urn:uuid: format for fullUrl values (matching NPHIES specification example)
-    // Example: fullUrl uses "urn:uuid:task-001" while Task.id is "poll-task-001"
-    const taskFullUrl = 'urn:uuid:task-001';
-    const providerOrgFullUrl = 'urn:uuid:org-provider-001';
-    const nphiesOrgFullUrl = 'urn:uuid:org-nphies';
+    
+    // Extract base URL from provider endpoint (remove /fhir if present)
+    // Example: http://provider.com/fhir -> http://provider.com
+    const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
+    
+    // Use absolute URLs for fullUrl values (matching NPHIES specification example)
+    // Example from spec: http://saudigeneralhospital.com.sa/Task/560082
+    const taskFullUrl = `${providerBaseUrl}/Task/${taskId}`;
+    const providerOrgFullUrl = `${providerBaseUrl}/Organization/${providerOrgId}`;
+    const nphiesOrgFullUrl = `${providerBaseUrl}/Organization/NPHIES`;
 
     return {
       resourceType: 'Bundle',
@@ -107,7 +111,7 @@ const CommunicationPanel = ({
               }
             },
             source: {
-              endpoint: providerEndpoint
+              endpoint: providerBaseUrl
             },
             destination: [{
               endpoint: `${nphiesBaseURL}/$process-message`,
@@ -119,7 +123,7 @@ const CommunicationPanel = ({
                 }
               }
             }],
-            // Focus uses full URL (urn:uuid format)
+            // Focus uses full URL matching Task fullUrl exactly
             focus: [{
               reference: taskFullUrl
             }]
@@ -135,7 +139,7 @@ const CommunicationPanel = ({
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
             },
             identifier: [{
-              system: 'http://provider.com/fhir/identifiers/poll-request',
+              system: `${providerBaseUrl}/identifiers/poll-request`,
               value: `req_${taskId}`
             }],
             status: 'requested',
@@ -147,10 +151,10 @@ const CommunicationPanel = ({
               }]
             },
             requester: {
-              reference: providerOrgFullUrl
+              reference: `Organization/${providerOrgId}`
             },
             owner: {
-              reference: nphiesOrgFullUrl
+              reference: 'Organization/NPHIES'
             },
             authoredOn: timestamp
           }
@@ -188,6 +192,7 @@ const CommunicationPanel = ({
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
             },
             identifier: [{
+              use: 'official',
               system: 'http://nphies.sa/license/nphies',
               value: 'NPHIES'
             }],
