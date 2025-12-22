@@ -970,7 +970,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     const encounterIdentifier = claim.encounter_identifier || 
                                 claim.claim_number || 
                                 `ENC-${encounterId.substring(0, 8)}`;
-    const providerNphiesId = provider?.nphies_id || 'provider';
+    const providerNphiesId = NPHIES_CONFIG.PROVIDER_DOMAIN || 'provider';
 
     // Build extensions based on encounter class
     const extensions = [];

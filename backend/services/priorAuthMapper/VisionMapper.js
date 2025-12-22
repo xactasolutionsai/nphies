@@ -22,6 +22,7 @@
  */
 
 import BaseMapper from './BaseMapper.js';
+import { NPHIES_CONFIG } from '../../config/nphies.js';
 
 class VisionMapper extends BaseMapper {
   constructor() {
@@ -488,7 +489,7 @@ class VisionMapper extends BaseMapper {
       },
       identifier: [
         {
-          system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/prescription`,
+          system: `http://${NPHIES_CONFIG.PROVIDER_DOMAIN || 'provider'}.com.sa/identifiers/prescription`,
           value: prescription.prescription_number || `RX-${prescriptionId.substring(0, 8)}`
         }
       ],

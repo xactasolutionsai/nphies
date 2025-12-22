@@ -440,7 +440,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     const encounterId = bundleResourceIds.encounter;
     const encounterClass = claim.encounter_class || 'daycase';
     const encounterIdentifier = claim.encounter_identifier || claim.claim_number || `ENC-${encounterId.substring(0, 8)}`;
-    const providerNphiesId = provider?.nphies_id || 'provider';
+    const providerNphiesId = NPHIES_CONFIG.PROVIDER_DOMAIN || 'provider';
 
     // Build hospitalization extensions
     const hospitalizationExtensions = [

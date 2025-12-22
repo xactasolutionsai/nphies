@@ -24,6 +24,7 @@
  */
 
 import BaseMapper from './BaseMapper.js';
+import { NPHIES_CONFIG } from '../../config/nphies.js';
 
 class DentalMapper extends BaseMapper {
   constructor() {
@@ -528,7 +529,7 @@ class DentalMapper extends BaseMapper {
       ],
       identifier: [
         {
-          system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/encounter`,
+          system: `http://${NPHIES_CONFIG.PROVIDER_DOMAIN || 'provider'}.com.sa/identifiers/encounter`,
           value: encounterIdentifier
         }
       ],

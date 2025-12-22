@@ -1514,7 +1514,7 @@ class PriorAuthMapper {
       // IC-00183: Encounter identifier is required
       identifier: [
         {
-          system: `http://${provider?.nphies_id || 'provider'}.com.sa/identifiers/encounter`,
+          system: `http://${NPHIES_CONFIG.PROVIDER_DOMAIN || 'provider'}.com.sa/identifiers/encounter`,
           value: encounterIdentifier
         }
       ],
