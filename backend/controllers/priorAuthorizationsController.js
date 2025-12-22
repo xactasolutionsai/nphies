@@ -538,12 +538,13 @@ class PriorAuthorizationsController extends BaseController {
         priorAuth.coverage_id
       );
 
-      // For resubmission, look up the original authorization to get its NPHIES identifier
-      if (priorAuth.is_resubmission && priorAuth.related_auth_id) {
+      // For resubmission, ensure related_claim_identifier is set to the original request_number
+      // This is used to reference the original Claim using its original identifier (provider system + request_number)
+      if (priorAuth.is_resubmission && priorAuth.related_auth_id && !priorAuth.related_claim_identifier) {
         try {
           const originalAuth = await this.getByIdInternal(priorAuth.related_auth_id);
-          if (originalAuth && originalAuth.pre_auth_ref) {
-            priorAuth.related_auth_pre_auth_ref = originalAuth.pre_auth_ref;
+          if (originalAuth && originalAuth.request_number) {
+            priorAuth.related_claim_identifier = originalAuth.request_number;
           }
         } catch (error) {
           console.warn('[sendToNphies] Could not look up original authorization for resubmission:', error.message);
@@ -1632,12 +1633,13 @@ class PriorAuthorizationsController extends BaseController {
         related_auth_id: formData.related_auth_id || formData.source_id || null
       };
 
-      // For resubmission, look up the original authorization to get its NPHIES identifier
-      if (priorAuth.is_resubmission && priorAuth.related_auth_id) {
+      // For resubmission, ensure related_claim_identifier is set to the original request_number
+      // This is used to reference the original Claim using its original identifier (provider system + request_number)
+      if (priorAuth.is_resubmission && priorAuth.related_auth_id && !priorAuth.related_claim_identifier) {
         try {
           const originalAuth = await this.getByIdInternal(priorAuth.related_auth_id);
-          if (originalAuth && originalAuth.pre_auth_ref) {
-            priorAuth.related_auth_pre_auth_ref = originalAuth.pre_auth_ref;
+          if (originalAuth && originalAuth.request_number) {
+            priorAuth.related_claim_identifier = originalAuth.request_number;
           }
         } catch (error) {
           console.warn('[Preview] Could not look up original authorization for resubmission:', error.message);

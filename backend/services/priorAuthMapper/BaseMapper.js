@@ -1033,22 +1033,20 @@ class BaseMapper {
    */
   buildClaimRelated(priorAuth, providerIdentifierSystem) {
     // Resubmission: rejected/partial authorization being resubmitted
-    // MUST use NPHIES identifier system and NPHIES-assigned identifier (pre_auth_ref)
+    // MUST reference the original Claim using its original identifier (provider system + request_number)
     // Error BV-00725: "related claim SHALL refer to an existing claim in nphies"
+    // The referenced claim must use the same identifier that was used in the original Claim.identifier
     if (priorAuth.is_resubmission) {
-      // Priority: Use related_auth_pre_auth_ref if available (from original auth),
-      // otherwise use related_claim_identifier if it's already an NPHIES identifier,
-      // or fallback to pre_auth_ref if this is a resubmission of an existing auth
-      const nphiesIdentifier = priorAuth.related_auth_pre_auth_ref || 
-                               priorAuth.related_claim_identifier || 
-                               priorAuth.pre_auth_ref;
+      // Use the original authorization's request_number with the provider's identifier system
+      // This matches the original Claim.identifier that was sent to NPHIES
+      const originalRequestNumber = priorAuth.related_claim_identifier;
       
-      if (nphiesIdentifier) {
+      if (originalRequestNumber) {
         return [{
           claim: {
             identifier: {
-              system: 'http://nphies.sa/identifiers/priorauth',
-              value: nphiesIdentifier
+              system: `${providerIdentifierSystem}/authorization`,
+              value: originalRequestNumber
             }
           },
           relationship: {
