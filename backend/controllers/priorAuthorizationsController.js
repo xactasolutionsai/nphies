@@ -551,6 +551,19 @@ class PriorAuthorizationsController extends BaseController {
         }
       }
 
+      // For follow-up/update, ensure related_claim_identifier is set to the original request_number
+      // This is used to reference the original Claim using its original identifier (provider system + request_number)
+      if (priorAuth.is_update && priorAuth.related_auth_id && !priorAuth.related_claim_identifier) {
+        try {
+          const originalAuth = await this.getByIdInternal(priorAuth.related_auth_id);
+          if (originalAuth && originalAuth.request_number) {
+            priorAuth.related_claim_identifier = originalAuth.request_number;
+          }
+        } catch (error) {
+          console.warn('[sendToNphies] Could not look up original authorization for follow-up:', error.message);
+        }
+      }
+
       // Build FHIR bundle
       const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
         priorAuth,
@@ -818,10 +831,11 @@ class PriorAuthorizationsController extends BaseController {
         return res.status(404).json({ error: 'Prior authorization not found' });
       }
 
-      // Must have pre_auth_ref to update
-      if (!existing.pre_auth_ref) {
+      // For follow-up/update, we need the original request_number to reference the original Claim
+      // Use the original authorization's request_number for Claim.related reference
+      if (!existing.request_number) {
         return res.status(400).json({ 
-          error: 'Cannot update: no prior authorization reference exists' 
+          error: 'Cannot update: original authorization request_number is required' 
         });
       }
 
@@ -833,7 +847,8 @@ class PriorAuthorizationsController extends BaseController {
         status: 'draft',
         is_update: true,
         related_auth_id: id,
-        pre_auth_ref: existing.pre_auth_ref,
+        related_claim_identifier: existing.request_number, // Original request_number for Claim.related
+        pre_auth_ref: existing.pre_auth_ref, // Keep for reference but not used in Claim.related
         items: items || existing.items,
         supporting_info: supporting_info || existing.supporting_info,
         diagnoses: diagnoses || existing.diagnoses,
@@ -1630,7 +1645,9 @@ class PriorAuthorizationsController extends BaseController {
         // Resubmission fields - for rejected/partial authorization resubmission
         is_resubmission: formData.is_resubmission || false,
         related_claim_identifier: formData.related_claim_identifier || null,
-        related_auth_id: formData.related_auth_id || formData.source_id || null
+        related_auth_id: formData.related_auth_id || formData.source_id || null,
+        // Update/Follow-up fields - for adding services to approved authorization (Use Case 7)
+        is_update: formData.is_update || false
       };
 
       // For resubmission, ensure related_claim_identifier is set to the original request_number
@@ -1643,6 +1660,19 @@ class PriorAuthorizationsController extends BaseController {
           }
         } catch (error) {
           console.warn('[Preview] Could not look up original authorization for resubmission:', error.message);
+        }
+      }
+
+      // For follow-up/update, ensure related_claim_identifier is set to the original request_number
+      // This is used to reference the original Claim using its original identifier (provider system + request_number)
+      if (priorAuth.is_update && priorAuth.related_auth_id && !priorAuth.related_claim_identifier) {
+        try {
+          const originalAuth = await this.getByIdInternal(priorAuth.related_auth_id);
+          if (originalAuth && originalAuth.request_number) {
+            priorAuth.related_claim_identifier = originalAuth.request_number;
+          }
+        } catch (error) {
+          console.warn('[Preview] Could not look up original authorization for follow-up:', error.message);
         }
       }
 

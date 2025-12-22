@@ -11,7 +11,7 @@ import {
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck, Pill,
-  MessageSquare, RotateCcw
+  MessageSquare, RotateCcw, PlusCircle
 } from 'lucide-react';
 
 // Import AI Medication Safety Panel
@@ -562,6 +562,22 @@ export default function PriorAuthorizationDetails() {
     navigate(`/prior-authorizations/new?${params.toString()}`);
   };
 
+  /**
+   * Handle follow-up authorization (Use Case 7)
+   * Creates a new PA request to add services to an approved authorization
+   * Linked to the original via Claim.related with relationship "prior"
+   */
+  const handleFollowUp = () => {
+    // Navigate to new PA form with follow-up params
+    // The form will use the original request_number as related_claim_identifier
+    const params = new URLSearchParams({
+      followup: 'true',
+      related_claim_identifier: priorAuth.request_number,
+      source_id: id
+    });
+    navigate(`/prior-authorizations/new?${params.toString()}`);
+  };
+
   const handleSubmitAsClaim = async () => {
     if (!window.confirm('Create and submit a claim to NPHIES from this approved prior authorization?')) return;
     
@@ -928,6 +944,19 @@ export default function PriorAuthorizationDetails() {
                 Cancel
               </Button>
             </>
+          )}
+          
+          {/* Follow Up button for approved authorizations (Use Case 7) */}
+          {priorAuth.status === 'approved' && (
+            <Button 
+              size="sm"
+              onClick={handleFollowUp} 
+              disabled={actionLoading}
+              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+            >
+              <PlusCircle className="h-4 w-4 mr-1" />
+              Follow Up
+            </Button>
           )}
           
           {/* Resubmit button for rejected or partial authorizations */}

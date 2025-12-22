@@ -1059,23 +1059,33 @@ class BaseMapper {
       }
     }
     
-    // Existing update logic (backward compatible)
-    // Uses the pre_auth_ref (payer's response identifier)
-    if (priorAuth.is_update && priorAuth.pre_auth_ref) {
-      return [{
-        claim: {
-          identifier: {
-            system: 'http://nphies.sa/identifiers/priorauth',
-            value: priorAuth.pre_auth_ref
+    // Follow-up/Update: adding services to an approved authorization (Use Case 7)
+    // MUST reference the original Claim using its original identifier (provider system + request_number)
+    // Error BV-00725: "related claim SHALL refer to an existing claim in nphies"
+    // The referenced claim must use the same identifier that was used in the original Claim.identifier
+    if (priorAuth.is_update) {
+      // Use the original authorization's request_number with the provider's identifier system
+      // This matches the original Claim.identifier that was sent to NPHIES
+      // Priority: Use related_claim_identifier if set, otherwise try to get from related_auth_id context
+      const originalRequestNumber = priorAuth.related_claim_identifier || 
+                                    priorAuth.related_auth_request_number;
+      
+      if (originalRequestNumber) {
+        return [{
+          claim: {
+            identifier: {
+              system: `${providerIdentifierSystem}/authorization`,
+              value: originalRequestNumber
+            }
+          },
+          relationship: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/related-claim-relationship',
+              code: 'prior'
+            }]
           }
-        },
-        relationship: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/related-claim-relationship',
-            code: 'prior'
-          }]
-        }
-      }];
+        }];
+      }
     }
     
     return null;

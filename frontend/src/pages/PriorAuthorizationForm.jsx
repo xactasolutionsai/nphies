@@ -14,7 +14,7 @@ import {
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
   Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
-  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare
+  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle
 } from 'lucide-react';
 
 // Import AI Medication Safety components
@@ -72,9 +72,10 @@ export default function PriorAuthorizationForm() {
   const { id } = useParams();
   const isEditMode = !!id;
   
-  // Parse query params for resubmission
+  // Parse query params for resubmission and follow-up
   const queryParams = new URLSearchParams(location.search);
   const isResubmission = queryParams.get('resubmit') === 'true';
+  const isFollowUp = queryParams.get('followup') === 'true';
   const relatedClaimIdentifier = queryParams.get('related_claim_identifier');
   const sourceId = queryParams.get('source_id');
 
@@ -119,6 +120,8 @@ export default function PriorAuthorizationForm() {
   
   // Resubmission state - tracks the original PA being resubmitted
   const [resubmissionData, setResubmissionData] = useState(null);
+  // Follow-up state - tracks the original PA for follow-up (Use Case 7)
+  const [followUpData, setFollowUpData] = useState(null);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -224,8 +227,11 @@ export default function PriorAuthorizationForm() {
     } else if (isResubmission && sourceId) {
       // Load source PA data for resubmission
       loadSourceForResubmission();
+    } else if (isFollowUp && sourceId) {
+      // Load source PA data for follow-up (Use Case 7)
+      loadSourceForFollowUp();
     }
-  }, [id, isResubmission, sourceId]);
+  }, [id, isResubmission, isFollowUp, sourceId]);
 
   // Auto-analyze medication safety when pharmacy items change
   // NOTE: This is disabled when AI_FEATURES_ENABLED is false in api.js
@@ -685,6 +691,169 @@ export default function PriorAuthorizationForm() {
     } catch (error) {
       console.error('Error loading source PA for resubmission:', error);
       alert('Error loading prior authorization for resubmission');
+      navigate('/prior-authorizations');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Load source PA data for follow-up (Use Case 7)
+   * Pre-fills the form with the original PA data but creates a new request
+   * linked to the original via Claim.related with relationship "prior"
+   * Used for adding services to an approved authorization
+   */
+  const loadSourceForFollowUp = async () => {
+    try {
+      setLoading(true);
+      const response = await api.getPriorAuthorization(sourceId);
+      const data = response.data;
+      
+      // Store follow-up metadata
+      setFollowUpData({
+        is_update: true,
+        related_claim_identifier: relatedClaimIdentifier || data.request_number,
+        related_auth_id: sourceId,
+        original_status: data.status,
+        original_outcome: data.outcome
+      });
+      
+      setResubmissionData(null); // Clear resubmission data if follow-up
+      
+      // Parse existing supporting_info into structured fields
+      // Uses the same logic as loadSourceForResubmission for consistency
+      const supportingInfo = data.supporting_info || [];
+      const vitalSigns = {
+        systolic: '', diastolic: '', height: '', weight: '',
+        pulse: '', temperature: '', oxygen_saturation: '', respiratory_rate: '',
+        measurement_time: null
+      };
+      const clinicalInfo = {
+        chief_complaint_format: 'snomed', // Default format
+        chief_complaint_code: '', chief_complaint_display: '',
+        chief_complaint_text: '', // Free text option
+        patient_history: '', history_of_present_illness: '',
+        physical_examination: '', treatment_plan: '',
+        investigation_result: ''
+      };
+      const admissionInfo = {
+        admission_weight: '', estimated_length_of_stay: ''
+      };
+      
+      // Track which supporting_info items are parsed into structured fields
+      const parsedCategories = new Set();
+      
+      supportingInfo.forEach(info => {
+        // Vital signs - use VITAL_SIGNS_FIELDS constant for proper matching
+        const vitalField = VITAL_SIGNS_FIELDS.find(f => f.category === info.category);
+        if (vitalField && info.value_quantity != null) {
+          vitalSigns[vitalField.key] = String(info.value_quantity);
+          if (info.timing_period_start && !vitalSigns.measurement_time) {
+            vitalSigns.measurement_time = info.timing_period_start;
+          }
+          parsedCategories.add(info.category);
+        }
+        
+        // Clinical text fields - use CLINICAL_TEXT_FIELDS constant
+        const clinicalField = CLINICAL_TEXT_FIELDS.find(f => f.category === info.category);
+        if (clinicalField && info.value_string) {
+          clinicalInfo[clinicalField.key] = info.value_string;
+          parsedCategories.add(info.category);
+        }
+        
+        // Chief complaint - supports both SNOMED code and free text formats
+        if (info.category === 'chief-complaint') {
+          if (info.code_text) {
+            // Free text format
+            clinicalInfo.chief_complaint_format = 'text';
+            clinicalInfo.chief_complaint_text = info.code_text;
+            clinicalInfo.chief_complaint_code = '';
+            clinicalInfo.chief_complaint_display = '';
+          } else if (info.code) {
+            // SNOMED code format
+            clinicalInfo.chief_complaint_format = 'snomed';
+            clinicalInfo.chief_complaint_code = info.code;
+            clinicalInfo.chief_complaint_display = info.code_display || '';
+            clinicalInfo.chief_complaint_text = '';
+          } else if (info.value_string) {
+            // Legacy: value_string format
+            clinicalInfo.chief_complaint_format = 'text';
+            clinicalInfo.chief_complaint_text = info.value_string;
+            clinicalInfo.chief_complaint_code = '';
+            clinicalInfo.chief_complaint_display = '';
+          }
+          parsedCategories.add(info.category);
+        }
+        
+        // Investigation result
+        if (info.category === 'investigation-result' && info.code) {
+          clinicalInfo.investigation_result = info.code;
+          parsedCategories.add(info.category);
+        }
+        
+        // Admission fields - use ADMISSION_FIELDS constant
+        const admissionField = ADMISSION_FIELDS.find(f => f.category === info.category);
+        if (admissionField && info.value_quantity != null) {
+          admissionInfo[admissionField.key] = String(info.value_quantity);
+          parsedCategories.add(info.category);
+        }
+      });
+      
+      // Filter out parsed items from supporting_info (keep only manual/other entries)
+      const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
+      
+      // Process items to preserve/infer manual_code_entry flag
+      const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
+        const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
+        const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
+        
+        return {
+          ...item,
+          manual_code_entry: hasManualCodeEntry,
+          manual_prescribed_code_entry: hasManualPrescribedCodeEntry
+        };
+      });
+      
+      // Pre-fill form with source data but reset status for new submission
+      setFormData({
+        ...data,
+        id: undefined, // Clear ID - this is a new record
+        request_number: undefined, // Will be generated
+        status: 'draft', // Reset to draft
+        pre_auth_ref: undefined, // Clear payer reference (but keep for reference)
+        outcome: undefined, // Clear outcome
+        disposition: undefined, // Clear disposition
+        response_date: undefined, // Clear response
+        request_bundle: undefined, // Clear previous bundle
+        response_bundle: undefined, // Clear previous response
+        items: processedItems,
+        diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
+        supporting_info: remainingSupportingInfo,
+        attachments: data.attachments || [],
+        vital_signs: vitalSigns,
+        clinical_info: clinicalInfo,
+        admission_info: admissionInfo,
+        vision_prescription: data.vision_prescription || {
+          product_type: 'lens',
+          date_written: null,
+          prescriber_license: '',
+          right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
+          left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
+        }
+      });
+      
+      // Load coverages for the patient
+      if (data.patient_id) {
+        try {
+          const coveragesRes = await api.getPatientCoverages(data.patient_id);
+          setCoverages(coveragesRes?.data || []);
+        } catch (coverageError) {
+          console.error('Error loading patient coverages:', coverageError);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading source PA for follow-up:', error);
+      alert('Error loading prior authorization for follow-up');
       navigate('/prior-authorizations');
     } finally {
       setLoading(false);
@@ -1327,6 +1496,13 @@ export default function PriorAuthorizationForm() {
         dataToSave.is_resubmission = resubmissionData.is_resubmission;
         dataToSave.related_claim_identifier = resubmissionData.related_claim_identifier;
       }
+      
+      // Include follow-up data if this is a follow-up (Use Case 7) - adding services to approved authorization
+      if (followUpData) {
+        dataToSave.is_update = followUpData.is_update;
+        dataToSave.related_claim_identifier = followUpData.related_claim_identifier;
+        dataToSave.related_auth_id = followUpData.related_auth_id;
+      }
 
       let response;
       if (isEditMode) {
@@ -1541,10 +1717,18 @@ export default function PriorAuthorizationForm() {
       }
       
       // Include resubmission data if this is a resubmission
-      // This ensures the preview shows the Claim.related structure with ex-relatedclaimrelationship
+      // This ensures the preview shows the Claim.related structure
       if (resubmissionData) {
         dataToPreview.is_resubmission = resubmissionData.is_resubmission;
         dataToPreview.related_claim_identifier = resubmissionData.related_claim_identifier;
+      }
+      
+      // Include follow-up data if this is a follow-up (Use Case 7)
+      // This ensures the preview shows the Claim.related structure
+      if (followUpData) {
+        dataToPreview.is_update = followUpData.is_update;
+        dataToPreview.related_claim_identifier = followUpData.related_claim_identifier;
+        dataToPreview.related_auth_id = followUpData.related_auth_id;
       }
 
       const response = await api.previewPriorAuthorizationBundle(dataToPreview);
@@ -1606,19 +1790,27 @@ export default function PriorAuthorizationForm() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {isEditMode ? 'Edit Prior Authorization' : isResubmission ? 'Resubmit Prior Authorization' : 'New Prior Authorization'}
+              {isEditMode ? 'Edit Prior Authorization' : isResubmission ? 'Resubmit Prior Authorization' : isFollowUp ? 'Follow Up Prior Authorization' : 'New Prior Authorization'}
             </h1>
             <p className="text-gray-600">
               {isEditMode 
                 ? `Request #: ${formData.request_number}` 
                 : isResubmission 
                   ? `Resubmitting rejected/partial authorization: ${relatedClaimIdentifier}`
-                  : 'Create a new NPHIES prior authorization request'}
+                  : isFollowUp
+                    ? `Adding services to approved authorization: ${relatedClaimIdentifier}`
+                    : 'Create a new NPHIES prior authorization request'}
             </p>
             {isResubmission && (
               <Badge className="mt-1 bg-orange-100 text-orange-800 border-orange-300">
-                <RefreshCw className="h-3 w-3 mr-1" />
+                <RotateCcw className="h-3 w-3 mr-1" />
                 Linked to original: {relatedClaimIdentifier}
+              </Badge>
+            )}
+            {isFollowUp && (
+              <Badge className="mt-1 bg-blue-100 text-blue-800 border-blue-300">
+                <PlusCircle className="h-3 w-3 mr-1" />
+                Follow-up to: {relatedClaimIdentifier}
               </Badge>
             )}
           </div>
