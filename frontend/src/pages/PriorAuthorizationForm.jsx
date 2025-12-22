@@ -1596,6 +1596,13 @@ export default function PriorAuthorizationForm() {
         dataToSave.is_resubmission = resubmissionData.is_resubmission;
         dataToSave.related_claim_identifier = resubmissionData.related_claim_identifier;
       }
+      
+      // Include follow-up data if this is a follow-up (Use Case 7) - adding services to approved authorization
+      if (followUpData) {
+        dataToSave.is_update = followUpData.is_update;
+        dataToSave.related_claim_identifier = followUpData.related_claim_identifier;
+        dataToSave.related_auth_id = followUpData.related_auth_id;
+      }
 
       // Save first
       let savedId = id;
