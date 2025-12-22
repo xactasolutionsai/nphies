@@ -55,6 +55,7 @@ const CommunicationPanel = ({
   const [ackPollResult, setAckPollResult] = useState(null);
   const [ackPollJsonCopied, setAckPollJsonCopied] = useState(null); // 'request' or 'response'
   const [pollPreviewCopied, setPollPreviewCopied] = useState(false);
+  const [copiedBundle, setCopiedBundle] = useState(null); // Track which bundle was copied: {commId, type: 'request'|'response'}
 
   // Generate the full Poll Request Bundle that will be sent to NPHIES
   // Based on official NPHIES IG: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
@@ -607,6 +608,44 @@ const CommunicationPanel = ({
   const [pollMetadata, setPollMetadata] = useState(null);
   const [isLoadingPollPreview, setIsLoadingPollPreview] = useState(false);
   const [pollBundleCopied, setPollBundleCopied] = useState(false);
+
+  // Copy request bundle to clipboard
+  const handleCopyRequestBundle = async (comm) => {
+    if (!comm.request_bundle) {
+      setError('No request bundle available');
+      return;
+    }
+    try {
+      const bundleJson = typeof comm.request_bundle === 'string' 
+        ? comm.request_bundle 
+        : JSON.stringify(comm.request_bundle, null, 2);
+      await navigator.clipboard.writeText(bundleJson);
+      setCopiedBundle({ commId: comm.id, type: 'request' });
+      setTimeout(() => setCopiedBundle(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy request bundle:', err);
+      setError('Failed to copy request bundle');
+    }
+  };
+
+  // Copy response bundle to clipboard
+  const handleCopyResponseBundle = async (comm) => {
+    if (!comm.response_bundle) {
+      setError('No response bundle available');
+      return;
+    }
+    try {
+      const bundleJson = typeof comm.response_bundle === 'string' 
+        ? comm.response_bundle 
+        : JSON.stringify(comm.response_bundle, null, 2);
+      await navigator.clipboard.writeText(bundleJson);
+      setCopiedBundle({ commId: comm.id, type: 'response' });
+      setTimeout(() => setCopiedBundle(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy response bundle:', err);
+      setError('Failed to copy response bundle');
+    }
+  };
 
   // Copy JSON to clipboard (uses backend preview)
   const copyJsonToClipboard = async () => {
@@ -1449,6 +1488,28 @@ const CommunicationPanel = ({
                               {pollingAckFor === comm.communication_id ? 'Polling...' : 'Poll Ack'}
                             </button>
                           </>
+                        )}
+                        {/* Copy Request Bundle button */}
+                        {comm.request_bundle && (
+                          <button
+                            onClick={() => handleCopyRequestBundle(comm)}
+                            className="flex items-center px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100 transition-colors"
+                            title="Copy Request Bundle JSON (sent to NPHIES)"
+                          >
+                            <Copy className="w-3 h-3 mr-1" />
+                            {copiedBundle?.commId === comm.id && copiedBundle?.type === 'request' ? '✓ Copied!' : 'Copy Request'}
+                          </button>
+                        )}
+                        {/* Copy Response Bundle button */}
+                        {comm.response_bundle && (
+                          <button
+                            onClick={() => handleCopyResponseBundle(comm)}
+                            className="flex items-center px-2 py-1 text-xs bg-purple-50 text-purple-700 rounded hover:bg-purple-100 transition-colors"
+                            title="Copy Response Bundle JSON (from NPHIES)"
+                          >
+                            <Copy className="w-3 h-3 mr-1" />
+                            {copiedBundle?.commId === comm.id && copiedBundle?.type === 'response' ? '✓ Copied!' : 'Copy Response'}
+                          </button>
                         )}
                         <button
                           onClick={() => handleViewResponse(comm)}
