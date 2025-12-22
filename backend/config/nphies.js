@@ -3,9 +3,13 @@
 // Change DEFAULT_PROVIDER_ID here or via NPHIES_PROVIDER_ID environment variable
 
 export const NPHIES_CONFIG = {
-  // Default Provider ID - Change this value when switching providers
+  // Default Provider ID - Used for NPHIES provider identifier in FHIR resources
   // Current: 1010613708 (was: PR-FHIR)
   DEFAULT_PROVIDER_ID: process.env.NPHIES_PROVIDER_ID || '1010613708',
+  
+  // Provider Domain for URL construction (e.g., http://PR-FHIR.com.sa/...)
+  // This should remain as 'PR-FHIR' for URL construction, separate from the provider ID
+  PROVIDER_DOMAIN: process.env.NPHIES_PROVIDER_DOMAIN || 'PR-FHIR',
   
   // Default Insurer ID for fallback
   DEFAULT_INSURER_ID: process.env.NPHIES_INSURER_ID || 'INS-FHIR',
