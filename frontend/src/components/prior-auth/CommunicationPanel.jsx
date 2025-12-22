@@ -65,7 +65,7 @@ const CommunicationPanel = ({
     const taskId = Date.now().toString(); // Simple numeric ID like in NPHIES example
     const providerOrgId = crypto.randomUUID();
     // Get provider ID from the first communication if available, otherwise use placeholder
-    const providerId = communications?.[0]?.provider_nphies_id || 'PR-FHIR';
+    const providerId = communications?.[0]?.provider_nphies_id || '1010613708';
     const providerName = 'Healthcare Provider';
     const providerEndpoint = 'http://provider.com/fhir';
     const timestamp = new Date().toISOString();
