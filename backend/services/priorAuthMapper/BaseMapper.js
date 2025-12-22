@@ -1018,8 +1018,12 @@ class BaseMapper {
    * Build Claim.related structure for resubmission or update scenarios
    * 
    * Resubmission (is_resubmission): When a prior authorization is rejected or partially approved,
-   * a new request can be submitted referencing the original request_number.
+   * a new request can be submitted referencing the original authorization.
    * Reference: NPHIES Test Case 6 - Rejected Authorization Resubmission
+   * 
+   * IMPORTANT: For resubmission, the related claim MUST refer to an existing claim in NPHIES.
+   * Therefore, we must use the NPHIES identifier system and the original authorization's
+   * NPHIES-assigned identifier (pre_auth_ref), not the provider's request_number.
    * 
    * Update (is_update): For modifications to an existing authorization using pre_auth_ref.
    * 
@@ -1029,22 +1033,32 @@ class BaseMapper {
    */
   buildClaimRelated(priorAuth, providerIdentifierSystem) {
     // Resubmission: rejected/partial authorization being resubmitted
-    // Uses the original request_number (provider's request identifier)
-    if (priorAuth.is_resubmission && priorAuth.related_claim_identifier) {
-      return [{
-        claim: {
-          identifier: {
-            system: `${providerIdentifierSystem}/authorization`,
-            value: priorAuth.related_claim_identifier // original request_number
+    // MUST use NPHIES identifier system and NPHIES-assigned identifier (pre_auth_ref)
+    // Error BV-00725: "related claim SHALL refer to an existing claim in nphies"
+    if (priorAuth.is_resubmission) {
+      // Priority: Use related_auth_pre_auth_ref if available (from original auth),
+      // otherwise use related_claim_identifier if it's already an NPHIES identifier,
+      // or fallback to pre_auth_ref if this is a resubmission of an existing auth
+      const nphiesIdentifier = priorAuth.related_auth_pre_auth_ref || 
+                               priorAuth.related_claim_identifier || 
+                               priorAuth.pre_auth_ref;
+      
+      if (nphiesIdentifier) {
+        return [{
+          claim: {
+            identifier: {
+              system: 'http://nphies.sa/identifiers/priorauth',
+              value: nphiesIdentifier
+            }
+          },
+          relationship: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/related-claim-relationship',
+              code: 'prior'
+            }]
           }
-        },
-        relationship: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/related-claim-relationship',
-            code: 'prior'
-          }]
-        }
-      }];
+        }];
+      }
     }
     
     // Existing update logic (backward compatible)

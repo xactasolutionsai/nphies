@@ -538,6 +538,18 @@ class PriorAuthorizationsController extends BaseController {
         priorAuth.coverage_id
       );
 
+      // For resubmission, look up the original authorization to get its NPHIES identifier
+      if (priorAuth.is_resubmission && priorAuth.related_auth_id) {
+        try {
+          const originalAuth = await this.getByIdInternal(priorAuth.related_auth_id);
+          if (originalAuth && originalAuth.pre_auth_ref) {
+            priorAuth.related_auth_pre_auth_ref = originalAuth.pre_auth_ref;
+          }
+        } catch (error) {
+          console.warn('[sendToNphies] Could not look up original authorization for resubmission:', error.message);
+        }
+      }
+
       // Build FHIR bundle
       const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
         priorAuth,
@@ -1616,8 +1628,21 @@ class PriorAuthorizationsController extends BaseController {
         medication_safety_analysis: formData.medication_safety_analysis || null,
         // Resubmission fields - for rejected/partial authorization resubmission
         is_resubmission: formData.is_resubmission || false,
-        related_claim_identifier: formData.related_claim_identifier || null
+        related_claim_identifier: formData.related_claim_identifier || null,
+        related_auth_id: formData.related_auth_id || formData.source_id || null
       };
+
+      // For resubmission, look up the original authorization to get its NPHIES identifier
+      if (priorAuth.is_resubmission && priorAuth.related_auth_id) {
+        try {
+          const originalAuth = await this.getByIdInternal(priorAuth.related_auth_id);
+          if (originalAuth && originalAuth.pre_auth_ref) {
+            priorAuth.related_auth_pre_auth_ref = originalAuth.pre_auth_ref;
+          }
+        } catch (error) {
+          console.warn('[Preview] Could not look up original authorization for resubmission:', error.message);
+        }
+      }
 
       // Build FHIR bundle
       const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
