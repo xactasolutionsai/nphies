@@ -1123,6 +1123,10 @@ class CommunicationMapper {
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
             },
+            identifier: [{
+              system: 'http://provider.com/fhir/identifiers/poll-request',
+              value: `req_${taskId}`
+            }],
             status: 'requested',
             intent: 'order',
             code: {

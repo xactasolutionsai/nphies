@@ -1,43 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "b48afaf5-5254-4593-b664-7dd0492ac8fb",
-  "meta": {
-    "profile": [
-      "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
-    ]
-  },
+  "id": "a84aabfa-1163-407d-aa38-f8119a0b7aa2",
   "type": "message",
-  "timestamp": "2025-12-22T12:16:31.983Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:35d16575-1a31-40ff-a08b-18680c924571",
+      "fullUrl": "urn:uuid:a7e4caf2-0441-40e5-97d2-5ae180273aa2",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "35d16575-1a31-40ff-a08b-18680c924571",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
-          ]
-        },
         "eventCoding": {
           "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
           "code": "poll-request"
         },
-        "sender": {
-          "type": "Organization",
-          "identifier": {
-            "system": "http://nphies.sa/license/provider-license",
-            "value": "1010613708"
-          }
-        },
-        "source": {
-          "endpoint": "http://provider.com/fhir"
-        },
         "destination": [
           {
-            "endpoint": "http://176.105.150.83/$process-message",
             "receiver": {
-              "type": "Organization",
               "identifier": {
                 "system": "http://nphies.sa/license/nphies",
                 "value": "NPHIES"
@@ -45,23 +21,29 @@
             }
           }
         ],
+        "sender": {
+          "identifier": {
+            "system": "http://nphies.sa/license/provider-license",
+            "value": "PR-FHIR"
+          }
+        },
         "focus": [
           {
-            "reference": "Task/poll-task-1766405791983"
+            "reference": "http://saudigeneralhospital.com.sa/Task/560082"
           }
         ]
       }
     },
     {
-      "fullUrl": "urn:uuid:task-001",
+      "fullUrl": "http://saudigeneralhospital.com.sa/Task/560082",
       "resource": {
         "resourceType": "Task",
-        "id": "poll-task-1766405791983",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0"
-          ]
-        },
+        "identifier": [
+          {
+            "system": "http://saudigeneralhospital.com.sa/identifiers/poll-request",
+            "value": "req_560082"
+          }
+        ],
         "status": "requested",
         "intent": "order",
         "code": {
@@ -73,62 +55,11 @@
           ]
         },
         "requester": {
-          "reference": "Organization/provider-org-1766405791983"
+          "reference": "Organization/saudigeneralhospital"
         },
         "owner": {
           "reference": "Organization/NPHIES"
-        },
-        "authoredOn": "2025-12-22T12:16:31.983Z"
-      }
-    },
-    {
-      "fullUrl": "urn:uuid:org-provider-001",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "provider-org-1766405791983",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
-          ]
-        },
-        "identifier": [
-          {
-            "system": "http://nphies.sa/license/provider-license",
-            "value": "1010613708"
-          }
-        ],
-        "active": true,
-        "type": [
-          {
-            "coding": [
-              {
-                "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-                "code": "prov"
-              }
-            ]
-          }
-        ],
-        "name": "Saudi General Hospital"
-      }
-    },
-    {
-      "fullUrl": "urn:uuid:org-nphies",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "NPHIES",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0"
-          ]
-        },
-        "identifier": [
-          {
-            "system": "http://nphies.sa/license/nphies",
-            "value": "NPHIES"
-          }
-        ],
-        "active": true,
-        "name": "National Program for Health Information Exchange Services"
+        }
       }
     }
   ]
