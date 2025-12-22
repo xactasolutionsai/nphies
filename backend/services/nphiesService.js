@@ -6,6 +6,7 @@
 
 import axios from 'axios';
 import { randomUUID } from 'crypto';
+import { NPHIES_CONFIG } from '../config/nphies.js';
 
 class NphiesService {
   constructor() {
@@ -646,7 +647,7 @@ class NphiesService {
    * @param {string} providerId - The provider's nphies ID
    * @returns {Object} - Response containing any pending PaymentReconciliation bundles
    */
-  async pollPaymentReconciliations(providerId = 'PR-FHIR') {
+  async pollPaymentReconciliations(providerId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID) {
     console.log('[NPHIES] Polling for PaymentReconciliation messages...');
     
     // Build the poll request bundle

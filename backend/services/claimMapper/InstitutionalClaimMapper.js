@@ -27,6 +27,7 @@
  */
 
 import InstitutionalPAMapper from '../priorAuthMapper/InstitutionalMapper.js';
+import { NPHIES_CONFIG } from '../../config/nphies.js';
 
 class InstitutionalClaimMapper extends InstitutionalPAMapper {
   constructor() {
@@ -102,7 +103,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
    */
   buildClaimMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || 'PR-FHIR';
+    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
 
     return {

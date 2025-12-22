@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'crypto';
 import nphiesMapper from '../nphiesMapper.js';
+import { NPHIES_CONFIG } from '../../config/nphies.js';
 
 class BaseClaimMapper {
   constructor() {
@@ -311,7 +312,7 @@ class BaseClaimMapper {
           endpoint: `http://nphies.sa/license/payer-license/${insurer.nphies_id || 'INS-FHIR'}`,
           receiver: { type: 'Organization', identifier: { system: 'http://nphies.sa/license/payer-license', value: insurer.nphies_id || 'INS-FHIR' } }
         }],
-        sender: { type: 'Organization', identifier: { system: 'http://nphies.sa/license/provider-license', value: provider.nphies_id || 'PR-FHIR' } },
+        sender: { type: 'Organization', identifier: { system: 'http://nphies.sa/license/provider-license', value: provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID } },
         source: { endpoint: 'http://provider.com' },
         focus: [{ reference: focusFullUrl }]
       }

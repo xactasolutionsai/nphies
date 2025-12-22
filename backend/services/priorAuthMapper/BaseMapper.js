@@ -6,6 +6,7 @@
 
 import { randomUUID } from 'crypto';
 import nphiesMapper from '../nphiesMapper.js';
+import { NPHIES_CONFIG } from '../../config/nphies.js';
 
 class BaseMapper {
   constructor() {
@@ -820,7 +821,7 @@ class BaseMapper {
    */
   buildMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || 'PR-FHIR';
+    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
 
     return {
@@ -1760,7 +1761,7 @@ class BaseMapper {
           type: 'Organization',
           identifier: {
             system: 'http://nphies.sa/license/provider-license',
-            value: provider.nphies_id || 'PR-FHIR'
+            value: provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID
           }
         },
         source: {

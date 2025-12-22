@@ -6,6 +6,7 @@
 
 import { randomUUID } from 'crypto';
 import nphiesCodeService from './nphiesCodeService.js';
+import { NPHIES_CONFIG } from '../config/nphies.js';
 
 class NphiesMapper {
   constructor() {
@@ -273,8 +274,8 @@ class NphiesMapper {
    */
   buildProviderOrganization(provider) {
     const providerId = (provider.provider_id || provider.providerId)?.toString() || this.generateId();
-    // Static NPHIES test ID for now (TODO: use database value in production)
-    const nphiesId = 'PR-FHIR';
+    // Use centralized NPHIES Provider ID from config
+    const nphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     const providerName = provider.provider_name || provider.providerName || provider.name || 'Provider Organization';
     const rawProviderType = provider.provider_type || provider.providerType || '1';
 
@@ -701,8 +702,8 @@ class NphiesMapper {
    */
   buildMessageHeader(eventCode, sender, destination, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    // Static NPHIES test IDs for now (TODO: use database values in production)
-    const senderNphiesId = 'PR-FHIR';
+    // Use centralized NPHIES Provider ID from config
+    const senderNphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     const destinationNphiesId = 'INS-FHIR';
 
     return {

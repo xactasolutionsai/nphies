@@ -12,6 +12,7 @@
 import { query, transaction } from '../db.js';
 import { randomUUID } from 'crypto';
 import NphiesService from './nphiesService.js';
+import { NPHIES_CONFIG } from '../config/nphies.js';
 
 // nphies Extension URLs
 const EXTENSION_URLS = {
@@ -945,12 +946,12 @@ class PaymentReconciliationService {
               endpoint: `http://insurer.nphies.sa/${claim.insurer_nphies_id || 'INS-FHIR'}`
             },
             destination: [{
-              endpoint: `http://provider.nphies.sa/${claim.provider_nphies_id || 'PR-FHIR'}`,
+              endpoint: `http://provider.nphies.sa/${claim.provider_nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID}`,
               receiver: {
                 type: 'Organization',
                 identifier: {
                   system: 'http://nphies.sa/license/provider-license',
-                  value: claim.provider_nphies_id || 'PR-FHIR'
+                  value: claim.provider_nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID
                 }
               }
             }],
@@ -996,7 +997,7 @@ class PaymentReconciliationService {
               type: 'Organization',
               identifier: {
                 system: 'http://nphies.sa/license/provider-license',
-                value: claim.provider_nphies_id || 'PR-FHIR'
+                value: claim.provider_nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID
               },
               display: claim.provider_name || 'Healthcare Provider'
             },
@@ -1028,7 +1029,7 @@ class PaymentReconciliationService {
                   reference: `Claim/${claim.id}`,
                   type: 'Claim',
                   identifier: {
-                    system: `http://provider.nphies.sa/${claim.provider_nphies_id || 'PR-FHIR'}/claim`,
+                    system: `http://provider.nphies.sa/${claim.provider_nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID}/claim`,
                     value: claim.claim_number
                   }
                 },
@@ -1223,12 +1224,12 @@ class PaymentReconciliationService {
               endpoint: `http://insurer.nphies.sa/${claim.insurer_nphies_id || 'INS-FHIR'}`
             },
             destination: [{
-              endpoint: `http://provider.nphies.sa/${claim.provider_nphies_id || 'PR-FHIR'}`,
+              endpoint: `http://provider.nphies.sa/${claim.provider_nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID}`,
               receiver: {
                 type: 'Organization',
                 identifier: {
                   system: 'http://nphies.sa/license/provider-license',
-                  value: claim.provider_nphies_id || 'PR-FHIR'
+                  value: claim.provider_nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID
                 }
               }
             }],
@@ -1270,7 +1271,7 @@ class PaymentReconciliationService {
               type: 'Organization',
               identifier: {
                 system: 'http://nphies.sa/license/provider-license',
-                value: claim.provider_nphies_id || 'PR-FHIR'
+                value: claim.provider_nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID
               },
               display: claim.provider_name || 'Healthcare Provider'
             },
@@ -1302,7 +1303,7 @@ class PaymentReconciliationService {
                   reference: `Claim/${claim.id}`,
                   type: 'Claim',
                   identifier: {
-                    system: `http://provider.nphies.sa/${claim.provider_nphies_id || 'PR-FHIR'}/claim`,
+                    system: `http://provider.nphies.sa/${claim.provider_nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID}/claim`,
                     value: claim.claim_number
                   }
                 },
@@ -1372,7 +1373,7 @@ class PaymentReconciliationService {
       const providerResult = await query(
         `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
       );
-      providerId = providerResult.rows[0]?.nphies_id || 'PR-FHIR';
+      providerId = providerResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     }
     
     // Build the poll request bundle using NphiesService
@@ -1398,7 +1399,7 @@ class PaymentReconciliationService {
       const providerResult = await query(
         `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
       );
-      providerId = providerResult.rows[0]?.nphies_id || 'PR-FHIR';
+      providerId = providerResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     }
     
     // 2. Poll NPHIES for pending messages
@@ -1508,7 +1509,7 @@ class PaymentReconciliationService {
       const providerResult = await query(
         `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
       );
-      providerId = providerResult.rows[0]?.nphies_id || 'PR-FHIR';
+      providerId = providerResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     }
     
     // 4. Build the Payment Notice bundle
@@ -1562,7 +1563,7 @@ class PaymentReconciliationService {
       const providerResult = await query(
         `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
       );
-      providerId = providerResult.rows[0]?.nphies_id || 'PR-FHIR';
+      providerId = providerResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     }
     
     // 3. Build the Payment Notice bundle

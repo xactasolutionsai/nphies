@@ -38,6 +38,7 @@
  */
 
 import VisionPAMapper from '../priorAuthMapper/VisionMapper.js';
+import { NPHIES_CONFIG } from '../../config/nphies.js';
 
 class VisionClaimMapper extends VisionPAMapper {
   constructor() {
@@ -111,7 +112,7 @@ class VisionClaimMapper extends VisionPAMapper {
    */
   buildClaimMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || 'PR-FHIR';
+    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
 
     return {

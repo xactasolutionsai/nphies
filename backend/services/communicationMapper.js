@@ -18,6 +18,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { NPHIES_CONFIG } from '../config/nphies.js';
 
 class CommunicationMapper {
   constructor() {
@@ -180,7 +181,7 @@ class CommunicationMapper {
    */
   buildProviderOrganizationResource(provider) {
     const providerId = provider.provider_id?.toString() || this.generateId();
-    const nphiesId = provider.nphies_id || 'PR-FHIR';
+    const nphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     const providerName = provider.provider_name || provider.name || 'Provider Organization';
     const providerType = provider.provider_type || '1';
 
@@ -851,7 +852,7 @@ class CommunicationMapper {
         type: 'Organization',
         identifier: {
           system: 'http://nphies.sa/license/provider-license',
-          value: provider.nphies_id || 'PR-FHIR'
+          value: provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID
         }
       },
       // Recipient (HIC/Insurer) - references Organization in bundle
@@ -974,7 +975,7 @@ class CommunicationMapper {
    */
   buildCommunicationMessageHeader({ provider, insurer, focusFullUrl }) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || 'PR-FHIR';
+    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
 
     return {

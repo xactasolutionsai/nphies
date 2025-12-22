@@ -38,6 +38,7 @@
  */
 
 import DentalMapper from '../priorAuthMapper/DentalMapper.js';
+import { NPHIES_CONFIG } from '../../config/nphies.js';
 
 class OralClaimMapper extends DentalMapper {
   constructor() {
@@ -117,7 +118,7 @@ class OralClaimMapper extends DentalMapper {
    */
   buildClaimMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || 'PR-FHIR';
+    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
 
     return {
