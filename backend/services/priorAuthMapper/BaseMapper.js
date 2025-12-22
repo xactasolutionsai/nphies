@@ -1040,7 +1040,7 @@ class BaseMapper {
         },
         relationship: {
           coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/ex-relatedclaimrelationship',
+            system: 'http://nphies.sa/terminology/CodeSystem/related-claim-relationship',
             code: 'prior'
           }]
         }
@@ -1059,7 +1059,7 @@ class BaseMapper {
         },
         relationship: {
           coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/ex-relatedclaimrelationship',
+            system: 'http://nphies.sa/terminology/CodeSystem/related-claim-relationship',
             code: 'prior'
           }]
         }
