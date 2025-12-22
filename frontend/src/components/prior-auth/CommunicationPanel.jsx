@@ -1776,8 +1776,56 @@ const CommunicationPanel = ({
                       <p className="font-medium text-green-600">{formatDate(selectedCommunication.acknowledgment_at)}</p>
                     </div>
                   )}
+                  {selectedCommunication.created_at && (
+                    <div>
+                      <span className="text-gray-500">Created At:</span>
+                      <p className="font-medium text-gray-600">{formatDate(selectedCommunication.created_at)}</p>
+                    </div>
+                  )}
+                  {selectedCommunication.updated_at && (
+                    <div>
+                      <span className="text-gray-500">Updated At:</span>
+                      <p className="font-medium text-gray-600">{formatDate(selectedCommunication.updated_at)}</p>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Related References */}
+              {(selectedCommunication.claim_id || selectedCommunication.patient_id || selectedCommunication.based_on_request_id || selectedCommunication.based_on_request_nphies_id) && (
+                <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                  <h4 className="text-sm font-semibold text-purple-700 mb-3 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Related References
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    {selectedCommunication.claim_id && (
+                      <div>
+                        <span className="text-gray-500">Claim ID:</span>
+                        <p className="font-mono text-purple-800 break-all text-xs">{selectedCommunication.claim_id}</p>
+                      </div>
+                    )}
+                    {selectedCommunication.patient_id && (
+                      <div>
+                        <span className="text-gray-500">Patient ID:</span>
+                        <p className="font-mono text-purple-800 break-all text-xs">{selectedCommunication.patient_id}</p>
+                      </div>
+                    )}
+                    {selectedCommunication.based_on_request_id && (
+                      <div>
+                        <span className="text-gray-500">Based On Request ID:</span>
+                        <p className="font-mono text-purple-800 break-all text-xs">{selectedCommunication.based_on_request_id}</p>
+                      </div>
+                    )}
+                    {selectedCommunication.based_on_request_nphies_id && (
+                      <div>
+                        <span className="text-gray-500">Based On Request NPHIES ID:</span>
+                        <p className="font-mono text-purple-800 break-all text-xs">{selectedCommunication.based_on_request_nphies_id}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* About Reference */}
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
@@ -1847,17 +1895,50 @@ const CommunicationPanel = ({
                           </p>
                         )}
                         {payload.content_type === 'attachment' && (
-                          <div className="flex items-center text-sm text-gray-700">
-                            <Paperclip className="w-4 h-4 mr-2 text-gray-400" />
-                            <span>{payload.attachment_title || 'Attachment'}</span>
-                            {payload.attachment_content_type && (
-                              <span className="ml-2 text-xs text-gray-500">({payload.attachment_content_type})</span>
+                          <div className="space-y-2">
+                            <div className="flex items-center text-sm text-gray-700">
+                              <Paperclip className="w-4 h-4 mr-2 text-gray-400" />
+                              <span>{payload.attachment_title || 'Attachment'}</span>
+                              {payload.attachment_content_type && (
+                                <span className="ml-2 text-xs text-gray-500">({payload.attachment_content_type})</span>
+                              )}
+                            </div>
+                            {payload.attachment_size && (
+                              <p className="text-xs text-gray-500">
+                                Size: {(payload.attachment_size / 1024).toFixed(2)} KB
+                              </p>
+                            )}
+                            {payload.attachment_url && (
+                              <p className="text-xs text-gray-500 break-all">
+                                URL: <a href={payload.attachment_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{payload.attachment_url}</a>
+                              </p>
+                            )}
+                            {payload.attachment_hash && (
+                              <p className="text-xs text-gray-500 font-mono">
+                                Hash: {payload.attachment_hash}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {(payload.reference_value || payload.reference_type) && (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-xs text-gray-500 mb-1">Reference:</p>
+                            {payload.reference_type && (
+                              <p className="text-xs text-gray-600">Type: {payload.reference_type}</p>
+                            )}
+                            {payload.reference_value && (
+                              <p className="text-xs text-gray-600 font-mono break-all">Value: {payload.reference_value}</p>
                             )}
                           </div>
                         )}
                         {payload.claim_item_sequences && payload.claim_item_sequences.length > 0 && (
                           <p className="text-xs text-gray-500 mt-2">
                             Related items: #{payload.claim_item_sequences.join(', #')}
+                          </p>
+                        )}
+                        {payload.created_at && (
+                          <p className="text-xs text-gray-400 mt-2">
+                            Created: {formatDate(payload.created_at)}
                           </p>
                         )}
                       </div>
@@ -1942,6 +2023,30 @@ const CommunicationPanel = ({
                       </div>
                     );
                   })()}
+                </div>
+              )}
+
+              {/* Acknowledgment Bundle */}
+              {selectedCommunication.acknowledgment_bundle && (
+                <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                  <h4 className="text-sm font-semibold text-amber-700 mb-3 flex items-center">
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Acknowledgment Bundle
+                  </h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Full acknowledgment bundle received from NPHIES
+                  </p>
+                  <button
+                    onClick={() => {
+                      setPreviewJson(selectedCommunication.acknowledgment_bundle);
+                      setPreviewMetadata(null);
+                      setShowJsonPreview(true);
+                    }}
+                    className="flex items-center px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors text-sm"
+                  >
+                    <Code className="w-4 h-4 mr-2" />
+                    View Acknowledgment Bundle JSON
+                  </button>
                 </div>
               )}
 
