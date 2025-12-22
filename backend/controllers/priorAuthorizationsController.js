@@ -4,6 +4,7 @@ import { validationSchemas } from '../models/schema.js';
 import priorAuthMapper, { getMapper } from '../services/priorAuthMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
 import communicationService from '../services/communicationService.js';
+import CommunicationMapper from '../services/communicationMapper.js';
 
 class PriorAuthorizationsController extends BaseController {
   constructor() {
@@ -1138,11 +1139,11 @@ class PriorAuthorizationsController extends BaseController {
       const providerNphiesId = providerResult.rows[0]?.provider_nphies_id;
       const providerName = providerResult.rows[0]?.provider_name;
 
-      // Build poll bundle (same as what poll() would send)
-      const pollBundle = nphiesService.buildPriorAuthPollBundle(
+      // Build poll bundle using Task-based structure (per NPHIES specification)
+      const communicationMapper = new CommunicationMapper();
+      const pollBundle = communicationMapper.buildPollRequestBundle(
         providerNphiesId,
-        ['priorauth-response', 'communication-request', 'communication'],
-        existing.nphies_request_id || existing.request_number
+        providerName || 'Healthcare Provider'
       );
 
       res.json({

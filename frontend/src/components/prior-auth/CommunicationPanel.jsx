@@ -62,18 +62,20 @@ const CommunicationPanel = ({
   const generatePollRequestBundle = () => {
     const bundleId = crypto.randomUUID();
     const messageHeaderId = crypto.randomUUID();
-    const taskId = Date.now().toString(); // Simple numeric ID like in NPHIES example
-    const providerOrgId = crypto.randomUUID();
+    const taskId = `poll-task-${Date.now()}`; // Simple ID format like in NPHIES example
+    const providerOrgId = `provider-org-${Date.now()}`; // Simple ID format for provider org
     // Get provider ID from the first communication if available, otherwise use placeholder
     const providerId = communications?.[0]?.provider_nphies_id || '1010613708';
     const providerName = 'Healthcare Provider';
     const providerEndpoint = 'http://provider.com/fhir';
+    const nphiesBaseURL = 'http://176.105.150.83'; // Should match backend env
     const timestamp = new Date().toISOString();
 
-    // Use provider endpoint URLs for resources (matching official NPHIES example)
-    const taskFullUrl = `${providerEndpoint}/Task/${taskId}`;
-    const providerOrgFullUrl = `${providerEndpoint}/Organization/${providerOrgId}`;
-    const nphiesOrgFullUrl = `${providerEndpoint}/Organization/NPHIES`;
+    // Use urn:uuid: format for fullUrl values (matching NPHIES specification example)
+    // Example: fullUrl uses "urn:uuid:task-001" while Task.id is "poll-task-001"
+    const taskFullUrl = 'urn:uuid:task-001';
+    const providerOrgFullUrl = 'urn:uuid:org-provider-001';
+    const nphiesOrgFullUrl = 'urn:uuid:org-nphies';
 
     return {
       resourceType: 'Bundle',
@@ -97,16 +99,6 @@ const CommunicationPanel = ({
               system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
               code: 'poll-request'
             },
-            destination: [{
-              endpoint: 'https://nphies.sa/fhir/$process-message',
-              receiver: {
-                type: 'Organization',
-                identifier: {
-                  system: 'http://nphies.sa/license/nphies',
-                  value: 'NPHIES'
-                }
-              }
-            }],
             sender: {
               type: 'Organization',
               identifier: {
@@ -117,13 +109,23 @@ const CommunicationPanel = ({
             source: {
               endpoint: providerEndpoint
             },
-            // Focus references the Task using its fullUrl
+            destination: [{
+              endpoint: `${nphiesBaseURL}/$process-message`,
+              receiver: {
+                type: 'Organization',
+                identifier: {
+                  system: 'http://nphies.sa/license/nphies',
+                  value: 'NPHIES'
+                }
+              }
+            }],
+            // Focus uses relative reference (matching NPHIES example)
             focus: [{
-              reference: taskFullUrl
+              reference: `Task/${taskId}`
             }]
           }
         },
-        // 2. Task (poll-request)
+        // 2. Task (poll-request) - minimal fields only
         {
           fullUrl: taskFullUrl,
           resource: {
@@ -132,32 +134,24 @@ const CommunicationPanel = ({
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
             },
-            identifier: [{
-              system: `${providerEndpoint}/identifiers/poll-request`,
-              value: `req_${taskId}`
-            }],
             status: 'requested',
             intent: 'order',
-            priority: 'routine',
             code: {
               coding: [{
                 system: 'http://nphies.sa/terminology/CodeSystem/task-code',
                 code: 'poll'
               }]
             },
-            authoredOn: timestamp,
-            lastModified: timestamp,
-            // Requester references Provider Organization
             requester: {
               reference: `Organization/${providerOrgId}`
             },
-            // Owner references NPHIES Organization
             owner: {
               reference: 'Organization/NPHIES'
-            }
+            },
+            authoredOn: timestamp
           }
         },
-        // 3. Provider Organization (with required extension-provider-type)
+        // 3. Provider Organization - simplified (no extension, no address)
         {
           fullUrl: providerOrgFullUrl,
           resource: {
@@ -166,17 +160,6 @@ const CommunicationPanel = ({
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
             },
-            // Required extension for provider-organization profile
-            extension: [{
-              url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type',
-              valueCodeableConcept: {
-                coding: [{
-                  system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
-                  code: '1',
-                  display: 'Hospital'
-                }]
-              }
-            }],
             identifier: [{
               system: 'http://nphies.sa/license/provider-license',
               value: providerId
@@ -188,14 +171,10 @@ const CommunicationPanel = ({
                 code: 'prov'
               }]
             }],
-            name: providerName,
-            address: [{
-              use: 'work',
-              text: 'Saudi Arabia'
-            }]
+            name: providerName
           }
         },
-        // 4. NPHIES Organization
+        // 4. NPHIES Organization - simplified (no use field in identifier)
         {
           fullUrl: nphiesOrgFullUrl,
           resource: {
@@ -205,7 +184,6 @@ const CommunicationPanel = ({
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
             },
             identifier: [{
-              use: 'official',
               system: 'http://nphies.sa/license/nphies',
               value: 'NPHIES'
             }],

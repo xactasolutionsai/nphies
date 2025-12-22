@@ -1054,16 +1054,17 @@ class CommunicationMapper {
   buildPollRequestBundle(providerId, providerName = 'Healthcare Provider', providerType = '1') {
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
-    const taskId = Date.now().toString(); // Simple numeric ID like in NPHIES example
-    const providerOrgId = this.generateId();
+    const taskId = `poll-task-${Date.now()}`; // Simple ID format like in NPHIES example
+    const providerOrgId = `provider-org-${Date.now()}`; // Simple ID format for provider org
     const timestamp = this.formatDateTime(new Date());
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
+    const nphiesBaseURL = process.env.NPHIES_BASE_URL || 'http://176.105.150.83';
 
-    // Use provider endpoint URLs for resources (matching official NPHIES example)
-    // https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
-    const taskFullUrl = `${providerEndpoint}/Task/${taskId}`;
-    const providerOrgFullUrl = `${providerEndpoint}/Organization/${providerOrgId}`;
-    const nphiesOrgFullUrl = `${providerEndpoint}/Organization/NPHIES`;
+    // Use urn:uuid: format for fullUrl values (matching NPHIES specification example)
+    // Example: fullUrl uses "urn:uuid:task-001" while Task.id is "poll-task-001"
+    const taskFullUrl = `urn:uuid:task-001`;
+    const providerOrgFullUrl = `urn:uuid:org-provider-001`;
+    const nphiesOrgFullUrl = 'urn:uuid:org-nphies';
 
     return {
       resourceType: 'Bundle',
@@ -1087,16 +1088,6 @@ class CommunicationMapper {
               system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
               code: 'poll-request'
             },
-            destination: [{
-              endpoint: 'https://nphies.sa/fhir/$process-message',
-              receiver: {
-                type: 'Organization',
-                identifier: {
-                  system: 'http://nphies.sa/license/nphies',
-                  value: 'NPHIES'
-                }
-              }
-            }],
             sender: {
               type: 'Organization',
               identifier: {
@@ -1107,13 +1098,23 @@ class CommunicationMapper {
             source: {
               endpoint: providerEndpoint
             },
-            // Focus references the Task using its fullUrl
+            destination: [{
+              endpoint: `${nphiesBaseURL}/$process-message`,
+              receiver: {
+                type: 'Organization',
+                identifier: {
+                  system: 'http://nphies.sa/license/nphies',
+                  value: 'NPHIES'
+                }
+              }
+            }],
+            // Focus uses relative reference (matching NPHIES example)
             focus: [{
-              reference: taskFullUrl
+              reference: `Task/${taskId}`
             }]
           }
         },
-        // 2. Task (poll-request)
+        // 2. Task (poll-request) - minimal fields only
         {
           fullUrl: taskFullUrl,
           resource: {
@@ -1122,32 +1123,24 @@ class CommunicationMapper {
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
             },
-            identifier: [{
-              system: `${providerEndpoint}/identifiers/poll-request`,
-              value: `req_${taskId}`
-            }],
             status: 'requested',
             intent: 'order',
-            priority: 'routine',
             code: {
               coding: [{
                 system: 'http://nphies.sa/terminology/CodeSystem/task-code',
                 code: 'poll'
               }]
             },
-            authoredOn: timestamp,
-            lastModified: timestamp,
-            // Requester references Provider Organization
             requester: {
               reference: `Organization/${providerOrgId}`
             },
-            // Owner references NPHIES Organization
             owner: {
               reference: 'Organization/NPHIES'
-            }
+            },
+            authoredOn: timestamp
           }
         },
-        // 3. Provider Organization (with required extension-provider-type)
+        // 3. Provider Organization - simplified (no extension, no address)
         {
           fullUrl: providerOrgFullUrl,
           resource: {
@@ -1156,17 +1149,6 @@ class CommunicationMapper {
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
             },
-            // Required extension for provider-organization profile
-            extension: [{
-              url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type',
-              valueCodeableConcept: {
-                coding: [{
-                  system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
-                  code: providerType,
-                  display: providerType === '1' ? 'Hospital' : 'Clinic'
-                }]
-              }
-            }],
             identifier: [{
               system: 'http://nphies.sa/license/provider-license',
               value: providerId
@@ -1178,14 +1160,10 @@ class CommunicationMapper {
                 code: 'prov'
               }]
             }],
-            name: providerName,
-            address: [{
-              use: 'work',
-              text: 'Saudi Arabia'
-            }]
+            name: providerName
           }
         },
-        // 4. NPHIES Organization
+        // 4. NPHIES Organization - simplified (no use field in identifier)
         {
           fullUrl: nphiesOrgFullUrl,
           resource: {
@@ -1195,7 +1173,6 @@ class CommunicationMapper {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
             },
             identifier: [{
-              use: 'official',
               system: 'http://nphies.sa/license/nphies',
               value: 'NPHIES'
             }],
@@ -1248,22 +1225,23 @@ class CommunicationMapper {
    * @param {Array} messageTypes - Message types to poll for
    * @returns {Object} FHIR Bundle
    */
-  buildPriorAuthPollBundle(providerId, requestIdentifier, messageTypes = ['priorauth-response', 'communication-request', 'communication']) {
-    const bundle = this.buildPollRequestBundle(providerId, messageTypes, 50);
-    
-    // Add request identifier filter
-    const parameters = bundle.entry.find(e => e.resource?.resourceType === 'Parameters');
-    if (parameters) {
-      parameters.resource.parameter.push({
-        name: 'request-identifier',
-        valueIdentifier: {
-          system: 'http://provider.com/prior-auth',
-          value: requestIdentifier
-        }
-      });
-    }
-
-    return bundle;
+  /**
+   * Build Prior Auth Poll Bundle (for backwards compatibility)
+   * 
+   * @deprecated This method signature is maintained for backwards compatibility.
+   * The Task-based poll structure doesn't support messageTypes or requestIdentifier filters.
+   * Use buildPollRequestBundle() directly instead.
+   * 
+   * @param {string} providerId - Provider NPHIES ID
+   * @param {string} requestIdentifier - Ignored (not in Task structure)
+   * @param {Array} messageTypes - Ignored (not in Task structure)
+   * @param {string} providerName - Provider organization name (optional)
+   * @returns {Object} FHIR Bundle for poll request
+   */
+  buildPriorAuthPollBundle(providerId, requestIdentifier, messageTypes = ['priorauth-response', 'communication-request', 'communication'], providerName = 'Healthcare Provider') {
+    // Task-based poll structure doesn't support filtering by messageTypes or requestIdentifier
+    // Delegate to buildPollRequestBundle which uses the correct Task structure
+    return this.buildPollRequestBundle(providerId, providerName);
   }
 
   // ============================================================================

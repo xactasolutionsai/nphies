@@ -744,7 +744,7 @@ class CommunicationService {
 
       // 1. Get Prior Authorization
       const paResult = await client.query(`
-        SELECT pa.*, pr.nphies_id as provider_nphies_id
+        SELECT pa.*, pr.nphies_id as provider_nphies_id, pr.provider_name
         FROM prior_authorizations pa
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
         WHERE pa.id = $1
@@ -756,11 +756,10 @@ class CommunicationService {
 
       const priorAuth = paResult.rows[0];
 
-      // 2. Build poll request
-      const pollBundle = nphiesService.buildPriorAuthPollBundle(
+      // 2. Build poll request using Task-based structure (per NPHIES specification)
+      const pollBundle = this.mapper.buildPollRequestBundle(
         priorAuth.provider_nphies_id,
-        ['priorauth-response', 'communication-request', 'communication'],
-        priorAuth.nphies_request_id || priorAuth.request_number
+        priorAuth.provider_name || 'Healthcare Provider'
       );
 
       // 3. Send poll request

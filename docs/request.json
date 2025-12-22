@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "4fb93fe6-c58b-4328-ac87-444b49aa1b19",
+  "id": "poll-bundle-001",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-17T15:38:00.289Z",
+  "timestamp": "2025-12-22T12:00:00Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:b05b788c-b018-42cb-9cf1-28be95e69ff3",
+      "fullUrl": "urn:uuid:msg-001",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "b05b788c-b018-42cb-9cf1-28be95e69ff3",
+        "id": "msg-001",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -23,9 +23,19 @@
           "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
           "code": "poll-request"
         },
+        "sender": {
+          "type": "Organization",
+          "identifier": {
+            "system": "http://nphies.sa/license/provider-license",
+            "value": "1010613708"
+          }
+        },
+        "source": {
+          "endpoint": "http://provider.com/fhir"
+        },
         "destination": [
           {
-            "endpoint": "https://nphies.sa/fhir/$process-message",
+            "endpoint": "http://176.105.150.83/$process-message",
             "receiver": {
               "type": "Organization",
               "identifier": {
@@ -35,42 +45,25 @@
             }
           }
         ],
-        "sender": {
-          "type": "Organization",
-          "identifier": {
-            "system": "http://nphies.sa/license/provider-license",
-            "value": "PR-FHIR"
-          }
-        },
-        "source": {
-          "endpoint": "http://provider.com/fhir"
-        },
         "focus": [
           {
-            "reference": "urn:uuid:aedc5fd7-39b6-456d-9d80-8a066c7cd987"
+            "reference": "Task/poll-task-001"
           }
         ]
       }
     },
     {
-      "fullUrl": "urn:uuid:aedc5fd7-39b6-456d-9d80-8a066c7cd987",
+      "fullUrl": "urn:uuid:task-001",
       "resource": {
         "resourceType": "Task",
-        "id": "aedc5fd7-39b6-456d-9d80-8a066c7cd987",
+        "id": "poll-task-001",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0"
           ]
         },
-        "identifier": [
-          {
-            "system": "http://provider.com/fhir/identifiers/poll-request",
-            "value": "poll_1765985880289"
-          }
-        ],
         "status": "requested",
         "intent": "order",
-        "priority": "routine",
         "code": {
           "coding": [
             {
@@ -79,44 +72,29 @@
             }
           ]
         },
-        "authoredOn": "2025-12-17T15:38:00.289Z",
-        "lastModified": "2025-12-17T15:38:00.289Z",
         "requester": {
-          "reference": "urn:uuid:45078eb5-6ef8-43aa-a7f1-eb35e8b40de9"
+          "reference": "Organization/provider-org-001"
         },
         "owner": {
-          "reference": "urn:uuid:nphies-org"
-        }
+          "reference": "Organization/NPHIES"
+        },
+        "authoredOn": "2025-12-22T12:00:00Z"
       }
     },
     {
-      "fullUrl": "urn:uuid:45078eb5-6ef8-43aa-a7f1-eb35e8b40de9",
+      "fullUrl": "urn:uuid:org-provider-001",
       "resource": {
         "resourceType": "Organization",
-        "id": "45078eb5-6ef8-43aa-a7f1-eb35e8b40de9",
+        "id": "provider-org-001",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
           ]
         },
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
-            "valueCodeableConcept": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                  "code": "1",
-                  "display": "Hospital"
-                }
-              ]
-            }
-          }
-        ],
         "identifier": [
           {
             "system": "http://nphies.sa/license/provider-license",
-            "value": "PR-FHIR"
+            "value": "1010613708"
           }
         ],
         "active": true,
@@ -134,7 +112,7 @@
       }
     },
     {
-      "fullUrl": "urn:uuid:nphies-org",
+      "fullUrl": "urn:uuid:org-nphies",
       "resource": {
         "resourceType": "Organization",
         "id": "NPHIES",
@@ -145,7 +123,6 @@
         },
         "identifier": [
           {
-            "use": "official",
             "system": "http://nphies.sa/license/nphies",
             "value": "NPHIES"
           }

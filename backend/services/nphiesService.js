@@ -7,6 +7,7 @@
 import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { NPHIES_CONFIG } from '../config/nphies.js';
+import CommunicationMapper from './communicationMapper.js';
 
 class NphiesService {
   constructor() {
@@ -1128,92 +1129,24 @@ class NphiesService {
   /**
    * Build a Poll Request bundle for Prior Authorization messages
    * 
+   * @deprecated This method used the wrong structure (Parameters instead of Task).
+   * Use CommunicationMapper.buildPollRequestBundle() instead, which follows NPHIES specification.
+   * 
+   * This method now delegates to CommunicationMapper for backwards compatibility.
+   * 
    * @param {string} providerId - Provider NPHIES ID
-   * @param {Array} messageTypes - Message types to poll for
-   * @param {string} requestIdentifier - Optional: filter by request identifier
-   * @param {number} count - Max messages to retrieve
+   * @param {Array} messageTypes - Message types to poll for (ignored - not in Task structure)
+   * @param {string} requestIdentifier - Optional: filter by request identifier (ignored - not in Task structure)
+   * @param {number} count - Max messages to retrieve (ignored - not in Task structure)
+   * @param {string} providerName - Provider organization name (optional)
    * @returns {Object} FHIR Bundle for poll request
    */
-  buildPriorAuthPollBundle(providerId, messageTypes = ['priorauth-response', 'communication-request', 'communication'], requestIdentifier = null, count = 50) {
-    const bundleId = randomUUID();
-    const messageHeaderId = randomUUID();
-    const parametersId = randomUUID();
-
-    const parameters = [
-      ...messageTypes.map(type => ({
-        name: 'message-type',
-        valueCode: type
-      })),
-      {
-        name: 'count',
-        valueInteger: count
-      }
-    ];
-
-    // Add request identifier filter if provided
-    if (requestIdentifier) {
-      parameters.push({
-        name: 'request-identifier',
-        valueIdentifier: {
-          system: 'http://provider.com/prior-auth',
-          value: requestIdentifier
-        }
-      });
-    }
-
-    return {
-      resourceType: 'Bundle',
-      id: bundleId,
-      meta: {
-        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
-      },
-      type: 'message',
-      timestamp: new Date().toISOString(),
-      entry: [
-        {
-          fullUrl: `urn:uuid:${messageHeaderId}`,
-          resource: {
-            resourceType: 'MessageHeader',
-            id: messageHeaderId,
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
-            },
-            eventCoding: {
-              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
-              code: 'poll'
-            },
-            source: {
-              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com'
-            },
-            destination: [{
-              endpoint: 'http://nphies.sa',
-              receiver: {
-                type: 'Organization',
-                identifier: {
-                  system: 'http://nphies.sa/license/nphies-license',
-                  value: 'nphies'
-                }
-              }
-            }],
-            sender: {
-              type: 'Organization',
-              identifier: {
-                system: 'http://nphies.sa/license/provider-license',
-                value: providerId
-              }
-            }
-          }
-        },
-        {
-          fullUrl: `urn:uuid:${parametersId}`,
-          resource: {
-            resourceType: 'Parameters',
-            id: parametersId,
-            parameter: parameters
-          }
-        }
-      ]
-    };
+  buildPriorAuthPollBundle(providerId, messageTypes = ['priorauth-response', 'communication-request', 'communication'], requestIdentifier = null, count = 50, providerName = 'Healthcare Provider') {
+    // Delegate to CommunicationMapper which uses the correct Task-based structure
+    // Note: messageTypes, requestIdentifier, and count are not part of the Task-based poll structure
+    // They were from the old Parameters-based approach which was incorrect
+    const mapper = new CommunicationMapper();
+    return mapper.buildPollRequestBundle(providerId, providerName);
   }
 
   /**
