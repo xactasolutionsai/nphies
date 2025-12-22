@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "9f781bc2-adce-4d81-a271-a061734b2678",
+    "id": "60e4681c-1a17-4ead-8f55-17238cfccdf3",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-22T15:52:41.068+03:00",
+    "timestamp": "2025-12-22T16:17:52.064+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/bce332db-72a9-4618-8a41-3b8b10076c34",
+            "fullUrl": "http://nphies.sa/MessageHeader/4264902b-2c9c-418f-8ed1-4a8fbd961624",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "bce332db-72a9-4618-8a41-3b8b10076c34",
+                "id": "4264902b-2c9c-418f-8ed1-4a8fbd961624",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -25,7 +25,7 @@
                 },
                 "destination": [
                     {
-                        "endpoint": "http://provider.com/fhir",
+                        "endpoint": "http://provider.com",
                         "receiver": {
                             "type": "Organization",
                             "identifier": {
@@ -46,16 +46,16 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "4c95dc23-287c-475c-81aa-96797c01c277",
+                    "identifier": "961b8342-4e68-4220-a68b-6058b234bac6",
                     "code": "fatal-error"
                 }
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Task/f3d70925-81f3-4514-b56d-b26df6600181",
+            "fullUrl": "http://nphies.sa/Task/a5eae535-0907-42e1-978d-21edc60122a3",
             "resource": {
                 "resourceType": "Task",
-                "id": "f3d70925-81f3-4514-b56d-b26df6600181",
+                "id": "a5eae535-0907-42e1-978d-21edc60122a3",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0"
@@ -69,8 +69,8 @@
                 },
                 "identifier": [
                     {
-                        "system": "http://provider.com/fhir/identifiers/poll-request",
-                        "value": "870"
+                        "system": "http://provider.com/identifiers/poll-request",
+                        "value": "533"
                     }
                 ],
                 "status": "failed",
@@ -83,9 +83,9 @@
                         }
                     ]
                 },
-                "authoredOn": "2025-12-22T12:52:35.868Z",
+                "authoredOn": "2025-12-22T13:17:40.214Z",
                 "requester": {
-                    "reference": "urn:uuid:org-provider-001"
+                    "reference": "Organization/provider-org-1766409460214"
                 },
                 "owner": {
                     "identifier": {
@@ -198,10 +198,10 @@
             }
         },
         {
-            "fullUrl": "urn:uuid:org-provider-001",
+            "fullUrl": "http://provider.com/Organization/provider-org-1766409460214",
             "resource": {
                 "resourceType": "Organization",
-                "id": "provider-org-1766407955868",
+                "id": "provider-org-1766409460214",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
@@ -228,7 +228,7 @@
             }
         },
         {
-            "fullUrl": "urn:uuid:org-nphies",
+            "fullUrl": "http://provider.com/Organization/NPHIES",
             "resource": {
                 "resourceType": "Organization",
                 "id": "NPHIES",
@@ -239,6 +239,7 @@
                 },
                 "identifier": [
                     {
+                        "use": "official",
                         "system": "http://nphies.sa/license/nphies",
                         "value": "NPHIES"
                     }

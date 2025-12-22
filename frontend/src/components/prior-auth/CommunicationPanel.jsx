@@ -62,7 +62,8 @@ const CommunicationPanel = ({
   const generatePollRequestBundle = () => {
     const bundleId = crypto.randomUUID();
     const messageHeaderId = crypto.randomUUID();
-    const taskId = `poll-task-${Date.now()}`; // Simple ID format like in NPHIES example
+    // Use simple numeric ID format matching NPHIES example (e.g., "560082")
+    const taskId = `${Date.now()}`;
     const providerOrgId = `provider-org-${Date.now()}`; // Simple ID format for provider org
     // Get provider ID from the first communication if available, otherwise use placeholder
     const providerId = communications?.[0]?.provider_nphies_id || '1010613708';

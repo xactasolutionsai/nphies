@@ -1054,7 +1054,8 @@ class CommunicationMapper {
   buildPollRequestBundle(providerId, providerName = 'Healthcare Provider', providerType = '1') {
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
-    const taskId = `poll-task-${Date.now()}`; // Simple ID format like in NPHIES example
+    // Use simple numeric ID format matching NPHIES example (e.g., "560082")
+    const taskId = `${Date.now()}`;
     const providerOrgId = `provider-org-${Date.now()}`; // Simple ID format for provider org
     const timestamp = this.formatDateTime(new Date());
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
@@ -1129,7 +1130,7 @@ class CommunicationMapper {
             },
             identifier: [{
               system: `${providerBaseUrl}/identifiers/poll-request`,
-              value: `req_${taskId}`
+              value: `req_${taskId}` // Matches NPHIES example format: "req_" + Task.id
             }],
             status: 'requested',
             intent: 'order',
