@@ -119,9 +119,9 @@ const CommunicationPanel = ({
                 }
               }
             }],
-            // Focus uses relative reference (matching NPHIES example)
+            // Focus uses full URL (urn:uuid format)
             focus: [{
-              reference: `Task/${taskId}`
+              reference: taskFullUrl
             }]
           }
         },
@@ -143,10 +143,10 @@ const CommunicationPanel = ({
               }]
             },
             requester: {
-              reference: `Organization/${providerOrgId}`
+              reference: providerOrgFullUrl
             },
             owner: {
-              reference: 'Organization/NPHIES'
+              reference: nphiesOrgFullUrl
             },
             authoredOn: timestamp
           }
