@@ -609,22 +609,75 @@ const CommunicationPanel = ({
   const [isLoadingPollPreview, setIsLoadingPollPreview] = useState(false);
   const [pollBundleCopied, setPollBundleCopied] = useState(false);
 
-  // Copy request bundle to clipboard
+  // Copy request bundle to clipboard (Postman-ready format)
   const handleCopyRequestBundle = async (comm) => {
     if (!comm.request_bundle) {
       setError('No request bundle available');
       return;
     }
     try {
-      const bundleJson = typeof comm.request_bundle === 'string' 
-        ? comm.request_bundle 
-        : JSON.stringify(comm.request_bundle, null, 2);
-      await navigator.clipboard.writeText(bundleJson);
+      // Parse bundle if it's a string
+      const bundle = typeof comm.request_bundle === 'string' 
+        ? JSON.parse(comm.request_bundle) 
+        : comm.request_bundle;
+      
+      const bundleJsonString = JSON.stringify(bundle, null, 2);
+      
+      // NPHIES endpoint (default test environment)
+      const nphiesBaseUrl = 'http://176.105.150.83';
+      const endpoint = `${nphiesBaseUrl}/$process-message`;
+      
+      // Create Postman collection format (can be imported directly into Postman)
+      const postmanCollection = {
+        info: {
+          name: `NPHIES Communication Request - ${comm.communication_id?.slice(0, 8) || 'Communication'}`,
+          description: 'Exact request sent to NPHIES for this communication',
+          schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+        },
+        item: [
+          {
+            name: 'Send Communication to NPHIES',
+            request: {
+              method: 'POST',
+              header: [
+                {
+                  key: 'Content-Type',
+                  value: 'application/fhir+json',
+                  type: 'text'
+                },
+                {
+                  key: 'Accept',
+                  value: 'application/fhir+json',
+                  type: 'text'
+                }
+              ],
+              body: {
+                mode: 'raw',
+                raw: bundleJsonString,
+                options: {
+                  raw: {
+                    language: 'json'
+                  }
+                }
+              },
+              url: {
+                raw: endpoint,
+                protocol: 'http',
+                host: ['176', '105', '150', '83'],
+                path: ['$process-message']
+              }
+            }
+          }
+        ]
+      };
+      
+      // Copy the Postman collection JSON (can be imported directly into Postman)
+      await navigator.clipboard.writeText(JSON.stringify(postmanCollection, null, 2));
       setCopiedBundle({ commId: comm.id, type: 'request' });
       setTimeout(() => setCopiedBundle(null), 2000);
     } catch (err) {
       console.error('Failed to copy request bundle:', err);
-      setError('Failed to copy request bundle');
+      setError('Failed to copy request bundle: ' + (err.message || 'Unknown error'));
     }
   };
 
