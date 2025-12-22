@@ -1140,10 +1140,26 @@ class PriorAuthorizationsController extends BaseController {
       const providerName = providerResult.rows[0]?.provider_name;
 
       // Build poll bundle using Task-based structure (per NPHIES specification)
+      // Include focus to poll for specific authorization (Task-560083 pattern)
       const communicationMapper = new CommunicationMapper();
+      const providerDomain = communicationMapper.extractProviderDomain(providerName || 'Healthcare Provider');
+      const authReference = communicationMapper.getNphiesAuthReference(existing);
+      
+      const pollOptions = {
+        focus: {
+          type: 'Claim',
+          identifier: {
+            system: `http://${providerDomain}/identifiers/authorization`,
+            value: authReference
+          }
+        }
+      };
+
       const pollBundle = communicationMapper.buildPollRequestBundle(
         providerNphiesId,
-        providerName || 'Healthcare Provider'
+        providerName || 'Healthcare Provider',
+        undefined, // providerType (not needed for poll)
+        pollOptions
       );
 
       res.json({

@@ -1037,8 +1037,10 @@ class CommunicationMapper {
   /**
    * Build Poll Request Bundle for NPHIES
    * 
-   * Based on official NPHIES IG example:
-   * https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
+   * Based on official NPHIES IG examples:
+   * - Task-560081: Basic poll request
+   * - Task-560082: Poll with input filters (count, exclude-message-type)
+   * - Task-560083: Poll with focus (specific authorization)
    * 
    * NPHIES Poll uses a FHIR Message Bundle with:
    * - MessageHeader with eventCoding: 'poll-request'
@@ -1049,9 +1051,33 @@ class CommunicationMapper {
    * 
    * @param {string} providerId - Provider license ID
    * @param {string} providerName - Provider organization name (optional)
+   * @param {string} providerType - Provider type code (optional, default '1')
+   * @param {Object} options - Optional polling parameters
+   * @param {Object} options.focus - Focus on specific resource (Task-560083 pattern)
+   *   - type: Resource type (e.g., "Claim")
+   *   - identifier: { system: string, value: string }
+   * @param {Object} options.input - Input filters (Task-560082 pattern)
+   *   - count: Number of messages to retrieve (default: 50)
+   *   - excludeMessageTypes: Array of message types to exclude
    * @returns {Object} FHIR Bundle for poll request
    */
-  buildPollRequestBundle(providerId, providerName = 'Healthcare Provider', providerType = '1') {
+  /**
+   * Extract provider domain from provider name for identifier system
+   * Converts "Saudi General Hospital" -> "saudigeneralhospital.com.sa"
+   */
+  extractProviderDomain(providerName) {
+    if (!providerName || providerName === 'Healthcare Provider') {
+      return 'provider.com.sa';
+    }
+    // Convert to lowercase, remove special chars, replace spaces with nothing
+    const domain = providerName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, '');
+    return `${domain}.com.sa`;
+  }
+
+  buildPollRequestBundle(providerId, providerName = 'Healthcare Provider', providerType = '1', options = {}) {
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
     // Use simple numeric ID format matching NPHIES example (e.g., "560082")
@@ -1064,6 +1090,9 @@ class CommunicationMapper {
     // Extract base URL from provider endpoint (remove /fhir if present)
     // Example: http://provider.com/fhir -> http://provider.com
     const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
+    
+    // Extract provider domain for identifier system (matching NPHIES examples)
+    const providerDomain = this.extractProviderDomain(providerName);
     
     // Use absolute URLs for fullUrl values (matching NPHIES specification example)
     // Example from spec: http://saudigeneralhospital.com.sa/Task/560082
@@ -1119,7 +1148,7 @@ class CommunicationMapper {
             }]
           }
         },
-        // 2. Task (poll-request) - minimal fields only
+        // 2. Task (poll-request) - matches NPHIES examples (Task-560081, Task-560082, Task-560083)
         {
           fullUrl: taskFullUrl,
           resource: {
@@ -1128,12 +1157,15 @@ class CommunicationMapper {
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
             },
+            // Identifier system format matches NPHIES examples (e.g., http://saudigeneralhospital.com.sa/identifiers/poll-request)
             identifier: [{
-              system: `${providerBaseUrl}/identifiers/poll-request`,
+              system: `http://${providerDomain}/identifiers/poll-request`,
               value: `req_${taskId}` // Matches NPHIES example format: "req_" + Task.id
             }],
             status: 'requested',
             intent: 'order',
+            // Priority field present in all NPHIES examples
+            priority: 'routine',
             code: {
               coding: [{
                 system: 'http://nphies.sa/terminology/CodeSystem/task-code',
@@ -1146,7 +1178,46 @@ class CommunicationMapper {
             owner: {
               reference: 'Organization/NPHIES'
             },
-            authoredOn: timestamp
+            authoredOn: timestamp,
+            // lastModified field present in all NPHIES examples (matches authoredOn)
+            lastModified: timestamp,
+            // Optional focus field (Task-560083 pattern) - for polling specific authorization
+            ...(options.focus && {
+              focus: {
+                type: options.focus.type || 'Claim',
+                identifier: {
+                  system: options.focus.identifier?.system || `http://${providerDomain}/identifiers/authorization`,
+                  value: options.focus.identifier?.value
+                }
+              }
+            }),
+            // Optional input field (Task-560082 pattern) - for filtering poll results
+            ...(options.input && {
+              input: [
+                // Count input (limit number of messages)
+                ...(options.input.count !== undefined ? [{
+                  type: {
+                    coding: [{
+                      system: 'http://nphies.sa/terminology/CodeSystem/task-input-type',
+                      code: 'count'
+                    }]
+                  },
+                  valuePositiveInt: options.input.count
+                }] : []),
+                // Exclude message types input
+                ...(options.input.excludeMessageTypes && Array.isArray(options.input.excludeMessageTypes) && options.input.excludeMessageTypes.length > 0
+                  ? options.input.excludeMessageTypes.map(msgType => ({
+                      type: {
+                        coding: [{
+                          system: 'http://nphies.sa/terminology/CodeSystem/task-input-type',
+                          code: 'exclude-message-type'
+                        }]
+                      },
+                      valueCode: msgType
+                    }))
+                  : [])
+              ].filter(item => item !== null && item !== undefined)
+            })
           }
         },
         // 3. Provider Organization - simplified (no extension, no address)

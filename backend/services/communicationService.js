@@ -757,9 +757,25 @@ class CommunicationService {
       const priorAuth = paResult.rows[0];
 
       // 2. Build poll request using Task-based structure (per NPHIES specification)
+      // Optionally include focus to poll for specific authorization (Task-560083 pattern)
+      const providerDomain = this.mapper.extractProviderDomain(priorAuth.provider_name || 'Healthcare Provider');
+      const authReference = this.mapper.getNphiesAuthReference(priorAuth);
+      
+      const pollOptions = {
+        focus: {
+          type: 'Claim',
+          identifier: {
+            system: `http://${providerDomain}/identifiers/authorization`,
+            value: authReference
+          }
+        }
+      };
+
       const pollBundle = this.mapper.buildPollRequestBundle(
         priorAuth.provider_nphies_id,
-        priorAuth.provider_name || 'Healthcare Provider'
+        priorAuth.provider_name || 'Healthcare Provider',
+        undefined, // providerType (not needed for poll)
+        pollOptions
       );
 
       // 3. Send poll request
