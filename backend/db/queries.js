@@ -50,6 +50,358 @@ export const queries = {
       FROM authorizations
       ORDER BY created_at DESC
       LIMIT 20
+    `,
+
+    // Comprehensive dashboard queries
+    GET_DAILY_TRENDS: `
+      SELECT 
+        DATE_TRUNC('day', submission_date) as date,
+        COUNT(*) as claim_count,
+        SUM(COALESCE(amount, 0)) as claim_amount
+      FROM claims
+      WHERE submission_date >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE_TRUNC('day', submission_date)
+      ORDER BY date DESC
+    `,
+
+    GET_PAYMENT_TRENDS: `
+      SELECT 
+        DATE_TRUNC('day', payment_date) as date,
+        COUNT(*) as payment_count,
+        SUM(COALESCE(amount, 0)) as payment_amount
+      FROM payments
+      WHERE payment_date >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE_TRUNC('day', payment_date)
+      ORDER BY date DESC
+    `,
+
+    GET_MONTHLY_TRENDS: `
+      SELECT 
+        DATE_TRUNC('month', submission_date) as month,
+        COUNT(*) as claim_count,
+        SUM(COALESCE(amount, 0)) as claim_amount
+      FROM claims
+      WHERE submission_date >= CURRENT_DATE - INTERVAL '12 months'
+      GROUP BY DATE_TRUNC('month', submission_date)
+      ORDER BY month DESC
+    `,
+
+    GET_PROVIDER_PERFORMANCE: `
+      SELECT 
+        p.provider_id,
+        p.provider_name,
+        COUNT(c.claim_id) as total_claims,
+        SUM(COALESCE(c.amount, 0)) as total_amount,
+        COUNT(CASE WHEN c.status = 'Paid' THEN 1 END) as paid_claims,
+        ROUND(100.0 * COUNT(CASE WHEN c.status = 'Paid' THEN 1 END) / NULLIF(COUNT(c.claim_id), 0), 2) as approval_rate
+      FROM providers p
+      LEFT JOIN claims c ON p.provider_id = c.provider_id
+      GROUP BY p.provider_id, p.provider_name
+      HAVING COUNT(c.claim_id) > 0
+      ORDER BY total_amount DESC
+      LIMIT 10
+    `,
+
+    GET_INSURER_PERFORMANCE: `
+      SELECT 
+        i.insurer_id,
+        i.insurer_name,
+        COUNT(c.claim_id) as total_claims,
+        SUM(COALESCE(c.amount, 0)) as total_amount,
+        COUNT(CASE WHEN c.status = 'Paid' THEN 1 END) as paid_claims,
+        ROUND(100.0 * COUNT(CASE WHEN c.status = 'Paid' THEN 1 END) / NULLIF(COUNT(c.claim_id), 0), 2) as approval_rate,
+        COALESCE(SUM(p.amount), 0) as total_payments
+      FROM insurers i
+      LEFT JOIN claims c ON i.insurer_id = c.insurer_id
+      LEFT JOIN payments p ON i.insurer_id = p.insurer_id
+      GROUP BY i.insurer_id, i.insurer_name
+      HAVING COUNT(c.claim_id) > 0 OR SUM(p.amount) > 0
+      ORDER BY total_amount DESC
+      LIMIT 10
+    `,
+
+    GET_AUTHORIZATIONS_BY_STATUS: `
+      SELECT status, COUNT(*) as count
+      FROM prior_authorizations
+      GROUP BY status
+      ORDER BY count DESC
+    `,
+
+    GET_ELIGIBILITY_BY_STATUS: `
+      SELECT status, COUNT(*) as count
+      FROM eligibility
+      GROUP BY status
+      ORDER BY count DESC
+    `,
+
+    GET_AUTHORIZATIONS_BY_TYPE: `
+      SELECT 
+        auth_type,
+        COUNT(*) as count,
+        COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_count,
+        COUNT(CASE WHEN status = 'denied' THEN 1 END) as denied_count
+      FROM prior_authorizations
+      GROUP BY auth_type
+      ORDER BY count DESC
+    `,
+
+    GET_OUTSTANDING_CLAIMS: `
+      SELECT 
+        i.insurer_name,
+        COUNT(c.claim_id) as claim_count,
+        SUM(COALESCE(c.amount, 0)) as outstanding_amount
+      FROM claims c
+      LEFT JOIN insurers i ON c.insurer_id = i.insurer_id
+      WHERE c.status NOT IN ('Paid', 'Finalized')
+      GROUP BY i.insurer_name
+      ORDER BY outstanding_amount DESC
+    `,
+
+    GET_TOP_PATIENTS: `
+      SELECT 
+        p.patient_id,
+        p.name,
+        COUNT(c.claim_id) as claim_count,
+        SUM(COALESCE(c.amount, 0)) as total_amount
+      FROM patients p
+      LEFT JOIN claims c ON p.patient_id = c.patient_id
+      GROUP BY p.patient_id, p.name
+      HAVING COUNT(c.claim_id) > 0
+      ORDER BY claim_count DESC
+      LIMIT 5
+    `,
+
+    GET_FINANCIAL_SUMMARY: `
+      SELECT 
+        COALESCE(SUM(c.amount), 0) as total_claims_amount,
+        COALESCE(SUM(CASE WHEN c.status = 'Paid' THEN c.amount ELSE 0 END), 0) as paid_claims_amount,
+        COALESCE(SUM(CASE WHEN c.status NOT IN ('Paid', 'Finalized') THEN c.amount ELSE 0 END), 0) as outstanding_amount,
+        COALESCE((SELECT SUM(amount) FROM payments), 0) as total_payments,
+        COALESCE(AVG(c.amount), 0) as avg_claim_amount
+      FROM claims c
+    `,
+
+    GET_PREVIOUS_PERIOD_STATS: `
+      SELECT 
+        (SELECT COUNT(*) FROM patients) as previous_patients,
+        (SELECT COUNT(*) FROM providers) as previous_providers,
+        (SELECT COUNT(*) FROM claims WHERE submission_date < CURRENT_DATE - INTERVAL '30 days') as previous_claims,
+        (SELECT COUNT(*) FROM payments WHERE payment_date < CURRENT_DATE - INTERVAL '30 days') as previous_payments,
+        (SELECT COUNT(*) FROM prior_authorizations WHERE encounter_start < CURRENT_DATE - INTERVAL '30 days') as previous_authorizations
+    `,
+
+    // =========================================================================
+    // ENHANCED DASHBOARD QUERIES (New)
+    // =========================================================================
+
+    // Prior Authorization breakdown by type with detailed status
+    GET_PRIOR_AUTH_BY_TYPE_STATUS: `
+      SELECT 
+        auth_type,
+        status,
+        COUNT(*) as count,
+        SUM(COALESCE(
+          (SELECT SUM(net_amount) FROM prior_authorization_items WHERE prior_auth_id = pa.id), 
+          0
+        )) as total_amount
+      FROM prior_authorizations pa
+      GROUP BY auth_type, status
+      ORDER BY auth_type, count DESC
+    `,
+
+    // Prior Authorization summary by type
+    GET_PRIOR_AUTH_SUMMARY: `
+      SELECT 
+        auth_type,
+        COUNT(*) as total,
+        COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
+        COUNT(CASE WHEN status = 'denied' THEN 1 END) as denied,
+        COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft,
+        COUNT(CASE WHEN status = 'error' THEN 1 END) as error,
+        ROUND(100.0 * COUNT(CASE WHEN status = 'approved' THEN 1 END) / NULLIF(COUNT(*), 0), 1) as approval_rate
+      FROM prior_authorizations
+      GROUP BY auth_type
+      ORDER BY total DESC
+    `,
+
+    // Eligibility by insurer with breakdown
+    GET_ELIGIBILITY_BY_INSURER: `
+      SELECT 
+        i.insurer_name,
+        i.insurer_id,
+        COUNT(*) as total_checks,
+        COUNT(CASE WHEN e.status = 'eligible' THEN 1 END) as eligible,
+        COUNT(CASE WHEN e.status = 'not_eligible' THEN 1 END) as not_eligible,
+        COUNT(CASE WHEN e.status IN ('pending', 'Pending') THEN 1 END) as pending,
+        COUNT(CASE WHEN e.status = 'Active' THEN 1 END) as active,
+        ROUND(100.0 * COUNT(CASE WHEN e.status = 'eligible' THEN 1 END) / NULLIF(COUNT(*), 0), 1) as eligibility_rate
+      FROM eligibility e
+      JOIN insurers i ON e.insurer_id = i.insurer_id
+      GROUP BY i.insurer_id, i.insurer_name
+      ORDER BY total_checks DESC
+    `,
+
+    // Coverage distribution - patients per insurer
+    GET_COVERAGE_DISTRIBUTION: `
+      SELECT 
+        i.insurer_name,
+        i.insurer_id,
+        i.plan_type,
+        COUNT(DISTINCT pc.patient_id) as patient_count,
+        COUNT(DISTINCT pc.coverage_id) as coverage_count
+      FROM insurers i
+      LEFT JOIN patient_coverage pc ON i.insurer_id = pc.insurer_id
+      GROUP BY i.insurer_id, i.insurer_name, i.plan_type
+      ORDER BY patient_count DESC
+    `,
+
+    // Claims pipeline/funnel data
+    GET_CLAIMS_PIPELINE: `
+      SELECT 
+        status,
+        COUNT(*) as count,
+        SUM(COALESCE(amount, 0)) as total_amount,
+        AVG(COALESCE(amount, 0)) as avg_amount
+      FROM claims
+      GROUP BY status
+      ORDER BY 
+        CASE status
+          WHEN 'Pending' THEN 1
+          WHEN 'Under Review' THEN 2
+          WHEN 'Resubmitted' THEN 3
+          WHEN 'Approved' THEN 4
+          WHEN 'Denied' THEN 5
+          WHEN 'Rejected' THEN 6
+          WHEN 'Paid' THEN 7
+          WHEN 'Finalized' THEN 8
+          ELSE 9
+        END
+    `,
+
+    // Claim submissions summary
+    GET_CLAIM_SUBMISSIONS_SUMMARY: `
+      SELECT 
+        claim_type,
+        status,
+        outcome,
+        COUNT(*) as count
+      FROM claim_submissions
+      GROUP BY claim_type, status, outcome
+      ORDER BY count DESC
+    `,
+
+    // Prior authorization trends (last 30 days)
+    GET_PRIOR_AUTH_TRENDS: `
+      SELECT 
+        DATE_TRUNC('day', created_at) as date,
+        auth_type,
+        COUNT(*) as count,
+        COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_count
+      FROM prior_authorizations
+      WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE_TRUNC('day', created_at), auth_type
+      ORDER BY date DESC
+    `,
+
+    // Provider performance with prior authorizations
+    GET_PROVIDER_FULL_PERFORMANCE: `
+      SELECT 
+        p.provider_id,
+        p.provider_name,
+        p.type as provider_type,
+        COUNT(DISTINCT c.claim_id) as total_claims,
+        SUM(COALESCE(c.amount, 0)) as claims_amount,
+        COUNT(DISTINCT pa.id) as total_auths,
+        COUNT(DISTINCT CASE WHEN pa.status = 'approved' THEN pa.id END) as approved_auths,
+        ROUND(100.0 * COUNT(DISTINCT CASE WHEN pa.status = 'approved' THEN pa.id END) / 
+          NULLIF(COUNT(DISTINCT pa.id), 0), 1) as auth_approval_rate
+      FROM providers p
+      LEFT JOIN claims c ON p.provider_id = c.provider_id
+      LEFT JOIN prior_authorizations pa ON p.provider_id = pa.provider_id
+      GROUP BY p.provider_id, p.provider_name, p.type
+      HAVING COUNT(DISTINCT c.claim_id) > 0 OR COUNT(DISTINCT pa.id) > 0
+      ORDER BY total_claims DESC, total_auths DESC
+      LIMIT 10
+    `,
+
+    // Insurer full performance
+    GET_INSURER_FULL_PERFORMANCE: `
+      SELECT 
+        i.insurer_id,
+        i.insurer_name,
+        i.plan_type,
+        COUNT(DISTINCT c.claim_id) as total_claims,
+        SUM(COALESCE(c.amount, 0)) as claims_amount,
+        COUNT(DISTINCT CASE WHEN c.status = 'Paid' THEN c.claim_id END) as paid_claims,
+        COALESCE((SELECT SUM(amount) FROM payments WHERE insurer_id = i.insurer_id), 0) as total_payments,
+        COUNT(DISTINCT e.eligibility_id) as eligibility_checks,
+        COUNT(DISTINCT CASE WHEN e.status = 'eligible' THEN e.eligibility_id END) as eligible_count,
+        ROUND(100.0 * COUNT(DISTINCT CASE WHEN e.status = 'eligible' THEN e.eligibility_id END) / 
+          NULLIF(COUNT(DISTINCT e.eligibility_id), 0), 1) as eligibility_rate
+      FROM insurers i
+      LEFT JOIN claims c ON i.insurer_id = c.insurer_id
+      LEFT JOIN eligibility e ON i.insurer_id = e.insurer_id
+      GROUP BY i.insurer_id, i.insurer_name, i.plan_type
+      ORDER BY total_claims DESC, eligibility_checks DESC
+      LIMIT 10
+    `,
+
+    // Dental and Eye approvals summary
+    GET_SPECIALTY_APPROVALS: `
+      SELECT 
+        auth_type as type,
+        COUNT(*) as total,
+        COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
+        COUNT(CASE WHEN status IN ('pending', 'draft') THEN 1 END) as pending,
+        COUNT(CASE WHEN status = 'denied' THEN 1 END) as denied,
+        COUNT(CASE WHEN status = 'error' THEN 1 END) as error
+      FROM prior_authorizations
+      GROUP BY auth_type
+      ORDER BY total DESC
+    `,
+
+    // Recent prior authorizations
+    GET_RECENT_PRIOR_AUTHS: `
+      SELECT 
+        pa.id,
+        pa.request_number,
+        pa.auth_type,
+        pa.status,
+        pa.outcome,
+        pa.created_at,
+        p.name as patient_name,
+        pr.provider_name,
+        i.insurer_name
+      FROM prior_authorizations pa
+      LEFT JOIN patients p ON pa.patient_id = p.patient_id
+      LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
+      LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+      ORDER BY pa.created_at DESC
+      LIMIT 10
+    `,
+
+    // Financial breakdown by category
+    GET_FINANCIAL_BREAKDOWN: `
+      SELECT 
+        'claims' as category,
+        COUNT(*) as count,
+        SUM(COALESCE(amount, 0)) as total_amount,
+        AVG(COALESCE(amount, 0)) as avg_amount
+      FROM claims
+      UNION ALL
+      SELECT 
+        'payments' as category,
+        COUNT(*) as count,
+        SUM(COALESCE(amount, 0)) as total_amount,
+        AVG(COALESCE(amount, 0)) as avg_amount
+      FROM payments
+      UNION ALL
+      SELECT 
+        'prior_auth_items' as category,
+        COUNT(*) as count,
+        SUM(COALESCE(net_amount, 0)) as total_amount,
+        AVG(COALESCE(net_amount, 0)) as avg_amount
+      FROM prior_authorization_items
     `
   },
 

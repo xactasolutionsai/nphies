@@ -9,7 +9,8 @@ const KPIRing = ({
   size = 120,
   strokeWidth = 8,
   showTarget = true,
-  isCurrency = false
+  isCurrency = false,
+  suffix = ''
 }) => {
   // If no target, show a full circle or use a default percentage
   const percentage = target ? Math.min((value / target) * 100, 100) : 100;
@@ -54,11 +55,11 @@ const KPIRing = ({
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
             <div className="text-lg font-bold text-text-heading leading-tight">
-              {formatValue(value)}
+              {formatValue(value)}{suffix}
             </div>
             {showTarget && target && (
               <div className="text-xs text-text-muted">
-                Target: {formatValue(target)}
+                Target: {formatValue(target)}{suffix}
               </div>
             )}
           </div>

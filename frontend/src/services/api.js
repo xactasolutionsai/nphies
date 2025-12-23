@@ -244,6 +244,11 @@ class ApiService {
     return this.request('/dashboard/stats');
   }
 
+  // Comprehensive dashboard statistics
+  async getComprehensiveDashboardStats() {
+    return this.request('/dashboard/comprehensive-stats');
+  }
+
   // Standard Approvals
   async getStandardApprovals(params = {}) {
     const queryString = new URLSearchParams(params).toString();
