@@ -8,22 +8,38 @@ import {
   FileCheck,
   UserCheck,
   Receipt,
-  Package,
-  CreditCard,
   Menu,
   X,
   ChevronDown,
   ChevronRight,
   Database,
   Stethoscope,
-  BarChart3,
-  FileText,
   ClipboardList,
   Eye,
   Pill,
-  Wallet
+  FileQuestion,
+  ClipboardCheck,
+  Send,
+  ShieldCheck,
+  BadgeCheck,
+  Layers,
+  BellRing,
+  Scale,
+  FileSearch
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// Custom Tooth icon component for dental items
+const ToothIcon = ({ className }) => (
+  <svg 
+    className={className}
+    viewBox="0 0 148.202 148.203" 
+    fill="currentColor"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M141.343,31.736c-2.917-12.577-11.417-21.793-24.606-26.677c-8.786-3.245-30.184-6.214-39.604,4.859 C46.763-8.078,30.749,1.725,19.98,13.292c-23.769,25.532-12.894,51.253-2.731,62.42c7.347,8.087,9.472,12.763,10.662,18.104 c0.268,1.175,0.874,4.646,0.904,5.389c1.878,44.476,17.043,48.287,20.669,48.555c1.057,0.305,2.098,0.444,3.105,0.444 c1.848,0,3.599-0.493,5.188-1.467c7.532-4.616,9.853-18.986,11.893-31.64c0.742-4.579,1.434-8.902,2.243-11.417 c1.403-4.354,2.563-5.347,2.552-5.498c1.011,0.45,2.716,3.708,2.904,4.992c0.28,1.918,0.481,4.402,0.706,7.186 c1.163,14.285,2.898,35.828,18.091,37.388c1.078,0.231,3.642,0.469,6.79-1.431c7.161-4.348,12.464-16.801,15.746-37.017 l0.493-3.233c1.182-8.104,2.819-19.211,9.512-26.25C136.441,71.742,145.775,50.859,141.343,31.736z M124.22,75.529 c-8.062,8.477-9.938,21.215-11.167,29.654l-0.475,3.13c-3.782,23.255-9.408,30.275-12.416,32.395 c-1.59,1.12-2.582,0.962-2.473,1.005l-0.706-0.141c-10.181-0.889-11.679-19.418-12.665-31.7c-0.244-2.947-0.457-5.571-0.749-7.599 c-0.299-2.047-3.197-9.853-8.525-10.297c-5.729-0.384-8.217,7.252-9.033,9.797c-0.956,2.978-1.659,7.307-2.469,12.337 c-1.559,9.633-3.909,24.198-9.006,27.328c-0.686,0.427-1.714,0.864-3.565,0.268l-0.941-0.146h-0.082 c-0.155,0-13.149-1.571-14.885-42.612c-0.061-1.431-0.815-5.468-1.041-6.491c-1.638-7.318-4.923-12.994-12.133-20.922 c-2.414-2.643-22.776-26.631,2.683-53.972C36.269,4.999,53.528-3.508,92.721,28.679c1.334,1.087,3.288,0.904,4.391-0.43 c1.096-1.333,0.901-3.285-0.427-4.39c-5.023-4.113-9.736-7.611-14.157-10.538c7.222-7.252,24.266-5.279,32.065-2.387 c11.296,4.177,18.256,11.651,20.697,22.229C139.011,49.293,131.259,68.143,124.22,75.529z"/>
+  </svg>
+);
 
 const masterDataItems = [
   { name: 'Patients', href: '/patients', icon: Users },
@@ -31,37 +47,46 @@ const masterDataItems = [
   { name: 'Insurers', href: '/insurers', icon: Shield },
 ];
 
-const requestsItems = [
-  { name: 'General Requests', href: '/general-requests', icon: ClipboardList },
-  { name: 'Dental Form', href: '/dental-form', icon: Stethoscope },
-  { name: 'Eyesight Form', href: '/eyesight-form', icon: Stethoscope },
-];
-
+// Merged Requests & Claims section
 const requestsAndClaimsItems = [
-  { name: 'Prior Authorizations', href: '/prior-authorizations', icon: FileCheck },
-  { name: 'Claim Submissions', href: '/claim-submissions', icon: Receipt },
-  { name: 'Standard Approvals', href: '/standard-approvals', icon: FileText },
-  { name: 'Dental Approvals', href: '/dental-approvals', icon: Stethoscope },
+  { name: 'General Requests', href: '/general-requests', icon: FileQuestion },
+  { name: 'Dental Form', href: '/dental-form', icon: ToothIcon },
+  { name: 'Eyesight Form', href: '/eyesight-form', icon: Eye },
+  { name: 'Prior Authorizations', href: '/prior-authorizations', icon: ClipboardCheck },
+  { name: 'Claim Submissions', href: '/claim-submissions', icon: Send },
+  { name: 'Standard Approvals', href: '/standard-approvals', icon: FileCheck },
+  { name: 'Dental Approvals', href: '/dental-approvals', icon: ToothIcon },
   { name: 'Eye Approvals', href: '/eye-approvals', icon: Eye },
 ];
 
-const otherNavigation = [
-  { name: 'Authorizations', href: '/authorizations', icon: FileCheck },
+// Eligibility section
+const eligibilityItems = [
   { name: 'Eligibility', href: '/eligibility', icon: UserCheck },
-  { name: 'NPHIES Eligibility', href: '/nphies-eligibility', icon: Shield },
+  { name: 'NPHIES Eligibility', href: '/nphies-eligibility', icon: BadgeCheck },
+];
+
+// Claims & Payments section
+const claimsPaymentsItems = [
+  { name: 'Authorizations', href: '/authorizations', icon: ShieldCheck },
   { name: 'Claims', href: '/claims', icon: Receipt },
-  { name: 'Claim Batches', href: '/claim-batches', icon: Package },
-  { name: 'Payment Notification', href: '/payments', icon: CreditCard },
-  { name: 'Payment Reconciliation', href: '/payment-reconciliations', icon: Wallet },
-  { name: 'Response Viewer', href: '/response-viewer', icon: BarChart3 },
+  { name: 'Claim Batches', href: '/claim-batches', icon: Layers },
+  { name: 'Payment Notification', href: '/payments', icon: BellRing },
+  { name: 'Payment Reconciliation', href: '/payment-reconciliations', icon: Scale },
+];
+
+// Tools section
+const toolsItems = [
+  { name: 'Response Viewer', href: '/response-viewer', icon: FileSearch },
   { name: 'Medicine Search', href: '/medicines', icon: Pill },
 ];
 
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [masterDataOpen, setMasterDataOpen] = useState(true);
-  const [requestsOpen, setRequestsOpen] = useState(true);
   const [requestsAndClaimsOpen, setRequestsAndClaimsOpen] = useState(true);
+  const [eligibilityOpen, setEligibilityOpen] = useState(true);
+  const [claimsPaymentsOpen, setClaimsPaymentsOpen] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(true);
   const location = useLocation();
 
   const renderNavigationItem = (item, isActive, onClick) => (
@@ -140,57 +165,6 @@ export default function Layout({ children }) {
     );
   };
 
-  const renderRequestsSection = (isMobile = false) => {
-    const isRequestsActive = requestsItems.some(item => location.pathname === item.href);
-
-    return (
-      <div className="mb-6">
-        <button
-          onClick={() => setRequestsOpen(!requestsOpen)}
-          className={cn(
-            "group flex w-full items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-300",
-            "border-l-4 border-transparent",
-            isRequestsActive
-              ? "bg-gradient-to-r from-primary-purple/10 to-primary-purple/5 text-primary-purple border-l-primary-purple"
-              : "text-gray-700 hover:bg-gray-50 hover:text-primary-purple hover:border-l-primary-purple/50"
-          )}
-        >
-          <Stethoscope
-            className={cn(
-              "mr-3 h-5 w-5 flex-shrink-0 transition-all duration-300",
-              isRequestsActive
-                ? "text-primary-purple"
-                : "text-gray-400 group-hover:text-primary-purple group-hover:scale-110"
-            )}
-          />
-          <span className="tracking-wide">Requests</span>
-            <div className={cn(
-            "ml-auto transition-transform duration-300",
-            requestsOpen ? "rotate-180" : "rotate-0"
-          )}>
-            <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-primary-purple" />
-          </div>
-        </button>
-
-        <div className={cn(
-          "overflow-hidden transition-all duration-500 ease-in-out",
-          requestsOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-        )}>
-          <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-100 pl-4">
-            {requestsItems.map((item) => {
-              const isActive = location.pathname === item.href;
-              return renderNavigationItem(
-                item,
-                isActive,
-                isMobile ? () => setSidebarOpen(false) : undefined
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   const renderRequestsAndClaimsSection = (isMobile = false) => {
     const isRequestsAndClaimsActive = requestsAndClaimsItems.some(item => location.pathname === item.href || location.pathname.startsWith(item.href));
 
@@ -225,11 +199,164 @@ export default function Layout({ children }) {
 
         <div className={cn(
           "overflow-hidden transition-all duration-500 ease-in-out",
-          requestsAndClaimsOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+          requestsAndClaimsOpen ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"
         )}>
           <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-100 pl-4">
             {requestsAndClaimsItems.map((item) => {
               const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/');
+              return renderNavigationItem(
+                item,
+                isActive,
+                isMobile ? () => setSidebarOpen(false) : undefined
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderEligibilitySection = (isMobile = false) => {
+    const isEligibilityActive = eligibilityItems.some(item => location.pathname === item.href);
+
+    return (
+      <div className="mb-6">
+        <button
+          onClick={() => setEligibilityOpen(!eligibilityOpen)}
+          className={cn(
+            "group flex w-full items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-300",
+            "border-l-4 border-transparent",
+            isEligibilityActive
+              ? "bg-gradient-to-r from-primary-purple/10 to-primary-purple/5 text-primary-purple border-l-primary-purple"
+              : "text-gray-700 hover:bg-gray-50 hover:text-primary-purple hover:border-l-primary-purple/50"
+          )}
+        >
+          <UserCheck
+            className={cn(
+              "mr-3 h-5 w-5 flex-shrink-0 transition-all duration-300",
+              isEligibilityActive
+                ? "text-primary-purple"
+                : "text-gray-400 group-hover:text-primary-purple group-hover:scale-110"
+            )}
+          />
+          <span className="tracking-wide">Eligibility</span>
+          <div className={cn(
+            "ml-auto transition-transform duration-300",
+            eligibilityOpen ? "rotate-180" : "rotate-0"
+          )}>
+            <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-primary-purple" />
+          </div>
+        </button>
+
+        <div className={cn(
+          "overflow-hidden transition-all duration-500 ease-in-out",
+          eligibilityOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        )}>
+          <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-100 pl-4">
+            {eligibilityItems.map((item) => {
+              const isActive = location.pathname === item.href;
+              return renderNavigationItem(
+                item,
+                isActive,
+                isMobile ? () => setSidebarOpen(false) : undefined
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderClaimsPaymentsSection = (isMobile = false) => {
+    const isClaimsPaymentsActive = claimsPaymentsItems.some(item => location.pathname === item.href);
+
+    return (
+      <div className="mb-6">
+        <button
+          onClick={() => setClaimsPaymentsOpen(!claimsPaymentsOpen)}
+          className={cn(
+            "group flex w-full items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-300",
+            "border-l-4 border-transparent",
+            isClaimsPaymentsActive
+              ? "bg-gradient-to-r from-primary-purple/10 to-primary-purple/5 text-primary-purple border-l-primary-purple"
+              : "text-gray-700 hover:bg-gray-50 hover:text-primary-purple hover:border-l-primary-purple/50"
+          )}
+        >
+          <Receipt
+            className={cn(
+              "mr-3 h-5 w-5 flex-shrink-0 transition-all duration-300",
+              isClaimsPaymentsActive
+                ? "text-primary-purple"
+                : "text-gray-400 group-hover:text-primary-purple group-hover:scale-110"
+            )}
+          />
+          <span className="tracking-wide">Claims & Payments</span>
+          <div className={cn(
+            "ml-auto transition-transform duration-300",
+            claimsPaymentsOpen ? "rotate-180" : "rotate-0"
+          )}>
+            <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-primary-purple" />
+          </div>
+        </button>
+
+        <div className={cn(
+          "overflow-hidden transition-all duration-500 ease-in-out",
+          claimsPaymentsOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        )}>
+          <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-100 pl-4">
+            {claimsPaymentsItems.map((item) => {
+              const isActive = location.pathname === item.href;
+              return renderNavigationItem(
+                item,
+                isActive,
+                isMobile ? () => setSidebarOpen(false) : undefined
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderToolsSection = (isMobile = false) => {
+    const isToolsActive = toolsItems.some(item => location.pathname === item.href);
+
+    return (
+      <div className="mb-6">
+        <button
+          onClick={() => setToolsOpen(!toolsOpen)}
+          className={cn(
+            "group flex w-full items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-300",
+            "border-l-4 border-transparent",
+            isToolsActive
+              ? "bg-gradient-to-r from-primary-purple/10 to-primary-purple/5 text-primary-purple border-l-primary-purple"
+              : "text-gray-700 hover:bg-gray-50 hover:text-primary-purple hover:border-l-primary-purple/50"
+          )}
+        >
+          <FileSearch
+            className={cn(
+              "mr-3 h-5 w-5 flex-shrink-0 transition-all duration-300",
+              isToolsActive
+                ? "text-primary-purple"
+                : "text-gray-400 group-hover:text-primary-purple group-hover:scale-110"
+            )}
+          />
+          <span className="tracking-wide">Tools</span>
+          <div className={cn(
+            "ml-auto transition-transform duration-300",
+            toolsOpen ? "rotate-180" : "rotate-0"
+          )}>
+            <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-primary-purple" />
+          </div>
+        </button>
+
+        <div className={cn(
+          "overflow-hidden transition-all duration-500 ease-in-out",
+          toolsOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        )}>
+          <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-100 pl-4">
+            {toolsItems.map((item) => {
+              const isActive = location.pathname === item.href;
               return renderNavigationItem(
                 item,
                 isActive,
@@ -308,26 +435,24 @@ export default function Layout({ children }) {
             {/* Master Data Section */}
             {renderMasterDataSection(true)}
 
-            {/* Requests Section */}
-            {renderRequestsSection(true)}
-
             {/* Requests and Claims Section */}
             {renderRequestsAndClaimsSection(true)}
 
-            {/* Other Navigation Items */}
-                <div className="pt-4 border-t border-gray-100">
-                  <div className="px-4 mb-3">
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Operations</h3>
-                  </div>
-            {otherNavigation.map((item) => {
-              const isActive = location.pathname === item.href;
-              return renderNavigationItem(
-                item, 
-                isActive, 
-                () => setSidebarOpen(false)
-              );
-            })}
-                </div>
+            {/* Operations */}
+            <div className="pt-4 border-t border-gray-100">
+              <div className="px-4 mb-3">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Operations</h3>
+              </div>
+              
+              {/* Eligibility Section */}
+              {renderEligibilitySection(true)}
+
+              {/* Claims & Payments Section */}
+              {renderClaimsPaymentsSection(true)}
+
+              {/* Tools Section */}
+              {renderToolsSection(true)}
+            </div>
               </div>
           </nav>
           </div>
@@ -374,22 +499,24 @@ export default function Layout({ children }) {
             {/* Master Data Section */}
             {renderMasterDataSection(false)}
 
-            {/* Requests Section */}
-            {renderRequestsSection(false)}
-
             {/* Requests and Claims Section */}
             {renderRequestsAndClaimsSection(false)}
 
-            {/* Other Navigation Items */}
-              <div className="pt-4 border-t border-gray-100">
-                <div className="px-4 mb-3">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Operations</h3>
-                </div>
-            {otherNavigation.map((item) => {
-              const isActive = location.pathname === item.href;
-              return renderNavigationItem(item, isActive);
-            })}
+            {/* Operations */}
+            <div className="pt-4 border-t border-gray-100">
+              <div className="px-4 mb-3">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Operations</h3>
               </div>
+              
+              {/* Eligibility Section */}
+              {renderEligibilitySection(false)}
+
+              {/* Claims & Payments Section */}
+              {renderClaimsPaymentsSection(false)}
+
+              {/* Tools Section */}
+              {renderToolsSection(false)}
+            </div>
             </div>
           </nav>
         </div>
@@ -411,7 +538,7 @@ export default function Layout({ children }) {
               <div className="flex items-center space-x-4">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900 tracking-wide">
-                    {[...masterDataItems, ...requestsItems, ...requestsAndClaimsItems, ...otherNavigation].find(item => item.href === location.pathname || location.pathname.startsWith(item.href + '/'))?.name || 'Dashboard'}
+                    {[...masterDataItems, ...requestsAndClaimsItems, ...eligibilityItems, ...claimsPaymentsItems, ...toolsItems].find(item => item.href === location.pathname || location.pathname.startsWith(item.href + '/'))?.name || 'Dashboard'}
                   </h1>
                   <p className="text-sm text-gray-600 font-medium">Xacta Solutions</p>
                 </div>

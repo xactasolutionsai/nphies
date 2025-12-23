@@ -344,10 +344,12 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     // SupportingInfo - Use existing supporting_info from claim data (from PA or claim form)
     // Then add any missing required categories with defaults
     // Per NPHIES errors BV-00752, BV-00803, BV-00804, BV-00805, BV-00806 - these are all required
+    // Support for MULTIPLE days-supply entries per usecase requirement
     const existingSupportingInfo = claim.supporting_info || [];
     let supportingInfoList = [];
+    let daysSupplySequences = []; // Array to track all days-supply sequence numbers
     let sequenceNum = 1;
-    const daysSupplySequence = sequenceNum;
+    let nextSequence = 1;
 
     // Valid investigation-result codes per https://portal.nphies.sa/ig/CodeSystem-investigation-result.html
     const validInvestigationCodes = ['INP', 'IRA', 'other', 'NA', 'IRP'];
@@ -368,24 +370,65 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     const getExisting = (cat) => existingSupportingInfo.find(info => 
       (info.category || '').toLowerCase() === cat.toLowerCase()
     );
+    
+    // Helper to get ALL existing supporting info entries by category (for multiple days-supply)
+    const getAllExisting = (cat) => existingSupportingInfo.filter(info => 
+      (info.category || '').toLowerCase() === cat.toLowerCase()
+    );
 
-    // 1. days-supply (required for pharmacy per NPHIES)
-    const existingDaysSupply = getExisting('days-supply');
-    const daysSupplyValue = existingDaysSupply?.value_quantity || claim.items?.[0]?.days_supply || claim.days_supply || 30;
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'days-supply'
-        }]
-      },
-      valueQuantity: {
-        value: parseInt(daysSupplyValue),
-        system: 'http://unitsofmeasure.org',
-        code: 'd'
-      }
-    });
+    // 1. Process ALL days-supply entries (support for multiple days-supply)
+    // IMPORTANT: Reassign sequences sequentially to ensure uniqueness (regardless of DB sequences)
+    // This prevents duplicate sequence numbers in the FHIR output
+    const existingDaysSupplyEntries = getAllExisting('days-supply');
+    if (existingDaysSupplyEntries.length > 0) {
+      // Sort by original sequence from DB to maintain relative order
+      const sortedDaysSupplyEntries = [...existingDaysSupplyEntries].sort((a, b) => 
+        (a.sequence || 0) - (b.sequence || 0)
+      );
+      
+      // Process all days-supply entries with sequential sequence assignment
+      sortedDaysSupplyEntries.forEach(existingDaysSupply => {
+        const sequence = nextSequence++;
+        const daysSupplyValue = existingDaysSupply.value_quantity || claim.items?.[0]?.days_supply || claim.days_supply || 30;
+        supportingInfoList.push({
+          sequence: sequence,
+          category: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+              code: 'days-supply'
+            }]
+          },
+          valueQuantity: {
+            value: parseInt(daysSupplyValue),
+            system: 'http://unitsofmeasure.org',
+            code: 'd'
+          }
+        });
+        daysSupplySequences.push(sequence);
+      });
+    } else {
+      // If no days-supply entries found, add a default one (backward compatibility)
+      const daysSupplyValue = claim.items?.[0]?.days_supply || claim.days_supply || 30;
+      const defaultSequence = nextSequence++;
+      supportingInfoList.push({
+        sequence: defaultSequence,
+        category: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+            code: 'days-supply'
+          }]
+        },
+        valueQuantity: {
+          value: parseInt(daysSupplyValue),
+          system: 'http://unitsofmeasure.org',
+          code: 'd'
+        }
+      });
+      daysSupplySequences.push(defaultSequence);
+    }
+    
+    // Update sequenceNum to be after all days-supply entries
+    sequenceNum = nextSequence;
 
     // 2. investigation-result (required per BV-00752)
     // Per IB-00045: Valid codes are: INP, IRA, other, NA, IRP
@@ -519,12 +562,13 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
 
     claimResource.insurance = [insuranceEntry];
 
-    // Items with medication codes (required - at least one)
+    // Items with medication codes or medical devices (required - at least one)
     // Build items first, then calculate total from item net values
+    // Pass supportingInfoList to enable auto-matching by days_supply value
     let builtItems = [];
     if (claim.items && claim.items.length > 0) {
       builtItems = claim.items.map((item, idx) => 
-        this.buildPharmacyClaimItemForClaim(item, idx + 1, daysSupplySequence, providerIdentifierSystem)
+        this.buildPharmacyClaimItemForClaim(item, idx + 1, supportingInfoList, providerIdentifierSystem)
       );
       claimResource.item = builtItems;
     }
@@ -554,7 +598,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
    * Build claim item for Pharmacy Claim with all required extensions
    * Reference: https://portal.nphies.sa/ig/Claim-483078.json.html
    * 
-   * Required Extensions for Pharmacy Claim Items:
+   * Required Extensions for Pharmacy Medication Claim Items:
    * - extension-patient-share (Money) - patient's share amount
    * - extension-package (boolean) - whether item is a package
    * - extension-tax (Money) - tax amount (REQUIRED for claims)
@@ -563,9 +607,18 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
    * - extension-pharmacist-Selection-Reason (CodeableConcept) - reason for pharmacist selection
    * - extension-maternity (boolean) - maternity related
    * 
+   * Required Extensions for Medical Device Claim Items:
+   * - extension-patient-share (Money)
+   * - extension-package (boolean)
+   * - extension-tax (Money)
+   * - extension-patientInvoice (Identifier)
+   * - extension-maternity (boolean)
+   * - NO medication-specific extensions
+   * 
    * NOTE: extension-pharmacist-substitute is NOT in the claim example, only in prior auth
+   * Auto-matches item.days_supply to supporting_info.value_quantity to find the correct sequence
    */
-  buildPharmacyClaimItemForClaim(item, itemIndex, daysSupplySequence, providerIdentifierSystem) {
+  buildPharmacyClaimItemForClaim(item, itemIndex, supportingInfoList, providerIdentifierSystem) {
     const sequence = item.sequence || itemIndex;
     
     const quantity = parseFloat(item.quantity || 1);
@@ -576,22 +629,39 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     const calculatedNet = (quantity * unitPrice * factor) + tax;
     const patientShare = parseFloat(item.patient_share || 0);
     
-    // Extract and validate medication code
-    const medicationCode = (item.medication_code && item.medication_code.trim()) || 
-                           (item.product_or_service_code && item.product_or_service_code.trim());
-    const medicationDisplay = (item.medication_name && item.medication_name.trim()) || 
-                              (item.product_or_service_display && item.product_or_service_display.trim());
+    // Determine item type (medication or device)
+    const itemType = item.item_type || 'medication';
+    const isDevice = itemType === 'device';
     
-    // Validate medication code exists (required for pharmacy)
-    if (!medicationCode) {
-      console.error(`[PharmacyClaimMapper] ERROR: Item ${sequence} missing medication_code`);
-      throw new Error(`Medication code is required for pharmacy item ${sequence}`);
+    // Extract product/service code - different handling for devices vs medications
+    let productCode, productDisplay, codeSystem;
+    
+    if (isDevice) {
+      // Medical device items use medical-devices code system
+      productCode = (item.product_or_service_code && item.product_or_service_code.trim()) || 
+                    (item.medication_code && item.medication_code.trim());
+      productDisplay = (item.product_or_service_display && item.product_or_service_display.trim()) ||
+                       (item.medication_name && item.medication_name.trim());
+      codeSystem = 'http://nphies.sa/terminology/CodeSystem/medical-devices';
+    } else {
+      // Medication items use medication-codes system
+      productCode = (item.medication_code && item.medication_code.trim()) || 
+                    (item.product_or_service_code && item.product_or_service_code.trim());
+      productDisplay = (item.medication_name && item.medication_name.trim()) || 
+                       (item.product_or_service_display && item.product_or_service_display.trim());
+      codeSystem = 'http://nphies.sa/terminology/CodeSystem/medication-codes';
+    }
+    
+    // Validate product code exists (required)
+    if (!productCode) {
+      console.error(`[PharmacyClaimMapper] ERROR: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code`);
+      throw new Error(`${isDevice ? 'Device' : 'Medication'} code is required for pharmacy item ${sequence}`);
     }
     
     // Build pharmacy-specific extensions per NPHIES claim example
     const itemExtensions = [];
 
-    // 1. extension-patient-share (required)
+    // 1. extension-patient-share (required for all items)
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share',
       valueMoney: {
@@ -600,13 +670,13 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     });
 
-    // 2. extension-package (required)
+    // 2. extension-package (required for all items)
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package',
       valueBoolean: item.is_package || false
     });
 
-    // 3. extension-tax (required for claims)
+    // 3. extension-tax (required for claims - all items)
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax',
       valueMoney: {
@@ -615,7 +685,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     });
 
-    // 4. extension-patientInvoice (REQUIRED for claims)
+    // 4. extension-patientInvoice (REQUIRED for claims - all items)
     const patientInvoice = item.patient_invoice || `Invc-${this.formatDate(new Date()).replace(/-/g, '')}-${sequence}`;
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice',
@@ -625,57 +695,118 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     });
 
-    // 5. extension-prescribed-Medication (required for pharmacy)
-    const prescribedMedicationCode = (item.prescribed_medication_code && item.prescribed_medication_code.trim()) || 
-                                     medicationCode;
-    itemExtensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication',
-      valueCodeableConcept: {
-        coding: [
-          {
-            system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-            code: prescribedMedicationCode
-          }
-        ]
-      }
-    });
+    // Medication-specific extensions (NOT for medical devices)
+    if (!isDevice) {
+      // 5. extension-prescribed-Medication (required for medications only)
+      const prescribedMedicationCode = (item.prescribed_medication_code && item.prescribed_medication_code.trim()) || 
+                                       productCode;
+      itemExtensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication',
+        valueCodeableConcept: {
+          coding: [
+            {
+              system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
+              code: prescribedMedicationCode
+            }
+          ]
+        }
+      });
 
-    // 6. extension-pharmacist-Selection-Reason (required for pharmacy)
-    const selectionReason = item.pharmacist_selection_reason || 'patient-request';
-    itemExtensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason',
-      valueCodeableConcept: {
-        coding: [
-          {
-            system: 'http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason',
-            code: selectionReason
-          }
-        ]
-      }
-    });
+      // 6. extension-pharmacist-Selection-Reason (required for medications only)
+      const selectionReason = item.pharmacist_selection_reason || 'patient-request';
+      itemExtensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason',
+        valueCodeableConcept: {
+          coding: [
+            {
+              system: 'http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason',
+              code: selectionReason
+            }
+          ]
+        }
+      });
+    }
 
-    // 7. extension-maternity (required)
+    // 7. extension-maternity (required for all items)
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity',
       valueBoolean: item.is_maternity || false
     });
 
+    // Determine informationSequence: auto-match item.days_supply to supporting_info.value_quantity
+    // IMPORTANT: Medical devices do NOT have days-supply, so they should NOT link to days-supply supportingInfo
+    let informationSequences = [];
+    
+    if (isDevice) {
+      // Medical devices don't have days-supply - use explicitly provided sequences if any, otherwise empty array
+      // Devices may link to other supporting info (vital signs, etc.) but not days-supply
+      if (item.information_sequences && Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
+        informationSequences = item.information_sequences;
+      }
+      // If no sequences provided for device, leave empty (no days-supply linking)
+    } else {
+      // Medication items: link to days-supply supportingInfo (BV-00376)
+      if (item.information_sequences && Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
+        // Use explicitly provided sequences from item (if user manually selected)
+        informationSequences = item.information_sequences;
+      } else if (item.days_supply && supportingInfoList && supportingInfoList.length > 0) {
+        // Auto-match: find days-supply supporting info with matching value_quantity
+        const itemDaysSupply = parseInt(item.days_supply);
+        const matchingDaysSupply = supportingInfoList.filter(info => {
+          const isDaysSupply = info.category?.coding?.[0]?.code === 'days-supply' || 
+                              info.category === 'days-supply';
+          if (!isDaysSupply) return false;
+          const daysValue = parseInt(info.valueQuantity?.value || info.value_quantity || 0);
+          return daysValue === itemDaysSupply;
+        });
+        
+        if (matchingDaysSupply.length > 0) {
+          // Use the matching sequence(s) - if multiple match, use all
+          informationSequences = matchingDaysSupply.map(info => info.sequence);
+        } else {
+          // No exact match found - use first available days-supply as fallback
+          const firstDaysSupply = supportingInfoList.find(info => 
+            info.category?.coding?.[0]?.code === 'days-supply' || info.category === 'days-supply'
+          );
+          if (firstDaysSupply) {
+            informationSequences = [firstDaysSupply.sequence];
+          }
+        }
+      }
+      
+      // If still no sequences for medication, log warning and default to first days-supply
+      if (informationSequences.length === 0) {
+        console.warn(`[PharmacyClaimMapper] WARNING: Medication item ${sequence} (days_supply: ${item.days_supply}) could not be matched to any days-supply supportingInfo`);
+        // Default to sequence 1 as last resort (assuming days-supply is at sequence 1)
+        const firstDaysSupply = supportingInfoList?.find(info => 
+          info.category?.coding?.[0]?.code === 'days-supply' || info.category === 'days-supply'
+        );
+        if (firstDaysSupply) {
+          informationSequences = [firstDaysSupply.sequence];
+        } else {
+          informationSequences = [1]; // Fallback
+        }
+      }
+    }
+
     // Build the claim item
+    // IMPORTANT: informationSequence MUST reference the days-supply supportingInfo per BV-00376 (for medications only)
     const claimItem = {
       extension: itemExtensions,
       sequence: sequence,
       diagnosisSequence: item.diagnosis_sequences || [1],
-      informationSequence: [daysSupplySequence] // Reference days-supply supportingInfo
+      // Only include informationSequence if not empty (devices may have empty array)
+      ...(informationSequences.length > 0 && { informationSequence: informationSequences })
     };
 
-    // ProductOrService using NPHIES medication-codes system
+    // ProductOrService using appropriate code system (medication-codes or medical-devices)
     const productOrServiceCoding = {
-      system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-      code: medicationCode
+      system: codeSystem,
+      code: productCode
     };
     
-    if (medicationDisplay) {
-      productOrServiceCoding.display = medicationDisplay;
+    if (productDisplay) {
+      productOrServiceCoding.display = productDisplay;
     }
     
     claimItem.productOrService = {

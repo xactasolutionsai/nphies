@@ -769,6 +769,28 @@ class ApiService {
     return this.request(`/nphies-codes/icd10/${encodeURIComponent(code)}`);
   }
 
+  // Chief Complaint SNOMED Codes
+  /**
+   * Get all chief complaint SNOMED codes
+   * Returns array of { value, label, display_en, description }
+   */
+  async getChiefComplaintCodes() {
+    return this.request('/nphies-codes/chief-complaints');
+  }
+
+  /**
+   * Search chief complaint codes for async dropdown
+   * Returns array of { value, label, display } for react-select with auto-fill
+   * @param {string} searchTerm - Search term to filter codes (searches code and display name)
+   * @param {number} limit - Max results (default 50)
+   */
+  async searchChiefComplaintCodes(searchTerm = '', limit = 50) {
+    const params = new URLSearchParams();
+    if (searchTerm) params.append('q', searchTerm);
+    params.append('limit', limit.toString());
+    return this.request(`/nphies-codes/chief-complaints/search?${params.toString()}`);
+  }
+
   // Medication Codes
   /**
    * Search medication codes for async dropdown

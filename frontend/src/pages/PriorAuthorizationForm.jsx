@@ -45,7 +45,6 @@ import {
   INVESTIGATION_RESULT_OPTIONS,
   SERVICE_EVENT_TYPE_OPTIONS,
   PRACTICE_CODES_OPTIONS,
-  DENTAL_CHIEF_COMPLAINT_OPTIONS,
   CHIEF_COMPLAINT_FORMAT_OPTIONS,
   TRIAGE_CATEGORY_OPTIONS,
   ENCOUNTER_SERVICE_TYPE_OPTIONS,
@@ -1406,17 +1405,38 @@ export default function PriorAuthorizationForm() {
     if (!formData.insurer_id) validationErrors.push({ field: 'insurer_id', message: 'Insurer is required' });
     if (!formData.items || formData.items.length === 0) validationErrors.push({ field: 'items', message: 'At least one service item is required' });
     
-    // Validate item codes based on auth type
-    // Pharmacy uses medication_code, others use product_or_service_code
+    // Validate item codes based on auth type and item type
+    // Pharmacy: medication items use medication_code, device items use product_or_service_code (or medication_code as fallback)
+    // Others: use product_or_service_code
     const invalidItems = formData.items.filter(item => {
       if (formData.auth_type === 'pharmacy') {
-        return !item.medication_code;
+        const itemType = item.item_type || 'medication';
+        if (itemType === 'device') {
+          // Device items: check for product_or_service_code or medication_code (both are valid)
+          return !item.product_or_service_code && !item.medication_code;
+        } else {
+          // Medication items: check for medication_code
+          return !item.medication_code;
+        }
       }
       return !item.product_or_service_code;
     });
     if (invalidItems.length > 0) {
-      const codeType = formData.auth_type === 'pharmacy' ? 'medication code' : 'service code';
-      validationErrors.push({ field: 'items', message: `All items must have a ${codeType}` });
+      // Build more specific error message based on item types
+      const deviceItems = invalidItems.filter(item => (item.item_type || 'medication') === 'device');
+      const medicationItems = invalidItems.filter(item => (item.item_type || 'medication') !== 'device');
+      
+      if (formData.auth_type === 'pharmacy') {
+        if (deviceItems.length > 0 && medicationItems.length > 0) {
+          validationErrors.push({ field: 'items', message: `All items must have a code: medical device items need a device code, medication items need a medication code` });
+        } else if (deviceItems.length > 0) {
+          validationErrors.push({ field: 'items', message: `Medical device items must have a device code` });
+        } else {
+          validationErrors.push({ field: 'items', message: `All medication items must have a medication code` });
+        }
+      } else {
+        validationErrors.push({ field: 'items', message: `All items must have a service code` });
+      }
     }
     
     return { valid: validationErrors.length === 0, errors: validationErrors };
@@ -2736,82 +2756,78 @@ export default function PriorAuthorizationForm() {
               <CardDescription>Chief complaint, patient history, and clinical findings</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Chief Complaint Section */}
-              {formData.auth_type === 'dental' ? (
-                /* Dental: SNOMED dropdown or Free Text */
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Chief Complaint Format</Label>
-                      <Select
-                        value={CHIEF_COMPLAINT_FORMAT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_format)}
+              {/* Chief Complaint Section - Unified for all auth types */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Chief Complaint Format</Label>
+                    <Select
+                      value={CHIEF_COMPLAINT_FORMAT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_format)}
+                      onChange={(option) => {
+                        handleClinicalInfoChange('chief_complaint_format', option?.value || 'snomed');
+                        // Clear values when switching format
+                        if (option?.value === 'text') {
+                          handleClinicalInfoChange('chief_complaint_code', '');
+                          handleClinicalInfoChange('chief_complaint_display', '');
+                        } else {
+                          handleClinicalInfoChange('chief_complaint_text', '');
+                        }
+                      }}
+                      options={CHIEF_COMPLAINT_FORMAT_OPTIONS}
+                      styles={selectStyles}
+                      menuPortalTarget={document.body}
+                    />
+                  </div>
+                  {formData.clinical_info.chief_complaint_format === 'snomed' ? (
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Chief Complaint (SNOMED) *</Label>
+                      <AsyncSelect
+                        value={formData.clinical_info.chief_complaint_code ? {
+                          value: formData.clinical_info.chief_complaint_code,
+                          label: `${formData.clinical_info.chief_complaint_code} - ${formData.clinical_info.chief_complaint_display || ''}`,
+                          display: formData.clinical_info.chief_complaint_display
+                        } : null}
                         onChange={(option) => {
-                          handleClinicalInfoChange('chief_complaint_format', option?.value || 'snomed');
-                          // Clear values when switching format
-                          if (option?.value === 'text') {
-                            handleClinicalInfoChange('chief_complaint_code', '');
-                            handleClinicalInfoChange('chief_complaint_display', '');
-                          } else {
-                            handleClinicalInfoChange('chief_complaint_text', '');
+                          handleClinicalInfoChange('chief_complaint_code', option?.value || '');
+                          handleClinicalInfoChange('chief_complaint_display', option?.display || '');
+                        }}
+                        loadOptions={async (inputValue) => {
+                          try {
+                            const results = await api.searchChiefComplaintCodes(inputValue, 50);
+                            return results || [];
+                          } catch (error) {
+                            console.error('Error loading chief complaints:', error);
+                            return [];
                           }
                         }}
-                        options={CHIEF_COMPLAINT_FORMAT_OPTIONS}
+                        defaultOptions
+                        cacheOptions
                         styles={selectStyles}
+                        placeholder="Search by code or description..."
+                        isClearable
                         menuPortalTarget={document.body}
+                        noOptionsMessage={({ inputValue }) => 
+                          inputValue ? `No chief complaints found for "${inputValue}"` : 'Type to search chief complaints...'
+                        }
+                      />
+                      {formData.clinical_info.chief_complaint_code && (
+                        <p className="text-xs text-gray-500">
+                          Code: {formData.clinical_info.chief_complaint_code} | Description: {formData.clinical_info.chief_complaint_display || 'N/A'}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Chief Complaint (Free Text) *</Label>
+                      <Input
+                        value={formData.clinical_info?.chief_complaint_text ?? ''}
+                        onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
+                        placeholder="e.g., Patient presents with abdominal pain"
                       />
                     </div>
-                    {formData.clinical_info.chief_complaint_format === 'snomed' ? (
-                      <div className="space-y-2 md:col-span-2">
-                        <Label>Chief Complaint (SNOMED) *</Label>
-                        <Select
-                          value={DENTAL_CHIEF_COMPLAINT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_code)}
-                          onChange={(option) => {
-                            handleClinicalInfoChange('chief_complaint_code', option?.value || '');
-                            handleClinicalInfoChange('chief_complaint_display', option?.label?.split(' - ')[1] || '');
-                          }}
-                          options={DENTAL_CHIEF_COMPLAINT_OPTIONS}
-                          styles={selectStyles}
-                          placeholder="Select chief complaint..."
-                          isClearable
-                          isSearchable
-                          menuPortalTarget={document.body}
-                        />
-                      </div>
-                    ) : (
-                      <div className="space-y-2 md:col-span-2">
-                        <Label>Chief Complaint (Free Text) *</Label>
-                        <Input
-                          value={formData.clinical_info?.chief_complaint_text ?? ''}
-                          onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
-                          placeholder="e.g., Periodic oral examination"
-                        />
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
-              ) : (
-                /* Non-Dental: Standard SNOMED code + description */
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="chief_complaint_code">Chief Complaint Code (SNOMED)</Label>
-                    <Input
-                      id="chief_complaint_code"
-                      value={formData.clinical_info?.chief_complaint_code ?? ''}
-                      onChange={(e) => handleClinicalInfoChange('chief_complaint_code', e.target.value)}
-                      placeholder="e.g., 21522001"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="chief_complaint_display">Chief Complaint Description</Label>
-                    <Input
-                      id="chief_complaint_display"
-                      value={formData.clinical_info?.chief_complaint_display ?? ''}
-                      onChange={(e) => handleClinicalInfoChange('chief_complaint_display', e.target.value)}
-                      placeholder="e.g., Abdominal pain"
-                    />
-                  </div>
-                </div>
-              )}
+              </div>
 
               {/* Clinical Text Fields */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -3577,10 +3593,68 @@ export default function PriorAuthorizationForm() {
                       <Pill className="h-4 w-4" />
                       Pharmacy-Specific Information (NPHIES Required)
                     </h4>
+                    
+                    {/* Item Type Selection (Medication or Medical Device) */}
+                    <div className="space-y-2 pb-4 border-b border-purple-300">
+                      <Label>Item Type *</Label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`item_type_${index}`}
+                            value="medication"
+                            checked={!item.item_type || item.item_type === 'medication'}
+                            onChange={(e) => {
+                              const newType = e.target.value;
+                              handleItemChange(index, 'item_type', newType);
+                              // Clear device code field if switching from device to medication
+                              if (item.item_type === 'device') {
+                                handleItemChange(index, 'product_or_service_code', '');
+                                handleItemChange(index, 'product_or_service_display', '');
+                              }
+                              // Clear days_supply if switching from medication to device (devices don't have days supply)
+                              if (newType === 'device' && (!item.item_type || item.item_type === 'medication')) {
+                                handleItemChange(index, 'days_supply', '');
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="text-sm">Medication</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`item_type_${index}`}
+                            value="device"
+                            checked={item.item_type === 'device'}
+                            onChange={(e) => {
+                              const newType = e.target.value;
+                              handleItemChange(index, 'item_type', newType);
+                              // Clear medication code field if switching from medication to device
+                              if (!item.item_type || item.item_type === 'medication') {
+                                handleItemChange(index, 'medication_code', '');
+                                handleItemChange(index, 'medication_name', '');
+                              }
+                              // Clear days_supply if switching to device (devices don't have days supply)
+                              if (newType === 'device') {
+                                handleItemChange(index, 'days_supply', '');
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="text-sm">Medical Device</span>
+                        </label>
+                      </div>
+                      <p className="text-xs text-gray-600">
+                        Select whether this item is a medication or a medical device
+                      </p>
+                    </div>
+
+                    {/* Medication/Device Code Section */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <Label>Medication Code *</Label>
+                          <Label>{item.item_type === 'device' ? 'Device Code *' : 'Medication Code *'}</Label>
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="checkbox"
@@ -3598,16 +3672,27 @@ export default function PriorAuthorizationForm() {
                             <span className="text-xs text-purple-700 font-medium">Manual Entry</span>
                           </label>
                         </div>
-                        {item.manual_code_entry ? (
+                        {item.manual_code_entry || item.item_type === 'device' ? (
                           <>
                             <Input
-                              value={item.medication_code || ''}
-                              onChange={(e) => handleItemChange(index, 'medication_code', e.target.value)}
-                              placeholder="Enter GTIN/drug code (e.g., 06285097000056)"
+                              value={item.medication_code || item.product_or_service_code || ''}
+                              onChange={(e) => {
+                                const code = e.target.value;
+                                if (item.item_type === 'device') {
+                                  handleItemChange(index, 'product_or_service_code', code);
+                                } else {
+                                  handleItemChange(index, 'medication_code', code);
+                                }
+                              }}
+                              placeholder={item.item_type === 'device' 
+                                ? "Enter medical device code (e.g., 58380)" 
+                                : "Enter GTIN/drug code (e.g., 06285097000056)"}
                               className="font-mono"
                             />
                             <p className="text-xs text-purple-600">
-                              Enter the drug code manually. Use codes like 06285097000056 or 99999999999999 for unlisted drugs.
+                              {item.item_type === 'device' 
+                                ? "Enter medical device code from NPHIES medical-devices code system"
+                                : "Enter the drug code manually. Use codes like 06285097000056 or 99999999999999 for unlisted drugs."}
                             </p>
                           </>
                         ) : (
@@ -3653,19 +3738,24 @@ export default function PriorAuthorizationForm() {
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label>Medication Name {item.manual_code_entry && '*'}</Label>
+                        <Label>{item.item_type === 'device' ? 'Device Name' : 'Medication Name'} {item.manual_code_entry && '*'}</Label>
                         <Input
-                          value={item.medication_name || ''}
-                          onChange={(e) => handleItemChange(index, 'medication_name', e.target.value)}
-                          placeholder={item.manual_code_entry ? "Enter medication name" : "Auto-filled from selection"}
+                          value={item.medication_name || item.product_or_service_display || ''}
+                          onChange={(e) => {
+                            handleItemChange(index, item.item_type === 'device' ? 'product_or_service_display' : 'medication_name', e.target.value);
+                          }}
+                          placeholder={item.manual_code_entry ? `Enter ${item.item_type === 'device' ? 'device' : 'medication'} name` : "Auto-filled from selection"}
                           readOnly={!item.manual_code_entry}
                           className={!item.manual_code_entry ? "bg-gray-50" : ""}
                         />
                         {item.manual_code_entry && (
-                          <p className="text-xs text-purple-600">Enter the medication/drug name for this code</p>
+                          <p className="text-xs text-purple-600">Enter the {item.item_type === 'device' ? 'device' : 'medication/drug'} name for this code</p>
                         )}
                       </div>
                     </div>
+                    
+                    {/* Medication-Specific Fields (hide for devices) */}
+                    {item.item_type !== 'device' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
@@ -3724,16 +3814,24 @@ export default function PriorAuthorizationForm() {
                         )}
                         <p className="text-xs text-gray-500">Original prescribed medication (if substituting)</p>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Days Supply *</Label>
-                        <Input
-                          type="number"
-                          value={item.days_supply || 30}
-                          onChange={(e) => handleItemChange(index, 'days_supply', e.target.value)}
-                          placeholder="30"
-                        />
-                      </div>
+                      {/* Days Supply - Only for medication items, NOT for medical devices */}
+                      {item.item_type !== 'device' && (
+                        <div className="space-y-2">
+                          <Label>Days Supply *</Label>
+                          <Input
+                            type="number"
+                            value={item.days_supply || 30}
+                            onChange={(e) => handleItemChange(index, 'days_supply', e.target.value)}
+                            placeholder="30"
+                          />
+                          <p className="text-xs text-gray-500">
+                            This will automatically link to the matching days-supply supporting info entry
+                          </p>
+                        </div>
+                      )}
                     </div>
+                    )}
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Pharmacist Selection Reason *</Label>
@@ -3758,15 +3856,15 @@ export default function PriorAuthorizationForm() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Pharmacist Substitute *</Label>
+                        <Label>Pharmacist Substitute (Optional)</Label>
                         <Select
-                          value={[
+                          value={item.pharmacist_substitute ? [
                             { value: 'Irreplaceable', label: 'SFDA Irreplaceable drugs' },
                             { value: 'Replaceable', label: 'SFDA Replaceable drugs' },
                             { value: 'Therapeutic-alternative', label: 'Therapeutic Alternative' },
                             { value: 'Not-substituted', label: 'Not Substituted' }
-                          ].find(opt => opt.value === (item.pharmacist_substitute || 'Irreplaceable'))}
-                          onChange={(option) => handleItemChange(index, 'pharmacist_substitute', option?.value || 'Irreplaceable')}
+                          ].find(opt => opt.value === item.pharmacist_substitute) : null}
+                          onChange={(option) => handleItemChange(index, 'pharmacist_substitute', option?.value || null)}
                           options={[
                             { value: 'Irreplaceable', label: 'SFDA Irreplaceable drugs' },
                             { value: 'Replaceable', label: 'SFDA Replaceable drugs' },
@@ -3775,6 +3873,8 @@ export default function PriorAuthorizationForm() {
                           ]}
                           styles={selectStyles}
                           menuPortalTarget={document.body}
+                          isClearable
+                          placeholder="Select if applicable..."
                         />
                       </div>
                     </div>
@@ -3950,7 +4050,8 @@ export default function PriorAuthorizationForm() {
                         handleItemChange(newIndex, 'product_or_service_code', systemMed.code);
                         handleItemChange(newIndex, 'product_or_service_display', systemMed.display);
                         handleItemChange(newIndex, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/medication-codes');
-                        // Set days supply default
+                        // Set days supply default (only for medication items, not devices)
+                        // Note: Default item_type is 'medication', so days_supply should be set
                         handleItemChange(newIndex, 'days_supply', 30);
                       }, 100);
                     }}

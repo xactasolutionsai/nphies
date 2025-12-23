@@ -19,6 +19,9 @@ import MedicationSafetyPanel from '@/components/general-request/shared/Medicatio
 
 // Import Communication Panel for NPHIES communications
 import { CommunicationPanel } from '@/components/prior-auth';
+import { PRIORITY_OPTIONS } from '@/components/prior-auth/constants';
+import { selectStyles } from '@/components/prior-auth/styles';
+import Select from 'react-select';
 
 // Helper functions
 const getAuthTypeDisplay = (authType) => {
@@ -170,6 +173,19 @@ export default function PriorAuthorizationDetails() {
   const [showServiceCodeDialog, setShowServiceCodeDialog] = useState(false);
   const [serviceCodeOverrides, setServiceCodeOverrides] = useState([]);
 
+  // Priority selection modal state
+  const [showPriorityModal, setShowPriorityModal] = useState(false);
+  const [selectedPriority, setSelectedPriority] = useState('normal');
+  
+  // Error/Success/Confirm modal states
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const [confirmCallback, setConfirmCallback] = useState(null);
+
   useEffect(() => {
     loadPriorAuthorization();
   }, [id]);
@@ -181,8 +197,9 @@ export default function PriorAuthorizationDetails() {
       setPriorAuth(response.data);
     } catch (error) {
       console.error('Error loading prior authorization:', error);
-      alert('Error loading prior authorization');
-      navigate('/prior-authorizations');
+      setErrorMessage('Error loading prior authorization');
+      setShowErrorModal(true);
+      setTimeout(() => navigate('/prior-authorizations'), 2000);
     } finally {
       setLoading(false);
     }
@@ -200,7 +217,8 @@ export default function PriorAuthorizationDetails() {
       setShowBundleDialog(true);
     } catch (error) {
       console.error('Error loading bundle:', error);
-      alert(`Error: ${extractErrorMessage(error)}`);
+      setErrorMessage(`Error: ${extractErrorMessage(error)}`);
+      setShowErrorModal(true);
     } finally {
       setActionLoading(false);
     }
@@ -489,24 +507,30 @@ export default function PriorAuthorizationDetails() {
   };
 
   const handleSendToNphies = async () => {
-    if (!window.confirm('Send this prior authorization to NPHIES?')) return;
-    
-    try {
-      setActionLoading(true);
-      const response = await api.sendPriorAuthorizationToNphies(id);
-      
-      if (response.success) {
-        alert(`Successfully sent to NPHIES!\nPre-Auth Ref: ${response.nphiesResponse?.preAuthRef || 'Pending'}`);
-        await loadPriorAuthorization();
-      } else {
-        alert(`NPHIES Error: ${response.error?.message || 'Unknown error'}`);
+    setConfirmMessage('Send this prior authorization to NPHIES?');
+    setConfirmCallback(async () => {
+      setShowConfirmModal(false);
+      try {
+        setActionLoading(true);
+        const response = await api.sendPriorAuthorizationToNphies(id);
+        
+        if (response.success) {
+          setSuccessMessage(`Successfully sent to NPHIES!\nPre-Auth Ref: ${response.nphiesResponse?.preAuthRef || 'Pending'}`);
+          setShowSuccessModal(true);
+          await loadPriorAuthorization();
+        } else {
+          setErrorMessage(`NPHIES Error: ${response.error?.message || 'Unknown error'}`);
+          setShowErrorModal(true);
+        }
+      } catch (error) {
+        console.error('Error sending to NPHIES:', error);
+        setErrorMessage(`Error: ${extractErrorMessage(error)}`);
+        setShowErrorModal(true);
+      } finally {
+        setActionLoading(false);
       }
-    } catch (error) {
-      console.error('Error sending to NPHIES:', error);
-      alert(`Error: ${extractErrorMessage(error)}`);
-    } finally {
-      setActionLoading(false);
-    }
+    });
+    setShowConfirmModal(true);
   };
 
   const handlePoll = async () => {
@@ -514,30 +538,42 @@ export default function PriorAuthorizationDetails() {
       setActionLoading(true);
       const response = await api.pollNphiesAuthorizationResponse(id);
       await loadPriorAuthorization();
-      alert(response.message || 'Polling complete');
+      setSuccessMessage(response.message || 'Polling complete');
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error polling:', error);
-      alert(`Error: ${extractErrorMessage(error)}`);
+      setErrorMessage(`Error: ${extractErrorMessage(error)}`);
+      setShowErrorModal(true);
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleCancel = async () => {
+    if (!cancelReason.trim()) {
+      setErrorMessage('Please provide a reason for cancellation');
+      setShowErrorModal(true);
+      return;
+    }
+    
     try {
       setActionLoading(true);
       const response = await api.cancelPriorAuthorization(id, cancelReason);
       
       if (response.success) {
-        alert('Prior authorization cancelled successfully');
+        setSuccessMessage('Prior authorization cancelled successfully');
+        setShowSuccessModal(true);
         setShowCancelDialog(false);
+        setCancelReason('');
         await loadPriorAuthorization();
       } else {
-        alert(`Error: ${response.error?.message || 'Failed to cancel'}`);
+        setErrorMessage(`Error: ${response.error?.message || 'Failed to cancel'}`);
+        setShowErrorModal(true);
       }
     } catch (error) {
       console.error('Error cancelling:', error);
-      alert(`Error: ${extractErrorMessage(error)}`);
+      setErrorMessage(`Error: ${extractErrorMessage(error)}`);
+      setShowErrorModal(true);
     } finally {
       setActionLoading(false);
     }
@@ -579,37 +615,10 @@ export default function PriorAuthorizationDetails() {
   };
 
   const handleSubmitAsClaim = async () => {
-    if (!window.confirm('Create and submit a claim to NPHIES from this approved prior authorization?')) return;
-    
-    try {
-      setActionLoading(true);
-      
-      // Step 1: Create the claim from the prior authorization
-      const createResponse = await api.createClaimFromPriorAuth(id);
-      const claimId = createResponse.data?.id;
-      
-      if (!claimId) {
-        alert('Failed to create claim. Please try again.');
-        return;
-      }
-      
-      // Step 2: Send the claim to NPHIES
-      const sendResponse = await api.sendClaimSubmissionToNphies(claimId);
-      
-      if (sendResponse.success) {
-        const claimRef = sendResponse.nphiesResponse?.nphiesClaimId || sendResponse.data?.nphies_claim_id || 'Pending';
-        alert(`Claim created and submitted to NPHIES successfully!\nClaim ID: ${claimId}\nNPHIES Claim Ref: ${claimRef}`);
-        navigate(`/claim-submissions/${claimId}`);
-      } else {
-        alert(`Claim created but NPHIES submission failed: ${sendResponse.error?.message || 'Unknown error'}\nYou can retry from the Claims list.`);
-        navigate(`/claim-submissions/${claimId}`);
-      }
-    } catch (error) {
-      console.error('Error creating/submitting claim:', error);
-      alert(`Error: ${extractErrorMessage(error)}`);
-    } finally {
-      setActionLoading(false);
-    }
+    // Set default priority from prior auth
+    setSelectedPriority(priorAuth?.priority || 'normal');
+    // Show priority modal
+    setShowPriorityModal(true);
   };
 
   // Preview Claim Bundle (what will be sent to NPHIES)
@@ -679,7 +688,8 @@ export default function PriorAuthorizationDetails() {
       setShowClaimBundleDialog(true);
     } catch (error) {
       console.error('Error previewing claim bundle:', error);
-      alert(`Error: ${extractErrorMessage(error)}`);
+      setErrorMessage(`Error: ${extractErrorMessage(error)}`);
+      setShowErrorModal(true);
     } finally {
       setClaimBundleLoading(false);
     }
@@ -714,15 +724,18 @@ export default function PriorAuthorizationDetails() {
 
   // Handle Submit as Claim button click
   const handleSubmitAsClaimWithResponse = async () => {
-    // For professional claims, show the service code dialog first
+    // Set default priority from prior auth
+    setSelectedPriority(priorAuth?.priority || 'normal');
+    
+    // For professional claims, show the service code dialog first, then priority modal
     if (priorAuth?.auth_type === 'professional') {
       initializeServiceCodeOverrides();
       setShowServiceCodeDialog(true);
       return;
     }
     
-    // For non-professional claims, proceed directly
-    await submitClaimToNphies();
+    // For non-professional claims, show priority modal first
+    setShowPriorityModal(true);
   };
 
   // Update service code override for an item
@@ -739,27 +752,40 @@ export default function PriorAuthorizationDetails() {
     // Validate that all service codes are filled
     const missingCodes = serviceCodeOverrides.filter(item => !item.service_code?.trim());
     if (missingCodes.length > 0) {
-      alert(`Please enter service codes for all items. Missing codes for items: ${missingCodes.map(i => i.sequence).join(', ')}`);
+      setErrorMessage(`Please enter service codes for all items. Missing codes for items: ${missingCodes.map(i => i.sequence).join(', ')}`);
+      setShowErrorModal(true);
       return;
     }
     
     setShowServiceCodeDialog(false);
-    await submitClaimToNphies(serviceCodeOverrides);
+    // Set default priority from prior auth
+    setSelectedPriority(priorAuth?.priority || 'normal');
+    // Show priority modal
+    setShowPriorityModal(true);
+  };
+
+  // Handle priority modal submission
+  const handleSubmitWithPriority = async (priority, itemOverrides = null) => {
+    setShowPriorityModal(false);
+    await submitClaimToNphies(priority, itemOverrides);
   };
 
   // Core claim submission logic
-  const submitClaimToNphies = async (itemOverrides = null) => {
-    if (!window.confirm('Create and submit a claim to NPHIES from this approved prior authorization?')) return;
-    
+  const submitClaimToNphies = async (priority, itemOverrides = null) => {
     try {
       setActionLoading(true);
       
-      // Step 1: Create the claim from the prior authorization with optional overrides
-      const createResponse = await api.createClaimFromPriorAuth(id, itemOverrides ? { itemOverrides } : null);
+      // Step 1: Create the claim from the prior authorization with priority and optional overrides
+      const createResponse = await api.createClaimFromPriorAuth(id, { 
+        priority: priority || priorAuth?.priority || 'normal',
+        itemOverrides: itemOverrides || null
+      });
       const claimId = createResponse.data?.id;
       
       if (!claimId) {
-        alert('Failed to create claim. Please try again.');
+        setErrorMessage('Failed to create claim. Please try again.');
+        setShowErrorModal(true);
+        setActionLoading(false);
         return;
       }
       
@@ -2859,12 +2885,17 @@ export default function PriorAuthorizationDetails() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => {
-                    navigator.clipboard.writeText(JSON.stringify(bundle.request, null, 2));
-                    alert('Request bundle copied!');
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(JSON.stringify(bundle.request, null, 2));
+                      setCopiedToClipboard(true);
+                      setTimeout(() => setCopiedToClipboard(false), 2000);
+                    } catch (error) {
+                      console.error('Failed to copy:', error);
+                    }
                   }}
                 >
-                  Copy
+                  {copiedToClipboard ? <ClipboardCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               )}
             </div>
@@ -2884,12 +2915,17 @@ export default function PriorAuthorizationDetails() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => {
-                    navigator.clipboard.writeText(JSON.stringify(bundle.response, null, 2));
-                    alert('Response bundle copied!');
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(JSON.stringify(bundle.response, null, 2));
+                      setCopiedToClipboard(true);
+                      setTimeout(() => setCopiedToClipboard(false), 2000);
+                    } catch (error) {
+                      console.error('Failed to copy:', error);
+                    }
                   }}
                 >
-                  Copy
+                  {copiedToClipboard ? <ClipboardCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               )}
             </div>
@@ -3158,6 +3194,106 @@ export default function PriorAuthorizationDetails() {
             <p>• Example format: <code className="bg-gray-100 px-1 rounded">83600-00-10</code></p>
           </div>
         </div>
+      </Modal>
+
+      {/* Priority Selection Modal */}
+      <Modal
+        open={showPriorityModal}
+        onClose={() => setShowPriorityModal(false)}
+        title="Set Claim Priority"
+        description="Select the priority for this claim submission. Setting priority to 'Deferred' will result in a pended response from NPHIES."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowPriorityModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => handleSubmitWithPriority(selectedPriority, serviceCodeOverrides.length > 0 ? serviceCodeOverrides : null)}
+              disabled={actionLoading || !selectedPriority}
+            >
+              {actionLoading ? 'Submitting...' : 'Submit Claim'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Priority *</Label>
+            <Select
+              value={PRIORITY_OPTIONS.find(opt => opt.value === selectedPriority)}
+              onChange={(option) => setSelectedPriority(option?.value || 'normal')}
+              options={PRIORITY_OPTIONS}
+              styles={selectStyles}
+              menuPortalTarget={document.body}
+              placeholder="Select priority..."
+            />
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-sm text-blue-800">
+              <strong>Note:</strong> Setting priority to "Deferred" will result in a pended response from NPHIES that requires polling to retrieve the final response.
+            </p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        open={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        title="Error"
+        description={errorMessage}
+        footer={
+          <Button onClick={() => setShowErrorModal(false)}>
+            Close
+          </Button>
+        }
+      >
+        <div className="flex items-center gap-3 text-red-600">
+          <AlertCircle className="h-5 w-5" />
+          <p className="whitespace-pre-line">{errorMessage}</p>
+        </div>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        open={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        title="Success"
+        description=""
+        footer={
+          <Button onClick={() => setShowSuccessModal(false)}>
+            Close
+          </Button>
+        }
+      >
+        <div className="flex items-center gap-3 text-green-600">
+          <CheckCircle className="h-5 w-5" />
+          <p className="whitespace-pre-line">{successMessage}</p>
+        </div>
+      </Modal>
+
+      {/* Confirm Modal */}
+      <Modal
+        open={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        title="Confirm"
+        description={confirmMessage}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              if (confirmCallback) {
+                confirmCallback();
+              }
+            }}>
+              Confirm
+            </Button>
+          </>
+        }
+      >
+        <p className="text-gray-700">{confirmMessage}</p>
       </Modal>
     </div>
   );

@@ -167,7 +167,7 @@ class ClaimSubmissionsController extends BaseController {
   async createFromPriorAuth(req, res) {
     try {
       const { paId } = req.params;
-      const { itemOverrides } = req.body || {}; // Optional service code overrides for professional claims
+      const { itemOverrides, priority } = req.body || {}; // Optional service code overrides and priority
 
       const paResult = await query(`
         SELECT pa.*, p.name as patient_name, pr.provider_name, i.insurer_name
@@ -212,7 +212,7 @@ class ClaimSubmissionsController extends BaseController {
         eligibility_offline_ref: pa.eligibility_offline_ref,
         eligibility_offline_date: pa.eligibility_offline_date,
         practice_code: pa.practice_code,
-        priority: pa.priority,
+        priority: priority || pa.priority || 'normal', // Use provided priority, fallback to PA priority, then 'normal'
         total_amount: pa.approved_amount || pa.total_amount,
         currency: pa.currency,
         service_date: serviceDate

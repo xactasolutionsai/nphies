@@ -34,6 +34,10 @@ router.get('/medications', (req, res) => nphiesCodesController.getMedicationCode
 router.get('/medications/search', (req, res) => nphiesCodesController.searchMedicationCodes(req, res));
 router.get('/medications/:code', (req, res) => nphiesCodesController.getMedicationByCode(req, res));
 
+// Chief complaint SNOMED codes endpoints
+router.get('/chief-complaints', (req, res) => nphiesCodesController.getChiefComplaints(req, res));
+router.get('/chief-complaints/search', (req, res) => nphiesCodesController.searchChiefComplaints(req, res));
+
 // Get codes by system
 router.get('/:systemCode', (req, res) => nphiesCodesController.getCodesBySystem(req, res));
 

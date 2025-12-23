@@ -895,6 +895,7 @@ class CommunicationService {
   /**
    * Store CommunicationRequest from poll
    * HIC is asking for additional information
+   * Supports both prior auth and claim-level communications
    */
   async storeCommunicationRequest(client, priorAuthId, commRequest) {
     // Check if already stored
@@ -909,11 +910,41 @@ class CommunicationService {
     // Parse the CommunicationRequest
     const parsed = this.mapper.parseCommunicationRequest(commRequest);
 
-    // Store in database
+    // Extract claim_id if about_type is 'Claim'
+    let claimId = null;
+    if (parsed.aboutType === 'Claim' && parsed.aboutReference) {
+      try {
+        // Extract identifier from about_reference
+        // Format could be: "Claim/{identifier}" or just the identifier value
+        let identifierValue = parsed.aboutReference;
+        
+        // If it's a reference string like "Claim/{id}", extract the ID part
+        if (typeof identifierValue === 'string' && identifierValue.includes('/')) {
+          identifierValue = identifierValue.split('/').pop();
+        }
+        
+        // Try to find claim by claim_number or nphies_claim_id
+        const claimQuery = await client.query(`
+          SELECT id FROM claim_submissions 
+          WHERE claim_number = $1 OR nphies_claim_id = $1
+          LIMIT 1
+        `, [identifierValue]);
+        
+        if (claimQuery.rows.length > 0) {
+          claimId = claimQuery.rows[0].id;
+        }
+      } catch (error) {
+        console.warn(`[CommunicationService] Could not extract claim_id from about_reference: ${parsed.aboutReference}`, error);
+        // Continue without claim_id if lookup fails
+      }
+    }
+
+    // Store in database (include claim_id when available)
     const result = await client.query(`
       INSERT INTO nphies_communication_requests (
         request_id,
         prior_auth_id,
+        claim_id,
         status,
         category,
         priority,
@@ -925,11 +956,12 @@ class CommunicationService {
         recipient_identifier,
         authored_on,
         request_bundle
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
     `, [
       commRequest.id,
       priorAuthId,
+      claimId, // Store claim_id when about_type is 'Claim'
       parsed.status || 'active',
       parsed.category,
       parsed.priority,
@@ -946,6 +978,7 @@ class CommunicationService {
     return {
       id: result.rows[0].id,
       requestId: commRequest.id,
+      claimId: claimId,
       category: parsed.category,
       priority: parsed.priority,
       payloadContentString: parsed.payloadContentString,

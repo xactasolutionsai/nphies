@@ -342,43 +342,81 @@ class PharmacyMapper extends BaseMapper {
 
     // SupportingInfo - days-supply is REQUIRED for pharmacy claims per BV-00376
     // The item.informationSequence MUST reference the days-supply supportingInfo
+    // Support for MULTIPLE days-supply entries per usecase requirement
     let supportingInfoList = [];
-    let daysSupplySequence = null;
+    let daysSupplySequences = []; // Array to track all days-supply sequence numbers
     let currentSequence = 1;
     
-    // First, add days-supply (REQUIRED for pharmacy)
-    // Get days_supply from items or use default
-    const daysSupplyValue = priorAuth.items?.[0]?.days_supply || priorAuth.days_supply || 30;
-    supportingInfoList.push({
-      sequence: currentSequence,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'days-supply'
-        }]
-      },
-      timingDate: this.formatDate(priorAuth.request_date || new Date()),
-      valueQuantity: {
-        value: parseInt(daysSupplyValue),
-        unit: 'd',
-        system: 'http://unitsofmeasure.org',
-        code: 'd'
-      }
-    });
-    daysSupplySequence = currentSequence;
-    currentSequence++;
-    
-    // Add other supporting info if provided (but NOT days-supply again)
+    // Process all supporting_info entries from the database (including multiple days-supply entries)
+    // IMPORTANT: Reassign sequences sequentially to ensure uniqueness (regardless of DB sequences)
+    // This prevents duplicate sequence numbers in the FHIR output
     if (priorAuth.supporting_info && priorAuth.supporting_info.length > 0) {
-      priorAuth.supporting_info.forEach(info => {
-        // Skip if it's days-supply (already added above)
+      // Sort by original sequence from DB to maintain relative order
+      const sortedSupportingInfo = [...priorAuth.supporting_info].sort((a, b) => 
+        (a.sequence || 0) - (b.sequence || 0)
+      );
+      
+      sortedSupportingInfo.forEach(info => {
+        // Assign sequential sequence numbers (1, 2, 3, ...) to ensure uniqueness
+        const sequence = currentSequence++;
+        
+        // Process days-supply entries - ALL of them, not just the first one
         if (info.category === 'days-supply' || info.category === 'days_supply') {
-          return;
+          const daysSupplyValue = info.value_quantity || priorAuth.items?.[0]?.days_supply || priorAuth.days_supply || 30;
+          const daysSupplyEntry = {
+            sequence: sequence,
+            category: {
+              coding: [{
+                system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+                code: 'days-supply'
+              }]
+            },
+            timingDate: info.timing_date ? this.formatDate(info.timing_date) : this.formatDate(priorAuth.request_date || new Date()),
+            valueQuantity: {
+              value: parseInt(daysSupplyValue),
+              unit: 'd',
+              system: 'http://unitsofmeasure.org',
+              code: 'd'
+            }
+          };
+          supportingInfoList.push(daysSupplyEntry);
+          // Track this days-supply sequence
+          daysSupplySequences.push(sequence);
+        } else {
+          // Process other supporting info categories - use sequential sequence
+          supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence: sequence }));
         }
-        supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence: currentSequence }));
-        currentSequence++;
       });
     }
+    
+    // If no days-supply entries found in supporting_info, add a default one (backward compatibility)
+    const hasDaysSupply = supportingInfoList.some(info => 
+      info.category?.coding?.[0]?.code === 'days-supply' || info.category === 'days-supply'
+    );
+    if (!hasDaysSupply) {
+      const daysSupplyValue = priorAuth.items?.[0]?.days_supply || priorAuth.days_supply || 30;
+      const defaultSequence = currentSequence++;
+      supportingInfoList.push({
+        sequence: defaultSequence,
+        category: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+            code: 'days-supply'
+          }]
+        },
+        timingDate: this.formatDate(priorAuth.request_date || new Date()),
+        valueQuantity: {
+          value: parseInt(daysSupplyValue),
+          unit: 'd',
+          system: 'http://unitsofmeasure.org',
+          code: 'd'
+        }
+      });
+      daysSupplySequences.push(defaultSequence);
+    }
+    
+    // Sort supportingInfoList by sequence to ensure proper ordering (already sequential, but good practice)
+    supportingInfoList.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
 
     // Add birth-weight supportingInfo for newborn patients
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
@@ -392,12 +430,11 @@ class PharmacyMapper extends BaseMapper {
         // Convert grams to kilograms for NPHIES (BV-00509 requires kg)
         const weightInKg = parseFloat(priorAuth.birth_weight) / 1000;
         supportingInfoList.push(this.buildSupportingInfo({
-          sequence: currentSequence,
+          sequence: currentSequence++,
           category: 'birth-weight',
           value_quantity: weightInKg,
           value_quantity_unit: 'kg'  // NPHIES BV-00509: must use 'kg' from UCUM
         }));
-        currentSequence++;
       }
     }
     
@@ -419,9 +456,10 @@ class PharmacyMapper extends BaseMapper {
     };
     
     if (priorAuth.items && priorAuth.items.length > 0) {
-      // Pass daysSupplySequence to link items to days-supply supportingInfo (REQUIRED per BV-00376)
+      // Build items with item-specific informationSequence linking
+      // Pass supportingInfoList to enable auto-matching by days_supply value
       claim.item = priorAuth.items.map((item, idx) => 
-        this.buildPharmacyClaimItem(item, idx + 1, daysSupplySequence, encounterPeriod)
+        this.buildPharmacyClaimItem(item, idx + 1, supportingInfoList, encounterPeriod)
       );
     }
 
@@ -448,11 +486,11 @@ class PharmacyMapper extends BaseMapper {
   }
 
   /**
-   * Build claim item for Pharmacy with medication codes
+   * Build claim item for Pharmacy with medication codes or medical devices
    * Reference: https://portal.nphies.sa/ig/StructureDefinition-pharmacy-priorauth.html
    * Example: https://portal.nphies.sa/ig/Claim-483074.json.html
    * 
-   * Required Extensions for Pharmacy Items:
+   * Required Extensions for Pharmacy Medication Items:
    * - extension-package (boolean) - whether item is a package
    * - extension-patient-share (Money) - patient's share amount
    * - extension-prescribed-Medication (CodeableConcept) - originally prescribed medication
@@ -460,9 +498,16 @@ class PharmacyMapper extends BaseMapper {
    * - extension-pharmacist-substitute (CodeableConcept) - substitution status
    * - extension-maternity (boolean) - maternity related
    * 
+   * Required Extensions for Medical Device Items:
+   * - extension-package (boolean)
+   * - extension-patient-share (Money)
+   * - extension-maternity (boolean)
+   * - NO medication-specific extensions
+   * 
    * IMPORTANT: informationSequence MUST reference the days-supply supportingInfo (BV-00376)
+   * Auto-matches item.days_supply to supporting_info.value_quantity to find the correct sequence
    */
-  buildPharmacyClaimItem(item, itemIndex, daysSupplySequence, encounterPeriod) {
+  buildPharmacyClaimItem(item, itemIndex, supportingInfoList, encounterPeriod) {
     const sequence = item.sequence || itemIndex;
     
     const quantity = parseFloat(item.quantity || 1);
@@ -473,29 +518,45 @@ class PharmacyMapper extends BaseMapper {
     const calculatedNet = (quantity * unitPrice * factor) + tax;
     const patientShare = parseFloat(item.patient_share || 0);
     
-    // Extract and validate medication code FIRST (needed for extensions and productOrService)
-    // Handle empty strings by treating them as undefined
-    const medicationCode = (item.medication_code && item.medication_code.trim()) || 
-                           (item.product_or_service_code && item.product_or_service_code.trim());
-    const medicationDisplay = (item.medication_name && item.medication_name.trim()) || 
-                              (item.product_or_service_display && item.product_or_service_display.trim());
+    // Determine item type (medication or device)
+    const itemType = item.item_type || 'medication';
+    const isDevice = itemType === 'device';
     
-    // Validate medication code exists (required for pharmacy)
-    if (!medicationCode) {
-      console.error(`[PharmacyMapper] ERROR: Item ${sequence} missing medication_code - this will cause NPHIES rejection`);
-      throw new Error(`Medication code is required for pharmacy item ${sequence}`);
+    // Extract product/service code - different handling for devices vs medications
+    let productCode, productDisplay, codeSystem;
+    
+    if (isDevice) {
+      // Medical device items use medical-devices code system
+      productCode = (item.product_or_service_code && item.product_or_service_code.trim()) || 
+                    (item.medication_code && item.medication_code.trim());
+      productDisplay = (item.product_or_service_display && item.product_or_service_display.trim()) ||
+                       (item.medication_name && item.medication_name.trim());
+      codeSystem = 'http://nphies.sa/terminology/CodeSystem/medical-devices';
+    } else {
+      // Medication items use medication-codes system
+      productCode = (item.medication_code && item.medication_code.trim()) || 
+                    (item.product_or_service_code && item.product_or_service_code.trim());
+      productDisplay = (item.medication_name && item.medication_name.trim()) || 
+                       (item.product_or_service_display && item.product_or_service_display.trim());
+      codeSystem = 'http://nphies.sa/terminology/CodeSystem/medication-codes';
+    }
+    
+    // Validate product code exists (required)
+    if (!productCode) {
+      console.error(`[PharmacyMapper] ERROR: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code - this will cause NPHIES rejection`);
+      throw new Error(`${isDevice ? 'Device' : 'Medication'} code is required for pharmacy item ${sequence}`);
     }
     
     // Build pharmacy-specific extensions per NPHIES spec
     const itemExtensions = [];
 
-    // 1. extension-package (required)
+    // 1. extension-package (required for all items)
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package',
       valueBoolean: item.is_package || false
     });
 
-    // 2. extension-patient-share (required)
+    // 2. extension-patient-share (required for all items)
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share',
       valueMoney: {
@@ -504,80 +565,137 @@ class PharmacyMapper extends BaseMapper {
       }
     });
 
-    // 3. extension-prescribed-Medication (required for pharmacy)
-    // This is the originally prescribed medication code - use same code as productOrService if not specified
-    const prescribedMedicationCode = (item.prescribed_medication_code && item.prescribed_medication_code.trim()) || 
-                                     medicationCode; // Use the validated medicationCode from above
-    
-    // Always include prescribed medication (required per NPHIES)
-    itemExtensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication',
-      valueCodeableConcept: {
-        coding: [
-          {
-            system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-            code: prescribedMedicationCode
-          }
-        ]
-      }
-    });
+    // Medication-specific extensions (NOT for medical devices)
+    if (!isDevice) {
+      // 3. extension-prescribed-Medication (required for medications only)
+      const prescribedMedicationCode = (item.prescribed_medication_code && item.prescribed_medication_code.trim()) || 
+                                       productCode;
+      itemExtensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication',
+        valueCodeableConcept: {
+          coding: [
+            {
+              system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
+              code: prescribedMedicationCode
+            }
+          ]
+        }
+      });
 
-    // 4. extension-pharmacist-Selection-Reason (required for pharmacy)
-    const selectionReason = item.pharmacist_selection_reason || 'patient-request';
-    itemExtensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason',
-      valueCodeableConcept: {
-        coding: [
-          {
-            system: 'http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason',
-            code: selectionReason
-          }
-        ]
-      }
-    });
+      // 4. extension-pharmacist-Selection-Reason (required for medications only)
+      const selectionReason = item.pharmacist_selection_reason || 'patient-request';
+      itemExtensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason',
+        valueCodeableConcept: {
+          coding: [
+            {
+              system: 'http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason',
+              code: selectionReason
+            }
+          ]
+        }
+      });
 
-    // 5. extension-pharmacist-substitute (required for pharmacy)
-    const substituteCode = item.pharmacist_substitute || 'Irreplaceable';
-    itemExtensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute',
-      valueCodeableConcept: {
-        coding: [
-          {
-            system: 'http://nphies.sa/terminology/CodeSystem/pharmacist-substitute',
-            code: substituteCode,
-            display: this.getPharmacistSubstituteDisplay(substituteCode)
+      // 5. extension-pharmacist-substitute (optional for medications)
+      // Only include if pharmacist_substitute is provided
+      if (item.pharmacist_substitute && item.pharmacist_substitute.trim()) {
+        const substituteCode = item.pharmacist_substitute.trim();
+        itemExtensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute',
+          valueCodeableConcept: {
+            coding: [
+              {
+                system: 'http://nphies.sa/terminology/CodeSystem/pharmacist-substitute',
+                code: substituteCode,
+                display: this.getPharmacistSubstituteDisplay(substituteCode)
+              }
+            ]
           }
-        ]
+        });
       }
-    });
+    }
 
-    // 6. extension-maternity (required)
+    // 6. extension-maternity (required for all items)
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity',
       valueBoolean: item.is_maternity || false
     });
 
+    // Determine informationSequence: auto-match item.days_supply to supporting_info.value_quantity
+    // IMPORTANT: Medical devices do NOT have days-supply, so they should NOT link to days-supply supportingInfo
+    let informationSequences = [];
+    
+    if (isDevice) {
+      // Medical devices don't have days-supply - use explicitly provided sequences if any, otherwise empty array
+      // Devices may link to other supporting info (vital signs, etc.) but not days-supply
+      if (item.information_sequences && Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
+        informationSequences = item.information_sequences;
+      }
+      // If no sequences provided for device, leave empty (no days-supply linking)
+    } else {
+      // Medication items: link to days-supply supportingInfo (BV-00376)
+      if (item.information_sequences && Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
+        // Use explicitly provided sequences from item (if user manually selected)
+        informationSequences = item.information_sequences;
+      } else if (item.days_supply && supportingInfoList && supportingInfoList.length > 0) {
+        // Auto-match: find days-supply supporting info with matching value_quantity
+        const itemDaysSupply = parseInt(item.days_supply);
+        const matchingDaysSupply = supportingInfoList.filter(info => {
+          const isDaysSupply = info.category?.coding?.[0]?.code === 'days-supply' || 
+                              info.category === 'days-supply';
+          if (!isDaysSupply) return false;
+          const daysValue = parseInt(info.valueQuantity?.value || info.value_quantity || 0);
+          return daysValue === itemDaysSupply;
+        });
+        
+        if (matchingDaysSupply.length > 0) {
+          // Use the matching sequence(s) - if multiple match, use all
+          informationSequences = matchingDaysSupply.map(info => info.sequence);
+        } else {
+          // No exact match found - use first available days-supply as fallback
+          const firstDaysSupply = supportingInfoList.find(info => 
+            info.category?.coding?.[0]?.code === 'days-supply' || info.category === 'days-supply'
+          );
+          if (firstDaysSupply) {
+            informationSequences = [firstDaysSupply.sequence];
+          }
+        }
+      }
+      
+      // If still no sequences for medication, log warning and default to first days-supply
+      if (informationSequences.length === 0) {
+        console.warn(`[PharmacyMapper] WARNING: Medication item ${sequence} (days_supply: ${item.days_supply}) could not be matched to any days-supply supportingInfo`);
+        // Default to sequence 1 as last resort (assuming days-supply is at sequence 1)
+        const firstDaysSupply = supportingInfoList?.find(info => 
+          info.category?.coding?.[0]?.code === 'days-supply' || info.category === 'days-supply'
+        );
+        if (firstDaysSupply) {
+          informationSequences = [firstDaysSupply.sequence];
+        } else {
+          informationSequences = [1]; // Fallback
+        }
+      }
+    }
+
     // Build the claim item
-    // IMPORTANT: informationSequence MUST reference the days-supply supportingInfo per BV-00376
+    // IMPORTANT: informationSequence MUST reference the days-supply supportingInfo per BV-00376 (for medications only)
     const claimItem = {
       extension: itemExtensions,
       sequence: sequence,
       diagnosisSequence: item.diagnosis_sequences || [1],
-      informationSequence: [daysSupplySequence] // MUST reference days-supply (required for pharmacy)
+      // Only include informationSequence if not empty (devices may have empty array)
+      ...(informationSequences.length > 0 && { informationSequence: informationSequences })
     };
 
-    // ProductOrService using NPHIES medication-codes system
-    // (medicationCode and medicationDisplay already extracted and validated above)
-    
-    // Build productOrService coding - only include display if it has a value
+    // ProductOrService using appropriate code system (medication-codes or medical-devices)
     const productOrServiceCoding = {
-      system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-      code: medicationCode
+      system: codeSystem,
+      code: productCode
     };
     
     // Only add display if it has a non-empty value
-    if (medicationDisplay) {
-      productOrServiceCoding.display = medicationDisplay;
+    if (productDisplay) {
+      productOrServiceCoding.display = productDisplay;
     }
     
     claimItem.productOrService = {

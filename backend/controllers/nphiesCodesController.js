@@ -360,6 +360,109 @@ class NphiesCodesController {
     }
   }
 
+  // ==================== CHIEF COMPLAINT CODES ====================
+
+  /**
+   * Get all chief complaint SNOMED codes
+   * Returns format suitable for dropdowns: { value, label }
+   */
+  async getChiefComplaints(req, res) {
+    try {
+      const { query: dbQuery } = await import('../db.js');
+      
+      const result = await dbQuery(`
+        SELECT 
+          nc.code as value,
+          nc.code || ' - ' || nc.display_en as label,
+          nc.display_en,
+          nc.description
+        FROM nphies_codes nc
+        JOIN nphies_code_systems ncs ON nc.code_system_id = ncs.code_system_id
+        WHERE ncs.code = 'chief-complaint-snomed'
+          AND nc.is_active = true
+        ORDER BY nc.sort_order, nc.display_en
+      `);
+      
+      res.json({ data: result.rows });
+    } catch (error) {
+      console.error('Error getting chief complaints:', error);
+      res.status(500).json({ error: 'Failed to fetch chief complaints' });
+    }
+  }
+
+  /**
+   * Search chief complaint codes for async dropdown (optimized for react-select)
+   * Returns format: { value, label, display } for auto-fill functionality
+   * 
+   * Query parameters:
+   * - q: Search term (searches code and display name)
+   * - limit: Max results (default 50, max 100)
+   */
+  async searchChiefComplaints(req, res) {
+    try {
+      const { query: dbQuery } = await import('../db.js');
+      
+      const {
+        q = '',
+        limit = 50
+      } = req.query;
+      
+      const safeLimit = Math.min(Math.max(1, parseInt(limit) || 50), 100);
+      
+      let result;
+      
+      if (q && q.trim()) {
+        const searchTerm = q.trim();
+        
+        // Search by code or display name, prioritize exact matches
+        result = await dbQuery(`
+          SELECT 
+            nc.code as value,
+            nc.code || ' - ' || nc.display_en as label,
+            nc.display_en as display,
+            nc.description
+          FROM nphies_codes nc
+          JOIN nphies_code_systems ncs ON nc.code_system_id = ncs.code_system_id
+          WHERE ncs.code = 'chief-complaint-snomed'
+            AND nc.is_active = true
+            AND (
+              nc.code ILIKE $1 OR 
+              nc.display_en ILIKE $2 OR
+              nc.description ILIKE $3
+            )
+          ORDER BY 
+            CASE 
+              WHEN nc.code ILIKE $1 THEN 0
+              WHEN nc.display_en ILIKE $4 THEN 1
+              ELSE 2
+            END,
+            nc.display_en
+          LIMIT $5
+        `, [`${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `${searchTerm}%`, safeLimit]);
+      } else {
+        // Return first N codes when no search term (sorted by sort_order)
+        result = await dbQuery(`
+          SELECT 
+            nc.code as value,
+            nc.code || ' - ' || nc.display_en as label,
+            nc.display_en as display,
+            nc.description
+          FROM nphies_codes nc
+          JOIN nphies_code_systems ncs ON nc.code_system_id = ncs.code_system_id
+          WHERE ncs.code = 'chief-complaint-snomed'
+            AND nc.is_active = true
+          ORDER BY nc.sort_order, nc.display_en
+          LIMIT $1
+        `, [safeLimit]);
+      }
+      
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error searching chief complaints:', error);
+      res.status(500).json({ error: 'Failed to search chief complaints' });
+    }
+  }
+
   // ==================== MEDICATION CODES ====================
 
   /**
