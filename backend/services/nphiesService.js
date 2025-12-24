@@ -1127,6 +1127,81 @@ class NphiesService {
   }
 
   /**
+   * Send Status Check message to NPHIES
+   * 
+   * Status Check is used to check the processing status of a prior submission
+   * (e.g., a claim that is queued/pended).
+   * 
+   * Uses the same $process-message endpoint as poll, but with:
+   * - eventCoding: 'status-check' (instead of 'poll-request')
+   * - Task with 'status-request' profile
+   * 
+   * @param {Object} statusCheckBundle - FHIR Bundle with status-check message
+   * @returns {Object} Response with success status and data
+   */
+  async sendStatusCheck(statusCheckBundle) {
+    console.log('[NPHIES] ===== SENDING STATUS CHECK =====');
+    console.log('[NPHIES] Bundle ID:', statusCheckBundle?.id);
+    
+    // Verify eventCoding
+    const messageHeader = statusCheckBundle?.entry?.find(
+      e => e.resource?.resourceType === 'MessageHeader'
+    )?.resource;
+    console.log('[NPHIES] EventCoding:', messageHeader?.eventCoding?.code);
+    
+    // Extract focus (the resource we're checking status for)
+    const task = statusCheckBundle?.entry?.find(
+      e => e.resource?.resourceType === 'Task'
+    )?.resource;
+    if (task?.focus) {
+      console.log('[NPHIES] Checking status for:', task.focus.type, '-', task.focus.identifier?.value);
+    }
+    console.log('[NPHIES] Endpoint: $process-message');
+    console.log('[NPHIES] =====================================');
+    
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/$process-message`,
+        statusCheckBundle,
+        {
+          headers: {
+            'Content-Type': 'application/fhir+json',
+            'Accept': 'application/fhir+json'
+          },
+          timeout: this.timeout,
+          validateStatus: (status) => status < 500
+        }
+      );
+      
+      console.log(`[NPHIES] Status check response status: ${response.status}`);
+      
+      // Log response details
+      if (response.data) {
+        console.log('[NPHIES] Response type:', response.data.resourceType);
+        if (response.data.resourceType === 'Bundle') {
+          console.log('[NPHIES] Bundle type:', response.data.type);
+          console.log('[NPHIES] Response entries:', response.data.entry?.length || 0);
+        }
+      }
+      
+      return {
+        success: response.status >= 200 && response.status < 300,
+        status: response.status,
+        data: response.data,
+        statusCheckBundle: statusCheckBundle
+      };
+      
+    } catch (error) {
+      console.error('[NPHIES] Status check error:', error.message);
+      return {
+        success: false,
+        error: this.formatError(error),
+        statusCheckBundle: statusCheckBundle
+      };
+    }
+  }
+
+  /**
    * Build a Poll Request bundle for Prior Authorization messages
    * 
    * @deprecated This method used the wrong structure (Parameters instead of Task).

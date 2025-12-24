@@ -38,4 +38,66 @@ router.post('/:id/send', (req, res) => claimSubmissionsController.sendToNphies(r
 // FHIR bundle preview for existing claim
 router.get('/:id/bundle', (req, res) => claimSubmissionsController.getBundle(req, res));
 
+// ============================================================================
+// Communication Routes - Status Check, Poll, and Communications
+// ============================================================================
+
+/**
+ * Status Check - Check processing status of a queued/pended claim
+ * POST /api/claim-submissions/:id/status-check
+ * 
+ * Sends a status-check message to NPHIES to request current processing status.
+ * Use this when a claim is in queued/pended status.
+ */
+router.post('/:id/status-check', (req, res) => claimSubmissionsController.sendStatusCheck(req, res));
+
+/**
+ * Poll - Retrieve pending messages for a claim
+ * POST /api/claim-submissions/:id/poll
+ * 
+ * Polls NPHIES for:
+ * - ClaimResponse (final adjudicated response)
+ * - CommunicationRequest (HIC needs more info - CONDITIONAL)
+ * - Communication acknowledgments
+ * 
+ * Note: CommunicationRequest is conditional - may or may not be received
+ * depending on whether HIC needs additional information.
+ */
+router.post('/:id/poll', (req, res) => claimSubmissionsController.pollMessages(req, res));
+
+/**
+ * Send Unsolicited Communication
+ * POST /api/claim-submissions/:id/communication/unsolicited
+ * 
+ * HCP proactively sends additional information to HIC.
+ * Body: { payloads: [{ contentType: 'string'|'attachment', ... }] }
+ */
+router.post('/:id/communication/unsolicited', (req, res) => claimSubmissionsController.sendUnsolicitedCommunication(req, res));
+
+/**
+ * Send Solicited Communication
+ * POST /api/claim-submissions/:id/communication/solicited
+ * 
+ * HCP responds to a CommunicationRequest from HIC.
+ * Body: { communicationRequestId: number, payloads: [...] }
+ */
+router.post('/:id/communication/solicited', (req, res) => claimSubmissionsController.sendSolicitedCommunication(req, res));
+
+/**
+ * Get Communication Requests
+ * GET /api/claim-submissions/:id/communication-requests
+ * 
+ * Get all CommunicationRequests received from HIC for this claim.
+ * Query: ?pending=true to get only pending (unanswered) requests
+ */
+router.get('/:id/communication-requests', (req, res) => claimSubmissionsController.getCommunicationRequests(req, res));
+
+/**
+ * Get Communications
+ * GET /api/claim-submissions/:id/communications
+ * 
+ * Get all Communications sent for this claim (both solicited and unsolicited).
+ */
+router.get('/:id/communications', (req, res) => claimSubmissionsController.getCommunications(req, res));
+
 export default router;

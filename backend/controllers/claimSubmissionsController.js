@@ -3,6 +3,7 @@ import { query } from '../db.js';
 import { validationSchemas } from '../models/schema.js';
 import claimMapper, { getClaimMapper } from '../services/claimMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
+import claimCommunicationService from '../services/claimCommunicationService.js';
 
 class ClaimSubmissionsController extends BaseController {
   constructor() {
@@ -487,6 +488,225 @@ class ClaimSubmissionsController extends BaseController {
     for (const att of attachments) {
       await query(`INSERT INTO claim_submission_attachments (claim_id, file_name, content_type, file_size, base64_content, title, description, category, binary_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [claimId, att.file_name, att.content_type, att.file_size, att.base64_content, att.title, att.description, att.category, att.binary_id || `binary-${Date.now()}`]);
+    }
+  }
+
+  // ============================================================================
+  // COMMUNICATION ENDPOINTS - Status Check, Poll, and Communications
+  // ============================================================================
+
+  /**
+   * Send Status Check for a claim
+   * POST /claim-submissions/:id/status-check
+   */
+  async sendStatusCheck(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const schemaName = req.schemaName || 'public';
+
+      console.log(`[ClaimSubmissions] Sending status check for claim ${claimId}`);
+
+      const result = await claimCommunicationService.sendStatusCheck(claimId, schemaName);
+
+      res.json({
+        success: result.success,
+        message: result.message,
+        statusCheckBundle: result.statusCheckBundle,
+        response: result.response,
+        error: result.error
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Status check error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to send status check'
+      });
+    }
+  }
+
+  /**
+   * Poll for messages related to a claim
+   * POST /claim-submissions/:id/poll
+   */
+  async pollMessages(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const schemaName = req.schemaName || 'public';
+
+      console.log(`[ClaimSubmissions] Polling messages for claim ${claimId}`);
+
+      const result = await claimCommunicationService.pollForMessages(claimId, schemaName);
+
+      res.json({
+        success: result.success,
+        message: result.message,
+        hasCommunicationRequests: result.hasCommunicationRequests,
+        hasClaimResponse: result.hasClaimResponse,
+        claimResponses: result.claimResponses,
+        communicationRequests: result.communicationRequests,
+        acknowledgments: result.acknowledgments,
+        pollBundle: result.pollBundle,
+        responseBundle: result.responseBundle,
+        error: result.error
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Poll error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to poll for messages'
+      });
+    }
+  }
+
+  /**
+   * Send unsolicited communication for a claim
+   * POST /claim-submissions/:id/communication/unsolicited
+   */
+  async sendUnsolicitedCommunication(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const schemaName = req.schemaName || 'public';
+      const { payloads } = req.body;
+
+      if (!payloads || !Array.isArray(payloads) || payloads.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Payloads array is required'
+        });
+      }
+
+      console.log(`[ClaimSubmissions] Sending unsolicited communication for claim ${claimId}`);
+
+      const result = await claimCommunicationService.sendUnsolicitedCommunication(
+        claimId,
+        payloads,
+        schemaName
+      );
+
+      res.json({
+        success: result.success,
+        communication: result.communication,
+        nphiesResponse: result.nphiesResponse
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Unsolicited communication error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to send unsolicited communication'
+      });
+    }
+  }
+
+  /**
+   * Send solicited communication (response to CommunicationRequest)
+   * POST /claim-submissions/:id/communication/solicited
+   */
+  async sendSolicitedCommunication(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const schemaName = req.schemaName || 'public';
+      const { communicationRequestId, payloads } = req.body;
+
+      if (!communicationRequestId) {
+        return res.status(400).json({
+          success: false,
+          error: 'communicationRequestId is required'
+        });
+      }
+
+      if (!payloads || !Array.isArray(payloads) || payloads.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Payloads array is required'
+        });
+      }
+
+      console.log(`[ClaimSubmissions] Sending solicited communication for claim ${claimId}, responding to request ${communicationRequestId}`);
+
+      const result = await claimCommunicationService.sendSolicitedCommunication(
+        communicationRequestId,
+        payloads,
+        schemaName
+      );
+
+      res.json({
+        success: result.success,
+        communication: result.communication,
+        nphiesResponse: result.nphiesResponse
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Solicited communication error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to send solicited communication'
+      });
+    }
+  }
+
+  /**
+   * Get communication requests for a claim
+   * GET /claim-submissions/:id/communication-requests
+   */
+  async getCommunicationRequests(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const schemaName = req.schemaName || 'public';
+      const pendingOnly = req.query.pending === 'true';
+
+      console.log(`[ClaimSubmissions] Getting communication requests for claim ${claimId}`);
+
+      let requests;
+      if (pendingOnly) {
+        requests = await claimCommunicationService.getPendingCommunicationRequests(claimId, schemaName);
+      } else {
+        requests = await claimCommunicationService.getCommunicationRequests(claimId, schemaName);
+      }
+
+      res.json({
+        success: true,
+        communicationRequests: requests,
+        count: requests.length,
+        pendingCount: requests.filter(r => !r.responded_at).length
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Get communication requests error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to get communication requests'
+      });
+    }
+  }
+
+  /**
+   * Get communications sent for a claim
+   * GET /claim-submissions/:id/communications
+   */
+  async getCommunications(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const schemaName = req.schemaName || 'public';
+
+      console.log(`[ClaimSubmissions] Getting communications for claim ${claimId}`);
+
+      const communications = await claimCommunicationService.getCommunications(claimId, schemaName);
+
+      res.json({
+        success: true,
+        communications: communications,
+        count: communications.length
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Get communications error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to get communications'
+      });
     }
   }
 }

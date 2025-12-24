@@ -743,6 +743,77 @@ class ApiService {
     });
   }
 
+  // ============================================================================
+  // Claim Status Check and Communication
+  // ============================================================================
+
+  /**
+   * Send status check for a claim
+   * Used when claim is in queued/pended status to check current processing status
+   * @param {number} claimId - Claim submission ID
+   */
+  async sendClaimStatusCheck(claimId) {
+    return this.request(`/claim-submissions/${claimId}/status-check`, {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Poll for messages related to a claim
+   * Retrieves: ClaimResponse (conditional), CommunicationRequest (conditional)
+   * @param {number} claimId - Claim submission ID
+   */
+  async pollClaimMessages(claimId) {
+    return this.request(`/claim-submissions/${claimId}/poll`, {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Send unsolicited communication for a claim
+   * HCP proactively sends additional information to HIC
+   * @param {number} claimId - Claim submission ID
+   * @param {Array} payloads - Array of payload objects
+   */
+  async sendClaimUnsolicitedCommunication(claimId, payloads) {
+    return this.request(`/claim-submissions/${claimId}/communication/unsolicited`, {
+      method: 'POST',
+      body: JSON.stringify({ payloads })
+    });
+  }
+
+  /**
+   * Send solicited communication for a claim
+   * HCP responds to a CommunicationRequest from HIC
+   * @param {number} claimId - Claim submission ID
+   * @param {number} communicationRequestId - CommunicationRequest ID to respond to
+   * @param {Array} payloads - Array of payload objects
+   */
+  async sendClaimSolicitedCommunication(claimId, communicationRequestId, payloads) {
+    return this.request(`/claim-submissions/${claimId}/communication/solicited`, {
+      method: 'POST',
+      body: JSON.stringify({ communicationRequestId, payloads })
+    });
+  }
+
+  /**
+   * Get communication requests for a claim
+   * @param {number} claimId - Claim submission ID
+   * @param {boolean} pendingOnly - If true, only return unanswered requests
+   */
+  async getClaimCommunicationRequests(claimId, pendingOnly = false) {
+    const params = pendingOnly ? '?pending=true' : '';
+    return this.request(`/claim-submissions/${claimId}/communication-requests${params}`);
+  }
+
+  /**
+   * Get communications sent for a claim
+   * @param {number} claimId - Claim submission ID
+   */
+  async getClaimCommunications(claimId) {
+    return this.request(`/claim-submissions/${claimId}/communications`);
+  }
+
   // ICD-10 Codes
   /**
    * Search ICD-10 codes for async dropdown

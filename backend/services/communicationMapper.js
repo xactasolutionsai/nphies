@@ -1020,6 +1020,215 @@ class CommunicationMapper {
   }
 
   // ============================================================================
+  // STATUS CHECK BUNDLE BUILDER
+  // ============================================================================
+
+  /**
+   * Build Status Check Bundle for NPHIES
+   * 
+   * Used to check the processing status of a prior submission (claim or prior authorization).
+   * Per NPHIES IG: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aad.html
+   * 
+   * The status-check message uses:
+   * - MessageHeader with eventCoding: 'status-check'
+   * - Task resource with profile 'status-request' and code 'poll' (check status)
+   * - Task.focus pointing to the focal resource (Claim) being checked
+   * - Organization resources for requester (Provider) and owner (Insurer)
+   * 
+   * @param {Object} options - Status check options
+   * @param {string} options.providerId - Provider NPHIES license ID
+   * @param {string} options.providerName - Provider organization name
+   * @param {string} options.insurerId - Insurer NPHIES license ID
+   * @param {string} options.insurerName - Insurer organization name (optional)
+   * @param {string} options.focalResourceIdentifier - The identifier of the resource being checked
+   * @param {string} options.focalResourceType - Resource type ('Claim' or 'ClaimResponse')
+   * @param {string} options.originalRequestId - Original request bundle ID for response.identifier
+   * @returns {Object} FHIR Bundle for status-check request
+   */
+  buildStatusCheckBundle({ 
+    providerId, 
+    providerName = 'Healthcare Provider', 
+    insurerId, 
+    insurerName = 'Insurance Company',
+    focalResourceIdentifier, 
+    focalResourceType = 'Claim',
+    originalRequestId = null
+  }) {
+    const bundleId = this.generateId();
+    const messageHeaderId = this.generateId();
+    const taskId = `${Date.now()}`;
+    const providerOrgId = `provider-org-${Date.now()}`;
+    const insurerOrgId = `insurer-org-${Date.now()}`;
+    const timestamp = this.formatDateTime(new Date());
+    const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
+    const nphiesBaseURL = process.env.NPHIES_BASE_URL || 'http://176.105.150.83';
+    
+    // Extract base URL from provider endpoint
+    const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
+    
+    // Extract provider domain for identifier system
+    const providerDomain = this.extractProviderDomain(providerName);
+    
+    // Use absolute URLs for fullUrl values
+    const taskFullUrl = `${providerBaseUrl}/Task/${taskId}`;
+    const providerOrgFullUrl = `${providerBaseUrl}/Organization/${providerOrgId}`;
+    const insurerOrgFullUrl = `${providerBaseUrl}/Organization/${insurerOrgId}`;
+
+    // Build MessageHeader resource
+    const messageHeaderResource = {
+      resourceType: 'MessageHeader',
+      id: messageHeaderId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+      },
+      eventCoding: {
+        system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+        code: 'status-check'
+      },
+      sender: {
+        type: 'Organization',
+        identifier: {
+          system: 'http://nphies.sa/license/provider-license',
+          value: providerId
+        }
+      },
+      source: {
+        endpoint: providerBaseUrl
+      },
+      destination: [{
+        endpoint: `http://nphies.sa/license/payer-license/${insurerId}`,
+        receiver: {
+          type: 'Organization',
+          identifier: {
+            system: 'http://nphies.sa/license/payer-license',
+            value: insurerId
+          }
+        }
+      }],
+      focus: [{
+        reference: taskFullUrl
+      }]
+    };
+
+    // Add response.identifier if we have the original request ID
+    if (originalRequestId) {
+      messageHeaderResource.response = {
+        identifier: originalRequestId
+      };
+    }
+
+    // Build Task resource with status-request profile
+    const taskResource = {
+      resourceType: 'Task',
+      id: taskId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/status-request|1.0.0']
+      },
+      identifier: [{
+        system: `http://${providerDomain}/identifiers/status-check`,
+        value: `status_${taskId}`
+      }],
+      status: 'requested',
+      intent: 'order',
+      priority: 'routine',
+      code: {
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/task-code',
+          code: 'poll',
+          display: 'Check status of the focal resource'
+        }]
+      },
+      // Focus on the specific resource we're checking status for
+      focus: {
+        type: focalResourceType,
+        identifier: {
+          system: `http://${providerDomain}/identifiers/${focalResourceType.toLowerCase()}`,
+          value: focalResourceIdentifier
+        }
+      },
+      requester: {
+        reference: `Organization/${providerOrgId}`
+      },
+      owner: {
+        reference: `Organization/${insurerOrgId}`
+      },
+      authoredOn: timestamp,
+      lastModified: timestamp
+    };
+
+    // Build Provider Organization
+    const providerOrgResource = {
+      resourceType: 'Organization',
+      id: providerOrgId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
+      },
+      identifier: [{
+        system: 'http://nphies.sa/license/provider-license',
+        value: providerId
+      }],
+      active: true,
+      type: [{
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
+          code: 'prov'
+        }]
+      }],
+      name: providerName
+    };
+
+    // Build Insurer Organization
+    const insurerOrgResource = {
+      resourceType: 'Organization',
+      id: insurerOrgId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0']
+      },
+      identifier: [{
+        use: 'official',
+        system: 'http://nphies.sa/license/payer-license',
+        value: insurerId
+      }],
+      active: true,
+      type: [{
+        coding: [{
+          system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
+          code: 'ins'
+        }]
+      }],
+      name: insurerName
+    };
+
+    return {
+      resourceType: 'Bundle',
+      id: bundleId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: timestamp,
+      entry: [
+        {
+          fullUrl: `urn:uuid:${messageHeaderId}`,
+          resource: messageHeaderResource
+        },
+        {
+          fullUrl: taskFullUrl,
+          resource: taskResource
+        },
+        {
+          fullUrl: providerOrgFullUrl,
+          resource: providerOrgResource
+        },
+        {
+          fullUrl: insurerOrgFullUrl,
+          resource: insurerOrgResource
+        }
+      ]
+    };
+  }
+
+  // ============================================================================
   // POLL REQUEST BUILDERS
   // ============================================================================
 

@@ -10,8 +10,9 @@ import {
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ExternalLink,
-  Wallet, Banknote, ArrowRight
+  Wallet, Banknote, ArrowRight, MessageSquare
 } from 'lucide-react';
+import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
 
 // Helper functions
 const getClaimTypeDisplay = (claimType) => {
@@ -880,6 +881,13 @@ export default function ClaimDetails() {
               <Wallet className="h-4 w-4 mr-1 inline" />
               Payments {payments.length > 0 && `(${payments.length})`}
             </TabButton>
+            {/* Communications Tab - Show for queued, pended, or approved claims */}
+            {(claim.status === 'queued' || claim.status === 'pended' || claim.status === 'approved' || claim.adjudication_outcome === 'approved') && (
+              <TabButton active={activeTab === 'communications'} onClick={() => setActiveTab('communications')}>
+                <MessageSquare className="h-4 w-4 mr-1 inline" />
+                Communications
+              </TabButton>
+            )}
           </div>
 
           {/* Details Tab */}
@@ -1743,6 +1751,20 @@ export default function ClaimDetails() {
                 )}
               </CardContent>
             </Card>
+          )}
+
+          {/* Communications Tab - Status Check, Poll, and Communications */}
+          {activeTab === 'communications' && (
+            <ClaimCommunicationPanel 
+              claimId={id}
+              claimStatus={claim.status}
+              nphiesClaimId={claim.nphies_claim_id}
+              items={claim.items || []}
+              onStatusUpdate={(data) => {
+                // Reload claim data when status changes
+                loadClaim();
+              }}
+            />
           )}
         </div>
 
