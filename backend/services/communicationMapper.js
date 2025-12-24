@@ -573,13 +573,13 @@ class CommunicationMapper {
     const communicationId = this.generateId();
     
     // Build the 'about' reference using proper identifier system URL format
-    // NPHIES FIX (BV-00148): The 'about' identifier MUST be the pre_auth_ref (NPHIES-assigned UUID)
-    // Example: 98118790-5053-4cef-b479-ae744986fbd5
-    const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
+    // NPHIES FIX: The 'about' identifier MUST match the Claim.identifier from the original authorization request
+    // Uses the same identifier system and request_number value for consistency
+    const providerDomain = this.extractProviderDomain(provider.provider_name || provider.name || 'provider');
     const aboutIdentifier = this.getNphiesAuthReference(priorAuth);
     const aboutReference = {
       identifier: {
-        system: `http://${providerDomain}.com.sa/identifiers/authorization`,
+        system: `http://${providerDomain}/identifiers/authorization`,
         value: aboutIdentifier
       }
     };
@@ -676,15 +676,15 @@ class CommunicationMapper {
     const communicationId = this.generateId();
     
     // Build the 'about' reference using proper identifier system URL format
-    // NPHIES FIX (BV-00148): The 'about' identifier MUST be the pre_auth_ref (NPHIES-assigned UUID)
-    // Example: 98118790-5053-4cef-b479-ae744986fbd5
-    const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
+    // NPHIES FIX: The 'about' identifier MUST match the Claim.identifier from the original authorization request
+    // Uses the same identifier system and request_number value for consistency
+    const providerDomain = this.extractProviderDomain(provider.provider_name || provider.name || 'provider');
     const aboutIdentifier = this.getNphiesAuthReference(priorAuth);
     
     // Use existing about_reference from CommunicationRequest if available, otherwise build new one
     const aboutReference = communicationRequest.about_reference ? 
-      { identifier: { system: `http://${providerDomain}.com.sa/identifiers/authorization`, value: communicationRequest.about_reference } } :
-      { identifier: { system: `http://${providerDomain}.com.sa/identifiers/authorization`, value: aboutIdentifier } };
+      { identifier: { system: `http://${providerDomain}/identifiers/authorization`, value: communicationRequest.about_reference } } :
+      { identifier: { system: `http://${providerDomain}/identifiers/authorization`, value: aboutIdentifier } };
     
     // Build basedOn identifier per NPHIES example format
     // Per NPHIES: { identifier: { system: "http://sni.com.sa/identifiers/communicationrequest", value: "CommReq_12361231" } }
@@ -810,7 +810,7 @@ class CommunicationMapper {
     
     // Build Communication identifier per NPHIES requirement (IC-00111)
     // The identifier system should use provider's domain
-    const providerDomain = (provider.provider_name || provider.name || 'provider').toLowerCase().replace(/\s+/g, '');
+    const providerDomain = this.extractProviderDomain(provider.provider_name || provider.name || 'provider');
     
     const communication = {
       resourceType: 'Communication',
@@ -821,11 +821,11 @@ class CommunicationMapper {
       // NPHIES FIX (IC-00111): Communication identifier is required per NPHIES spec
       // Per NPHIES example: http://saudigeneralhospital.com.sa/identifiers/communication
       identifier: [{
-        system: `http://${providerDomain}.com.sa/identifiers/communication`,
+        system: `http://${providerDomain}/identifiers/communication`,
         value: `Communication_${id.replace(/-/g, '')}`
       }],
-      // Status: 'completed' when sending (we're done composing)
-      status: 'completed',
+      // Status: 'in-progress' when sending (per NPHIES standard)
+      status: 'in-progress',
       // Category - Using HL7 standard codes: alert, notification, reminder, instruction
       // See: https://terminology.hl7.org/CodeSystem-communication-category.html
       category: [{
@@ -1143,10 +1143,11 @@ class CommunicationMapper {
         }]
       },
       // Focus on the specific resource we're checking status for
+      // NPHIES FIX: identifier system must match Claim.identifier.system format
       focus: {
         type: focalResourceType,
         identifier: {
-          system: `http://${providerDomain}/${focalResourceType.toLowerCase()}`,
+          system: `http://${providerDomain}/identifiers/authorization`,
           value: focalResourceIdentifier
         }
       },
