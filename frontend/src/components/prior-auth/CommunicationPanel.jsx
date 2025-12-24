@@ -31,7 +31,7 @@ import {
   X,
   Copy,
   Eye,
-  Code
+  Code,
   XCircle
 } from 'lucide-react';
 import api from '../../services/api';
