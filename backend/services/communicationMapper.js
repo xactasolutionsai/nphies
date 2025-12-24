@@ -240,7 +240,7 @@ class CommunicationMapper {
    */
   buildInsurerOrganizationResource(insurer) {
     const insurerId = insurer.insurer_id?.toString() || this.generateId();
-    const nphiesId = insurer.nphies_id || 'INS-FHIR';
+    const nphiesId = insurer.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID;
     const insurerName = insurer.insurer_name || insurer.name || 'Insurance Organization';
 
     return {
@@ -862,7 +862,7 @@ class CommunicationMapper {
         type: 'Organization',
         identifier: {
           system: 'http://nphies.sa/license/payer-license',
-          value: insurer.nphies_id || 'INS-FHIR'
+          value: insurer.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID
         }
       }],
       // Payload (content)
@@ -976,7 +976,7 @@ class CommunicationMapper {
   buildCommunicationMessageHeader({ provider, insurer, focusFullUrl }) {
     const messageHeaderId = this.generateId();
     const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+    const destinationNphiesId = insurer.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID;
 
     return {
       fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -1068,7 +1068,7 @@ class CommunicationMapper {
     const insurerOrgId = this.generateId();
     const timestamp = this.formatDate(new Date());
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
-    const nphiesBaseURL = process.env.NPHIES_BASE_URL || 'http://176.105.150.83';
+    const nphiesBaseURL = NPHIES_CONFIG.BASE_URL;
     
     // Extract base URL from provider endpoint
     const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
@@ -1467,7 +1467,7 @@ class CommunicationMapper {
     const providerOrgId = `provider-org-${Date.now()}`; // Simple ID format for provider org
     const timestamp = this.formatDateTime(new Date());
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
-    const nphiesBaseURL = process.env.NPHIES_BASE_URL || 'http://176.105.150.83';
+    const nphiesBaseURL = NPHIES_CONFIG.BASE_URL;
     
     // Extract base URL from provider endpoint (remove /fhir if present)
     // Example: http://provider.com/fhir -> http://provider.com
