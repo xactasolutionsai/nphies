@@ -801,7 +801,10 @@ class CommunicationService {
         communicationRequests: [],
         acknowledgments: [],
         pollBundle,
-        responseBundle: pollResponse.data
+        responseBundle: pollResponse.data,
+        // Include errors and response code from NPHIES
+        errors: pollResponse.errors || [],
+        responseCode: pollResponse.responseCode
       };
 
       // 5. Process ClaimResponses (final authorization responses)

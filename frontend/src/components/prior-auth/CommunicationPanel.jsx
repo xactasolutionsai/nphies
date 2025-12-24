@@ -1099,10 +1099,50 @@ const CommunicationPanel = ({
 
       {/* Poll Result */}
       {pollResult && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <p className="text-green-800 font-medium">{pollResult.message}</p>
+        <div className={`border rounded-lg p-4 ${
+          pollResult.errors && pollResult.errors.length > 0
+            ? 'bg-red-50 border-red-200'
+            : 'bg-green-50 border-green-200'
+        }`}>
+          <p className={`font-medium ${
+            pollResult.errors && pollResult.errors.length > 0
+              ? 'text-red-800'
+              : 'text-green-800'
+          }`}>
+            {pollResult.message}
+          </p>
+          
+          {/* Display Errors if any */}
+          {pollResult.errors && pollResult.errors.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-red-300">
+              <p className="text-red-800 font-semibold mb-2">⚠️ Errors Found:</p>
+              <div className="space-y-2">
+                {pollResult.errors.map((err, index) => (
+                  <div key={index} className="bg-red-100 border border-red-300 rounded p-2">
+                    <p className="text-sm text-red-800">
+                      <span className="font-medium">Error {index + 1}:</span>
+                      {err.code && <span className="ml-2">Code: <code className="bg-red-200 px-1 rounded">{err.code}</code></span>}
+                    </p>
+                    <p className="text-sm text-red-700 mt-1">
+                      {err.message || err.details || JSON.stringify(err)}
+                    </p>
+                    {err.expression && (
+                      <p className="text-xs text-red-600 mt-1 font-mono">
+                        Location: {err.expression}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
           {pollResult.pollResults && (
-            <div className="mt-2 text-sm text-green-700">
+            <div className={`mt-2 text-sm ${
+              pollResult.errors && pollResult.errors.length > 0
+                ? 'text-red-700'
+                : 'text-green-700'
+            }`}>
               <p>• ClaimResponses: {pollResult.pollResults.claimResponses?.length || 0}</p>
               <p>• CommunicationRequests: {pollResult.pollResults.communicationRequests?.length || 0}</p>
               <p>• Acknowledgments: {pollResult.pollResults.acknowledgments?.length || 0}</p>
@@ -1112,6 +1152,15 @@ const CommunicationPanel = ({
                 </p>
               )}
             </div>
+          )}
+          
+          {/* Show responseCode if available */}
+          {pollResult.responseCode && (
+            <p className={`text-xs mt-2 ${
+              pollResult.responseCode === 'ok' ? 'text-green-600' : 'text-red-600'
+            }`}>
+              Response Code: <code className="bg-gray-100 px-1 rounded">{pollResult.responseCode}</code>
+            </p>
           )}
         </div>
       )}

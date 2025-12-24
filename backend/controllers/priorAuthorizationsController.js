@@ -1135,6 +1135,10 @@ class PriorAuthorizationsController extends BaseController {
           autoPollDelayMs: pollResult.autoPollDelayMs,
           autoPollPriorAuthId: pollResult.autoPollPriorAuthId
         },
+        // Include errors if any
+        errors: pollResult.errors || [],
+        responseCode: pollResult.responseCode,
+        has_errors: (pollResult.errors && pollResult.errors.length > 0) || false,
         message: pollResult.claimResponses.length > 0 
           ? 'Received authorization response' 
           : pollResult.communicationRequests.length > 0
