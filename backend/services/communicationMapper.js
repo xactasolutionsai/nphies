@@ -1561,8 +1561,13 @@ class CommunicationMapper {
             requester: {
               reference: providerOrgFullUrl
             },
+            // NPHIES FIX: owner should use identifier format for NPHIES (per NPHIES response structure)
+            // The response shows owner uses identifier, not reference format
             owner: {
-              reference: nphiesOrgFullUrl
+              identifier: {
+                system: 'http://nphies.sa/license/nphies',
+                value: 'NPHIES'
+              }
             },
             authoredOn: this.formatDateTime(new Date()),
             lastModified: this.formatDateTime(new Date()),

@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "24987b8e-8ca3-4444-bf0a-a86c3b66e9e7",
+    "id": "cc0934de-66e9-45e2-b6b7-235263cb42c4",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-25T02:40:10.205+03:00",
+    "timestamp": "2025-12-25T02:44:37.261+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/d1b8b18f-94d7-4922-983c-47b206e5a23a",
+            "fullUrl": "http://nphies.sa/MessageHeader/223e65ab-b7b2-44d0-af10-34aeac8b03c5",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "d1b8b18f-94d7-4922-983c-47b206e5a23a",
+                "id": "223e65ab-b7b2-44d0-af10-34aeac8b03c5",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -46,16 +46,16 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "0673af5d-6371-4e12-a62d-d57c46598fde",
+                    "identifier": "0e47d321-86eb-4321-b472-6fddebe7d77e",
                     "code": "fatal-error"
                 }
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Task/1099bcc4-1850-4996-b374-efe411409332",
+            "fullUrl": "http://nphies.sa/Task/dada65c6-e1c7-4dac-92a3-418d602e6de0",
             "resource": {
                 "resourceType": "Task",
-                "id": "1099bcc4-1850-4996-b374-efe411409332",
+                "id": "dada65c6-e1c7-4dac-92a3-418d602e6de0",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0"
@@ -70,7 +70,7 @@
                 "identifier": [
                     {
                         "system": "http://saudigeneralhospital.com.sa/identifiers/poll-request",
-                        "value": "519"
+                        "value": "692"
                     }
                 ],
                 "status": "failed",
@@ -85,10 +85,10 @@
                         }
                     ]
                 },
-                "authoredOn": "2025-12-24T23:39:41.675Z",
-                "lastModified": "2025-12-24T23:39:41.675Z",
+                "authoredOn": "2025-12-24T23:44:31.744Z",
+                "lastModified": "2025-12-24T23:44:31.744Z",
                 "requester": {
-                    "reference": "http://saudigeneralhospital.com.sa/Organization/ec27f43e-bef6-47b5-b92c-9f266ff52f9a"
+                    "reference": "http://saudigeneralhospital.com.sa/Organization/c4e6564f-558e-4452-8f7e-487697e914e7"
                 },
                 "owner": {
                     "identifier": {
@@ -146,34 +146,70 @@
                                 }
                             ]
                         }
+                    },
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/ValueSet/task-output-type",
+                                    "code": "error"
+                                }
+                            ]
+                        },
+                        "valueCodeableConcept": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "Bundle.entry[2].resource.extension"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "IC-01428",
+                                    "display": "The element SHALL follow the cardinality specified in the NPHIES profile"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/ValueSet/task-output-type",
+                                    "code": "error"
+                                }
+                            ]
+                        },
+                        "valueCodeableConcept": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "Bundle.entry[2].resource.extension[0].providerType"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "IC-01574",
+                                    "display": "'Organization ProviderType' is not following the specified cardinality within the message profile"
+                                }
+                            ]
+                        }
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://saudigeneralhospital.com.sa/Organization/ec27f43e-bef6-47b5-b92c-9f266ff52f9a",
+            "fullUrl": "http://saudigeneralhospital.com.sa/Organization/c4e6564f-558e-4452-8f7e-487697e914e7",
             "resource": {
                 "resourceType": "Organization",
-                "id": "ec27f43e-bef6-47b5-b92c-9f266ff52f9a",
+                "id": "c4e6564f-558e-4452-8f7e-487697e914e7",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
                     ]
                 },
-                "extension": [
-                    {
-                        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
-                        "valueCodeableConcept": {
-                            "coding": [
-                                {
-                                    "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                                    "code": "1",
-                                    "display": "Hospital"
-                                }
-                            ]
-                        }
-                    }
-                ],
                 "identifier": [
                     {
                         "system": "http://nphies.sa/license/provider-license",
