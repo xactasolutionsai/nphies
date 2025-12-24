@@ -158,11 +158,18 @@ const ClaimCommunicationPanel = ({
   // JSON Preview state
   const [showJsonPreview, setShowJsonPreview] = useState(false);
   const [previewJson, setPreviewJson] = useState(null);
+  const [previewJsonTitle, setPreviewJsonTitle] = useState('');
   const [jsonCopied, setJsonCopied] = useState(false);
   
   // Response bundle preview state
   const [showResponsePreview, setShowResponsePreview] = useState(false);
   const [selectedCommunication, setSelectedCommunication] = useState(null);
+  
+  // Status Check and Poll bundle storage (for copy functionality)
+  const [lastStatusCheckRequest, setLastStatusCheckRequest] = useState(null);
+  const [lastStatusCheckResponse, setLastStatusCheckResponse] = useState(null);
+  const [lastPollRequest, setLastPollRequest] = useState(null);
+  const [lastPollResponse, setLastPollResponse] = useState(null);
 
   // Load data on mount
   useEffect(() => {
@@ -198,6 +205,15 @@ const ClaimCommunicationPanel = ({
     
     try {
       const result = await api.sendClaimStatusCheck(claimId);
+      
+      // Store the bundles for copy functionality
+      if (result.statusCheckBundle) {
+        setLastStatusCheckRequest(result.statusCheckBundle);
+      }
+      if (result.response) {
+        setLastStatusCheckResponse(result.response);
+      }
+      
       setStatusCheckResult(result);
       
       // If queued, show info about next steps
@@ -238,6 +254,15 @@ const ClaimCommunicationPanel = ({
     
     try {
       const result = await api.pollClaimCommunication(claimId);
+      
+      // Store the bundles for copy functionality
+      if (result.pollBundle) {
+        setLastPollRequest(result.pollBundle);
+      }
+      if (result.responseBundle) {
+        setLastPollResponse(result.responseBundle);
+      }
+      
       setPollResult(result);
       
       // Reload data to get new requests/responses
@@ -396,6 +421,26 @@ const ClaimCommunicationPanel = ({
   const handleViewResponse = (comm) => {
     setSelectedCommunication(comm);
     setShowResponsePreview(true);
+  };
+  
+  // View JSON bundle in modal
+  const handleViewJson = (json, title) => {
+    setPreviewJson(json);
+    setPreviewJsonTitle(title);
+    setShowJsonPreview(true);
+    setJsonCopied(false);
+  };
+  
+  // Copy JSON to clipboard
+  const handleCopyJson = async (json) => {
+    try {
+      const jsonString = typeof json === 'string' ? json : JSON.stringify(json, null, 2);
+      await navigator.clipboard.writeText(jsonString);
+      setJsonCopied(true);
+      setTimeout(() => setJsonCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy JSON:', err);
+    }
   };
 
   // Toggle section
@@ -568,7 +613,7 @@ const ClaimCommunicationPanel = ({
             : 'bg-yellow-50 border-yellow-200'
         }`}>
           <div className="flex items-start justify-between">
-            <div>
+            <div className="flex-1">
               <p className={`font-medium ${
                 statusCheckResult.success ? 'text-green-800' : 'text-yellow-800'
               }`}>
@@ -593,6 +638,28 @@ const ClaimCommunicationPanel = ({
                   <strong>Next:</strong> {statusCheckResult.nextStep}
                 </p>
               )}
+              
+              {/* JSON Copy Buttons */}
+              <div className="flex flex-wrap gap-2 mt-3">
+                {lastStatusCheckRequest && (
+                  <button
+                    onClick={() => handleViewJson(lastStatusCheckRequest, 'Status Check Request Bundle')}
+                    className="inline-flex items-center px-2 py-1 text-xs bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 transition-colors"
+                  >
+                    <Code className="w-3 h-3 mr-1" />
+                    View Request JSON
+                  </button>
+                )}
+                {lastStatusCheckResponse && (
+                  <button
+                    onClick={() => handleViewJson(lastStatusCheckResponse, 'Status Check Response Bundle')}
+                    className="inline-flex items-center px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                  >
+                    <Code className="w-3 h-3 mr-1" />
+                    View Response JSON
+                  </button>
+                )}
+              </div>
             </div>
             <button
               onClick={() => setStatusCheckResult(null)}
@@ -608,7 +675,7 @@ const ClaimCommunicationPanel = ({
       {pollResult && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <div className="flex items-start justify-between">
-            <div>
+            <div className="flex-1">
               <p className="text-green-800 font-medium">{pollResult.message}</p>
               {pollResult.pollResults && (
                 <div className="mt-2 text-sm text-green-700">
@@ -622,6 +689,28 @@ const ClaimCommunicationPanel = ({
                   <strong>Note:</strong> Direct ClaimResponse received (no CommunicationRequest needed)
                 </p>
               )}
+              
+              {/* JSON Copy Buttons */}
+              <div className="flex flex-wrap gap-2 mt-3">
+                {lastPollRequest && (
+                  <button
+                    onClick={() => handleViewJson(lastPollRequest, 'Poll Request Bundle')}
+                    className="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                  >
+                    <Code className="w-3 h-3 mr-1" />
+                    View Request JSON
+                  </button>
+                )}
+                {lastPollResponse && (
+                  <button
+                    onClick={() => handleViewJson(lastPollResponse, 'Poll Response Bundle')}
+                    className="inline-flex items-center px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                  >
+                    <Code className="w-3 h-3 mr-1" />
+                    View Response JSON
+                  </button>
+                )}
+              </div>
             </div>
             <button
               onClick={() => setPollResult(null)}
@@ -1135,10 +1224,7 @@ const ClaimCommunicationPanel = ({
                     NPHIES Response
                   </h4>
                   <button
-                    onClick={() => {
-                      setPreviewJson(selectedCommunication.response_bundle);
-                      setShowJsonPreview(true);
-                    }}
+                    onClick={() => handleViewJson(selectedCommunication.response_bundle, 'Communication Response Bundle')}
                     className="flex items-center px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm"
                   >
                     <Code className="w-4 h-4 mr-2" />
@@ -1171,7 +1257,7 @@ const ClaimCommunicationPanel = ({
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center">
                 <Code className="w-5 h-5 text-blue-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900">JSON Preview</h3>
+                <h3 className="text-lg font-semibold text-gray-900">{previewJsonTitle || 'JSON Preview'}</h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
