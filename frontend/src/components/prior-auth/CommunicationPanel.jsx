@@ -792,6 +792,17 @@ const CommunicationPanel = ({
         
         // Reload data
         await loadData();
+        
+        // If unsolicited communication was sent, auto-poll for acknowledgment after a delay
+        if (communicationType === 'unsolicited' && autoPollEnabled) {
+          console.log('[CommunicationPanel] Unsolicited communication sent. Auto-polling for acknowledgment in 2 seconds...');
+          
+          // Wait 2 seconds for NPHIES to process, then poll for acknowledgment
+          setTimeout(async () => {
+            console.log('[CommunicationPanel] Auto-polling for acknowledgment...');
+            await handlePoll(false); // Poll for acknowledgment
+          }, 2000);
+        }
       } else {
         // Handle error object properly
         const errMsg = result.message;
