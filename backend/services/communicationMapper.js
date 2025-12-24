@@ -1062,23 +1062,24 @@ class CommunicationMapper {
   }) {
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
-    const taskId = `${Date.now()}`;
-    const providerOrgId = `provider-org-${Date.now()}`;
-    const insurerOrgId = `insurer-org-${Date.now()}`;
-    const timestamp = this.formatDateTime(new Date());
+    const taskTimestamp = Date.now();
+    const taskId = `${taskTimestamp}`;
+    const providerOrgId = this.generateId();
+    const insurerOrgId = this.generateId();
+    const timestamp = this.formatDate(new Date());
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
     const nphiesBaseURL = process.env.NPHIES_BASE_URL || 'http://176.105.150.83';
     
     // Extract base URL from provider endpoint
     const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
     
-    // Extract provider domain for identifier system
+    // Extract provider domain for identifier system and full URLs
     const providerDomain = this.extractProviderDomain(providerName);
     
-    // Use absolute URLs for fullUrl values
-    const taskFullUrl = `${providerBaseUrl}/Task/${taskId}`;
-    const providerOrgFullUrl = `${providerBaseUrl}/Organization/${providerOrgId}`;
-    const insurerOrgFullUrl = `${providerBaseUrl}/Organization/${insurerOrgId}`;
+    // Use absolute URLs for fullUrl values matching NPHIES example format
+    const taskFullUrl = `http://${providerDomain}/Task/${taskId}`;
+    const providerOrgFullUrl = `http://${providerDomain}/Organization/${providerOrgId}`;
+    const insurerOrgFullUrl = `http://${providerDomain}/Organization/${insurerOrgId}`;
 
     // Build MessageHeader resource
     const messageHeaderResource = {
@@ -1099,7 +1100,7 @@ class CommunicationMapper {
         }
       },
       source: {
-        endpoint: providerBaseUrl
+        endpoint: `http://nphies.sa/license/provider-license/${providerId}`
       },
       destination: [{
         endpoint: `http://nphies.sa/license/payer-license/${insurerId}`,
@@ -1121,16 +1122,16 @@ class CommunicationMapper {
       }
     };
 
-    // Build Task resource with status-request profile
+    // Build Task resource with task profile (matching NPHIES example)
     const taskResource = {
       resourceType: 'Task',
       id: taskId,
       meta: {
-        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/status-request|1.0.0']
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0']
       },
       identifier: [{
-        system: `http://${providerDomain}/identifiers/status-check`,
-        value: `status_${taskId}`
+        system: `http://${providerDomain}/task`,
+        value: `${taskTimestamp}`
       }],
       status: 'requested',
       intent: 'order',
@@ -1138,23 +1139,22 @@ class CommunicationMapper {
       code: {
         coding: [{
           system: 'http://nphies.sa/terminology/CodeSystem/task-code',
-          code: 'poll',
-          display: 'Check status of the focal resource'
+          code: 'status'
         }]
       },
       // Focus on the specific resource we're checking status for
       focus: {
         type: focalResourceType,
         identifier: {
-          system: `http://${providerDomain}/identifiers/${focalResourceType.toLowerCase()}`,
+          system: `http://${providerDomain}/${focalResourceType.toLowerCase()}`,
           value: focalResourceIdentifier
         }
       },
       requester: {
-        reference: `Organization/${providerOrgId}`
+        reference: providerOrgFullUrl
       },
       owner: {
-        reference: `Organization/${insurerOrgId}`
+        reference: insurerOrgFullUrl
       },
       authoredOn: timestamp,
       lastModified: timestamp
@@ -1202,8 +1202,7 @@ class CommunicationMapper {
       providerOrgResource.address = [this.buildFhirAddress(providerAddress, 'work')];
     }
 
-    // Build Insurer Organization
-    // Per NPHIES IG: identifier should have type with NII code
+    // Build Insurer Organization (matching NPHIES example structure)
     const insurerOrgResource = {
       resourceType: 'Organization',
       id: insurerOrgId,
@@ -1211,13 +1210,6 @@ class CommunicationMapper {
         profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0']
       },
       identifier: [{
-        use: 'official',
-        type: {
-          coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-            code: 'NII'  // National Insurance Organization Identifier
-          }]
-        },
         system: 'http://nphies.sa/license/payer-license',
         value: insurerId
       }],
