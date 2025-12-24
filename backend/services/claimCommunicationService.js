@@ -324,12 +324,20 @@ class ClaimCommunicationService {
       // 3. Send poll request
       const pollResponse = await nphiesService.sendPoll(pollBundle);
 
-      if (!pollResponse.success) {
+      // IMPORTANT: Check for errors even if HTTP status is 200
+      if (!pollResponse.success || (pollResponse.errors && pollResponse.errors.length > 0)) {
+        const errorMessage = pollResponse.errors && pollResponse.errors.length > 0
+          ? pollResponse.errors.map(e => `${e.code}: ${e.message}${e.expression ? ` (${e.expression})` : ''}`).join('; ')
+          : pollResponse.error || 'Poll request failed';
+        
         return {
           success: false,
-          error: pollResponse.error,
+          error: errorMessage,
+          errors: pollResponse.errors || [],
+          responseCode: pollResponse.responseCode,
           pollBundle,
-          message: 'Poll request failed'
+          responseBundle: pollResponse.data,
+          message: 'Poll request failed with validation errors'
         };
       }
 
@@ -348,7 +356,9 @@ class ClaimCommunicationService {
         pollBundle,
         responseBundle: pollResponse.data,
         hasCommunicationRequests: communicationRequests.length > 0,
-        hasClaimResponse: claimResponses.length > 0
+        hasClaimResponse: claimResponses.length > 0,
+        errors: pollResponse.errors || [],
+        responseCode: pollResponse.responseCode
       };
 
       // 5. Process ClaimResponses (final adjudicated responses)

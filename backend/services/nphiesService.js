@@ -1102,9 +1102,88 @@ class NphiesService {
         }
       }
       
+      // IMPORTANT: HTTP 200 doesn't mean success - check for errors in response body
+      let nphiesSuccess = response.status >= 200 && response.status < 300;
+      let responseCode = null;
+      let errors = [];
+      
+      if (response.data?.resourceType === 'Bundle' && response.data?.entry) {
+        // Find MessageHeader to check response code
+        const respMessageHeader = response.data.entry.find(
+          e => e.resource?.resourceType === 'MessageHeader'
+        )?.resource;
+        
+        if (respMessageHeader?.response?.code) {
+          responseCode = respMessageHeader.response.code;
+          // fatal-error or transient-error means failure
+          if (responseCode === 'fatal-error' || responseCode === 'transient-error') {
+            nphiesSuccess = false;
+            console.log(`[NPHIES] Response code indicates error: ${responseCode}`);
+          }
+        }
+        
+        // Find Task to extract errors from output
+        const respTask = response.data.entry.find(
+          e => e.resource?.resourceType === 'Task'
+        )?.resource;
+        
+        if (respTask?.status === 'failed' || respTask?.output) {
+          // Extract errors from Task.output
+          const errorOutputs = respTask.output?.filter(
+            o => o.type?.coding?.some(c => c.code === 'error')
+          ) || [];
+          
+          errors = errorOutputs.map(eo => {
+            const coding = eo.valueCodeableConcept?.coding?.[0];
+            const expression = coding?.extension?.find(
+              ext => ext.url?.includes('error-expression')
+            )?.valueString;
+            return {
+              code: coding?.code || 'unknown',
+              message: coding?.display || 'Unknown error',
+              expression: expression || null
+            };
+          });
+          
+          if (errors.length > 0) {
+            nphiesSuccess = false;
+            console.log(`[NPHIES] Task contains ${errors.length} error(s):`, errors.map(e => e.code).join(', '));
+          }
+        }
+        
+        // Also check for OperationOutcome
+        const operationOutcome = response.data.entry.find(
+          e => e.resource?.resourceType === 'OperationOutcome'
+        )?.resource;
+        
+        if (operationOutcome?.issue) {
+          const ooErrors = operationOutcome.issue
+            .filter(issue => issue.severity === 'error' || issue.severity === 'fatal')
+            .map(issue => {
+              const coding = issue.details?.coding?.[0];
+              const expression = coding?.extension?.find(
+                ext => ext.url?.includes('error-expression')
+              )?.valueString;
+              return {
+                code: coding?.code || issue.code?.code || 'unknown',
+                message: coding?.display || issue.details?.text || issue.diagnostics || 'Unknown error',
+                expression: expression || issue.location?.join(', ') || null
+              };
+            });
+          
+          if (ooErrors.length > 0) {
+            errors.push(...ooErrors);
+            nphiesSuccess = false;
+            console.log(`[NPHIES] OperationOutcome contains ${ooErrors.length} error(s):`, ooErrors.map(e => e.code).join(', '));
+          }
+        }
+      }
+      
       return {
-        success: response.status >= 200 && response.status < 300,
+        success: nphiesSuccess,
         status: response.status,
+        responseCode: responseCode,
+        errors: errors,
         data: response.data,
         pollBundle: pollBundle  // Include the poll bundle for debugging
       };

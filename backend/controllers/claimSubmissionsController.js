@@ -580,6 +580,8 @@ class ClaimSubmissionsController extends BaseController {
         acknowledgments: result.acknowledgments,
         pollBundle: result.pollBundle,
         responseBundle: result.responseBundle,
+        errors: result.errors || [],
+        responseCode: result.responseCode,
         error: result.error
       });
 

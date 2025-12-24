@@ -796,10 +796,46 @@ const ClaimCommunicationPanel = ({
 
       {/* Poll Result */}
       {pollResult && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className={`border rounded-lg p-4 ${
+          pollResult.success && (!pollResult.errors || pollResult.errors.length === 0)
+            ? 'bg-green-50 border-green-200'
+            : 'bg-red-50 border-red-200'
+        }`}>
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <p className="text-green-800 font-medium">{pollResult.message}</p>
+              <p className={`font-medium ${
+                pollResult.success && (!pollResult.errors || pollResult.errors.length === 0)
+                  ? 'text-green-800'
+                  : 'text-red-800'
+              }`}>
+                {pollResult.message || (pollResult.success ? 'Poll completed' : 'Poll failed')}
+              </p>
+              
+              {/* Display errors if any */}
+              {pollResult.errors && pollResult.errors.length > 0 && (
+                <div className="mt-2 p-3 bg-red-100 border border-red-300 rounded">
+                  <p className="text-red-800 font-semibold mb-2">Validation Errors:</p>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-red-700">
+                    {pollResult.errors.map((error, idx) => (
+                      <li key={idx}>
+                        <strong>{error.code}:</strong> {error.message}
+                        {error.expression && (
+                          <span className="text-red-600 text-xs block ml-4">
+                            Location: {error.expression}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {pollResult.responseCode && (
+                <p className="mt-2 text-sm text-gray-600">
+                  Response Code: <strong>{pollResult.responseCode}</strong>
+                </p>
+              )}
+              
               {pollResult.pollResults && (
                 <div className="mt-2 text-sm text-green-700">
                   <p>• ClaimResponses: {pollResult.pollResults.claimResponses?.length || 0}</p>
