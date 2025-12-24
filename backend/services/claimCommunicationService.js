@@ -559,8 +559,7 @@ class ClaimCommunicationService {
       parsed.status || 'active',
       parsed.category,
       parsed.priority,
-      // Use aboutIdentifier value if aboutReference is not set (identifier format)
-      parsed.aboutReference || parsed.aboutIdentifier || null,
+      parsed.aboutReference,
       parsed.aboutType || 'Claim',
       parsed.payloadContentType,
       parsed.payloadContentString,

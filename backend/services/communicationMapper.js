@@ -1854,28 +1854,13 @@ class CommunicationMapper {
     // Supports both direct reference and identifier-based reference formats
     if (resource.about && resource.about.length > 0) {
       const about = resource.about[0];
-      parsed.aboutType = about.type;
+      parsed.aboutReference = about.reference;
+      parsed.aboutType = about.type || this.extractTypeFromReference(about.reference);
       
-      // Handle both reference and identifier formats
-      if (about.reference) {
-        // Direct reference format: "Claim/123" or "http://example.com/Claim/123"
-        parsed.aboutReference = about.reference;
-        // Extract type from reference if not explicitly set
-        if (!parsed.aboutType) {
-          parsed.aboutType = this.extractTypeFromReference(about.reference);
-        }
-      }
-      
-      // Identifier format (NPHIES standard): { type: "Claim", identifier: { system, value } }
+      // Also extract identifier if present (NPHIES uses identifier format)
       if (about.identifier) {
         parsed.aboutIdentifier = about.identifier.value;
         parsed.aboutIdentifierSystem = about.identifier.system;
-        
-        // If no reference was provided, use identifier value as aboutReference
-        // This ensures backward compatibility and proper storage
-        if (!parsed.aboutReference) {
-          parsed.aboutReference = about.identifier.value;
-        }
       }
     }
 
