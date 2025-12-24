@@ -496,6 +496,35 @@ class ClaimSubmissionsController extends BaseController {
   // ============================================================================
 
   /**
+   * Preview Status Check bundle (without sending)
+   * GET /claim-submissions/:id/status-check/preview
+   */
+  async previewStatusCheck(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const schemaName = req.schemaName || 'public';
+
+      console.log(`[ClaimSubmissions] Previewing status check for claim ${claimId}`);
+
+      const result = await claimCommunicationService.previewStatusCheck(claimId, schemaName);
+
+      res.json({
+        success: result.success,
+        message: result.message,
+        claimNumber: result.claimNumber,
+        statusCheckBundle: result.statusCheckBundle
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Status check preview error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to generate status check preview'
+      });
+    }
+  }
+
+  /**
    * Send Status Check for a claim
    * POST /claim-submissions/:id/status-check
    */

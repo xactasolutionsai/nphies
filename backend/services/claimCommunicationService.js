@@ -27,6 +27,85 @@ class ClaimCommunicationService {
   // ============================================================================
 
   /**
+   * Preview Status Check bundle WITHOUT sending to NPHIES
+   * Use this to view/copy the JSON before actually sending
+   * 
+   * @param {number} claimId - Claim Submission ID
+   * @param {string} schemaName - Database schema name
+   * @returns {Object} Status check bundle for preview
+   */
+  async previewStatusCheck(claimId, schemaName) {
+    const client = await pool.connect();
+    
+    try {
+      await client.query(`SET search_path TO ${schemaName}`);
+
+      // Get Claim with related data
+      const claimResult = await client.query(`
+        SELECT 
+          cs.*,
+          pr.provider_name,
+          pr.nphies_id as provider_nphies_id,
+          pr.provider_type,
+          pr.address as provider_address,
+          i.insurer_name,
+          i.nphies_id as insurer_nphies_id,
+          i.address as insurer_address
+        FROM claim_submissions cs
+        LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
+        LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
+        WHERE cs.id = $1
+      `, [claimId]);
+
+      if (claimResult.rows.length === 0) {
+        throw new Error('Claim not found');
+      }
+
+      const claim = claimResult.rows[0];
+      
+      // Build address objects
+      const providerAddress = claim.provider_address ? {
+        text: claim.provider_address,
+        country: 'Saudi Arabia'
+      } : null;
+      
+      const insurerAddress = claim.insurer_address ? {
+        text: claim.insurer_address,
+        country: 'Saudi Arabia'
+      } : null;
+
+      // Build Status Check bundle (without sending)
+      const focalIdentifier = claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id;
+      
+      const statusCheckBundle = this.mapper.buildStatusCheckBundle({
+        providerId: claim.provider_nphies_id,
+        providerName: claim.provider_name || 'Healthcare Provider',
+        insurerId: claim.insurer_nphies_id,
+        insurerName: claim.insurer_name || 'Insurance Company',
+        focalResourceIdentifier: focalIdentifier,
+        focalResourceType: 'Claim',
+        originalRequestId: claim.nphies_request_id,
+        providerType: claim.provider_type,
+        providerAddress: providerAddress,
+        insurerAddress: insurerAddress
+      });
+
+      return {
+        success: true,
+        statusCheckBundle,
+        claimNumber: claim.claim_number,
+        message: 'Status check bundle generated. Review and click Send to submit to NPHIES.'
+      };
+
+    } catch (error) {
+      console.error('[ClaimCommunicationService] Error generating status check preview:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Send Status Check message for a Claim
    * Used when claim is in queued/pended status to check current processing status
    * 
@@ -134,6 +213,7 @@ class ClaimCommunicationService {
       }
 
       // 6. Store the status check request/response for audit
+      // Note: Using 'poll' as response_type since DB constraint only allows: initial, update, cancel, poll, final
       await client.query(`
         INSERT INTO claim_submission_responses (
           claim_id,
@@ -147,12 +227,13 @@ class ClaimCommunicationService {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
       `, [
         claimId,
-        'status-check',
+        'poll',  // DB constraint: must be one of initial, update, cancel, poll, final
         hasErrors ? 'error' : 'queued',
         hasErrors ? `Status check failed: ${responseCode || 'error'}` : 'Status check sent',
         JSON.stringify({
           request: statusCheckBundle,
-          response: nphiesResponse.data
+          response: nphiesResponse.data,
+          type: 'status-check'  // Store actual type in JSON for reference
         }),
         hasErrors,
         errorDetails ? JSON.stringify(errorDetails) : null

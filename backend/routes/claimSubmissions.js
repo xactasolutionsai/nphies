@@ -43,6 +43,14 @@ router.get('/:id/bundle', (req, res) => claimSubmissionsController.getBundle(req
 // ============================================================================
 
 /**
+ * Preview Status Check Bundle (without sending)
+ * GET /api/claim-submissions/:id/status-check/preview
+ * 
+ * Returns the status-check FHIR bundle for review/copy before sending.
+ */
+router.get('/:id/status-check/preview', (req, res) => claimSubmissionsController.previewStatusCheck(req, res));
+
+/**
  * Status Check - Check processing status of a queued/pended claim
  * POST /api/claim-submissions/:id/status-check
  * 

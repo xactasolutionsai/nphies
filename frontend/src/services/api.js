@@ -759,6 +759,15 @@ class ApiService {
   }
 
   /**
+   * Preview status check bundle (without sending)
+   * Use this to view/copy the JSON before actually sending
+   * @param {number} claimId - Claim submission ID
+   */
+  async previewClaimStatusCheck(claimId) {
+    return this.request(`/claim-submissions/${claimId}/status-check/preview`);
+  }
+
+  /**
    * Poll for messages related to a claim
    * Retrieves: ClaimResponse (conditional), CommunicationRequest (conditional)
    * @param {number} claimId - Claim submission ID

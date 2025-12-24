@@ -109,8 +109,10 @@ const ClaimCommunicationPanel = ({
   // State
   const [isPolling, setIsPolling] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [isPreviewingStatus, setIsPreviewingStatus] = useState(false);
   const [pollResult, setPollResult] = useState(null);
   const [statusCheckResult, setStatusCheckResult] = useState(null);
+  const [statusCheckPreview, setStatusCheckPreview] = useState(null);
   const [communicationRequests, setCommunicationRequests] = useState([]);
   const [communications, setCommunications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -194,6 +196,38 @@ const ClaimCommunicationPanel = ({
       setError('Failed to load communication data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Preview Status Check (without sending)
+  const handlePreviewStatusCheck = async () => {
+    setIsPreviewingStatus(true);
+    setError(null);
+    setStatusCheckPreview(null);
+    
+    try {
+      const result = await api.previewClaimStatusCheck(claimId);
+      
+      if (result.success && result.statusCheckBundle) {
+        setStatusCheckPreview(result.statusCheckBundle);
+        setLastStatusCheckRequest(result.statusCheckBundle);
+        // Show JSON preview modal
+        handleViewJson(result.statusCheckBundle, 'Status Check Request Bundle (Preview)');
+      } else {
+        setError(result.error || 'Failed to generate preview');
+      }
+    } catch (err) {
+      console.error('Error previewing status check:', err);
+      const errorData = err.response?.data?.error;
+      let errorMessage;
+      if (typeof errorData === 'object' && errorData !== null) {
+        errorMessage = errorData.message || errorData.details || JSON.stringify(errorData);
+      } else {
+        errorMessage = errorData || err.message || 'Failed to preview status check';
+      }
+      setError(errorMessage);
+    } finally {
+      setIsPreviewingStatus(false);
     }
   };
 
@@ -534,6 +568,18 @@ const ClaimCommunicationPanel = ({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Preview Status Check Button - View JSON before sending */}
+            {canSendStatusCheck && (
+              <button
+                onClick={handlePreviewStatusCheck}
+                disabled={isPreviewingStatus}
+                className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Preview status-check JSON before sending"
+              >
+                <Eye className={`w-4 h-4 mr-2 ${isPreviewingStatus ? 'animate-pulse' : ''}`} />
+                {isPreviewingStatus ? 'Loading...' : 'Preview'}
+              </button>
+            )}
             {/* Status Check Button */}
             {canSendStatusCheck && (
               <button
@@ -543,7 +589,7 @@ const ClaimCommunicationPanel = ({
                 title="Send status-check message to NPHIES"
               >
                 <Activity className={`w-4 h-4 mr-2 ${isCheckingStatus ? 'animate-pulse' : ''}`} />
-                {isCheckingStatus ? 'Checking...' : 'Status Check'}
+                {isCheckingStatus ? 'Checking...' : 'Send Status Check'}
               </button>
             )}
             {/* Poll Button */}
