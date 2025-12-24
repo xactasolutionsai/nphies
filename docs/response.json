@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "f7746bb2-4e0b-4062-b85e-afdbfb0df02a",
+    "id": "203f5e85-1816-4576-a97f-4fb2fbc263ac",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-24T13:11:00.351+03:00",
+    "timestamp": "2025-12-24T10:52:21.152+00:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/d93b6c0d-86e8-4ae5-b6cc-267f26fdf52a",
+            "fullUrl": "http://pseudo-payer.com.sa/MessageHeader/9128a247-f7a5-4942-8959-9ec0c548715b",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "d93b6c0d-86e8-4ae5-b6cc-267f26fdf52a",
+                "id": "9128a247-f7a5-4942-8959-9ec0c548715b",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -21,7 +21,7 @@
                 },
                 "eventCoding": {
                     "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
-                    "code": "priorauth-response"
+                    "code": "claim-response"
                 },
                 "destination": [
                     {
@@ -38,44 +38,69 @@
                 "sender": {
                     "type": "Organization",
                     "identifier": {
-                        "system": "http://nphies.sa/license/nphies",
-                        "value": "NPHIES"
+                        "system": "http://nphies.sa/license/payer-license",
+                        "value": "INS-FHIR"
                     }
                 },
                 "source": {
-                    "endpoint": "http://nphies.sa/"
+                    "endpoint": "http://payer.com"
                 },
                 "response": {
-                    "identifier": "17eb0fe0-a915-467c-ba4b-792ef1cf41f4",
+                    "identifier": "1894bb7f-2cd6-46f9-acfa-0e1ea598641d",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://nphies.sa/ClaimResponse/230"
+                        "reference": "http://pseudo-payer.com.sa/ClaimResponse/59871509-98f5-4ac4-9f5f-c69a0d5eec57"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/ClaimResponse/230",
+            "fullUrl": "http://pseudo-payer.com.sa/ClaimResponse/59871509-98f5-4ac4-9f5f-c69a0d5eec57",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "230",
+                "id": "59871509-98f5-4ac4-9f5f-c69a0d5eec57",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
-                    ],
-                    "tag": [
-                        {
-                            "code": "NPHIES generated",
-                            "display": "NPHIES generated"
-                        }
                     ]
                 },
+                "extension": [
+                    {
+                        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
+                        "valueCodeableConcept": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
+                                    "code": "pended"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
+                        "valueIdentifier": {
+                            "system": "http://saudigeneralhospital.com.sa/identifiers/batch",
+                            "value": "batch-CLM-1766573539986"
+                        }
+                    },
+                    {
+                        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-number",
+                        "valuePositiveInt": 1
+                    },
+                    {
+                        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period",
+                        "valuePeriod": {
+                            "start": "2023-12-04",
+                            "end": "2023-12-04"
+                        }
+                    }
+                ],
                 "identifier": [
                     {
-                        "system": "http://nphies.sa/ClaimResponse",
-                        "value": "DUP-1766570939747"
+                        "system": "http://pseudo-payer.com.sa/claimresponse",
+                        "value": "7b5f2c32-5009-4f48-8ed5-36c17d1510d3"
                     }
                 ],
                 "status": "active",
@@ -87,74 +112,46 @@
                         }
                     ]
                 },
-                "use": "preauthorization",
-                "patient": {
-                    "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
+                "subType": {
+                    "coding": [
+                        {
+                            "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype",
+                            "code": "op"
+                        }
+                    ]
                 },
-                "created": "2025-12-24T13:08:59+03:00",
+                "use": "claim",
+                "patient": {
+                    "reference": "http://provider.com/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
+                },
+                "created": "2025-12-24",
                 "insurer": {
-                    "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+                    "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
                 "requestor": {
-                    "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
+                    "reference": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
                 },
                 "request": {
                     "type": "Claim",
                     "identifier": {
-                        "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-                        "value": "DUP-1766570939747"
+                        "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
+                        "value": "CLM-1766573539986"
                     }
                 },
-                "outcome": "error",
+                "outcome": "queued",
                 "insurance": [
                     {
                         "sequence": 1,
                         "focal": true,
                         "coverage": {
-                            "reference": "Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
-                        }
-                    }
-                ],
-                "error": [
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[1].resource.item[3].extension[2].value"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "IB-00242",
-                                    "display": "Element value binding is not using a value from the specified ValueSet"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "code": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[1].resource.item[3].productOrService"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "IB-00030",
-                                    "display": "The Claim.item.productOrService SHALL use a code from the specified valueSet"
-                                }
-                            ]
+                            "reference": "http://provider.com/Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2"
                         }
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
+            "fullUrl": "http://provider.com/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
             "resource": {
                 "resourceType": "Patient",
                 "id": "09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
@@ -246,7 +243,7 @@
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
+            "fullUrl": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
             "resource": {
                 "resourceType": "Organization",
                 "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
@@ -301,7 +298,7 @@
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
+            "fullUrl": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
             "resource": {
                 "resourceType": "Organization",
                 "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
@@ -352,7 +349,7 @@
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
+            "fullUrl": "http://provider.com/Coverage/32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
             "resource": {
                 "resourceType": "Coverage",
                 "id": "32d05e1a-2e77-4762-a0b4-4dd2eb6975b2",
@@ -401,7 +398,7 @@
                 },
                 "payor": [
                     {
-                        "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+                        "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                     }
                 ],
                 "class": [

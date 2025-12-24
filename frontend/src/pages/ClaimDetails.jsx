@@ -448,6 +448,24 @@ export default function ClaimDetails() {
       return parts[parts.length - 1];
     };
 
+    // Extract adjudication outcome from extension
+    const adjudicationOutcome = claimResponse.extension?.find(
+      ext => ext.url?.includes('extension-adjudication-outcome')
+    )?.valueCodeableConcept?.coding?.[0]?.code;
+
+    // Extract batch extensions
+    const batchIdentifier = claimResponse.extension?.find(
+      ext => ext.url?.includes('extension-batch-identifier')
+    )?.valueIdentifier;
+    
+    const batchNumber = claimResponse.extension?.find(
+      ext => ext.url?.includes('extension-batch-number')
+    )?.valuePositiveInt;
+    
+    const batchPeriod = claimResponse.extension?.find(
+      ext => ext.url?.includes('extension-batch-period')
+    )?.valuePeriod;
+
     return {
       id: claimResponse.id,
       profile: claimResponse.meta?.profile?.[0],
@@ -460,8 +478,14 @@ export default function ClaimDetails() {
       subType: claimResponse.subType?.coding?.[0]?.code,
       use: claimResponse.use,
       outcome: claimResponse.outcome,
+      adjudicationOutcome: adjudicationOutcome, // Pended, approved, rejected, partial
       created: claimResponse.created,
       disposition: claimResponse.disposition,
+      // Batch information
+      batchIdentifier: batchIdentifier?.value,
+      batchIdentifierSystem: batchIdentifier?.system,
+      batchNumber: batchNumber,
+      batchPeriod: batchPeriod,
       // References
       patientReference: claimResponse.patient?.reference,
       patientId: extractIdFromRef(claimResponse.patient?.reference),
@@ -648,6 +672,7 @@ export default function ClaimDetails() {
       draft: { variant: 'outline', icon: FileText, className: 'text-gray-600 border-gray-300' },
       pending: { variant: 'default', icon: Clock, className: 'bg-blue-500' },
       queued: { variant: 'secondary', icon: Clock, className: 'bg-yellow-500 text-black' },
+      pended: { variant: 'secondary', icon: Clock, className: 'bg-amber-500 text-white' }, // Pended status (for deferred priority claims)
       approved: { variant: 'default', icon: CheckCircle, className: 'bg-green-500' },
       complete: { variant: 'default', icon: CheckCircle, className: 'bg-green-500' },
       partial: { variant: 'default', icon: AlertCircle, className: 'bg-orange-500' },
@@ -1336,7 +1361,7 @@ export default function ClaimDetails() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                         <div>
                           <Label className="text-gray-500">Response ID</Label>
                           <p className="font-mono text-xs break-all">{claimResponseDetails.id || '-'}</p>
@@ -1355,6 +1380,26 @@ export default function ClaimDetails() {
                           >
                             {claimResponseDetails.outcome || '-'}
                           </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Adjudication Outcome</Label>
+                          {claimResponseDetails.adjudicationOutcome ? (
+                            <Badge 
+                              variant={claimResponseDetails.adjudicationOutcome === 'approved' ? 'default' : 
+                                      claimResponseDetails.adjudicationOutcome === 'rejected' ? 'destructive' :
+                                      claimResponseDetails.adjudicationOutcome === 'pended' ? 'secondary' : 'secondary'}
+                              className={
+                                claimResponseDetails.adjudicationOutcome === 'approved' ? 'bg-green-500 mt-1' :
+                                claimResponseDetails.adjudicationOutcome === 'rejected' ? 'bg-red-500 mt-1' :
+                                claimResponseDetails.adjudicationOutcome === 'pended' ? 'bg-amber-500 text-white mt-1' :
+                                claimResponseDetails.adjudicationOutcome === 'partial' ? 'bg-orange-500 mt-1' : 'mt-1'
+                              }
+                            >
+                              {claimResponseDetails.adjudicationOutcome}
+                            </Badge>
+                          ) : (
+                            <p className="text-sm text-gray-500 mt-1">-</p>
+                          )}
                         </div>
                         <div>
                           <Label className="text-gray-500">Use</Label>
@@ -1404,6 +1449,44 @@ export default function ClaimDetails() {
                           <div>
                             <Label className="text-gray-500">Disposition</Label>
                             <p className="mt-1">{claimResponseDetails.disposition}</p>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Batch Information */}
+                      {(claimResponseDetails.batchIdentifier || claimResponseDetails.batchNumber || claimResponseDetails.batchPeriod) && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">Batch Information</Label>
+                            <div className="mt-2 space-y-2">
+                              {claimResponseDetails.batchIdentifier && (
+                                <div>
+                                  <p className="text-xs text-gray-500">Batch Identifier</p>
+                                  <p className="font-mono text-sm">{claimResponseDetails.batchIdentifier}</p>
+                                  {claimResponseDetails.batchIdentifierSystem && (
+                                    <p className="text-xs text-gray-400 mt-0.5">{claimResponseDetails.batchIdentifierSystem}</p>
+                                  )}
+                                </div>
+                              )}
+                              {claimResponseDetails.batchNumber && (
+                                <div>
+                                  <p className="text-xs text-gray-500">Batch Number</p>
+                                  <p className="font-medium">{claimResponseDetails.batchNumber}</p>
+                                </div>
+                              )}
+                              {claimResponseDetails.batchPeriod && (
+                                <div>
+                                  <p className="text-xs text-gray-500">Batch Period</p>
+                                  <p className="font-medium">
+                                    {formatDate(claimResponseDetails.batchPeriod.start)}
+                                    {claimResponseDetails.batchPeriod.end && claimResponseDetails.batchPeriod.end !== claimResponseDetails.batchPeriod.start && 
+                                      ` - ${formatDate(claimResponseDetails.batchPeriod.end)}`
+                                    }
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </>
                       )}
