@@ -1555,10 +1555,10 @@ class CommunicationMapper {
               }]
             },
             requester: {
-              reference: `Organization/${providerOrgId}`
+              reference: providerOrgFullUrl
             },
             owner: {
-              reference: 'Organization/NPHIES'
+              reference: nphiesOrgFullUrl
             },
             authoredOn: this.formatDateTime(new Date()),
             lastModified: this.formatDateTime(new Date()),
