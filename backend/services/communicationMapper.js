@@ -1462,10 +1462,10 @@ class CommunicationMapper {
   buildPollRequestBundle(providerId, providerName = 'Healthcare Provider', providerType = '1', options = {}) {
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
-    // Use simple numeric ID format matching NPHIES example (e.g., "2342906")
+    // Use simple numeric ID format matching NPHIES example (e.g., "560081")
     const taskId = `${Date.now()}`;
-    // Use simple numeric ID for provider org (example uses "10")
-    const providerOrgId = `${Date.now() % 1000000}`;
+    // Use simple numeric ID for provider org (example uses "b1b3432921324f97af3be9fd0b1a14ae")
+    const providerOrgId = this.generateId();
     const timestamp = this.formatDateTime(new Date()); // Bundle timestamp uses datetime
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
     const nphiesBaseURL = NPHIES_CONFIG.BASE_URL;
@@ -1478,9 +1478,10 @@ class CommunicationMapper {
     const providerDomain = this.extractProviderDomain(providerName);
     
     // Use absolute URLs for fullUrl values (matching NPHIES example)
-    // Example: http://sgh.com.sa/Task/2342906
+    // Example: http://saudigeneralhospital.com.sa/Task/560081
     const taskFullUrl = `http://${providerDomain}/Task/${taskId}`;
     const providerOrgFullUrl = `http://${providerDomain}/Organization/${providerOrgId}`;
+    const nphiesOrgFullUrl = `http://${providerDomain}/Organization/NPHIES`;
 
     return {
       resourceType: 'Bundle',
@@ -1512,10 +1513,10 @@ class CommunicationMapper {
               }
             },
             source: {
-              endpoint: `http://nphies.sa/license/provider-license/${providerId}`
+              endpoint: providerBaseUrl
             },
             destination: [{
-              endpoint: 'http://nphies.sa',
+              endpoint: `${nphiesBaseURL}/fhir/$process-message`,
               receiver: {
                 type: 'Organization',
                 identifier: {
@@ -1537,13 +1538,12 @@ class CommunicationMapper {
             resourceType: 'Task',
             id: taskId,
             meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0']
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
             },
-            // Identifier system format matches NPHIES example (note: example has typo with single slash, using correct double slash)
+            // Identifier system format matches NPHIES example: http://saudigeneralhospital.com.sa/identifiers/poll-request
             identifier: [{
-              use: 'official',
-              system: `http://${providerDomain}/task`,
-              value: `PlReq_${new Date().toISOString().split('T')[0].replace(/-/g, '')}${taskId}`
+              system: `http://${providerDomain}/identifiers/poll-request`,
+              value: `req_${taskId}`
             }],
             status: 'requested',
             intent: 'order',
@@ -1558,13 +1558,10 @@ class CommunicationMapper {
               reference: `Organization/${providerOrgId}`
             },
             owner: {
-              identifier: {
-                system: 'http://nphies.sa/license/nphies',
-                value: 'NPHIES'
-              }
+              reference: 'Organization/NPHIES'
             },
-            authoredOn: this.formatDate(new Date()),
-            lastModified: this.formatDate(new Date()),
+            authoredOn: this.formatDateTime(new Date()),
+            lastModified: this.formatDateTime(new Date()),
             // Optional focus field (Task-560083 pattern) - for polling specific authorization
             ...(options.focus && {
               focus: {
@@ -1636,7 +1633,6 @@ class CommunicationMapper {
               }
             }],
             identifier: [{
-              use: 'official',
               system: 'http://nphies.sa/license/provider-license',
               value: providerId
             }],
@@ -1650,6 +1646,24 @@ class CommunicationMapper {
             name: providerName
           }
         },
+        // 4. NPHIES Organization (required per NPHIES documentation)
+        {
+          fullUrl: nphiesOrgFullUrl,
+          resource: {
+            resourceType: 'Organization',
+            id: 'NPHIES',
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
+            },
+            identifier: [{
+              use: 'official',
+              system: 'http://nphies.sa/license/nphies',
+              value: 'NPHIES'
+            }],
+            active: true,
+            name: 'National Program for Health Information Exchange Services'
+          }
+        }
       ]
     };
   }
