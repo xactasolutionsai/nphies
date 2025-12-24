@@ -934,30 +934,33 @@ class CommunicationService {
     const parsed = this.mapper.parseCommunicationRequest(commRequest);
 
     // Extract claim_id if about_type is 'Claim'
+    // Support both reference format and identifier format
     let claimId = null;
-    if (parsed.aboutType === 'Claim' && parsed.aboutReference) {
+    if (parsed.aboutType === 'Claim') {
       try {
-        // Extract identifier from about_reference
-        // Format could be: "Claim/{identifier}" or just the identifier value
-        let identifierValue = parsed.aboutReference;
+        // Use aboutIdentifier if available (identifier format), otherwise use aboutReference
+        let identifierValue = parsed.aboutIdentifier || parsed.aboutReference;
         
-        // If it's a reference string like "Claim/{id}", extract the ID part
-        if (typeof identifierValue === 'string' && identifierValue.includes('/')) {
-          identifierValue = identifierValue.split('/').pop();
-        }
-        
-        // Try to find claim by claim_number or nphies_claim_id
-        const claimQuery = await client.query(`
-          SELECT id FROM claim_submissions 
-          WHERE claim_number = $1 OR nphies_claim_id = $1
-          LIMIT 1
-        `, [identifierValue]);
-        
-        if (claimQuery.rows.length > 0) {
-          claimId = claimQuery.rows[0].id;
+        if (identifierValue) {
+          // If it's a reference string like "Claim/{id}", extract the ID part
+          if (typeof identifierValue === 'string' && identifierValue.includes('/')) {
+            identifierValue = identifierValue.split('/').pop();
+          }
+          
+          // Try to find claim by claim_number or nphies_claim_id
+          const claimQuery = await client.query(`
+            SELECT id FROM claim_submissions 
+            WHERE claim_number = $1 OR nphies_claim_id = $1
+            LIMIT 1
+          `, [identifierValue]);
+          
+          if (claimQuery.rows.length > 0) {
+            claimId = claimQuery.rows[0].id;
+          }
         }
       } catch (error) {
-        console.warn(`[CommunicationService] Could not extract claim_id from about_reference: ${parsed.aboutReference}`, error);
+        const identifierValue = parsed.aboutIdentifier || parsed.aboutReference;
+        console.warn(`[CommunicationService] Could not extract claim_id from about field: ${identifierValue}`, error);
         // Continue without claim_id if lookup fails
       }
     }
@@ -988,7 +991,8 @@ class CommunicationService {
       parsed.status || 'active',
       parsed.category,
       parsed.priority,
-      parsed.aboutReference,
+      // Use aboutIdentifier value if aboutReference is not set (identifier format)
+      parsed.aboutReference || parsed.aboutIdentifier || null,
       parsed.aboutType,
       parsed.payloadContentType,
       parsed.payloadContentString,
