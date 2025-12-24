@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "c76ae7de-72e3-40cf-9902-f24b04f1d5c4",
+    "id": "54af0141-4ca1-41d5-a197-6e3699868139",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-24T19:09:17.002+03:00",
+    "timestamp": "2025-12-24T19:19:09.789+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/79e817c0-06c7-473d-bfd2-2724e3065820",
+            "fullUrl": "http://nphies.sa/MessageHeader/371202e6-5ebc-48ea-ae77-4e4321d50a85",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "79e817c0-06c7-473d-bfd2-2724e3065820",
+                "id": "371202e6-5ebc-48ea-ae77-4e4321d50a85",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -46,19 +46,19 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "938fb9ef-3768-4689-b9af-48aac26c84aa",
-                    "code": "fatal-error"
+                    "identifier": "66194b55-0d00-48ac-8569-b72f2d87cd57",
+                    "code": "ok"
                 }
             }
         },
         {
-            "fullUrl": "http://nphies.sa/Task/7d90854b-ebeb-4567-b2aa-57a863a31c65",
+            "fullUrl": "http://nphies.sa/Task/b06d5bba-9882-4d20-bc58-9fcd7387433a",
             "resource": {
                 "resourceType": "Task",
-                "id": "7d90854b-ebeb-4567-b2aa-57a863a31c65",
+                "id": "b06d5bba-9882-4d20-bc58-9fcd7387433a",
                 "meta": {
                     "profile": [
-                        "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0"
+                        "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0"
                     ],
                     "tag": [
                         {
@@ -70,10 +70,10 @@
                 "identifier": [
                     {
                         "system": "http://saudigeneralhospital.com.sa/identifiers/poll-request",
-                        "value": "921"
+                        "value": "836"
                     }
                 ],
-                "status": "failed",
+                "status": "completed",
                 "intent": "order",
                 "priority": "routine",
                 "code": {
@@ -84,76 +84,24 @@
                         }
                     ]
                 },
-                "authoredOn": "2025-12-24T16:05:20.815Z",
-                "lastModified": "2025-12-24T16:05:20.815Z",
+                "authoredOn": "2025-12-24T16:12:08.462Z",
+                "lastModified": "2025-12-24T16:12:08.462Z",
                 "requester": {
-                    "reference": "Organization/f624cb67-b201-4156-9d81-719e8864b49d"
+                    "reference": "http://saudigeneralhospital.com.sa/Organization/3aa23c45-1be2-40a7-b084-7706872266cf"
                 },
                 "owner": {
                     "identifier": {
                         "system": "http://nphies.sa/license/nphies",
                         "value": "NPHIES"
                     }
-                },
-                "output": [
-                    {
-                        "type": {
-                            "coding": [
-                                {
-                                    "system": "http://nphies.sa/terminology/ValueSet/task-output-type",
-                                    "code": "error"
-                                }
-                            ]
-                        },
-                        "valueCodeableConcept": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[0].resource.focus[0]"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "RE-00100",
-                                    "display": "MessageHeader focus is not referring to a valid resource"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "type": {
-                            "coding": [
-                                {
-                                    "system": "http://nphies.sa/terminology/ValueSet/task-output-type",
-                                    "code": "error"
-                                }
-                            ]
-                        },
-                        "valueCodeableConcept": {
-                            "coding": [
-                                {
-                                    "extension": [
-                                        {
-                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[1].resource"
-                                        }
-                                    ],
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "RE-00170",
-                                    "display": "Referenced SHALL point to a valid profile"
-                                }
-                            ]
-                        }
-                    }
-                ]
+                }
             }
         },
         {
-            "fullUrl": "http://saudigeneralhospital.com.sa/Organization/f624cb67-b201-4156-9d81-719e8864b49d",
+            "fullUrl": "http://saudigeneralhospital.com.sa/Organization/3aa23c45-1be2-40a7-b084-7706872266cf",
             "resource": {
                 "resourceType": "Organization",
-                "id": "f624cb67-b201-4156-9d81-719e8864b49d",
+                "id": "3aa23c45-1be2-40a7-b084-7706872266cf",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"

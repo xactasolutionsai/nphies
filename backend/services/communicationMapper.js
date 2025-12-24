@@ -1538,7 +1538,7 @@ class CommunicationMapper {
             resourceType: 'Task',
             id: taskId,
             meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0']
             },
             // Identifier system format matches NPHIES example: http://saudigeneralhospital.com.sa/identifiers/poll-request
             identifier: [{

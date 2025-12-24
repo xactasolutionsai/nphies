@@ -1,174 +1,165 @@
 {
-	"resourceType": "Bundle",
-	"id": "284b2d52-21f4-45bf-92dd-654933df5609",
-	"meta": {
-		"profile": [
-			"http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
-		]
-	},
-	"type": "message",
-	"timestamp": "2023-12-02T05:06:16.904Z",
-	"entry": [
-		{
-			"fullUrl": "urn:uuid:3fa23591-f89b-4ad9-aa38-0cf23d805609",
-			"resource": {
-				"meta": {
-					"profile": [
-						"http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
-					]
-				},
-				"resourceType": "MessageHeader",
-				"id": "3fa23591-f89b-4ad9-aa38-0cf23d805609",
-				"eventCoding": {
-					"system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
-					"code": "status-check"
-				},
-				"destination": [
-					{
-						"endpoint": "http://nphies.sa/license/payer-license/INS-FHIR",
-						"receiver": {
-							"type": "Organization",
-							"identifier": {
-								"system": "http://nphies.sa/license/payer-license",
-								"value": "INS-FHIR"
-							}
-						}
-					}
-				],
-				"sender": {
-					"type": "Organization",
-					"identifier": {
-						"system": "http://nphies.sa/license/provider-license",
-						"value": "PR-FHIR"
-					}
-				},
-				"source": {
-					"endpoint": "http://nphies.sa/license/provider-license/PR-FHIR"
-				},
-				"focus": [
-					{
-						"reference": "http://saudicentralpharmacy.sa.com/Task/955609"
-					}
-				]
-			}
-		},
-		{
-			"fullUrl": "http://saudicentralpharmacy.sa.com/Task/955609",
-			"resource": {
-				"meta": {
-					"profile": [
-						"http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0"
-					]
-				},
-				"resourceType": "Task",
-				"id": "955609",
-				"identifier": [
-					{
-						"system": "http://saudicentralpharmacy.sa.com/task",
-						"value": "1766583583860"
-					}
-				],
-				"code": {
-					"coding": [
-						{
-							"system": "http://nphies.sa/terminology/CodeSystem/task-code",
-							"code": "status"
-						}
-					]
-				},
-				"focus": {
-					"type": "Claim",
-					"identifier": {
-						"system": "http://saudicentralpharmacy.sa.com/claim",
-						"value": "req_00112489089"
-					}
-				},
-				"authoredOn": "2023-12-02",
-				"lastModified": "2023-12-02",
-				"status": "requested",
-				"intent": "order",
-				"priority": "routine",
-				"requester": {
-					"reference": "http://saudicentralpharmacy.sa.com/Organization/b1b3432921324f97af3be9fd0b1a34fa"
-				},
-				"owner": {
-					"reference": "http://sni.com.sa/Organization/bff3aa1fbd3648619ac082357bf135db"
-				}
-			}
-		},
-		{
-			"fullUrl": "http://saudicentralpharmacy.sa.com/Organization/b1b3432921324f97af3be9fd0b1a34fa",
-			"resource": {
-				"resourceType": "Organization",
-				"id": "b1b3432921324f97af3be9fd0b1a34fa",
-				"meta": {
-					"profile": [
-						"http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
-					]
-				},
-				"extension": [
-					{
-						"url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
-						"valueCodeableConcept": {
-							"coding": [
-								{
-									"system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-									"code": "6",
-									"display": "Pharmacy"
-								}
-							]
-						}
-					}
-				],
-				"identifier": [
-					{
-						"system": "http://nphies.sa/license/provider-license",
-						"value": "PR-FHIR"
-					}
-				],
-				"active": true,
-				"type": [
-					{
-						"coding": [
-							{
-								"system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-								"code": "prov"
-							}
-						]
-					}
-				],
-				"name": "Saudi Central Pharmacy"
-			}
-		},
-		{
-			"fullUrl": "http://sni.com.sa/Organization/bff3aa1fbd3648619ac082357bf135db",
-			"resource": {
-				"resourceType": "Organization",
-				"id": "bff3aa1fbd3648619ac082357bf135db",
-				"meta": {
-					"profile": [
-						"http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"
-					]
-				},
-				"identifier": [
-					{
-						"system": "http://nphies.sa/license/payer-license",
-						"value": "INS-FHIR"
-					}
-				],
-				"active": true,
-				"type": [
-					{
-						"coding": [
-							{
-								"system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-								"code": "ins"
-							}
-						]
-					}
-				],
-				"name": "Saudi National Insurance"
-			}
-		}
-	]
+  "resourceType": "Bundle",
+  "id": "0281df69-89dc-42d6-90bd-f7e9d2e42517",
+  "meta": {
+    "profile": [
+      "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
+    ]
+  },
+  "type": "message",
+  "timestamp": "2025-12-24T16:12:08.462Z",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:66194b55-0d00-48ac-8569-b72f2d87cd57",
+      "resource": {
+        "resourceType": "MessageHeader",
+        "id": "66194b55-0d00-48ac-8569-b72f2d87cd57",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
+          ]
+        },
+        "eventCoding": {
+          "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
+          "code": "poll-request"
+        },
+        "sender": {
+          "type": "Organization",
+          "identifier": {
+            "system": "http://nphies.sa/license/provider-license",
+            "value": "1010613708"
+          }
+        },
+        "source": {
+          "endpoint": "http://provider.com"
+        },
+        "destination": [
+          {
+            "endpoint": "http://176.105.150.83/fhir/$process-message",
+            "receiver": {
+              "type": "Organization",
+              "identifier": {
+                "system": "http://nphies.sa/license/nphies",
+                "value": "NPHIES"
+              }
+            }
+          }
+        ],
+        "focus": [
+          {
+            "reference": "http://saudigeneralhospital.com.sa/Task/1766592728461"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "http://saudigeneralhospital.com.sa/Task/1766592728461",
+      "resource": {
+        "resourceType": "Task",
+        "id": "1766592728461",
+        "meta": {
+          "profile": [
+           "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://saudigeneralhospital.com.sa/identifiers/poll-request",
+            "value": "req_1766592728461"
+          }
+        ],
+        "status": "requested",
+        "intent": "order",
+        "priority": "routine",
+        "code": {
+          "coding": [
+            {
+              "system": "http://nphies.sa/terminology/CodeSystem/task-code",
+              "code": "poll"
+            }
+          ]
+        },
+        "requester": {
+          "reference": "http://saudigeneralhospital.com.sa/Organization/3aa23c45-1be2-40a7-b084-7706872266cf"
+        },
+        "owner": {
+          "reference": "http://saudigeneralhospital.com.sa/Organization/NPHIES"
+        },
+        "authoredOn": "2025-12-24T16:12:08.462Z",
+        "lastModified": "2025-12-24T16:12:08.462Z",
+        "focus": {
+          "type": "Claim",
+          "identifier": {
+            "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
+            "value": "CLM-1766588464885"
+          }
+        }
+      }
+    },
+    {
+      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/3aa23c45-1be2-40a7-b084-7706872266cf",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "3aa23c45-1be2-40a7-b084-7706872266cf",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
+          ]
+        },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
+                  "code": "1",
+                  "display": "Hospital"
+                }
+              ]
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "http://nphies.sa/license/provider-license",
+            "value": "1010613708"
+          }
+        ],
+        "active": true,
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
+                "code": "prov"
+              }
+            ]
+          }
+        ],
+        "name": "Saudi General Hospital"
+      }
+    },
+    {
+      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/NPHIES",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "NPHIES",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0"
+          ]
+        },
+        "identifier": [
+          {
+            "use": "official",
+            "system": "http://nphies.sa/license/nphies",
+            "value": "NPHIES"
+          }
+        ],
+        "active": true,
+        "name": "National Program for Health Information Exchange Services"
+      }
+    }
+  ]
 }
