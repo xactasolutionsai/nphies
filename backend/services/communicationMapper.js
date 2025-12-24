@@ -1043,6 +1043,9 @@ class CommunicationMapper {
    * @param {string} options.focalResourceIdentifier - The identifier of the resource being checked
    * @param {string} options.focalResourceType - Resource type ('Claim' or 'ClaimResponse')
    * @param {string} options.originalRequestId - Original request bundle ID for response.identifier
+   * @param {string} options.providerType - Provider type code from DB (e.g., '1' for Hospital)
+   * @param {Object} options.providerAddress - Provider address object from DB
+   * @param {Object} options.insurerAddress - Insurer address object from DB
    * @returns {Object} FHIR Bundle for status-check request
    */
   buildStatusCheckBundle({ 
@@ -1052,7 +1055,10 @@ class CommunicationMapper {
     insurerName = 'Insurance Company',
     focalResourceIdentifier, 
     focalResourceType = 'Claim',
-    originalRequestId = null
+    originalRequestId = null,
+    providerType = null,        // From DB: provider_type code
+    providerAddress = null,     // From DB: provider address
+    insurerAddress = null       // From DB: insurer address
   }) {
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
@@ -1107,15 +1113,13 @@ class CommunicationMapper {
       }],
       focus: [{
         reference: taskFullUrl
-      }]
+      }],
+      // NPHIES FIX: response element is REQUIRED with both identifier and code
+      response: {
+        identifier: originalRequestId || bundleId,
+        code: 'ok'  // IC-00224 fix: MessageHeader response code is required
+      }
     };
-
-    // Add response.identifier if we have the original request ID
-    if (originalRequestId) {
-      messageHeaderResource.response = {
-        identifier: originalRequestId
-      };
-    }
 
     // Build Task resource with status-request profile
     const taskResource = {
@@ -1156,13 +1160,29 @@ class CommunicationMapper {
       lastModified: timestamp
     };
 
-    // Build Provider Organization
+    // Build Provider Organization with required providerType extension
+    // Per NPHIES IG: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aad.json.html
+    // providerType extension is REQUIRED - use dynamic data from DB
+    const providerTypeCode = this.getProviderTypeCode(providerType);
+    const providerTypeDisplay = this.getProviderTypeDisplay(providerType);
+    
     const providerOrgResource = {
       resourceType: 'Organization',
       id: providerOrgId,
       meta: {
         profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
       },
+      extension: [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type',
+        valueCodeableConcept: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
+            // Convert DB value (e.g., 'hospital') to NPHIES code (e.g., '1')
+            code: providerTypeCode,
+            display: providerTypeDisplay
+          }]
+        }
+      }],
       identifier: [{
         system: 'http://nphies.sa/license/provider-license',
         value: providerId
@@ -1176,8 +1196,14 @@ class CommunicationMapper {
       }],
       name: providerName
     };
+    
+    // Add provider address from DB if available
+    if (providerAddress) {
+      providerOrgResource.address = [this.buildFhirAddress(providerAddress, 'work')];
+    }
 
     // Build Insurer Organization
+    // Per NPHIES IG: identifier should have type with NII code
     const insurerOrgResource = {
       resourceType: 'Organization',
       id: insurerOrgId,
@@ -1186,6 +1212,12 @@ class CommunicationMapper {
       },
       identifier: [{
         use: 'official',
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+            code: 'NII'  // National Insurance Organization Identifier
+          }]
+        },
         system: 'http://nphies.sa/license/payer-license',
         value: insurerId
       }],
@@ -1198,6 +1230,11 @@ class CommunicationMapper {
       }],
       name: insurerName
     };
+    
+    // Add insurer address from DB if available
+    if (insurerAddress) {
+      insurerOrgResource.address = [this.buildFhirAddress(insurerAddress, 'work')];
+    }
 
     return {
       resourceType: 'Bundle',
@@ -1270,6 +1307,150 @@ class CommunicationMapper {
    *   - excludeMessageTypes: Array of message types to exclude
    * @returns {Object} FHIR Bundle for poll request
    */
+  
+  // ============================================================================
+  // HELPER METHODS FOR DYNAMIC DATA
+  // ============================================================================
+  
+  /**
+   * Get NPHIES provider type code from database value
+   * Based on NPHIES CodeSystem: http://nphies.sa/terminology/CodeSystem/provider-type
+   * @param {string} dbValue - Provider type from database (e.g., 'hospital', 'clinic')
+   * @returns {string} NPHIES code
+   */
+  getProviderTypeCode(dbValue) {
+    if (!dbValue) return '1'; // Default to Hospital
+    
+    const typeMap = {
+      'hospital': '1',
+      'polyclinic': '2',
+      'clinic': '3',
+      'pharmacy': '4',
+      'optical': '5',
+      'dental': '6',
+      'laboratory': '7',
+      'radiology': '8',
+      'physiotherapy': '9',
+      'home healthcare': '10',
+      'home_healthcare': '10'
+    };
+    
+    const normalized = dbValue.toLowerCase().trim();
+    return typeMap[normalized] || dbValue; // Return original if already a code
+  }
+  
+  /**
+   * Get display text for provider type code
+   * Based on NPHIES CodeSystem: http://nphies.sa/terminology/CodeSystem/provider-type
+   * @param {string} code - Provider type code (numeric or text)
+   * @returns {string} Display text
+   */
+  getProviderTypeDisplay(code) {
+    if (!code) return 'Healthcare Provider';
+    
+    const providerTypes = {
+      '1': 'Hospital',
+      '2': 'Polyclinic',
+      '3': 'Clinic',
+      '4': 'Pharmacy',
+      '5': 'Optical',
+      '6': 'Dental',
+      '7': 'Laboratory',
+      '8': 'Radiology',
+      '9': 'Physiotherapy',
+      '10': 'Home Healthcare',
+      'licensed': 'Licensed Provider',
+      // Also handle text values from DB
+      'hospital': 'Hospital',
+      'polyclinic': 'Polyclinic',
+      'clinic': 'Clinic',
+      'pharmacy': 'Pharmacy',
+      'optical': 'Optical',
+      'dental': 'Dental',
+      'laboratory': 'Laboratory',
+      'radiology': 'Radiology',
+      'physiotherapy': 'Physiotherapy',
+      'home healthcare': 'Home Healthcare'
+    };
+    
+    const normalized = code.toLowerCase().trim();
+    return providerTypes[normalized] || providerTypes[code] || 'Healthcare Provider';
+  }
+  
+  /**
+   * Build FHIR Address from database address object
+   * Per NPHIES IG example: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aad.json.html
+   * @param {Object|string} address - Address object from DB or text string
+   * @param {string} use - Address use (work, home, etc.)
+   * @returns {Object} FHIR Address resource
+   */
+  buildFhirAddress(address, use = 'work') {
+    if (!address) return null;
+    
+    const fhirAddress = {
+      use: use
+    };
+    
+    // Handle text-only address (from DB text field)
+    if (typeof address === 'string') {
+      fhirAddress.text = address;
+      fhirAddress.line = [address];
+      fhirAddress.country = 'Saudi Arabia';
+      return fhirAddress;
+    }
+    
+    // Handle address object with text property only
+    if (address.text && !address.street && !address.line1) {
+      fhirAddress.text = address.text;
+      fhirAddress.line = [address.text];
+      if (address.country) fhirAddress.country = address.country;
+      else fhirAddress.country = 'Saudi Arabia';
+      return fhirAddress;
+    }
+    
+    // Build text from available fields
+    const textParts = [];
+    if (address.street || address.line1) textParts.push(address.street || address.line1);
+    if (address.building) textParts.push(`Building ${address.building}`);
+    if (address.suite) textParts.push(`Suite ${address.suite}`);
+    if (address.district) textParts.push(address.district);
+    if (address.city) textParts.push(address.city);
+    if (address.country) textParts.push(address.country);
+    
+    if (textParts.length > 0) {
+      fhirAddress.text = textParts.join(', ');
+    }
+    
+    // Build line array
+    const lines = [];
+    if (address.street || address.line1) {
+      let line1 = address.street || address.line1;
+      if (address.building) line1 += `, Building ${address.building}`;
+      if (address.suite) line1 += `, Suite ${address.suite}`;
+      lines.push(line1);
+    }
+    if (address.district) {
+      lines.push(address.district);
+    }
+    if (lines.length > 0) {
+      fhirAddress.line = lines;
+    }
+    
+    // Add city, state, postal, country
+    if (address.city) fhirAddress.city = address.city;
+    if (address.state) fhirAddress.state = address.state;
+    if (address.postal_code || address.postalCode) {
+      fhirAddress.postalCode = address.postal_code || address.postalCode;
+    }
+    if (address.country) {
+      fhirAddress.country = address.country;
+    } else {
+      fhirAddress.country = 'Saudi Arabia'; // Default
+    }
+    
+    return fhirAddress;
+  }
+  
   /**
    * Extract provider domain from provider name for identifier system
    * Converts "Saudi General Hospital" -> "saudigeneralhospital.com.sa"

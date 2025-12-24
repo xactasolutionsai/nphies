@@ -508,12 +508,15 @@ class ClaimSubmissionsController extends BaseController {
 
       const result = await claimCommunicationService.sendStatusCheck(claimId, schemaName);
 
+      // Return detailed error information for debugging
       res.json({
         success: result.success,
         message: result.message,
         statusCheckBundle: result.statusCheckBundle,
         response: result.response,
-        error: result.error
+        responseCode: result.responseCode,
+        errors: result.errors,  // Array of {code, message, expression}
+        error: result.error     // Human-readable error string
       });
 
     } catch (error) {

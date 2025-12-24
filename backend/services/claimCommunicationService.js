@@ -40,7 +40,7 @@ class ClaimCommunicationService {
     try {
       await client.query(`SET search_path TO ${schemaName}`);
 
-      // 1. Get Claim with related data
+      // 1. Get Claim with related data including provider/insurer details for NPHIES bundle
       const claimResult = await client.query(`
         SELECT 
           cs.*,
@@ -50,9 +50,12 @@ class ClaimCommunicationService {
           pr.provider_id,
           pr.provider_name,
           pr.nphies_id as provider_nphies_id,
+          pr.provider_type,
+          pr.address as provider_address,
           i.insurer_id,
           i.insurer_name,
-          i.nphies_id as insurer_nphies_id
+          i.nphies_id as insurer_nphies_id,
+          i.address as insurer_address
         FROM claim_submissions cs
         LEFT JOIN patients p ON cs.patient_id = p.patient_id
         LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
@@ -65,6 +68,19 @@ class ClaimCommunicationService {
       }
 
       const claim = claimResult.rows[0];
+      
+      // Build provider address object from DB text field
+      // The address field contains the full address as text
+      const providerAddress = claim.provider_address ? {
+        text: claim.provider_address,
+        country: 'Saudi Arabia'
+      } : null;
+      
+      // Build insurer address object from DB text field
+      const insurerAddress = claim.insurer_address ? {
+        text: claim.insurer_address,
+        country: 'Saudi Arabia'
+      } : null;
 
       // 2. Validate claim is in appropriate status for status check
       const validStatuses = ['queued', 'pending'];
@@ -83,7 +99,11 @@ class ClaimCommunicationService {
         insurerName: claim.insurer_name || 'Insurance Company',
         focalResourceIdentifier: focalIdentifier,
         focalResourceType: 'Claim',
-        originalRequestId: claim.nphies_request_id
+        originalRequestId: claim.nphies_request_id,
+        // Dynamic data from DB per NPHIES IG
+        providerType: claim.provider_type,      // e.g., '1' for Hospital
+        providerAddress: providerAddress,        // Full address object
+        insurerAddress: insurerAddress           // Full address object
       });
 
       console.log(`[ClaimCommunicationService] Sending status-check for claim ${claim.claim_number}`);
@@ -91,7 +111,29 @@ class ClaimCommunicationService {
       // 4. Send to NPHIES
       const nphiesResponse = await nphiesService.sendStatusCheck(statusCheckBundle);
 
-      // 5. Store the status check request/response for audit
+      // 5. Extract detailed error information from NPHIES response
+      const errors = nphiesResponse.errors || [];
+      const responseCode = nphiesResponse.responseCode;
+      const hasErrors = !nphiesResponse.success || errors.length > 0;
+      
+      // Build error details for storage and display
+      let errorDetails = null;
+      let errorMessage = null;
+      
+      if (hasErrors) {
+        if (errors.length > 0) {
+          errorDetails = {
+            responseCode: responseCode,
+            errors: errors
+          };
+          errorMessage = errors.map(e => `${e.code}: ${e.message}`).join('\n');
+        } else if (nphiesResponse.error) {
+          errorDetails = { message: nphiesResponse.error };
+          errorMessage = nphiesResponse.error;
+        }
+      }
+
+      // 6. Store the status check request/response for audit
       await client.query(`
         INSERT INTO claim_submission_responses (
           claim_id,
@@ -105,25 +147,27 @@ class ClaimCommunicationService {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
       `, [
         claimId,
-        'poll', // Using 'poll' type for status check
-        nphiesResponse.success ? 'queued' : 'error',
-        nphiesResponse.success ? 'Status check sent' : nphiesResponse.error,
+        'status-check',
+        hasErrors ? 'error' : 'queued',
+        hasErrors ? `Status check failed: ${responseCode || 'error'}` : 'Status check sent',
         JSON.stringify({
           request: statusCheckBundle,
           response: nphiesResponse.data
         }),
-        !nphiesResponse.success,
-        nphiesResponse.error ? JSON.stringify({ message: nphiesResponse.error }) : null
+        hasErrors,
+        errorDetails ? JSON.stringify(errorDetails) : null
       ]);
 
       return {
-        success: nphiesResponse.success,
+        success: !hasErrors,
         statusCheckBundle,
         response: nphiesResponse.data,
-        error: nphiesResponse.error,
-        message: nphiesResponse.success 
+        responseCode: responseCode,
+        errors: errors,
+        error: errorMessage,
+        message: !hasErrors 
           ? 'Status check sent successfully. Poll for response.' 
-          : `Status check failed: ${nphiesResponse.error}`
+          : `Status check failed: ${errorMessage || responseCode || 'Unknown error'}`
       };
 
     } catch (error) {

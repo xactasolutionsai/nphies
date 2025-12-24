@@ -610,24 +610,64 @@ const ClaimCommunicationPanel = ({
         <div className={`border rounded-lg p-4 ${
           statusCheckResult.success 
             ? 'bg-green-50 border-green-200' 
-            : 'bg-yellow-50 border-yellow-200'
+            : statusCheckResult.responseCode === 'fatal-error' || statusCheckResult.errors?.length > 0
+              ? 'bg-red-50 border-red-200'
+              : 'bg-yellow-50 border-yellow-200'
         }`}>
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <p className={`font-medium ${
-                statusCheckResult.success ? 'text-green-800' : 'text-yellow-800'
+                statusCheckResult.success 
+                  ? 'text-green-800' 
+                  : statusCheckResult.responseCode === 'fatal-error' || statusCheckResult.errors?.length > 0
+                    ? 'text-red-800'
+                    : 'text-yellow-800'
               }`}>
                 {statusCheckResult.success ? (
                   <><CheckCircle className="w-4 h-4 inline mr-1" /> Status Check Sent</>
+                ) : statusCheckResult.responseCode === 'fatal-error' || statusCheckResult.errors?.length > 0 ? (
+                  <><AlertCircle className="w-4 h-4 inline mr-1" /> Status Check Failed</>
                 ) : (
                   <><Clock className="w-4 h-4 inline mr-1" /> Status Check Queued</>
                 )}
               </p>
               <p className={`text-sm mt-1 ${
-                statusCheckResult.success ? 'text-green-700' : 'text-yellow-700'
+                statusCheckResult.success 
+                  ? 'text-green-700' 
+                  : statusCheckResult.responseCode === 'fatal-error' || statusCheckResult.errors?.length > 0
+                    ? 'text-red-700'
+                    : 'text-yellow-700'
               }`}>
                 {statusCheckResult.message}
               </p>
+              
+              {/* Display NPHIES Response Code */}
+              {statusCheckResult.responseCode && (
+                <p className="text-sm mt-1">
+                  Response Code: <span className={`font-medium ${
+                    statusCheckResult.responseCode === 'ok' ? 'text-green-600' : 'text-red-600'
+                  }`}>{statusCheckResult.responseCode}</span>
+                </p>
+              )}
+              
+              {/* Display NPHIES Errors */}
+              {statusCheckResult.errors && statusCheckResult.errors.length > 0 && (
+                <div className="mt-3 bg-red-100 rounded-lg p-3">
+                  <p className="text-sm font-medium text-red-800 mb-2">NPHIES Validation Errors:</p>
+                  <ul className="text-xs text-red-700 space-y-1">
+                    {statusCheckResult.errors.map((err, idx) => (
+                      <li key={idx} className="flex items-start">
+                        <span className="font-mono bg-red-200 px-1 rounded mr-2">{err.code}</span>
+                        <span>{err.message}</span>
+                        {err.expression && (
+                          <span className="ml-2 text-red-500 font-mono text-xs">({err.expression})</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
               {statusCheckResult.acknowledgmentStatus && (
                 <p className="text-sm mt-1">
                   Acknowledgment: <span className="font-medium">{statusCheckResult.acknowledgmentStatus}</span>
@@ -653,7 +693,11 @@ const ClaimCommunicationPanel = ({
                 {lastStatusCheckResponse && (
                   <button
                     onClick={() => handleViewJson(lastStatusCheckResponse, 'Status Check Response Bundle')}
-                    className="inline-flex items-center px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                    className={`inline-flex items-center px-2 py-1 text-xs rounded transition-colors ${
+                      statusCheckResult.success 
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                    }`}
                   >
                     <Code className="w-3 h-3 mr-1" />
                     View Response JSON

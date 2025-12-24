@@ -1184,11 +1184,69 @@ class NphiesService {
         }
       }
       
+      // NPHIES FIX: Check for errors in response even if HTTP 200
+      // The response code in MessageHeader.response.code indicates actual success/failure
+      const responseData = response.data;
+      let nphiesSuccess = response.status >= 200 && response.status < 300;
+      let responseCode = null;
+      let errors = [];
+      
+      if (responseData?.resourceType === 'Bundle' && responseData?.entry) {
+        // Find MessageHeader to check response code
+        const respMessageHeader = responseData.entry.find(
+          e => e.resource?.resourceType === 'MessageHeader'
+        )?.resource;
+        
+        if (respMessageHeader?.response?.code) {
+          responseCode = respMessageHeader.response.code;
+          // fatal-error or transient-error means failure
+          if (responseCode === 'fatal-error' || responseCode === 'transient-error') {
+            nphiesSuccess = false;
+            console.log(`[NPHIES] Response code indicates error: ${responseCode}`);
+          }
+        }
+        
+        // Find Task to extract errors from output
+        const respTask = responseData.entry.find(
+          e => e.resource?.resourceType === 'Task'
+        )?.resource;
+        
+        if (respTask?.status === 'failed' || respTask?.output) {
+          // Extract errors from Task.output
+          const errorOutputs = respTask.output?.filter(
+            o => o.type?.coding?.some(c => c.code === 'error')
+          ) || [];
+          
+          errors = errorOutputs.map(eo => {
+            const coding = eo.valueCodeableConcept?.coding?.[0];
+            const expression = coding?.extension?.find(
+              ext => ext.url?.includes('error-expression')
+            )?.valueString;
+            return {
+              code: coding?.code || 'unknown',
+              message: coding?.display || 'Unknown error',
+              expression: expression || null
+            };
+          });
+          
+          if (errors.length > 0) {
+            nphiesSuccess = false;
+            console.log(`[NPHIES] Task contains ${errors.length} error(s):`, errors.map(e => e.code).join(', '));
+          }
+        }
+      }
+      
       return {
-        success: response.status >= 200 && response.status < 300,
+        success: nphiesSuccess,
         status: response.status,
-        data: response.data,
-        statusCheckBundle: statusCheckBundle
+        responseCode: responseCode,
+        data: responseData,
+        errors: errors,
+        statusCheckBundle: statusCheckBundle,
+        // Include error message for display
+        error: !nphiesSuccess && errors.length > 0 
+          ? errors.map(e => `${e.code}: ${e.message}`).join('; ')
+          : (!nphiesSuccess ? `NPHIES returned ${responseCode || 'error'}` : null)
       };
       
     } catch (error) {
