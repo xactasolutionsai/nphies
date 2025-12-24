@@ -1032,7 +1032,7 @@ export default function ClaimDetails() {
                               </div>
                               <div>
                                 <p className="font-medium">{item.product_or_service_code}</p>
-                                <p className="text-sm text-gray-500">{item.product_or_service_display || 'No description'}</p>
+                                <p className="text-sm text-gray-500">{item.product_or_service_display || item.medication_name || 'No description'}</p>
                               </div>
                             </div>
                             <Badge variant={

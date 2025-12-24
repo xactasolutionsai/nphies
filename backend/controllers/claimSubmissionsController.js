@@ -235,7 +235,11 @@ class ClaimSubmissionsController extends BaseController {
             serviced_date: item.serviced_date || serviceDate,
             // For professional claims, override the service code and system if provided
             product_or_service_code: override?.service_code || item.product_or_service_code,
-            product_or_service_display: override?.service_display || item.product_or_service_display,
+            // For pharmacy claims, copy medication_name to product_or_service_display if display is empty
+            product_or_service_display: override?.service_display || 
+                                       item.product_or_service_display || 
+                                       item.medication_name || 
+                                       null,
             // Use services CodeSystem for professional claims when override is provided
             product_or_service_system: override?.service_code 
               ? 'http://nphies.sa/terminology/CodeSystem/services' 
