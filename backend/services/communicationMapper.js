@@ -1526,11 +1526,9 @@ class CommunicationMapper {
                 }
               }
             }],
-            // Focus uses full URL matching Task fullUrl exactly (CRITICAL: must match character-by-character)
-            // Per NPHIES_Poll_Request_Validation_Fixes.md: MessageHeader.focus[0].reference MUST exactly match Task fullUrl
-            // Any mismatch causes RE-00100 and RE-00169 errors
+            // Focus uses full URL matching Task fullUrl exactly
             focus: [{
-              reference: taskFullUrl  // Must exactly match the Task entry fullUrl below
+              reference: taskFullUrl
             }]
           }
         },
@@ -1541,7 +1539,7 @@ class CommunicationMapper {
             resourceType: 'Task',
             id: taskId,
             meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0']
             },
             // Identifier system format matches NPHIES example: http://saudigeneralhospital.com.sa/identifiers/poll-request
             identifier: [{
@@ -1554,20 +1552,14 @@ class CommunicationMapper {
             code: {
               coding: [{
                 system: 'http://nphies.sa/terminology/CodeSystem/task-code',
-                code: 'poll',
-                display: 'Poll the focal resource'
+                code: 'poll'
               }]
             },
             requester: {
               reference: providerOrgFullUrl
             },
-            // NPHIES FIX: owner should use identifier format for NPHIES (per NPHIES response structure)
-            // The response shows owner uses identifier, not reference format
             owner: {
-              identifier: {
-                system: 'http://nphies.sa/license/nphies',
-                value: 'NPHIES'
-              }
+              reference: nphiesOrgFullUrl
             },
             authoredOn: this.formatDateTime(new Date()),
             lastModified: this.formatDateTime(new Date()),
@@ -1623,8 +1615,6 @@ class CommunicationMapper {
           }
         },
         // 3. Provider Organization (matching NPHIES example structure)
-        // NPHIES FIX: extension-provider-type is NOT allowed in poll-request bundles (causes RE-00170)
-        // Per NPHIES_Poll_Request_Validation_Fixes.md: Provider Organization must NOT have provider-type extension
         {
           fullUrl: providerOrgFullUrl,
           resource: {
@@ -1633,7 +1623,16 @@ class CommunicationMapper {
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
             },
-            // NO extension-provider-type in poll-request (removed per NPHIES validation fixes)
+            extension: [{
+              url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type',
+              valueCodeableConcept: {
+                coding: [{
+                  system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
+                  code: this.getProviderTypeCode(providerType),
+                  display: this.getProviderTypeDisplay(providerType)
+                }]
+              }
+            }],
             identifier: [{
               system: 'http://nphies.sa/license/provider-license',
               value: providerId
