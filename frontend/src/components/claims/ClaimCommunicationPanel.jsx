@@ -172,6 +172,7 @@ const ClaimCommunicationPanel = ({
   const [lastStatusCheckResponse, setLastStatusCheckResponse] = useState(null);
   const [lastPollRequest, setLastPollRequest] = useState(null);
   const [lastPollResponse, setLastPollResponse] = useState(null);
+  const [pollRequestJsonCopied, setPollRequestJsonCopied] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -287,7 +288,7 @@ const ClaimCommunicationPanel = ({
     setPollResult(null);
     
     try {
-      const result = await api.pollClaimCommunication(claimId);
+      const result = await api.pollClaimMessages(claimId);
       
       // Store the bundles for copy functionality
       if (result.pollBundle) {
@@ -601,6 +602,38 @@ const ClaimCommunicationPanel = ({
               <RefreshCw className={`w-4 h-4 mr-2 ${isPolling ? 'animate-spin' : ''}`} />
               {isPolling ? 'Polling...' : 'Poll for Updates'}
             </button>
+            {/* Copy Poll Request JSON Button - Show if we have a poll request */}
+            {lastPollRequest && (
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(JSON.stringify(lastPollRequest, null, 2));
+                    setPollRequestJsonCopied(true);
+                    setTimeout(() => setPollRequestJsonCopied(false), 2000);
+                  } catch (err) {
+                    console.error('Failed to copy:', err);
+                  }
+                }}
+                className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
+                  pollRequestJsonCopied 
+                    ? 'bg-green-100 text-green-700 border border-green-300' 
+                    : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200'
+                }`}
+                title="Copy Poll Request JSON to clipboard"
+              >
+                {pollRequestJsonCopied ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Poll JSON
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -783,13 +816,44 @@ const ClaimCommunicationPanel = ({
               {/* JSON Copy Buttons */}
               <div className="flex flex-wrap gap-2 mt-3">
                 {lastPollRequest && (
-                  <button
-                    onClick={() => handleViewJson(lastPollRequest, 'Poll Request Bundle')}
-                    className="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                  >
-                    <Code className="w-3 h-3 mr-1" />
-                    View Request JSON
-                  </button>
+                  <>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(JSON.stringify(lastPollRequest, null, 2));
+                          setPollRequestJsonCopied(true);
+                          setTimeout(() => setPollRequestJsonCopied(false), 2000);
+                        } catch (err) {
+                          console.error('Failed to copy:', err);
+                        }
+                      }}
+                      className={`inline-flex items-center px-2 py-1 text-xs rounded transition-colors ${
+                        pollRequestJsonCopied 
+                          ? 'bg-green-100 text-green-700' 
+                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                      }`}
+                      title="Copy Poll Request JSON to clipboard"
+                    >
+                      {pollRequestJsonCopied ? (
+                        <>
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 mr-1" />
+                          Copy Request JSON
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleViewJson(lastPollRequest, 'Poll Request Bundle')}
+                      className="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                    >
+                      <Code className="w-3 h-3 mr-1" />
+                      View Request JSON
+                    </button>
+                  </>
                 )}
                 {lastPollResponse && (
                   <button

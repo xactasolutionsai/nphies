@@ -1462,10 +1462,11 @@ class CommunicationMapper {
   buildPollRequestBundle(providerId, providerName = 'Healthcare Provider', providerType = '1', options = {}) {
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
-    // Use simple numeric ID format matching NPHIES example (e.g., "560082")
+    // Use simple numeric ID format matching NPHIES example (e.g., "2342906")
     const taskId = `${Date.now()}`;
-    const providerOrgId = `provider-org-${Date.now()}`; // Simple ID format for provider org
-    const timestamp = this.formatDateTime(new Date());
+    // Use simple numeric ID for provider org (example uses "10")
+    const providerOrgId = `${Date.now() % 1000000}`;
+    const timestamp = this.formatDateTime(new Date()); // Bundle timestamp uses datetime
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
     const nphiesBaseURL = NPHIES_CONFIG.BASE_URL;
     
@@ -1476,11 +1477,10 @@ class CommunicationMapper {
     // Extract provider domain for identifier system (matching NPHIES examples)
     const providerDomain = this.extractProviderDomain(providerName);
     
-    // Use absolute URLs for fullUrl values (matching NPHIES specification example)
-    // Example from spec: http://saudigeneralhospital.com.sa/Task/560082
-    const taskFullUrl = `${providerBaseUrl}/Task/${taskId}`;
-    const providerOrgFullUrl = `${providerBaseUrl}/Organization/${providerOrgId}`;
-    const nphiesOrgFullUrl = `${providerBaseUrl}/Organization/NPHIES`;
+    // Use absolute URLs for fullUrl values (matching NPHIES example)
+    // Example: http://sgh.com.sa/Task/2342906
+    const taskFullUrl = `http://${providerDomain}/Task/${taskId}`;
+    const providerOrgFullUrl = `http://${providerDomain}/Organization/${providerOrgId}`;
 
     return {
       resourceType: 'Bundle',
@@ -1512,10 +1512,10 @@ class CommunicationMapper {
               }
             },
             source: {
-              endpoint: providerBaseUrl
+              endpoint: `http://nphies.sa/license/provider-license/${providerId}`
             },
             destination: [{
-              endpoint: `${nphiesBaseURL}/$process-message`,
+              endpoint: 'http://nphies.sa',
               receiver: {
                 type: 'Organization',
                 identifier: {
@@ -1537,17 +1537,17 @@ class CommunicationMapper {
             resourceType: 'Task',
             id: taskId,
             meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0']
             },
-            // Identifier system format matches NPHIES examples (e.g., http://saudigeneralhospital.com.sa/identifiers/poll-request)
+            // Identifier system format matches NPHIES example (note: example has typo with single slash, using correct double slash)
             identifier: [{
-              system: `http://${providerDomain}/identifiers/poll-request`,
-              value: `req_${taskId}` // Matches NPHIES example format: "req_" + Task.id
+              use: 'official',
+              system: `http://${providerDomain}/task`,
+              value: `PlReq_${new Date().toISOString().split('T')[0].replace(/-/g, '')}${taskId}`
             }],
             status: 'requested',
             intent: 'order',
-            // Priority field present in all NPHIES examples
-            priority: 'routine',
+            priority: options.priority || 'routine',
             code: {
               coding: [{
                 system: 'http://nphies.sa/terminology/CodeSystem/task-code',
@@ -1558,11 +1558,13 @@ class CommunicationMapper {
               reference: `Organization/${providerOrgId}`
             },
             owner: {
-              reference: 'Organization/NPHIES'
+              identifier: {
+                system: 'http://nphies.sa/license/nphies',
+                value: 'NPHIES'
+              }
             },
-            authoredOn: timestamp,
-            // lastModified field present in all NPHIES examples (matches authoredOn)
-            lastModified: timestamp,
+            authoredOn: this.formatDate(new Date()),
+            lastModified: this.formatDate(new Date()),
             // Optional focus field (Task-560083 pattern) - for polling specific authorization
             ...(options.focus && {
               focus: {
@@ -1586,7 +1588,19 @@ class CommunicationMapper {
                   },
                   valuePositiveInt: options.input.count
                 }] : []),
-                // Exclude message types input
+                // Include message types input (example uses include-message-type)
+                ...(options.input.includeMessageTypes && Array.isArray(options.input.includeMessageTypes) && options.input.includeMessageTypes.length > 0
+                  ? options.input.includeMessageTypes.map(msgType => ({
+                      type: {
+                        coding: [{
+                          system: 'http://nphies.sa/terminology/CodeSystem/task-input-type',
+                          code: 'include-message-type'
+                        }]
+                      },
+                      valueCode: msgType
+                    }))
+                  : []),
+                // Exclude message types input (for backwards compatibility)
                 ...(options.input.excludeMessageTypes && Array.isArray(options.input.excludeMessageTypes) && options.input.excludeMessageTypes.length > 0
                   ? options.input.excludeMessageTypes.map(msgType => ({
                       type: {
@@ -1602,7 +1616,7 @@ class CommunicationMapper {
             })
           }
         },
-        // 3. Provider Organization - simplified (no extension, no address)
+        // 3. Provider Organization (matching NPHIES example structure)
         {
           fullUrl: providerOrgFullUrl,
           resource: {
@@ -1611,7 +1625,18 @@ class CommunicationMapper {
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
             },
+            extension: [{
+              url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type',
+              valueCodeableConcept: {
+                coding: [{
+                  system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
+                  code: this.getProviderTypeCode(providerType),
+                  display: this.getProviderTypeDisplay(providerType)
+                }]
+              }
+            }],
             identifier: [{
+              use: 'official',
               system: 'http://nphies.sa/license/provider-license',
               value: providerId
             }],
@@ -1625,24 +1650,6 @@ class CommunicationMapper {
             name: providerName
           }
         },
-        // 4. NPHIES Organization - simplified (no use field in identifier)
-        {
-          fullUrl: nphiesOrgFullUrl,
-          resource: {
-            resourceType: 'Organization',
-            id: 'NPHIES',
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
-            },
-            identifier: [{
-              use: 'official',
-              system: 'http://nphies.sa/license/nphies',
-              value: 'NPHIES'
-            }],
-            active: true,
-            name: 'National Program for Health Information Exchange Services'
-          }
-        }
       ]
     };
   }
