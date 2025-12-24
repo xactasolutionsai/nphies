@@ -32,6 +32,7 @@ import {
   Copy,
   Eye,
   Code
+  XCircle
 } from 'lucide-react';
 import api from '../../services/api';
 import { selectStyles } from './styles';
@@ -55,6 +56,12 @@ const CommunicationPanel = ({
   const [ackPollResult, setAckPollResult] = useState(null);
   const [ackPollJsonCopied, setAckPollJsonCopied] = useState(null); // 'request' or 'response'
   const [pollPreviewCopied, setPollPreviewCopied] = useState(false);
+  
+  // Auto-poll state (Step 7-8)
+  const [autoPollEnabled, setAutoPollEnabled] = useState(true); // Default: enabled
+  const [isAutoPolling, setIsAutoPolling] = useState(false);
+  const [autoPollTimeout, setAutoPollTimeout] = useState(null);
+  const [finalResponseStatus, setFinalResponseStatus] = useState(null); // 'waiting', 'received', 'approved', 'denied', 'partial'
 
   // Generate the full Poll Request Bundle that will be sent to NPHIES
   // Based on official NPHIES IG: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
@@ -263,6 +270,15 @@ const CommunicationPanel = ({
     }
   }, [priorAuthId]);
 
+  // Cleanup auto-poll timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoPollTimeout) {
+        clearTimeout(autoPollTimeout);
+      }
+    };
+  }, [autoPollTimeout]);
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -283,8 +299,12 @@ const CommunicationPanel = ({
   };
 
   // Poll for updates
-  const handlePoll = async () => {
-    setIsPolling(true);
+  const handlePoll = async (isAutoPoll = false) => {
+    if (isAutoPoll) {
+      setIsAutoPolling(true);
+    } else {
+      setIsPolling(true);
+    }
     setError(null);
     setPollResult(null);
     
@@ -294,6 +314,46 @@ const CommunicationPanel = ({
       
       // Reload data to get new requests/acknowledgments
       await loadData();
+      
+      // Check if we should auto-poll for final response (Step 7)
+      if (result.pollResults?.shouldAutoPollForFinalResponse && autoPollEnabled && !isAutoPoll) {
+        const delayMs = result.pollResults.autoPollDelayMs || 3000;
+        console.log(`[CommunicationPanel] Auto-polling for final response in ${delayMs}ms...`);
+        
+        // Clear any existing timeout
+        if (autoPollTimeout) {
+          clearTimeout(autoPollTimeout);
+        }
+        
+        // Set timeout for auto-poll
+        const timeout = setTimeout(async () => {
+          console.log('[CommunicationPanel] Executing auto-poll for final response...');
+          await handlePoll(true); // Recursive call with isAutoPoll flag
+        }, delayMs);
+        
+        setAutoPollTimeout(timeout);
+        setFinalResponseStatus('waiting');
+      }
+      
+      // Check if final response was received (Step 8)
+      if (result.pollResults?.claimResponses && result.pollResults.claimResponses.length > 0) {
+        const claimResponse = result.pollResults.claimResponses[0];
+        // claimResponse is already processed, check status field
+        if (claimResponse.status === 'approved' || claimResponse.status === 'denied' || claimResponse.status === 'partial') {
+          setFinalResponseStatus(claimResponse.status);
+        } else if (claimResponse.outcome === 'complete') {
+          const disposition = claimResponse.disposition?.toLowerCase() || '';
+          if (disposition.includes('approved') || disposition.includes('accept')) {
+            setFinalResponseStatus('approved');
+          } else if (disposition.includes('denied') || disposition.includes('reject')) {
+            setFinalResponseStatus('denied');
+          } else {
+            setFinalResponseStatus('approved'); // Default
+          }
+        } else if (claimResponse.outcome === 'partial') {
+          setFinalResponseStatus('partial');
+        }
+      }
       
       // Notify parent if status changed
       if (result.data && onStatusUpdate) {
@@ -310,8 +370,17 @@ const CommunicationPanel = ({
         errorMessage = errorData || err.response?.data?.details || err.message || 'Failed to poll for updates';
       }
       setError(errorMessage);
+      
+      // If auto-poll failed, allow manual retry
+      if (isAutoPoll) {
+        setFinalResponseStatus('waiting'); // Keep waiting, show manual button
+      }
     } finally {
-      setIsPolling(false);
+      if (isAutoPoll) {
+        setIsAutoPolling(false);
+      } else {
+        setIsPolling(false);
+      }
     }
   };
 
@@ -335,6 +404,27 @@ const CommunicationPanel = ({
           ...result,
           message: `Acknowledgment received: ${result.acknowledgmentStatus}`
         });
+        
+        // Check if this was an unsolicited communication - trigger auto-poll (Step 7)
+        const comm = communications.find(c => c.communication_id === communicationId);
+        if (comm && comm.communication_type === 'unsolicited' && autoPollEnabled) {
+          const delayMs = 3000; // Default delay
+          console.log(`[CommunicationPanel] Unsolicited communication acknowledged. Auto-polling for final response in ${delayMs}ms...`);
+          
+          // Clear any existing timeout
+          if (autoPollTimeout) {
+            clearTimeout(autoPollTimeout);
+          }
+          
+          // Set timeout for auto-poll
+          const timeout = setTimeout(async () => {
+            console.log('[CommunicationPanel] Executing auto-poll for final response after acknowledgment...');
+            await handlePoll(true); // Auto-poll
+          }, delayMs);
+          
+          setAutoPollTimeout(timeout);
+          setFinalResponseStatus('waiting');
+        }
       } else if (result.alreadyAcknowledged) {
         setAckPollResult({
           ...result,
@@ -906,6 +996,96 @@ const CommunicationPanel = ({
         </div>
       )}
 
+      {/* Auto-Poll Toggle */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <label className="flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoPollEnabled}
+            onChange={(e) => setAutoPollEnabled(e.target.checked)}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <span className="ml-2 text-sm text-gray-700">
+            Automatically poll for final response after acknowledgment (Step 7)
+          </span>
+        </label>
+        <p className="text-xs text-gray-500 mt-1 ml-6">
+          When enabled, the system will automatically poll for the final authorization response after receiving a communication acknowledgment.
+        </p>
+      </div>
+
+      {/* Final Response Status (Step 8) */}
+      {finalResponseStatus && (
+        <div className={`border rounded-lg p-4 ${
+          finalResponseStatus === 'approved' 
+            ? 'bg-green-50 border-green-200' 
+            : finalResponseStatus === 'denied'
+            ? 'bg-red-50 border-red-200'
+            : finalResponseStatus === 'partial'
+            ? 'bg-yellow-50 border-yellow-200'
+            : 'bg-blue-50 border-blue-200'
+        }`}>
+          <div className="flex items-start">
+            {finalResponseStatus === 'approved' && (
+              <>
+                <CheckCircle className="w-5 h-5 text-green-600 mr-2 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-green-800 font-semibold">✅ Final Authorization Response Received: Approved</p>
+                  <p className="text-sm text-green-700 mt-1">
+                    The authorization has been approved. Check the Prior Authorization details for approved amounts and disposition.
+                  </p>
+                </div>
+              </>
+            )}
+            {finalResponseStatus === 'denied' && (
+              <>
+                <XCircle className="w-5 h-5 text-red-600 mr-2 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-red-800 font-semibold">❌ Final Authorization Response Received: Denied</p>
+                  <p className="text-sm text-red-700 mt-1">
+                    The authorization has been denied. Check the Prior Authorization details for denial reason.
+                  </p>
+                </div>
+              </>
+            )}
+            {finalResponseStatus === 'partial' && (
+              <>
+                <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-yellow-800 font-semibold">⚠️ Final Authorization Response Received: Partial</p>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    The authorization has been partially approved. Check the Prior Authorization details for approved items.
+                  </p>
+                </div>
+              </>
+            )}
+            {finalResponseStatus === 'waiting' && (
+              <>
+                <Clock className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5 animate-pulse" />
+                <div className="flex-1">
+                  <p className="text-blue-800 font-semibold">⏳ Waiting for Final Authorization Response</p>
+                  <p className="text-sm text-blue-700 mt-1">
+                    {isAutoPolling 
+                      ? 'Polling for final response...' 
+                      : 'After HIC acknowledges your communication, they will adjudicate and send the final authorization response. Click "Poll for Updates" to retrieve it.'}
+                  </p>
+                  {!isAutoPolling && (
+                    <button
+                      onClick={() => handlePoll(false)}
+                      disabled={isPolling}
+                      className="mt-2 flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      <RefreshCw className={`w-3 h-3 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
+                      Poll for Final Response
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Poll Result */}
       {pollResult && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -915,6 +1095,11 @@ const CommunicationPanel = ({
               <p>• ClaimResponses: {pollResult.pollResults.claimResponses?.length || 0}</p>
               <p>• CommunicationRequests: {pollResult.pollResults.communicationRequests?.length || 0}</p>
               <p>• Acknowledgments: {pollResult.pollResults.acknowledgments?.length || 0}</p>
+              {pollResult.pollResults.shouldAutoPollForFinalResponse && (
+                <p className="mt-2 text-blue-700 font-medium">
+                  ℹ️ Acknowledgment received! {autoPollEnabled ? `Auto-polling for final response in ${pollResult.pollResults.autoPollDelayMs || 3000}ms...` : 'Click "Poll for Updates" to retrieve final response.'}
+                </p>
+              )}
             </div>
           )}
         </div>

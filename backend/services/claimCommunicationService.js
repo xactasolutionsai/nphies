@@ -16,6 +16,7 @@ import { randomUUID } from 'crypto';
 import pool from '../db.js';
 import nphiesService from './nphiesService.js';
 import CommunicationMapper from './communicationMapper.js';
+import { NPHIES_CONFIG } from '../config/nphies.js';
 
 class ClaimCommunicationService {
   constructor() {
@@ -374,18 +375,39 @@ class ClaimCommunicationService {
       }
 
       // 7. Process Communications (acknowledgments)
+      let hasUnsolicitedAcknowledgment = false;
+      let unsolicitedClaimId = null;
+      
       for (const comm of communications) {
         const processed = await this.processAcknowledgment(client, comm);
         if (processed) {
           results.acknowledgments.push(processed);
+          
+          // Check if this was an acknowledgment for an unsolicited communication
+          if (processed.isUnsolicited && processed.claimId) {
+            hasUnsolicitedAcknowledgment = true;
+            unsolicitedClaimId = processed.claimId;
+          }
         }
       }
 
-      // 8. Generate appropriate message based on what was received
+      // 8. Auto-poll for final response after unsolicited communication acknowledgment (Step 7)
+      if (hasUnsolicitedAcknowledgment && NPHIES_CONFIG.AUTO_POLL_AFTER_ACKNOWLEDGMENT) {
+        console.log(`[ClaimCommunicationService] Unsolicited communication acknowledged. Auto-polling for final response in ${NPHIES_CONFIG.AUTO_POLL_DELAY_MS}ms...`);
+        
+        // Set flag to indicate auto-poll should be triggered
+        results.shouldAutoPollForFinalResponse = true;
+        results.autoPollDelayMs = NPHIES_CONFIG.AUTO_POLL_DELAY_MS;
+        results.autoPollClaimId = unsolicitedClaimId;
+      }
+
+      // 9. Generate appropriate message based on what was received
       if (results.hasClaimResponse) {
         results.message = 'ClaimResponse received - claim has been adjudicated';
       } else if (results.hasCommunicationRequests) {
         results.message = 'CommunicationRequest received - insurer needs additional information';
+      } else if (hasUnsolicitedAcknowledgment && results.shouldAutoPollForFinalResponse) {
+        results.message = 'Acknowledgment received. Auto-polling for final response...';
       } else {
         results.message = 'No new messages. The insurer may still be processing.';
       }
@@ -560,6 +582,7 @@ class ClaimCommunicationService {
 
   /**
    * Process Communication acknowledgment from poll
+   * Returns information about whether this was an unsolicited communication (for auto-poll)
    */
   async processAcknowledgment(client, communication) {
     const parsed = this.mapper.parseCommunication(communication);
@@ -573,6 +596,21 @@ class ClaimCommunicationService {
     if (!ourCommId) {
       return null;
     }
+
+    // Get communication details before updating (to check if it's unsolicited)
+    const commBeforeUpdate = await client.query(`
+      SELECT communication_type, prior_auth_id, claim_id
+      FROM nphies_communications
+      WHERE communication_id = $1
+    `, [ourCommId]);
+
+    if (commBeforeUpdate.rows.length === 0) {
+      console.warn(`[ClaimCommunicationService] Acknowledgment for unknown Communication: ${ourCommId}`);
+      return null;
+    }
+
+    const commData = commBeforeUpdate.rows[0];
+    const isUnsolicited = commData.communication_type === 'unsolicited';
 
     // Update our Communication with acknowledgment
     const result = await client.query(`
@@ -597,7 +635,10 @@ class ClaimCommunicationService {
     return {
       communicationId: ourCommId,
       acknowledgmentStatus: parsed.status,
-      acknowledgedAt: result.rows[0].acknowledgment_at
+      acknowledgedAt: result.rows[0].acknowledgment_at,
+      isUnsolicited: isUnsolicited,
+      priorAuthId: commData.prior_auth_id,
+      claimId: commData.claim_id
     };
   }
 

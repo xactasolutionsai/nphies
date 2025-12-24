@@ -20,6 +20,11 @@ export const NPHIES_CONFIG = {
   OAUTH_URL: process.env.NPHIES_OAUTH_URL || 'https://hsb.nphies.sa/oauth/token',
   TIMEOUT: parseInt(process.env.NPHIES_TIMEOUT || '60000'),
   RETRY_ATTEMPTS: parseInt(process.env.NPHIES_RETRY_ATTEMPTS || '3'),
+  
+  // Auto-Poll Configuration (Steps 7-8)
+  // Automatically poll for final authorization response after communication acknowledgment
+  AUTO_POLL_AFTER_ACKNOWLEDGMENT: process.env.AUTO_POLL_AFTER_ACKNOWLEDGMENT !== 'false', // Default: true
+  AUTO_POLL_DELAY_MS: parseInt(process.env.AUTO_POLL_DELAY_MS || '3000'), // Default: 3 seconds
 };
 
 export default NPHIES_CONFIG;

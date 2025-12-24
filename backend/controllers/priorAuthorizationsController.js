@@ -1129,13 +1129,19 @@ class PriorAuthorizationsController extends BaseController {
         pollResults: {
           claimResponses: pollResult.claimResponses,
           communicationRequests: pollResult.communicationRequests,
-          acknowledgments: pollResult.acknowledgments
+          acknowledgments: pollResult.acknowledgments,
+          // Step 7: Auto-poll flags
+          shouldAutoPollForFinalResponse: pollResult.shouldAutoPollForFinalResponse || false,
+          autoPollDelayMs: pollResult.autoPollDelayMs,
+          autoPollPriorAuthId: pollResult.autoPollPriorAuthId
         },
         message: pollResult.claimResponses.length > 0 
           ? 'Received authorization response' 
           : pollResult.communicationRequests.length > 0
             ? 'Received communication request(s) from insurer'
-            : 'No new messages'
+            : pollResult.shouldAutoPollForFinalResponse
+              ? 'Acknowledgment received. Auto-polling for final response...'
+              : 'No new messages'
       });
     } catch (error) {
       console.error('Error polling for response:', error);
