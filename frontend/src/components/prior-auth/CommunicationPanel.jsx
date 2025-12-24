@@ -58,7 +58,6 @@ const CommunicationPanel = ({
   const [pollPreviewCopied, setPollPreviewCopied] = useState(false);
   
   // Auto-poll state (Step 7-8)
-  const [autoPollEnabled, setAutoPollEnabled] = useState(true); // Default: enabled
   const [isAutoPolling, setIsAutoPolling] = useState(false);
   const [autoPollTimeout, setAutoPollTimeout] = useState(null);
   const [finalResponseStatus, setFinalResponseStatus] = useState(null); // 'waiting', 'received', 'approved', 'denied', 'partial'
@@ -316,7 +315,7 @@ const CommunicationPanel = ({
       await loadData();
       
       // Check if we should auto-poll for final response (Step 7)
-      if (result.pollResults?.shouldAutoPollForFinalResponse && autoPollEnabled && !isAutoPoll) {
+      if (result.pollResults?.shouldAutoPollForFinalResponse && !isAutoPoll) {
         const delayMs = result.pollResults.autoPollDelayMs || 3000;
         console.log(`[CommunicationPanel] Auto-polling for final response in ${delayMs}ms...`);
         
@@ -407,7 +406,7 @@ const CommunicationPanel = ({
         
         // Check if this was an unsolicited communication - trigger auto-poll (Step 7)
         const comm = communications.find(c => c.communication_id === communicationId);
-        if (comm && comm.communication_type === 'unsolicited' && autoPollEnabled) {
+        if (comm && comm.communication_type === 'unsolicited') {
           const delayMs = 3000; // Default delay
           console.log(`[CommunicationPanel] Unsolicited communication acknowledged. Auto-polling for final response in ${delayMs}ms...`);
           
@@ -794,7 +793,7 @@ const CommunicationPanel = ({
         await loadData();
         
         // If unsolicited communication was sent, auto-poll for acknowledgment after a delay
-        if (communicationType === 'unsolicited' && autoPollEnabled) {
+        if (communicationType === 'unsolicited') {
           console.log('[CommunicationPanel] Unsolicited communication sent. Auto-polling for acknowledgment in 2 seconds...');
           
           // Wait 2 seconds for NPHIES to process, then poll for acknowledgment
@@ -1007,24 +1006,6 @@ const CommunicationPanel = ({
         </div>
       )}
 
-      {/* Auto-Poll Toggle */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-        <label className="flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={autoPollEnabled}
-            onChange={(e) => setAutoPollEnabled(e.target.checked)}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-          <span className="ml-2 text-sm text-gray-700">
-            Automatically poll for final response after acknowledgment (Step 7)
-          </span>
-        </label>
-        <p className="text-xs text-gray-500 mt-1 ml-6">
-          When enabled, the system will automatically poll for the final authorization response after receiving a communication acknowledgment.
-        </p>
-      </div>
-
       {/* Final Response Status (Step 8) */}
       {finalResponseStatus && (
         <div className={`border rounded-lg p-4 ${
@@ -1148,7 +1129,7 @@ const CommunicationPanel = ({
               <p>• Acknowledgments: {pollResult.pollResults.acknowledgments?.length || 0}</p>
               {pollResult.pollResults.shouldAutoPollForFinalResponse && (
                 <p className="mt-2 text-blue-700 font-medium">
-                  ℹ️ Acknowledgment received! {autoPollEnabled ? `Auto-polling for final response in ${pollResult.pollResults.autoPollDelayMs || 3000}ms...` : 'Click "Poll for Updates" to retrieve final response.'}
+                  ℹ️ Acknowledgment received! Auto-polling for final response in {pollResult.pollResults.autoPollDelayMs || 3000}ms...
                 </p>
               )}
             </div>
