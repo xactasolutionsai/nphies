@@ -1842,8 +1842,9 @@ class PriorAuthorizationsController extends BaseController {
          net_amount, currency, serviced_date, serviced_period_start, serviced_period_end,
          body_site_code, body_site_system, sub_site_code, description, notes,
          manual_code_entry, manual_prescribed_code_entry, prescribed_medication_code,
-         pharmacist_selection_reason, pharmacist_substitute, patient_share, is_package, is_maternity)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
+         pharmacist_selection_reason, pharmacist_substitute, patient_share, is_package, is_maternity,
+         item_type)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
       `;
       await query(itemQuery, [
         priorAuthId,
@@ -1877,7 +1878,8 @@ class PriorAuthorizationsController extends BaseController {
         item.pharmacist_substitute || null,
         item.patient_share || null,
         item.is_package || false,
-        item.is_maternity || false
+        item.is_maternity || false,
+        item.item_type || 'medication' // Save item_type (medication or device)
       ]);
     }
   }

@@ -518,8 +518,8 @@ class PharmacyMapper extends BaseMapper {
     const calculatedNet = (quantity * unitPrice * factor) + tax;
     const patientShare = parseFloat(item.patient_share || 0);
     
-    // Determine item type (medication or device)
-    const itemType = item.item_type || 'medication';
+    // Determine item type (medication or device) - use explicit item_type from database
+    const itemType = item.item_type || 'medication'; // Default to medication if not set
     const isDevice = itemType === 'device';
     
     // Extract product/service code - different handling for devices vs medications
