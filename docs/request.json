@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "185e6cea-93bc-4f1a-b71c-ac8aad955be4",
+  "id": "c1356160-b098-49e8-a648-17467957d358",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-24T23:44:31.744Z",
+  "timestamp": "2025-12-25T00:03:41.663Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:0e47d321-86eb-4321-b472-6fddebe7d77e",
+      "fullUrl": "urn:uuid:f4753b08-8b4d-415f-bd4f-eabd1c561541",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "0e47d321-86eb-4321-b472-6fddebe7d77e",
+        "id": "f4753b08-8b4d-415f-bd4f-eabd1c561541",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,25 +47,25 @@
         ],
         "focus": [
           {
-            "reference": "http://saudigeneralhospital.com.sa/Task/1766619871744"
+            "reference": "http://saudigeneralhospital.com.sa/Task/1766621021663"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Task/1766619871744",
+      "fullUrl": "http://saudigeneralhospital.com.sa/Task/1766621021663",
       "resource": {
         "resourceType": "Task",
-        "id": "1766619871744",
+        "id": "1766621021663",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0"
           ]
         },
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/poll-request",
-            "value": "req_1766619871744"
+            "value": "d2ac52fb-3dc2-4014-8018-62bab90f739b"
           }
         ],
         "status": "requested",
@@ -75,38 +75,51 @@
           "coding": [
             {
               "system": "http://nphies.sa/terminology/CodeSystem/task-code",
-              "code": "poll",
-              "display": "Poll the focal resource"
+              "code": "poll"
             }
           ]
         },
         "requester": {
-          "reference": "http://saudigeneralhospital.com.sa/Organization/c4e6564f-558e-4452-8f7e-487697e914e7"
+          "reference": "http://saudigeneralhospital.com.sa/Organization/979051d2-c8ab-46b8-87a8-43ebfd31b283"
         },
         "owner": {
           "reference": "http://saudigeneralhospital.com.sa/Organization/NPHIES"
         },
-        "authoredOn": "2025-12-24T23:44:31.744Z",
-        "lastModified": "2025-12-24T23:44:31.744Z",
+        "authoredOn": "2025-12-25T00:03:41.663Z",
+        "lastModified": "2025-12-25T00:03:41.663Z",
         "focus": {
           "type": "Claim",
           "identifier": {
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-            "value": "DUP-1766616612687"
+            "value": "d2ac52fb-3dc2-4014-8018-62bab90f739b"
           }
         }
       }
     },
     {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/c4e6564f-558e-4452-8f7e-487697e914e7",
+      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/979051d2-c8ab-46b8-87a8-43ebfd31b283",
       "resource": {
         "resourceType": "Organization",
-        "id": "c4e6564f-558e-4452-8f7e-487697e914e7",
+        "id": "979051d2-c8ab-46b8-87a8-43ebfd31b283",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
           ]
         },
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
+                  "code": "1",
+                  "display": "Hospital"
+                }
+              ]
+            }
+          }
+        ],
         "identifier": [
           {
             "system": "http://nphies.sa/license/provider-license",

@@ -762,6 +762,36 @@ class CommunicationService {
       const providerDomain = this.mapper.extractProviderDomain(priorAuth.provider_name || 'Healthcare Provider');
       const authReference = this.mapper.getNphiesAuthReference(priorAuth);
       
+      // Log identifier details for debugging
+      console.log('[CommunicationService] ===== POLL REQUEST DETAILS =====');
+      console.log('[CommunicationService] Prior Auth ID:', priorAuthId);
+      console.log('[CommunicationService] Request Number:', priorAuth.request_number);
+      console.log('[CommunicationService] NPHIES Request ID:', priorAuth.nphies_request_id);
+      console.log('[CommunicationService] Pre-Auth Ref:', priorAuth.pre_auth_ref);
+      console.log('[CommunicationService] Auth Reference Used:', authReference);
+      console.log('[CommunicationService] Provider Domain:', providerDomain);
+      console.log('[CommunicationService] Identifier System:', `http://${providerDomain}/identifiers/authorization`);
+      
+      // Verify identifier matches original Claim if request_bundle is available
+      if (priorAuth.request_bundle) {
+        try {
+          const requestBundle = typeof priorAuth.request_bundle === 'string' 
+            ? JSON.parse(priorAuth.request_bundle) 
+            : priorAuth.request_bundle;
+          const claim = requestBundle.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource;
+          if (claim?.identifier?.[0]) {
+            const originalIdentifier = claim.identifier[0].value;
+            const originalSystem = claim.identifier[0].system;
+            console.log('[CommunicationService] Original Claim Identifier:', originalIdentifier);
+            console.log('[CommunicationService] Original Claim System:', originalSystem);
+            console.log('[CommunicationService] Identifier Match:', originalIdentifier === authReference ? '✓ MATCH' : '✗ MISMATCH');
+            console.log('[CommunicationService] System Match:', originalSystem === `http://${providerDomain}/identifiers/authorization` ? '✓ MATCH' : '✗ MISMATCH');
+          }
+        } catch (err) {
+          console.warn('[CommunicationService] Could not parse request_bundle to verify identifier:', err.message);
+        }
+      }
+      
       const pollOptions = {
         focus: {
           type: 'Claim',
@@ -779,6 +809,9 @@ class CommunicationService {
         pollOptions
       );
 
+      console.log('[CommunicationService] Poll Bundle Focus:', JSON.stringify(pollOptions.focus, null, 2));
+      console.log('[CommunicationService] =====================================');
+
       // 3. Send poll request
       const pollResponse = await nphiesService.sendPriorAuthPoll(pollBundle);
 
@@ -791,9 +824,55 @@ class CommunicationService {
       }
 
       // 4. Extract and categorize responses
-      const claimResponses = nphiesService.extractClaimResponsesFromPoll(pollResponse.data);
+      const allClaimResponses = nphiesService.extractClaimResponsesFromPoll(pollResponse.data);
       const communicationRequests = nphiesService.extractCommunicationRequestsFromPoll(pollResponse.data);
       const communications = nphiesService.extractCommunicationsFromPoll(pollResponse.data);
+
+      console.log('[CommunicationService] ===== POLL RESPONSE ANALYSIS =====');
+      console.log('[CommunicationService] Total ClaimResponses found:', allClaimResponses.length);
+      console.log('[CommunicationService] CommunicationRequests found:', communicationRequests.length);
+      console.log('[CommunicationService] Communications found:', communications.length);
+
+      // Filter ClaimResponses to match the pending authorization
+      // Match by checking ClaimResponse.request.identifier against poll focus identifier
+      const matchingClaimResponses = [];
+      const unmatchedClaimResponses = [];
+      
+      for (const cr of allClaimResponses) {
+        const requestIdentifier = cr.request?.identifier?.value;
+        const requestSystem = cr.request?.identifier?.system;
+        
+        console.log('[CommunicationService] ClaimResponse ID:', cr.id);
+        console.log('[CommunicationService] ClaimResponse.request.identifier.value:', requestIdentifier);
+        console.log('[CommunicationService] ClaimResponse.request.identifier.system:', requestSystem);
+        
+        // Check if this ClaimResponse matches our authorization
+        const matchesValue = requestIdentifier === authReference;
+        const matchesSystem = requestSystem === `http://${providerDomain}/identifiers/authorization`;
+        const matches = matchesValue && matchesSystem;
+        
+        console.log('[CommunicationService] Matches auth reference:', matchesValue ? '✓' : '✗');
+        console.log('[CommunicationService] Matches identifier system:', matchesSystem ? '✓' : '✗');
+        console.log('[CommunicationService] Overall match:', matches ? '✓ MATCHED' : '✗ NOT MATCHED');
+        
+        if (matches) {
+          matchingClaimResponses.push(cr);
+        } else {
+          unmatchedClaimResponses.push({
+            id: cr.id,
+            requestIdentifier,
+            requestSystem,
+            reason: !matchesValue ? 'Identifier value mismatch' : 'Identifier system mismatch'
+          });
+        }
+      }
+      
+      console.log('[CommunicationService] Matching ClaimResponses:', matchingClaimResponses.length);
+      console.log('[CommunicationService] Unmatched ClaimResponses:', unmatchedClaimResponses.length);
+      if (unmatchedClaimResponses.length > 0) {
+        console.log('[CommunicationService] Unmatched details:', JSON.stringify(unmatchedClaimResponses, null, 2));
+      }
+      console.log('[CommunicationService] =====================================');
 
       const results = {
         success: true,
@@ -804,13 +883,31 @@ class CommunicationService {
         responseBundle: pollResponse.data,
         // Include errors and response code from NPHIES
         errors: pollResponse.errors || [],
-        responseCode: pollResponse.responseCode
+        responseCode: pollResponse.responseCode,
+        // Add matching details for debugging
+        matchingDetails: {
+          totalFound: allClaimResponses.length,
+          matched: matchingClaimResponses.length,
+          unmatched: unmatchedClaimResponses.length,
+          unmatchedDetails: unmatchedClaimResponses,
+          pollIdentifier: {
+            system: `http://${providerDomain}/identifiers/authorization`,
+            value: authReference
+          }
+        }
       };
 
-      // 5. Process ClaimResponses (final authorization responses)
-      for (const cr of claimResponses) {
+      // 5. Process only matching ClaimResponses (final authorization responses)
+      for (const cr of matchingClaimResponses) {
         const processed = await this.processClaimResponse(client, priorAuthId, cr);
         results.claimResponses.push(processed);
+      }
+      
+      // Log warning if no matching responses found but responses exist
+      if (allClaimResponses.length > 0 && matchingClaimResponses.length === 0) {
+        console.warn('[CommunicationService] WARNING: Found ClaimResponses but none matched the authorization identifier');
+        console.warn('[CommunicationService] Expected identifier:', authReference);
+        console.warn('[CommunicationService] Expected system:', `http://${providerDomain}/identifiers/authorization`);
       }
 
       // 6. Process CommunicationRequests (HIC asking for info)
@@ -858,11 +955,18 @@ class CommunicationService {
 
   /**
    * Process ClaimResponse from poll
-   * Updates Prior Authorization status
+   * Updates Prior Authorization status and extracts full adjudication information
    */
   async processClaimResponse(client, priorAuthId, claimResponse) {
     const outcome = claimResponse.outcome;
     let status = 'pending';
+    let adjudicationOutcome = null;
+    
+    // Extract adjudication outcome from extension
+    const adjudicationExt = claimResponse.extension?.find(
+      ext => ext.url?.includes('extension-adjudication-outcome')
+    );
+    adjudicationOutcome = adjudicationExt?.valueCodeableConcept?.coding?.[0]?.code;
     
     switch (outcome) {
       case 'complete':
@@ -870,14 +974,18 @@ class CommunicationService {
         const disposition = claimResponse.disposition?.toLowerCase() || '';
         if (disposition.includes('approved') || disposition.includes('accept')) {
           status = 'approved';
+          if (!adjudicationOutcome) adjudicationOutcome = 'approved';
         } else if (disposition.includes('denied') || disposition.includes('reject')) {
           status = 'denied';
+          if (!adjudicationOutcome) adjudicationOutcome = 'rejected';
         } else {
           status = 'approved'; // Default complete to approved
+          if (!adjudicationOutcome) adjudicationOutcome = 'approved';
         }
         break;
       case 'partial':
         status = 'partial';
+        if (!adjudicationOutcome) adjudicationOutcome = 'partial';
         break;
       case 'queued':
         status = 'queued';
@@ -887,31 +995,114 @@ class CommunicationService {
         break;
     }
 
-    // Update Prior Authorization
+    // Extract financial totals
+    const totals = claimResponse.total?.map(total => ({
+      category: total.category?.coding?.[0]?.code,
+      categoryDisplay: total.category?.coding?.[0]?.display,
+      amount: total.amount?.value,
+      currency: total.amount?.currency || 'SAR'
+    })) || [];
+
+    // Extract item-level adjudication details
+    const itemAdjudications = claimResponse.item?.map(item => {
+      const itemOutcome = item.extension?.find(
+        ext => ext.url?.includes('extension-adjudication-outcome')
+      )?.valueCodeableConcept?.coding?.[0]?.code;
+
+      const adjudicationList = item.adjudication?.map(adj => ({
+        category: adj.category?.coding?.[0]?.code,
+        categoryDisplay: adj.category?.coding?.[0]?.display,
+        amount: adj.amount?.value,
+        value: adj.value,
+        currency: adj.amount?.currency,
+        reason: adj.reason?.coding?.[0]?.code,
+        reasonDisplay: adj.reason?.coding?.[0]?.display
+      })) || [];
+
+      return {
+        itemSequence: item.itemSequence,
+        outcome: itemOutcome,
+        adjudication: adjudicationList
+      };
+    }) || [];
+
+    // Extract pre-auth period
+    const preAuthPeriod = claimResponse.preAuthPeriod;
+
+    // Calculate approved amount from totals
+    const approvedAmount = totals.find(t => t.category === 'benefit')?.amount || 
+                          totals.find(t => t.category === 'eligible')?.amount;
+
+    // Update Prior Authorization with full adjudication details
     await client.query(`
       UPDATE prior_authorizations
       SET status = $1,
           outcome = $2,
           disposition = $3,
-          pre_auth_ref = COALESCE($4, pre_auth_ref),
-          response_bundle = $5,
+          adjudication_outcome = $4,
+          pre_auth_ref = COALESCE($5, pre_auth_ref),
+          pre_auth_period_start = COALESCE($6, pre_auth_period_start),
+          pre_auth_period_end = COALESCE($7, pre_auth_period_end),
+          approved_amount = COALESCE($8, approved_amount),
+          response_bundle = $9,
           response_date = NOW()
-      WHERE id = $6
+      WHERE id = $10
     `, [
       status,
       outcome,
       claimResponse.disposition,
+      adjudicationOutcome,
       claimResponse.preAuthRef,
+      preAuthPeriod?.start || null,
+      preAuthPeriod?.end || null,
+      approvedAmount || null,
       JSON.stringify(claimResponse),
       priorAuthId
     ]);
+
+    // Update item-level adjudication if items exist
+    if (itemAdjudications.length > 0) {
+      for (const itemAdj of itemAdjudications) {
+        const itemOutcome = itemAdj.outcome;
+        const adjudicationStatus = itemOutcome === 'approved' ? 'approved' : 
+                                  itemOutcome === 'rejected' ? 'denied' : 
+                                  itemOutcome === 'partial' ? 'partial' : 'pending';
+        
+        // Get approved amount for this item
+        const itemApprovedAmount = itemAdj.adjudication.find(a => a.category === 'benefit')?.amount ||
+                                  itemAdj.adjudication.find(a => a.category === 'eligible')?.amount;
+        
+        // Get adjudication reason
+        const adjudicationReason = itemAdj.adjudication.find(a => a.reason)?.reasonDisplay ||
+                                  itemAdj.adjudication.find(a => a.reason)?.reason;
+
+        await client.query(`
+          UPDATE prior_authorization_items
+          SET adjudication_status = $1,
+              adjudication_amount = $2,
+              adjudication_reason = $3
+          WHERE prior_auth_id = $4 AND sequence = $5
+        `, [
+          adjudicationStatus,
+          itemApprovedAmount || null,
+          adjudicationReason || null,
+          priorAuthId,
+          itemAdj.itemSequence
+        ]);
+      }
+    }
 
     return {
       id: claimResponse.id,
       outcome,
       status,
+      adjudicationOutcome,
       disposition: claimResponse.disposition,
-      preAuthRef: claimResponse.preAuthRef
+      preAuthRef: claimResponse.preAuthRef,
+      preAuthPeriod,
+      totals,
+      itemAdjudications,
+      approvedAmount
     };
   }
 

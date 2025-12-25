@@ -1123,6 +1123,23 @@ class PriorAuthorizationsController extends BaseController {
       // Get updated prior authorization data
       const updatedPA = await this.getByIdInternal(id);
 
+      // Build detailed response message
+      let message = 'No new messages';
+      if (pollResult.claimResponses.length > 0) {
+        const firstResponse = pollResult.claimResponses[0];
+        const adjOutcome = firstResponse.adjudicationOutcome || firstResponse.status;
+        message = `Received authorization response: ${adjOutcome}`;
+        if (firstResponse.preAuthRef) {
+          message += ` (Ref: ${firstResponse.preAuthRef})`;
+        }
+      } else if (pollResult.communicationRequests.length > 0) {
+        message = `Received ${pollResult.communicationRequests.length} communication request(s) from insurer`;
+      } else if (pollResult.shouldAutoPollForFinalResponse) {
+        message = 'Acknowledgment received. Auto-polling for final response...';
+      } else if (pollResult.matchingDetails && pollResult.matchingDetails.totalFound > 0 && pollResult.matchingDetails.matched === 0) {
+        message = `Found ${pollResult.matchingDetails.totalFound} response(s) but none matched this authorization`;
+      }
+
       res.json({
         success: true,
         data: updatedPA,
@@ -1133,19 +1150,18 @@ class PriorAuthorizationsController extends BaseController {
           // Step 7: Auto-poll flags
           shouldAutoPollForFinalResponse: pollResult.shouldAutoPollForFinalResponse || false,
           autoPollDelayMs: pollResult.autoPollDelayMs,
-          autoPollPriorAuthId: pollResult.autoPollPriorAuthId
+          autoPollPriorAuthId: pollResult.autoPollPriorAuthId,
+          // Add matching details for debugging
+          matchingDetails: pollResult.matchingDetails
         },
+        // Include poll request and response bundles for debugging
+        pollBundle: pollResult.pollBundle,
+        responseBundle: pollResult.responseBundle,
         // Include errors if any
         errors: pollResult.errors || [],
         responseCode: pollResult.responseCode,
         has_errors: (pollResult.errors && pollResult.errors.length > 0) || false,
-        message: pollResult.claimResponses.length > 0 
-          ? 'Received authorization response' 
-          : pollResult.communicationRequests.length > 0
-            ? 'Received communication request(s) from insurer'
-            : pollResult.shouldAutoPollForFinalResponse
-              ? 'Acknowledgment received. Auto-polling for final response...'
-              : 'No new messages'
+        message
       });
     } catch (error) {
       console.error('Error polling for response:', error);

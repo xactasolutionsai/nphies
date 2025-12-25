@@ -185,6 +185,10 @@ export default function PriorAuthorizationDetails() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmMessage, setConfirmMessage] = useState('');
   const [confirmCallback, setConfirmCallback] = useState(null);
+  
+  // Poll results state
+  const [pollResults, setPollResults] = useState(null);
+  const [showPollResults, setShowPollResults] = useState(false);
 
   useEffect(() => {
     loadPriorAuthorization();
@@ -536,10 +540,31 @@ export default function PriorAuthorizationDetails() {
   const handlePoll = async () => {
     try {
       setActionLoading(true);
-      const response = await api.pollNphiesAuthorizationResponse(id);
+      setPollResults(null);
+      const response = await api.pollPriorAuthorizationResponse(id);
+      
+      // Store poll results for display
+      setPollResults({
+        success: response.success,
+        message: response.message,
+        pollResults: response.pollResults,
+        pollBundle: response.pollBundle,
+        responseBundle: response.responseBundle,
+        matchingDetails: response.pollResults?.matchingDetails,
+        errors: response.errors || [],
+        responseCode: response.responseCode,
+        has_errors: response.has_errors || false
+      });
+      
       await loadPriorAuthorization();
-      setSuccessMessage(response.message || 'Polling complete');
-      setShowSuccessModal(true);
+      
+      // Show poll results if there are results or errors
+      if (response.pollResults || response.errors?.length > 0) {
+        setShowPollResults(true);
+      } else {
+        setSuccessMessage(response.message || 'Polling complete - No new messages');
+        setShowSuccessModal(true);
+      }
     } catch (error) {
       console.error('Error polling:', error);
       setErrorMessage(`Error: ${extractErrorMessage(error)}`);
@@ -3294,6 +3319,309 @@ export default function PriorAuthorizationDetails() {
         }
       >
         <p className="text-gray-700">{confirmMessage}</p>
+      </Modal>
+
+      {/* Poll Results Modal */}
+      <Modal
+        open={showPollResults}
+        onClose={() => setShowPollResults(false)}
+        title="Poll Results"
+        description={pollResults?.message || 'Polling results'}
+        footer={
+          <Button onClick={() => setShowPollResults(false)}>
+            Close
+          </Button>
+        }
+      >
+        {pollResults && (
+          <div className="space-y-6">
+            {/* Connection Status */}
+            {pollResults.matchingDetails && (
+              <div className={`p-4 rounded-lg border ${
+                pollResults.matchingDetails.matched > 0 
+                  ? 'bg-green-50 border-green-200' 
+                  : pollResults.matchingDetails.totalFound > 0
+                    ? 'bg-yellow-50 border-yellow-200'
+                    : 'bg-gray-50 border-gray-200'
+              }`}>
+                <div className="flex items-center gap-2 mb-3">
+                  {pollResults.matchingDetails.matched > 0 ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : pollResults.matchingDetails.totalFound > 0 ? (
+                    <AlertCircle className="h-5 w-5 text-yellow-600" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-gray-600" />
+                  )}
+                  <h3 className="font-semibold">Connection Status</h3>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total Responses Found:</span>
+                    <span className="font-medium">{pollResults.matchingDetails.totalFound}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Matched to Authorization:</span>
+                    <span className={`font-medium ${
+                      pollResults.matchingDetails.matched > 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {pollResults.matchingDetails.matched > 0 ? '✓ Yes' : '✗ No'}
+                    </span>
+                  </div>
+                  {pollResults.matchingDetails.unmatched > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Unmatched Responses:</span>
+                      <span className="font-medium text-yellow-600">{pollResults.matchingDetails.unmatched}</span>
+                    </div>
+                  )}
+                  <div className="mt-3 pt-3 border-t border-gray-300">
+                    <p className="text-xs text-gray-500 mb-1">Poll Identifier Used:</p>
+                    <p className="font-mono text-xs break-all">
+                      {pollResults.matchingDetails.pollIdentifier?.system}
+                    </p>
+                    <p className="font-mono text-xs break-all">
+                      Value: {pollResults.matchingDetails.pollIdentifier?.value}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ClaimResponse Results */}
+            {pollResults.pollResults?.claimResponses && pollResults.pollResults.claimResponses.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  Authorization Response ({pollResults.pollResults.claimResponses.length})
+                </h3>
+                {pollResults.pollResults.claimResponses.map((cr, idx) => (
+                  <div key={idx} className="p-4 border rounded-lg bg-green-50 border-green-200">
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <Label className="text-gray-500 text-xs">Outcome</Label>
+                        <Badge className={`mt-1 ${
+                          cr.outcome === 'complete' ? 'bg-green-500' : 
+                          cr.outcome === 'partial' ? 'bg-orange-500' : 
+                          'bg-gray-500'
+                        }`}>
+                          {cr.outcome}
+                        </Badge>
+                      </div>
+                      {cr.adjudicationOutcome && (
+                        <div>
+                          <Label className="text-gray-500 text-xs">Adjudication</Label>
+                          <Badge className={`mt-1 ${
+                            cr.adjudicationOutcome === 'approved' ? 'bg-green-500' : 
+                            cr.adjudicationOutcome === 'rejected' ? 'bg-red-500' : 
+                            cr.adjudicationOutcome === 'partial' ? 'bg-orange-500' : 
+                            'bg-yellow-500'
+                          }`}>
+                            {cr.adjudicationOutcome}
+                          </Badge>
+                        </div>
+                      )}
+                      {cr.preAuthRef && (
+                        <div>
+                          <Label className="text-gray-500 text-xs">Pre-Auth Ref</Label>
+                          <p className="font-mono text-sm text-green-600 mt-1">{cr.preAuthRef}</p>
+                        </div>
+                      )}
+                      {cr.disposition && (
+                        <div>
+                          <Label className="text-gray-500 text-xs">Disposition</Label>
+                          <p className="font-medium mt-1">{cr.disposition}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Financial Totals */}
+                    {cr.totals && cr.totals.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-green-300">
+                        <Label className="text-gray-500 text-xs uppercase tracking-wider mb-3 block">
+                          Financial Adjudication
+                        </Label>
+                        <div className="grid grid-cols-3 gap-4">
+                          {cr.totals.map((total, tIdx) => (
+                            <div key={tIdx} className={`p-3 rounded-lg ${
+                              total.category === 'eligible' ? 'bg-blue-50 border border-blue-200' :
+                              total.category === 'benefit' ? 'bg-green-50 border border-green-200' :
+                              total.category === 'copay' ? 'bg-orange-50 border border-orange-200' :
+                              'bg-gray-50 border border-gray-200'
+                            }`}>
+                              <p className="text-xs text-gray-600 capitalize mb-1">
+                                {total.category?.replace('-', ' ')}
+                              </p>
+                              <p className={`text-lg font-bold ${
+                                total.category === 'benefit' ? 'text-green-600' :
+                                total.category === 'copay' ? 'text-orange-600' :
+                                'text-gray-900'
+                              }`}>
+                                {formatAmount(total.amount, total.currency)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Item-Level Adjudication */}
+                    {cr.itemAdjudications && cr.itemAdjudications.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-green-300">
+                        <Label className="text-gray-500 text-xs uppercase tracking-wider mb-3 block">
+                          Item-Level Adjudication
+                        </Label>
+                        <div className="space-y-3">
+                          {cr.itemAdjudications.map((itemAdj, itemIdx) => (
+                            <div key={itemIdx} className="p-3 bg-white rounded border border-gray-200">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-medium">Item {itemAdj.itemSequence}</span>
+                                {itemAdj.outcome && (
+                                  <Badge className={
+                                    itemAdj.outcome === 'approved' ? 'bg-green-500' :
+                                    itemAdj.outcome === 'rejected' ? 'bg-red-500' :
+                                    'bg-yellow-500'
+                                  }>
+                                    {itemAdj.outcome}
+                                  </Badge>
+                                )}
+                              </div>
+                              {itemAdj.adjudication && itemAdj.adjudication.length > 0 && (
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                  {itemAdj.adjudication.map((adj, adjIdx) => (
+                                    <div key={adjIdx}>
+                                      <span className="text-gray-500 capitalize">
+                                        {adj.category?.replace('-', ' ')}:
+                                      </span>
+                                      <span className="font-medium ml-1">
+                                        {adj.amount !== undefined 
+                                          ? formatAmount(adj.amount, adj.currency) 
+                                          : adj.value !== undefined 
+                                            ? adj.value 
+                                            : '-'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pre-Auth Period */}
+                    {cr.preAuthPeriod && (
+                      <div className="mt-4 pt-4 border-t border-green-300">
+                        <Label className="text-gray-500 text-xs uppercase tracking-wider mb-2 block">
+                          Authorization Period
+                        </Label>
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500">Start</p>
+                            <p className="font-medium">{formatDate(cr.preAuthPeriod.start)}</p>
+                          </div>
+                          <div className="text-gray-400">→</div>
+                          <div>
+                            <p className="text-xs text-gray-500">End</p>
+                            <p className="font-medium">{formatDate(cr.preAuthPeriod.end)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Communication Requests */}
+            {pollResults.pollResults?.communicationRequests && pollResults.pollResults.communicationRequests.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-blue-600" />
+                  Communication Requests ({pollResults.pollResults.communicationRequests.length})
+                </h3>
+                {pollResults.pollResults.communicationRequests.map((commReq, idx) => (
+                  <div key={idx} className="p-3 border rounded-lg bg-blue-50">
+                    <p className="font-medium">{commReq.category || 'Communication Request'}</p>
+                    {commReq.payloadContentString && (
+                      <p className="text-sm text-gray-600 mt-1">{commReq.payloadContentString}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Errors */}
+            {pollResults.errors && pollResults.errors.length > 0 && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <h3 className="font-semibold text-red-800 mb-2 flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5" />
+                  Errors
+                </h3>
+                <ul className="space-y-1 text-sm text-red-700">
+                  {pollResults.errors.map((error, idx) => (
+                    <li key={idx}>
+                      {error.code && <span className="font-mono">{error.code}: </span>}
+                      {error.message || error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* No Results Message */}
+            {pollResults.pollResults?.claimResponses?.length === 0 && 
+             pollResults.pollResults?.communicationRequests?.length === 0 && 
+             (!pollResults.errors || pollResults.errors.length === 0) && (
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                <p className="text-gray-600">No new messages found in poll response</p>
+                {pollResults.matchingDetails && pollResults.matchingDetails.totalFound > 0 && (
+                  <p className="text-sm text-yellow-600 mt-2">
+                    Note: {pollResults.matchingDetails.totalFound} response(s) found but none matched this authorization
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Debug Section (Collapsible) */}
+            <details className="mt-4">
+              <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-800">
+                Debug Information (Click to expand)
+              </summary>
+              <div className="mt-2 space-y-4">
+                {pollResults.pollBundle && (
+                  <div>
+                    <Label className="text-gray-500 text-xs uppercase tracking-wider mb-2 block">
+                      Poll Request Bundle
+                    </Label>
+                    <pre className="bg-gray-900 text-green-400 p-3 rounded text-xs overflow-auto max-h-40">
+                      {JSON.stringify(pollResults.pollBundle, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {pollResults.responseBundle && (
+                  <div>
+                    <Label className="text-gray-500 text-xs uppercase tracking-wider mb-2 block">
+                      Poll Response Bundle
+                    </Label>
+                    <pre className="bg-gray-900 text-blue-400 p-3 rounded text-xs overflow-auto max-h-40">
+                      {JSON.stringify(pollResults.responseBundle, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {pollResults.matchingDetails?.unmatchedDetails && pollResults.matchingDetails.unmatchedDetails.length > 0 && (
+                  <div>
+                    <Label className="text-gray-500 text-xs uppercase tracking-wider mb-2 block">
+                      Unmatched Response Details
+                    </Label>
+                    <pre className="bg-yellow-50 border border-yellow-200 p-3 rounded text-xs overflow-auto max-h-40">
+                      {JSON.stringify(pollResults.matchingDetails.unmatchedDetails, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </details>
+          </div>
+        )}
       </Modal>
     </div>
   );
