@@ -1140,26 +1140,13 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     encounter.subject = { reference: `Patient/${patientId}` };
 
     // Period
-    const needsDateTime = ['daycase', 'inpatient', 'emergency'].includes(encounterClass);
-    
-    if (needsDateTime) {
-      encounter.period = {
-        start: this.formatDateTimeWithTimezone(claim.encounter_start || claim.service_date || new Date())
-      };
-      if (claim.encounter_end) {
-        encounter.period.end = this.formatDateTimeWithTimezone(claim.encounter_end);
-      }
-    } else {
-      // AMB: date-only format
-      const startDateRaw = claim.encounter_start || claim.service_date || new Date();
-      let dateOnlyStart;
-      if (typeof startDateRaw === 'string' && startDateRaw.includes('T')) {
-        dateOnlyStart = startDateRaw.split('T')[0];
-      } else {
-        dateOnlyStart = this.formatDate(startDateRaw);
-      }
-      
-      encounter.period = { start: dateOnlyStart };
+    // BV-00811: Date time format up to seconds SHALL be mandatory for claims
+    // Always use full datetime format with seconds for all encounter types
+    encounter.period = {
+      start: this.formatDateTimeWithTimezone(claim.encounter_start || claim.service_date || new Date())
+    };
+    if (claim.encounter_end) {
+      encounter.period.end = this.formatDateTimeWithTimezone(claim.encounter_end);
     }
 
     // ServiceProvider
