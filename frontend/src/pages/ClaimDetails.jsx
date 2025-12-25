@@ -1118,15 +1118,33 @@ export default function ClaimDetails() {
                             </div>
                           )}
                           
-                          {/* Additional item details */}
-                          {(item.tooth_number || item.eye || item.days_supply) && (
-                            <div className="mt-3 pt-3 border-t text-sm">
-                              {item.tooth_number && <span className="mr-4">Tooth: {item.tooth_number}</span>}
-                              {item.tooth_surface && <span className="mr-4">Surface: {item.tooth_surface}</span>}
-                              {item.eye && <span className="mr-4">Eye: {item.eye}</span>}
-                              {item.days_supply && <span>Days Supply: {item.days_supply}</span>}
-                            </div>
-                          )}
+                          {/* Additional item details - Show only relevant fields based on claim type */}
+                          {(() => {
+                            const hasDentalFields = claim.claim_type === 'dental' && (item.tooth_number || item.tooth_surface);
+                            const hasVisionFields = claim.claim_type === 'vision' && item.eye;
+                            const hasPharmacyFields = claim.claim_type === 'pharmacy' && item.days_supply;
+                            
+                            if (!hasDentalFields && !hasVisionFields && !hasPharmacyFields) {
+                              return null;
+                            }
+                            
+                            return (
+                              <div className="mt-3 pt-3 border-t text-sm">
+                                {claim.claim_type === 'dental' && (
+                                  <>
+                                    {item.tooth_number && <span className="mr-4">Tooth: {item.tooth_number}</span>}
+                                    {item.tooth_surface && <span className="mr-4">Surface: {item.tooth_surface}</span>}
+                                  </>
+                                )}
+                                {claim.claim_type === 'vision' && item.eye && (
+                                  <span className="mr-4">Eye: {item.eye}</span>
+                                )}
+                                {claim.claim_type === 'pharmacy' && item.days_supply && (
+                                  <span>Days Supply: {item.days_supply}</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}
