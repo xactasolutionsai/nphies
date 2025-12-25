@@ -838,22 +838,66 @@ class CommunicationService {
       const matchingClaimResponses = [];
       const unmatchedClaimResponses = [];
       
+      const expectedSystem = `http://${providerDomain}/identifiers/authorization`;
+      
+      console.log('[CommunicationService] ===== MATCHING LOGIC =====');
+      console.log('[CommunicationService] Expected identifier value:', authReference);
+      console.log('[CommunicationService] Expected identifier system:', expectedSystem);
+      console.log('[CommunicationService] Provider domain:', providerDomain);
+      
       for (const cr of allClaimResponses) {
         const requestIdentifier = cr.request?.identifier?.value;
         const requestSystem = cr.request?.identifier?.system;
         
+        console.log('[CommunicationService] --- ClaimResponse Analysis ---');
         console.log('[CommunicationService] ClaimResponse ID:', cr.id);
-        console.log('[CommunicationService] ClaimResponse.request.identifier.value:', requestIdentifier);
-        console.log('[CommunicationService] ClaimResponse.request.identifier.system:', requestSystem);
+        console.log('[CommunicationService] ClaimResponse.request:', cr.request ? 'Present' : 'MISSING');
+        console.log('[CommunicationService] ClaimResponse.request.identifier:', cr.request?.identifier ? 'Present' : 'MISSING');
+        console.log('[CommunicationService] ClaimResponse.request.identifier.value:', requestIdentifier || 'MISSING');
+        console.log('[CommunicationService] ClaimResponse.request.identifier.system:', requestSystem || 'MISSING');
         
-        // Check if this ClaimResponse matches our authorization
-        const matchesValue = requestIdentifier === authReference;
-        const matchesSystem = requestSystem === `http://${providerDomain}/identifiers/authorization`;
-        const matches = matchesValue && matchesSystem;
+        // Try multiple matching strategies
+        let matches = false;
+        let matchReason = '';
         
-        console.log('[CommunicationService] Matches auth reference:', matchesValue ? '✓' : '✗');
-        console.log('[CommunicationService] Matches identifier system:', matchesSystem ? '✓' : '✗');
-        console.log('[CommunicationService] Overall match:', matches ? '✓ MATCHED' : '✗ NOT MATCHED');
+        // Strategy 1: Exact match (value + system)
+        const exactValueMatch = requestIdentifier === authReference;
+        const exactSystemMatch = requestSystem === expectedSystem;
+        if (exactValueMatch && exactSystemMatch) {
+          matches = true;
+          matchReason = 'Exact match (value + system)';
+        }
+        
+        // Strategy 2: Value match only (system might differ slightly)
+        if (!matches && exactValueMatch) {
+          matches = true;
+          matchReason = `Value match (system differs: expected "${expectedSystem}", got "${requestSystem}")`;
+        }
+        
+        // Strategy 3: Case-insensitive system match with value match
+        if (!matches && requestIdentifier && requestSystem) {
+          const systemNormalized = requestSystem.toLowerCase().replace(/\/$/, '');
+          const expectedSystemNormalized = expectedSystem.toLowerCase().replace(/\/$/, '');
+          if (requestIdentifier === authReference && systemNormalized === expectedSystemNormalized) {
+            matches = true;
+            matchReason = 'Case-insensitive system match with value match';
+          }
+        }
+        
+        // Strategy 4: If only one ClaimResponse and it has a request identifier, assume it's for this auth
+        // (This handles cases where NPHIES might return responses without perfect identifier matching)
+        if (!matches && allClaimResponses.length === 1 && requestIdentifier) {
+          matches = true;
+          matchReason = `Single ClaimResponse found (assuming match - value: "${requestIdentifier}", expected: "${authReference}")`;
+        }
+        
+        console.log('[CommunicationService] Match result:', matches ? '✓ MATCHED' : '✗ NOT MATCHED');
+        if (matches) {
+          console.log('[CommunicationService] Match reason:', matchReason);
+        } else {
+          console.log('[CommunicationService] Value match:', exactValueMatch ? '✓' : '✗');
+          console.log('[CommunicationService] System match:', exactSystemMatch ? '✓' : '✗');
+        }
         
         if (matches) {
           matchingClaimResponses.push(cr);
@@ -862,7 +906,9 @@ class CommunicationService {
             id: cr.id,
             requestIdentifier,
             requestSystem,
-            reason: !matchesValue ? 'Identifier value mismatch' : 'Identifier system mismatch'
+            reason: !requestIdentifier ? 'No request identifier found' : 
+                   !exactValueMatch ? `Identifier value mismatch (expected "${authReference}", got "${requestIdentifier}")` : 
+                   `Identifier system mismatch (expected "${expectedSystem}", got "${requestSystem}")`
           });
         }
       }
