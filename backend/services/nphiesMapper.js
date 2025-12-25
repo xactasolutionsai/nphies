@@ -476,9 +476,10 @@ class NphiesMapper {
    * @param {Object} policyHolder - Optional PolicyHolder Organization data
    * @param {Object} motherPatient - Optional mother patient data (for newborn requests)
    */
-  buildCoverageResource(coverage, patient, insurer, policyHolder = null, motherPatient = null) {
+  buildCoverageResource(coverage, patient, insurer, policyHolder = null, motherPatient = null, newbornPatientId = null, motherPatientResourceId = null) {
     const coverageId = `coverage-${(coverage.coverage_id || coverage.coverageId)?.toString() || this.generateId()}`;
-    const patientId = `patient-${(patient.patient_id || patient.patientId)?.toString()}`;
+    // Use the provided patient resource IDs if available (from built Patient resources), otherwise generate/derive from patient object
+    const patientId = newbornPatientId || `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}`;
     const insurerId = (insurer.insurer_id || insurer.insurerId)?.toString();
     
     // Support both formats
@@ -516,17 +517,18 @@ class NphiesMapper {
     } else {
       // Fallback to Patient reference if no policyHolder organization
       // For newborn cases, use mother as policyHolder
-      const policyHolderPatientId = motherPatient 
-        ? `patient-${(motherPatient.patient_id || motherPatient.patientId)?.toString()}`
-        : patientId;
+      const policyHolderPatientId = motherPatientResourceId || (motherPatient 
+        ? `patient-${(motherPatient.patient_id || motherPatient.patientId)?.toString() || this.generateId()}`
+        : patientId);
       policyHolderRef = { reference: `Patient/${policyHolderPatientId}` };
     }
 
     // For newborn cases: subscriber = mother, beneficiary = newborn
     // Per NPHIES example: Newborn Elig Request.json
-    const subscriberPatientId = motherPatient 
-      ? `patient-${(motherPatient.patient_id || motherPatient.patientId)?.toString()}`
-      : patientId;
+    // Use the provided mother patient resource ID if available, otherwise derive from motherPatient object
+    const subscriberPatientId = motherPatientResourceId || (motherPatient 
+      ? `patient-${(motherPatient.patient_id || motherPatient.patientId)?.toString() || this.generateId()}`
+      : patientId);
     const beneficiaryPatientId = patientId; // Always the newborn/primary patient
 
     return {
@@ -610,11 +612,11 @@ class NphiesMapper {
    * @param {Object} insurer - Insurer data
    * @param {Object|null} coverage - Coverage data (optional for discovery mode)
    */
-  buildCoverageEligibilityRequest(data, patient, provider, insurer, coverage) {
+  buildCoverageEligibilityRequest(data, patient, provider, insurer, coverage, patientResourceId = null) {
     // Generate simple request ID like NPHIES example: "req_161959"
     const requestId = `req_${Date.now().toString().slice(-6)}`;
-    // Support both DB format (patient_id) and raw format (patientId)
-    const patientId = `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}`;
+    // Use the provided patient resource ID if available (from built Patient resource), otherwise generate/derive from patient object
+    const patientId = patientResourceId || `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}`;
     const providerId = (provider.provider_id || provider.providerId)?.toString() || this.generateId();
     const insurerId = (insurer.insurer_id || insurer.insurerId)?.toString() || this.generateId();
 
@@ -818,26 +820,29 @@ class NphiesMapper {
   buildEligibilityRequestBundle(data) {
     const { patient, provider, insurer, coverage, policyHolder, purpose, servicedDate, isNewborn, isTransfer, motherPatient } = data;
 
-    // Build individual resources first to get their fullUrls
+    // Build individual resources first to get their fullUrls and IDs
     // For newborn cases, patient is the newborn, and we also need mother patient resource
     const newbornPatientResource = this.buildPatientResource(patient);
+    const newbornPatientId = newbornPatientResource.resource.id; // Extract the generated ID
+    
     const providerResource = this.buildProviderOrganization(provider);
     const insurerResource = this.buildPayerOrganization(insurer);
     const locationResource = this.buildLocationResource(provider);
     
     // Build mother patient resource if provided (for newborn requests)
     const motherPatientResource = (isNewborn && motherPatient) ? this.buildPatientResource(motherPatient) : null;
+    const motherPatientId = motherPatientResource ? motherPatientResource.resource.id : null;
     
     // Build PolicyHolder Organization if provided (employer/company that holds the policy)
     const policyHolderResource = policyHolder ? this.buildPolicyHolderOrganization(policyHolder) : null;
     
     // Coverage is optional for discovery mode
-    // For newborn cases, pass motherPatient to buildCoverageResource (subscriber = mother, beneficiary = newborn)
+    // For newborn cases, pass motherPatient and the generated patient IDs to buildCoverageResource
     const coverageResource = coverage 
-      ? this.buildCoverageResource(coverage, patient, insurer, policyHolder, motherPatient) 
+      ? this.buildCoverageResource(coverage, patient, insurer, policyHolder, motherPatient, newbornPatientId, motherPatientId) 
       : null;
     
-    // Pass locationId to eligibility request for facility reference
+    // Pass locationId and patient ID to eligibility request for facility reference
     const eligibilityRequest = this.buildCoverageEligibilityRequest(
       { 
         purpose, 
@@ -849,7 +854,8 @@ class NphiesMapper {
       patient,
       provider,
       insurer,
-      coverage
+      coverage,
+      newbornPatientId  // Pass the generated patient resource ID
     );
 
     // Build message header (must be first entry in bundle)
