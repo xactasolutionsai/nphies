@@ -1186,12 +1186,17 @@ class BaseMapper {
       
       // If servicedDate doesn't have a time component (is at midnight or was date-only),
       // default to current time while keeping the date part
-      const servicedDateStr = servicedDate.toISOString();
       const isMidnight = servicedDate.getHours() === 0 && 
                         servicedDate.getMinutes() === 0 && 
                         servicedDate.getSeconds() === 0;
       
-      if (isMidnight && item.serviced_date && !item.serviced_date.includes('T') && !item.serviced_date.match(/\d{2}:\d{2}/)) {
+      // Check if original serviced_date was a date-only string (no time component)
+      const originalServicedDateStr = typeof item.serviced_date === 'string' 
+        ? item.serviced_date 
+        : (item.serviced_date instanceof Date ? item.serviced_date.toISOString() : String(item.serviced_date || ''));
+      const hasTimeInOriginal = originalServicedDateStr.includes('T') || originalServicedDateStr.match(/\d{2}:\d{2}/);
+      
+      if (isMidnight && item.serviced_date && !hasTimeInOriginal) {
         // Date-only was provided, use current time with the same date
         const now = new Date();
         const datePart = servicedDate.toISOString().split('T')[0];
