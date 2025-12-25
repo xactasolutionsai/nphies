@@ -762,36 +762,6 @@ class CommunicationService {
       const providerDomain = this.mapper.extractProviderDomain(priorAuth.provider_name || 'Healthcare Provider');
       const authReference = this.mapper.getNphiesAuthReference(priorAuth);
       
-      // Log identifier details for debugging
-      console.log('[CommunicationService] ===== POLL REQUEST DETAILS =====');
-      console.log('[CommunicationService] Prior Auth ID:', priorAuthId);
-      console.log('[CommunicationService] Request Number:', priorAuth.request_number);
-      console.log('[CommunicationService] NPHIES Request ID:', priorAuth.nphies_request_id);
-      console.log('[CommunicationService] Pre-Auth Ref:', priorAuth.pre_auth_ref);
-      console.log('[CommunicationService] Auth Reference Used:', authReference);
-      console.log('[CommunicationService] Provider Domain:', providerDomain);
-      console.log('[CommunicationService] Identifier System:', `http://${providerDomain}/identifiers/authorization`);
-      
-      // Verify identifier matches original Claim if request_bundle is available
-      if (priorAuth.request_bundle) {
-        try {
-          const requestBundle = typeof priorAuth.request_bundle === 'string' 
-            ? JSON.parse(priorAuth.request_bundle) 
-            : priorAuth.request_bundle;
-          const claim = requestBundle.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource;
-          if (claim?.identifier?.[0]) {
-            const originalIdentifier = claim.identifier[0].value;
-            const originalSystem = claim.identifier[0].system;
-            console.log('[CommunicationService] Original Claim Identifier:', originalIdentifier);
-            console.log('[CommunicationService] Original Claim System:', originalSystem);
-            console.log('[CommunicationService] Identifier Match:', originalIdentifier === authReference ? '✓ MATCH' : '✗ MISMATCH');
-            console.log('[CommunicationService] System Match:', originalSystem === `http://${providerDomain}/identifiers/authorization` ? '✓ MATCH' : '✗ MISMATCH');
-          }
-        } catch (err) {
-          console.warn('[CommunicationService] Could not parse request_bundle to verify identifier:', err.message);
-        }
-      }
-      
       const pollOptions = {
         focus: {
           type: 'Claim',
@@ -809,9 +779,6 @@ class CommunicationService {
         pollOptions
       );
 
-      console.log('[CommunicationService] Poll Bundle Focus:', JSON.stringify(pollOptions.focus, null, 2));
-      console.log('[CommunicationService] =====================================');
-
       // 3. Send poll request
       const pollResponse = await nphiesService.sendPriorAuthPoll(pollBundle);
 
@@ -828,11 +795,6 @@ class CommunicationService {
       const communicationRequests = nphiesService.extractCommunicationRequestsFromPoll(pollResponse.data);
       const communications = nphiesService.extractCommunicationsFromPoll(pollResponse.data);
 
-      console.log('[CommunicationService] ===== POLL RESPONSE ANALYSIS =====');
-      console.log('[CommunicationService] Total ClaimResponses found:', allClaimResponses.length);
-      console.log('[CommunicationService] CommunicationRequests found:', communicationRequests.length);
-      console.log('[CommunicationService] Communications found:', communications.length);
-
       // Filter ClaimResponses to match the pending authorization
       // Match by checking ClaimResponse.request.identifier against poll focus identifier
       const matchingClaimResponses = [];
@@ -840,38 +802,23 @@ class CommunicationService {
       
       const expectedSystem = `http://${providerDomain}/identifiers/authorization`;
       
-      console.log('[CommunicationService] ===== MATCHING LOGIC =====');
-      console.log('[CommunicationService] Expected identifier value:', authReference);
-      console.log('[CommunicationService] Expected identifier system:', expectedSystem);
-      console.log('[CommunicationService] Provider domain:', providerDomain);
-      
       for (const cr of allClaimResponses) {
         const requestIdentifier = cr.request?.identifier?.value;
         const requestSystem = cr.request?.identifier?.system;
         
-        console.log('[CommunicationService] --- ClaimResponse Analysis ---');
-        console.log('[CommunicationService] ClaimResponse ID:', cr.id);
-        console.log('[CommunicationService] ClaimResponse.request:', cr.request ? 'Present' : 'MISSING');
-        console.log('[CommunicationService] ClaimResponse.request.identifier:', cr.request?.identifier ? 'Present' : 'MISSING');
-        console.log('[CommunicationService] ClaimResponse.request.identifier.value:', requestIdentifier || 'MISSING');
-        console.log('[CommunicationService] ClaimResponse.request.identifier.system:', requestSystem || 'MISSING');
-        
         // Try multiple matching strategies
         let matches = false;
-        let matchReason = '';
         
         // Strategy 1: Exact match (value + system)
         const exactValueMatch = requestIdentifier === authReference;
         const exactSystemMatch = requestSystem === expectedSystem;
         if (exactValueMatch && exactSystemMatch) {
           matches = true;
-          matchReason = 'Exact match (value + system)';
         }
         
         // Strategy 2: Value match only (system might differ slightly)
         if (!matches && exactValueMatch) {
           matches = true;
-          matchReason = `Value match (system differs: expected "${expectedSystem}", got "${requestSystem}")`;
         }
         
         // Strategy 3: Case-insensitive system match with value match
@@ -880,7 +827,6 @@ class CommunicationService {
           const expectedSystemNormalized = expectedSystem.toLowerCase().replace(/\/$/, '');
           if (requestIdentifier === authReference && systemNormalized === expectedSystemNormalized) {
             matches = true;
-            matchReason = 'Case-insensitive system match with value match';
           }
         }
         
@@ -888,15 +834,6 @@ class CommunicationService {
         // (This handles cases where NPHIES might return responses without perfect identifier matching)
         if (!matches && allClaimResponses.length === 1 && requestIdentifier) {
           matches = true;
-          matchReason = `Single ClaimResponse found (assuming match - value: "${requestIdentifier}", expected: "${authReference}")`;
-        }
-        
-        console.log('[CommunicationService] Match result:', matches ? '✓ MATCHED' : '✗ NOT MATCHED');
-        if (matches) {
-          console.log('[CommunicationService] Match reason:', matchReason);
-        } else {
-          console.log('[CommunicationService] Value match:', exactValueMatch ? '✓' : '✗');
-          console.log('[CommunicationService] System match:', exactSystemMatch ? '✓' : '✗');
         }
         
         if (matches) {
@@ -912,13 +849,6 @@ class CommunicationService {
           });
         }
       }
-      
-      console.log('[CommunicationService] Matching ClaimResponses:', matchingClaimResponses.length);
-      console.log('[CommunicationService] Unmatched ClaimResponses:', unmatchedClaimResponses.length);
-      if (unmatchedClaimResponses.length > 0) {
-        console.log('[CommunicationService] Unmatched details:', JSON.stringify(unmatchedClaimResponses, null, 2));
-      }
-      console.log('[CommunicationService] =====================================');
 
       const results = {
         success: true,
@@ -949,12 +879,6 @@ class CommunicationService {
         results.claimResponses.push(processed);
       }
       
-      // Log warning if no matching responses found but responses exist
-      if (allClaimResponses.length > 0 && matchingClaimResponses.length === 0) {
-        console.warn('[CommunicationService] WARNING: Found ClaimResponses but none matched the authorization identifier');
-        console.warn('[CommunicationService] Expected identifier:', authReference);
-        console.warn('[CommunicationService] Expected system:', `http://${providerDomain}/identifiers/authorization`);
-      }
 
       // 6. Process CommunicationRequests (HIC asking for info)
       for (const commReq of communicationRequests) {
