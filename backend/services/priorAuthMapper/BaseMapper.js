@@ -970,29 +970,35 @@ class BaseMapper {
     }
 
     // Add value based on type
-    // Skip valueString if we already used it for code.text (chief-complaint case)
-    if (info.value_string !== undefined && info.value_string !== null && !info._usedValueStringForCodeText) {
-      supportingInfo.valueString = info.value_string;
-    } else if (info.value_quantity !== null && info.value_quantity !== undefined) {
-      const ucumCode = this.getUCUMCode(info.value_quantity_unit || info.unit);
-      supportingInfo.valueQuantity = {
-        value: parseFloat(info.value_quantity),
-        system: 'http://unitsofmeasure.org',
-        code: ucumCode
-      };
-    } else if (info.value_boolean !== null && info.value_boolean !== undefined) {
-      supportingInfo.valueBoolean = info.value_boolean;
-    } else if (info.value_date) {
-      supportingInfo.valueDate = this.formatDate(info.value_date);
-    } else if (info.value_period_start) {
-      supportingInfo.valuePeriod = {
-        start: this.formatDateTime(info.value_period_start),
-        end: this.formatDateTime(info.value_period_end)
-      };
-    } else if (info.value_reference) {
-      supportingInfo.valueReference = {
-        reference: info.value_reference
-      };
+    // GE-00013: Onset category should NOT have any value fields (only code and timingDate per NPHIES spec)
+    // Skip value fields for onset category
+    const isOnset = category === 'onset' || info._isOnset;
+    
+    if (!isOnset) {
+      // Skip valueString if we already used it for code.text (chief-complaint case)
+      if (info.value_string !== undefined && info.value_string !== null && !info._usedValueStringForCodeText) {
+        supportingInfo.valueString = info.value_string;
+      } else if (info.value_quantity !== null && info.value_quantity !== undefined) {
+        const ucumCode = this.getUCUMCode(info.value_quantity_unit || info.unit);
+        supportingInfo.valueQuantity = {
+          value: parseFloat(info.value_quantity),
+          system: 'http://unitsofmeasure.org',
+          code: ucumCode
+        };
+      } else if (info.value_boolean !== null && info.value_boolean !== undefined) {
+        supportingInfo.valueBoolean = info.value_boolean;
+      } else if (info.value_date) {
+        supportingInfo.valueDate = this.formatDate(info.value_date);
+      } else if (info.value_period_start) {
+        supportingInfo.valuePeriod = {
+          start: this.formatDateTime(info.value_period_start),
+          end: this.formatDateTime(info.value_period_end)
+        };
+      } else if (info.value_reference) {
+        supportingInfo.valueReference = {
+          reference: info.value_reference
+        };
+      }
     }
 
     // Add reason

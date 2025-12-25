@@ -590,6 +590,21 @@ class ProfessionalMapper extends BaseMapper {
           info.code = principalDiagnosis.diagnosis_code;
           info.code_display = principalDiagnosis.diagnosis_display;
         }
+        
+        // GE-00013: Remove all value fields from onset - per NPHIES spec, onset only requires:
+        // - category (onset)
+        // - code (CodeableConcept with ICD-10-AM)
+        // - timingDate
+        // Onset should NOT have valueQuantity, valueString, valueBoolean, valueDate, valuePeriod, or valueReference
+        delete info.value_quantity;
+        delete info.value_quantity_unit;
+        delete info.value_string;
+        delete info.value_boolean;
+        delete info.value_date;
+        delete info.value_period_start;
+        delete info.value_period_end;
+        delete info.value_reference;
+        info._isOnset = true; // Flag to prevent buildSupportingInfo from adding value fields
       }
       return info;
     }).filter(Boolean); // Remove null entries (invalid onset without diagnosis)
