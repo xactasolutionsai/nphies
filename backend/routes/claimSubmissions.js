@@ -34,6 +34,7 @@ router.delete('/:id', (req, res) => claimSubmissionsController.delete(req, res))
 
 // NPHIES workflow operations
 router.post('/:id/send', (req, res) => claimSubmissionsController.sendToNphies(req, res));
+router.post('/:id/cancel', (req, res) => claimSubmissionsController.cancel(req, res));
 
 // FHIR bundle preview for existing claim
 router.get('/:id/bundle', (req, res) => claimSubmissionsController.getBundle(req, res));

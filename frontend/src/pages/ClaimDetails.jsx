@@ -134,6 +134,8 @@ export default function ClaimDetails() {
   const [bundle, setBundle] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
   const [showBundleDialog, setShowBundleDialog] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
   const [payments, setPayments] = useState([]);
@@ -721,6 +723,32 @@ export default function ClaimDetails() {
     }
   };
 
+  const handleCancel = async () => {
+    if (!cancelReason.trim()) {
+      alert('Please provide a reason for cancellation');
+      return;
+    }
+    
+    try {
+      setActionLoading(true);
+      const response = await api.cancelClaimSubmission(id, cancelReason);
+      
+      if (response.success) {
+        alert('Claim cancelled successfully');
+        setShowCancelDialog(false);
+        setCancelReason('');
+        await loadClaim();
+      } else {
+        alert(`Error: ${response.error?.message || response.message || 'Failed to cancel claim'}`);
+      }
+    } catch (error) {
+      console.error('Error cancelling claim:', error);
+      alert(`Error: ${extractErrorMessage(error)}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const getStatusBadge = (status, outcome) => {
     // Use outcome for display if available (approved, denied, etc.)
     const displayStatus = outcome || status;
@@ -825,6 +853,20 @@ export default function ClaimDetails() {
             <Button onClick={loadClaim} disabled={actionLoading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${actionLoading ? 'animate-spin' : ''}`} />
               Refresh Status
+            </Button>
+          )}
+          
+          {/* Cancel button - Show for approved, queued, or pended claims that haven't been cancelled/paid */}
+          {(claim.status === 'approved' || claim.status === 'queued' || claim.status === 'pended' || claim.adjudication_outcome === 'approved') && 
+           claim.status !== 'cancelled' && claim.status !== 'paid' && (
+            <Button 
+              variant="outline" 
+              onClick={() => setShowCancelDialog(true)} 
+              disabled={actionLoading}
+              className="text-red-500 border-red-300 hover:bg-red-50"
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              Cancel
             </Button>
           )}
           
@@ -1020,6 +1062,61 @@ export default function ClaimDetails() {
                     <div>
                       <Label className="text-gray-500">Disposition</Label>
                       <p className="font-medium mt-1">{claim.disposition}</p>
+                    </div>
+                  </>
+                )}
+
+                {/* Cancellation Details Section */}
+                {claim.status === 'cancelled' && (claim.cancellation_reason || claim.responses?.some(r => r.response_type === 'cancel')) && (
+                  <>
+                    <hr className="border-gray-200" />
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <XCircle className="h-5 w-5 text-red-600" />
+                        <h3 className="font-semibold text-red-800">Cancellation Details</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        {(claim.cancellation_reason || claim.responses?.find(r => r.response_type === 'cancel')) && (
+                          <div>
+                            <Label className="text-red-700">Cancellation Reason Code</Label>
+                            <p className="font-medium text-red-900">
+                              {(() => {
+                                const cancelReason = claim.cancellation_reason || 
+                                  (claim.responses?.find(r => r.response_type === 'cancel')?.bundle_json 
+                                    ? JSON.parse(claim.responses.find(r => r.response_type === 'cancel').bundle_json)
+                                      ?.entry?.find(e => e.resource?.resourceType === 'Task')
+                                      ?.resource?.reasonCode?.coding?.[0]?.code
+                                    : null);
+                                if (!cancelReason) return 'Not specified';
+                                if (cancelReason === 'WI') return 'WI - Wrong Information';
+                                if (cancelReason === 'NP') return 'NP - Service Not Performed';
+                                if (cancelReason === 'TAS') return 'TAS - Transaction Already Submitted';
+                                if (cancelReason === 'SU') return 'SU - Service Unavailable';
+                                if (cancelReason === 'resubmission') return 'Claim Re-submission';
+                                return cancelReason;
+                              })()}
+                            </p>
+                          </div>
+                        )}
+                        <div>
+                          <Label className="text-red-700">Cancellation Status</Label>
+                          <p className="font-medium text-red-900">
+                            {claim.responses?.find(r => r.response_type === 'cancel')?.outcome === 'complete' 
+                              ? '✓ Confirmed by NPHIES' 
+                              : claim.responses?.find(r => r.response_type === 'cancel')?.outcome === 'error'
+                              ? '✗ Rejected by NPHIES'
+                              : 'Pending'}
+                          </p>
+                        </div>
+                        {claim.responses?.find(r => r.response_type === 'cancel')?.received_at && (
+                          <div>
+                            <Label className="text-red-700">Cancelled At</Label>
+                            <p className="font-medium text-red-900">
+                              {formatDateTime(claim.responses.find(r => r.response_type === 'cancel').received_at)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </>
                 )}
@@ -2106,6 +2203,49 @@ export default function ClaimDetails() {
           )}
         </div>
       </div>
+
+      {/* Cancel Modal */}
+      <Modal
+        open={showCancelDialog}
+        onClose={() => setShowCancelDialog(false)}
+        title="Cancel Claim"
+        description="Are you sure you want to cancel this claim? This action will be sent to NPHIES."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>Cancel</Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleCancel} 
+              disabled={actionLoading || !cancelReason}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {actionLoading ? 'Cancelling...' : 'Confirm Cancellation'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="cancelReason">Cancellation Reason (NPHIES Required)</Label>
+            <select
+              id="cancelReason"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+            >
+              <option value="">-- Select Reason --</option>
+              <option value="NP">Service Not Performed - Service was not performed</option>
+              <option value="WI">Wrong Information - Wrong information submitted</option>
+              <option value="TAS">Transaction Already Submitted - Duplicate transaction</option>
+              <option value="SU">Service Unavailable - Product/Service is unavailable</option>
+              <option value="resubmission">Claim Re-submission - Need to re-submit claim</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Select the appropriate reason code as required by NPHIES
+            </p>
+          </div>
+        </div>
+      </Modal>
 
       {/* FHIR Bundle Dialog */}
       <Modal

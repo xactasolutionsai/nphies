@@ -732,6 +732,13 @@ class ApiService {
     });
   }
 
+  async cancelClaimSubmission(id, reason) {
+    return this.request(`/claim-submissions/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    });
+  }
+
   async getClaimSubmissionBundle(id) {
     return this.request(`/claim-submissions/${id}/bundle`);
   }

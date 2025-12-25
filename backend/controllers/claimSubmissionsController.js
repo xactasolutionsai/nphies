@@ -889,6 +889,148 @@ class ClaimSubmissionsController extends BaseController {
       });
     }
   }
+
+  /**
+   * Cancel claim submission
+   */
+  async cancel(req, res) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const schemaName = req.schemaName || 'public';
+
+      console.log(`[ClaimSubmissions] Cancelling claim ${id} with reason: ${reason}`);
+
+      // Get existing claim
+      const existing = await this.getByIdInternal(id, schemaName);
+      if (!existing) {
+        return res.status(404).json({ error: 'Claim submission not found' });
+      }
+
+      // Must have claim identifier to cancel (nphies_claim_id or claim_number)
+      if (!existing.nphies_claim_id && !existing.claim_number) {
+        return res.status(400).json({ 
+          error: 'Cannot cancel: no claim identifier exists' 
+        });
+      }
+
+      // Check if claim can be cancelled (not already cancelled, paid, etc.)
+      if (existing.status === 'cancelled') {
+        return res.status(400).json({ 
+          error: 'Claim is already cancelled' 
+        });
+      }
+
+      if (existing.status === 'paid') {
+        return res.status(400).json({ 
+          error: 'Cannot cancel: claim has already been paid' 
+        });
+      }
+
+      // Get provider and insurer data
+      const providerResult = await query(`SELECT * FROM providers WHERE provider_id = $1`, [existing.provider_id]);
+      const insurerResult = await query(`SELECT * FROM insurers WHERE insurer_id = $1`, [existing.insurer_id]);
+
+      if (providerResult.rows.length === 0 || insurerResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Provider or insurer not found' });
+      }
+
+      const provider = providerResult.rows[0];
+      const insurer = insurerResult.rows[0];
+
+      // Build cancel request bundle using claim mapper (which extends BaseMapper)
+      // Adapt claim data to prior auth format for cancel bundle
+      // The identifier used should be nphies_claim_id if available, otherwise claim_number
+      const claimForCancel = {
+        request_number: existing.nphies_claim_id || existing.claim_number,
+        nphies_request_id: existing.nphies_claim_id || existing.nphies_request_id,
+        pre_auth_ref: existing.pre_auth_ref,
+        provider_id: existing.provider_id,
+        insurer_id: existing.insurer_id
+      };
+
+      // Get claim mapper and build cancel bundle
+      const mapper = getClaimMapper(existing.claim_type);
+      const cancelBundle = mapper.buildCancelRequestBundle(claimForCancel, provider, insurer, reason);
+
+      // Send to NPHIES using dedicated cancel method
+      const nphiesResponse = await nphiesService.submitCancelRequest(cancelBundle);
+
+      if (nphiesResponse.success) {
+        // Update status
+        await query(`SET search_path TO ${schemaName}`);
+        // Try to update cancellation_reason if column exists, otherwise just update status
+        try {
+          await query(`
+            UPDATE claim_submissions 
+            SET status = 'cancelled',
+                cancellation_reason = $1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2
+          `, [reason, id]);
+        } catch (error) {
+          // If cancellation_reason column doesn't exist, just update status
+          if (error.message.includes('column "cancellation_reason" does not exist')) {
+            await query(`
+              UPDATE claim_submissions 
+              SET status = 'cancelled',
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = $1
+            `, [id]);
+          } else {
+            throw error;
+          }
+        }
+
+        // Store response
+        const dbOutcome = nphiesResponse.taskStatus === 'completed' ? 'complete' : 
+                          nphiesResponse.taskStatus === 'failed' ? 'error' : 'complete';
+        await query(`
+          INSERT INTO claim_submission_responses 
+          (claim_id, response_type, outcome, bundle_json, received_at)
+          VALUES ($1, $2, $3, $4, NOW())
+        `, [id, 'cancel', dbOutcome, JSON.stringify(nphiesResponse.data)]);
+
+        const updatedData = await this.getByIdInternal(id, schemaName);
+
+        res.json({
+          success: true,
+          data: updatedData,
+          message: 'Claim cancelled successfully',
+          taskStatus: nphiesResponse.taskStatus,
+          nphiesResponse: nphiesResponse.data,
+          requestBundle: cancelBundle
+        });
+      } else {
+        // Store failed response for debugging
+        await query(`SET search_path TO ${schemaName}`);
+        await query(`
+          INSERT INTO claim_submission_responses 
+          (claim_id, response_type, outcome, bundle_json, has_errors, errors, received_at)
+          VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        `, [
+          id, 
+          'cancel', 
+          'error', 
+          JSON.stringify(nphiesResponse.data || nphiesResponse.error),
+          true,
+          JSON.stringify(nphiesResponse.error || nphiesResponse.errors)
+        ]);
+
+        res.status(502).json({
+          success: false,
+          error: nphiesResponse.error || nphiesResponse.errors,
+          taskStatus: nphiesResponse.taskStatus,
+          message: 'Failed to cancel claim',
+          nphiesResponse: nphiesResponse.data,
+          requestBundle: cancelBundle
+        });
+      }
+    } catch (error) {
+      console.error('[ClaimSubmissions] Error cancelling claim:', error);
+      res.status(500).json({ error: error.message || 'Failed to cancel claim' });
+    }
+  }
 }
 
 export default new ClaimSubmissionsController();
