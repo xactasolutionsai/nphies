@@ -56,6 +56,29 @@ const formatDateTime = (dateString) => {
   return new Date(dateString).toLocaleString();
 };
 
+/**
+ * Safely extract value from FHIR CodeableConcept or simple value
+ * Handles cases where value might be:
+ * - A simple string: "op"
+ * - A FHIR CodeableConcept: { coding: [{ code: "op", system: "..." }] }
+ * - An object with code property: { code: "op" }
+ */
+const extractCodeValue = (value, fallback = '-') => {
+  if (!value) return fallback;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    // FHIR CodeableConcept structure
+    if (value.coding && Array.isArray(value.coding)) {
+      return value.coding[0]?.code || value.coding[0]?.display || fallback;
+    }
+    // Simple object with code
+    if (value.code) return value.code;
+    // Object with display
+    if (value.display) return value.display;
+  }
+  return fallback;
+};
+
 // Custom Modal Component
 const Modal = ({ open, onClose, title, description, children, footer }) => {
   if (!open) return null;
@@ -354,13 +377,29 @@ export default function ClaimDetails() {
     }
   };
 
-  // Extract totals from response bundle
-  const getResponseTotals = () => {
+  /**
+   * Helper to extract ClaimResponse from response_bundle
+   * Handles both cases:
+   * 1. Bundle structure: { entry: [{ resource: { resourceType: 'ClaimResponse', ... } }] }
+   * 2. Direct ClaimResponse: { resourceType: 'ClaimResponse', ... }
+   */
+  const getClaimResponseFromBundle = () => {
     if (!claim.response_bundle) return null;
     
-    const claimResponse = claim.response_bundle?.entry?.find(
+    // Check if response_bundle is a direct ClaimResponse
+    if (claim.response_bundle.resourceType === 'ClaimResponse') {
+      return claim.response_bundle;
+    }
+    
+    // Otherwise, look for it in bundle entries
+    return claim.response_bundle?.entry?.find(
       e => e.resource?.resourceType === 'ClaimResponse'
-    )?.resource;
+    )?.resource || null;
+  };
+
+  // Extract totals from response bundle
+  const getResponseTotals = () => {
+    const claimResponse = getClaimResponseFromBundle();
     
     if (!claimResponse?.total) return null;
     
@@ -374,11 +413,7 @@ export default function ClaimDetails() {
 
   // Extract adjudication outcome from response
   const getAdjudicationOutcome = () => {
-    if (!claim.response_bundle) return null;
-    
-    const claimResponse = claim.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'ClaimResponse'
-    )?.resource;
+    const claimResponse = getClaimResponseFromBundle();
     
     return claimResponse?.extension?.find(
       ext => ext.url?.includes('extension-adjudication-outcome')
@@ -431,11 +466,7 @@ export default function ClaimDetails() {
 
   // Extract ClaimResponse details from response bundle
   const getClaimResponseDetails = () => {
-    if (!claim.response_bundle) return null;
-    
-    const claimResponse = claim.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'ClaimResponse'
-    )?.resource;
+    const claimResponse = getClaimResponseFromBundle();
     
     if (!claimResponse) return null;
 
@@ -482,6 +513,9 @@ export default function ClaimDetails() {
       adjudicationOutcome: adjudicationOutcome, // Pended, approved, rejected, partial
       created: claimResponse.created,
       disposition: claimResponse.disposition,
+      // Pre-Authorization Reference (from response)
+      preAuthRef: claimResponse.preAuthRef,
+      preAuthPeriod: claimResponse.preAuthPeriod,
       // Batch information
       batchIdentifier: batchIdentifier?.value,
       batchIdentifierSystem: batchIdentifier?.system,
@@ -734,7 +768,7 @@ export default function ClaimDetails() {
               {getStatusBadge(claim.status, claim.adjudication_outcome || adjudicationOutcome)}
             </div>
             <p className="text-gray-600 mt-1">
-              {getClaimTypeDisplay(claim.claim_type)} Claim
+              {getClaimTypeDisplay(extractCodeValue(claim.claim_type))} Claim
               {claim.pre_auth_ref && (
                 <span className="ml-2 text-blue-600 font-mono">
                   • Pre-Auth Ref: {claim.pre_auth_ref}
@@ -900,23 +934,19 @@ export default function ClaimDetails() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-gray-500">Claim Type</Label>
-                    <p className="font-medium">{getClaimTypeDisplay(claim.claim_type)}</p>
+                    <p className="font-medium">{getClaimTypeDisplay(extractCodeValue(claim.claim_type))}</p>
                   </div>
                   <div>
                     <Label className="text-gray-500">Sub Type</Label>
-                    <p className="font-medium capitalize">
-                      {typeof claim.sub_type === 'object' 
-                        ? (claim.sub_type?.coding?.[0]?.code || claim.sub_type?.code || '-')
-                        : (claim.sub_type || '-')}
-                    </p>
+                    <p className="font-medium uppercase">{extractCodeValue(claim.sub_type)}</p>
                   </div>
                   <div>
                     <Label className="text-gray-500">Priority</Label>
-                    <p className="font-medium capitalize">{claim.priority || 'Normal'}</p>
+                    <p className="font-medium capitalize">{extractCodeValue(claim.priority, 'Normal')}</p>
                   </div>
                   <div>
                     <Label className="text-gray-500">Outcome</Label>
-                    <p className="font-medium capitalize">{claim.outcome || claim.adjudication_outcome || '-'}</p>
+                    <p className="font-medium capitalize">{extractCodeValue(claim.outcome) || extractCodeValue(claim.adjudication_outcome) || '-'}</p>
                   </div>
                 </div>
 
@@ -942,13 +972,13 @@ export default function ClaimDetails() {
                 </div>
 
                 {/* Encounter Info (not for Vision claims) */}
-                {claim.claim_type !== 'vision' && claim.encounter_class && (
+                {extractCodeValue(claim.claim_type) !== 'vision' && claim.encounter_class && (
                   <>
                     <hr className="border-gray-200" />
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label className="text-gray-500">Encounter Class</Label>
-                        <p className="font-medium">{getEncounterClassDisplay(claim.encounter_class)}</p>
+                        <p className="font-medium">{getEncounterClassDisplay(extractCodeValue(claim.encounter_class))}</p>
                       </div>
                       {claim.encounter_start && (
                         <div>
@@ -1026,9 +1056,9 @@ export default function ClaimDetails() {
                   <div className="space-y-4">
                     {claim.items.map((item, index) => {
                       // Get item-level adjudication details from response bundle
-                      const responseItem = claim.response_bundle?.entry?.find(
-                        e => e.resource?.resourceType === 'ClaimResponse'
-                      )?.resource?.item?.find(i => i.itemSequence === item.sequence);
+                      // Handle both bundle structure and direct ClaimResponse
+                      const claimResponseForItems = getClaimResponseFromBundle();
+                      const responseItem = claimResponseForItems?.item?.find(i => i.itemSequence === item.sequence);
                       
                       const itemAdjudications = responseItem?.adjudication || [];
                       const itemOutcome = responseItem?.extension?.find(
@@ -1124,9 +1154,10 @@ export default function ClaimDetails() {
                           
                           {/* Additional item details - Show only relevant fields based on claim type */}
                           {(() => {
-                            const hasDentalFields = claim.claim_type === 'dental' && (item.tooth_number || item.tooth_surface);
-                            const hasVisionFields = claim.claim_type === 'vision' && item.eye;
-                            const hasPharmacyFields = claim.claim_type === 'pharmacy' && item.days_supply;
+                            const claimType = extractCodeValue(claim.claim_type);
+                            const hasDentalFields = claimType === 'dental' && (item.tooth_number || item.tooth_surface);
+                            const hasVisionFields = claimType === 'vision' && item.eye;
+                            const hasPharmacyFields = claimType === 'pharmacy' && item.days_supply;
                             
                             if (!hasDentalFields && !hasVisionFields && !hasPharmacyFields) {
                               return null;
@@ -1134,16 +1165,16 @@ export default function ClaimDetails() {
                             
                             return (
                               <div className="mt-3 pt-3 border-t text-sm">
-                                {claim.claim_type === 'dental' && (
+                                {claimType === 'dental' && (
                                   <>
                                     {item.tooth_number && <span className="mr-4">Tooth: {item.tooth_number}</span>}
                                     {item.tooth_surface && <span className="mr-4">Surface: {item.tooth_surface}</span>}
                                   </>
                                 )}
-                                {claim.claim_type === 'vision' && item.eye && (
+                                {claimType === 'vision' && item.eye && (
                                   <span className="mr-4">Eye: {item.eye}</span>
                                 )}
-                                {claim.claim_type === 'pharmacy' && item.days_supply && (
+                                {claimType === 'pharmacy' && item.days_supply && (
                                   <span>Days Supply: {item.days_supply}</span>
                                 )}
                               </div>
@@ -1391,6 +1422,25 @@ export default function ClaimDetails() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
+                      {/* NPHIES Response Identifier - Important for tracking */}
+                      {claimResponseDetails.identifier && (
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <Label className="text-blue-700 text-xs uppercase tracking-wider">NPHIES Response Identifier</Label>
+                          <p className="font-mono text-sm mt-1 text-blue-900">{claimResponseDetails.identifier}</p>
+                          {claimResponseDetails.identifierSystem && (
+                            <p className="text-xs text-blue-600 mt-0.5">{claimResponseDetails.identifierSystem}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Profile Information */}
+                      {claimResponseDetails.profile && (
+                        <div className="p-2 bg-gray-50 rounded-lg border border-gray-200">
+                          <Label className="text-gray-500 text-xs">FHIR Profile</Label>
+                          <p className="font-mono text-xs mt-1 text-gray-700 break-all">{claimResponseDetails.profile}</p>
+                        </div>
+                      )}
+                      
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                         <div>
                           <Label className="text-gray-500">Response ID</Label>
@@ -1479,6 +1529,61 @@ export default function ClaimDetails() {
                           <div>
                             <Label className="text-gray-500">Disposition</Label>
                             <p className="mt-1">{claimResponseDetails.disposition}</p>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Pre-Authorization Reference */}
+                      {claimResponseDetails.preAuthRef && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                            <Label className="text-purple-700 text-xs uppercase tracking-wider">Pre-Authorization Reference</Label>
+                            <p className="font-mono text-sm mt-1 text-purple-900">{claimResponseDetails.preAuthRef}</p>
+                            {claimResponseDetails.preAuthPeriod && (
+                              <div className="mt-2 pt-2 border-t border-purple-200">
+                                <p className="text-xs text-purple-600">Valid Period</p>
+                                <p className="text-sm font-medium text-purple-800">
+                                  {formatDate(claimResponseDetails.preAuthPeriod.start)} - {formatDate(claimResponseDetails.preAuthPeriod.end)}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      {/* FHIR References from Response */}
+                      {(claimResponseDetails.patientReference || claimResponseDetails.insurerReference || claimResponseDetails.requestorReference || claimResponseDetails.coverageReference) && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500 text-xs uppercase tracking-wider">FHIR References</Label>
+                            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                              {claimResponseDetails.patientReference && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Patient</p>
+                                  <p className="font-mono text-xs break-all">{claimResponseDetails.patientReference}</p>
+                                </div>
+                              )}
+                              {claimResponseDetails.insurerReference && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Insurer</p>
+                                  <p className="font-mono text-xs break-all">{claimResponseDetails.insurerReference}</p>
+                                </div>
+                              )}
+                              {claimResponseDetails.requestorReference && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Requestor</p>
+                                  <p className="font-mono text-xs break-all">{claimResponseDetails.requestorReference}</p>
+                                </div>
+                              )}
+                              {claimResponseDetails.coverageReference && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Coverage</p>
+                                  <p className="font-mono text-xs break-all">{claimResponseDetails.coverageReference}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </>
                       )}
@@ -1893,7 +1998,7 @@ export default function ClaimDetails() {
                 <p className="font-medium">{claim.provider_name || 'Unknown'}</p>
                 <p className="text-sm text-gray-500 font-mono">{claim.provider_nphies_id}</p>
                 {claim.provider_type && (
-                  <Badge variant="outline" className="mt-1">Type: {claim.provider_type}</Badge>
+                  <Badge variant="outline" className="mt-1">Type: {extractCodeValue(claim.provider_type)}</Badge>
                 )}
               </div>
             </CardContent>
