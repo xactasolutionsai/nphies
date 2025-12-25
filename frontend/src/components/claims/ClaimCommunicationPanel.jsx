@@ -403,11 +403,14 @@ const ClaimCommunicationPanel = ({
         return;
       }
 
-      const result = await api.sendClaimCommunication(claimId, {
-        payloads,
-        communicationType,
-        basedOnRequestId: communicationType === 'solicited' ? selectedRequestId : null
-      });
+      // Use the correct API method based on communication type
+      // (matches the pattern used in PriorAuth CommunicationPanel)
+      let result;
+      if (communicationType === 'unsolicited') {
+        result = await api.sendClaimUnsolicitedCommunication(claimId, payloads);
+      } else {
+        result = await api.sendClaimSolicitedCommunication(claimId, selectedRequestId, payloads);
+      }
 
       if (result.success) {
         // Reset form
