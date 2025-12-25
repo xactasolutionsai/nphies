@@ -80,15 +80,17 @@ class ProfessionalMapper extends BaseMapper {
     }
 
     // Assemble bundle per NPHIES spec order
+    // RE-00005 fix: Organization resources (Provider and Insurer) must come BEFORE Claim
+    // to ensure facility reference validation passes
     // Observation resources are included after patient but before binary attachments
     const entries = [
       messageHeader,
+      providerResource,      // Must be before Claim for facility reference validation
+      insurerResource,        // Must be before Claim for reference validation
       claimResource,
       encounterResource,
       coverageResource,
       practitionerResource,
-      providerResource,
-      insurerResource,
       patientResource,
       ...observationResources,
       ...binaryResources
