@@ -2215,8 +2215,10 @@ export default function PriorAuthorizationForm() {
                     - SS/IMP (Short Stay/Inpatient): dateTime "2023-12-04T10:25:00+03:00" per https://portal.nphies.sa/ig/Encounter-10124.json.html
                     Note: Dental claims always use AMB encounter class */}
                 {(() => {
-                  // Dental claims MUST use ambulatory encounter class (date-only, no end date per NPHIES)
+                  // Dental claims MUST use ambulatory encounter class (no end date per NPHIES)
                   const isDentalClaim = formData.auth_type === 'dental';
+                  // BV-00811: Always require datetime with seconds for claims (even for ambulatory)
+                  // Per NPHIES: Date time format up to seconds SHALL be mandatory for encounter.period.start
                   const needsDateTime = !isDentalClaim && ['inpatient', 'daycase'].includes(formData.encounter_class);
                   // Per NPHIES Encounter-10123 example: AMB encounters don't need end date (ongoing)
                   const showEndDate = needsDateTime;
@@ -2225,34 +2227,25 @@ export default function PriorAuthorizationForm() {
                     <div className={`grid grid-cols-1 ${showEndDate ? 'md:grid-cols-2' : ''} gap-4`}>
                       <div className="space-y-2">
                         <Label>
-                          Encounter Start {needsDateTime ? 'Date & Time' : 'Date'}
-                          {isDentalClaim && <span className="text-xs text-gray-500 ml-1">(Dental uses date only)</span>}
+                          Encounter Start Date & Time *
                         </Label>
                         <div className="datepicker-wrapper">
                           <DatePicker
                             selected={formData.encounter_start ? new Date(formData.encounter_start) : null}
                             onChange={(date) => {
-                              // BV-00811: Always use full datetime format with seconds (required for all encounter classes)
-                              // For AMB encounters without time picker, default to midnight (00:00:00)
+                              // BV-00811: Always use full datetime format with seconds (required for all encounter classes when submitting as claim)
+                              // Always send full ISO string with seconds, regardless of encounter class
                               if (date) {
-                                let dateWithTime;
-                                if (needsDateTime) {
-                                  // User selected date & time - use as is
-                                  dateWithTime = date;
-                                } else {
-                                  // AMB: User selected date only - set to midnight UTC
-                                  dateWithTime = new Date(date);
-                                  dateWithTime.setUTCHours(0, 0, 0, 0);
-                                }
-                                handleChange('encounter_start', dateWithTime.toISOString());
+                                handleChange('encounter_start', date.toISOString());
                               } else {
                                 handleChange('encounter_start', '');
                               }
                             }}
-                            showTimeSelect={needsDateTime}
-                            dateFormat={needsDateTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"}
+                            showTimeSelect
+                            timeIntervals={1}
+                            dateFormat="yyyy-MM-dd HH:mm:ss"
                             className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                            placeholderText={needsDateTime ? "Select date & time" : "Select date"}
+                            placeholderText="Select date & time"
                           />
                           <Calendar className="datepicker-icon h-4 w-4" />
                         </div>
