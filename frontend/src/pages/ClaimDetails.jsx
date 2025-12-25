@@ -10,7 +10,7 @@ import {
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ExternalLink,
-  Wallet, Banknote, ArrowRight, MessageSquare
+  Wallet, Banknote, ArrowRight, MessageSquare, ChevronDown, MoreVertical
 } from 'lucide-react';
 import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
 
@@ -144,6 +144,7 @@ export default function ClaimDetails() {
   const [pollingPayments, setPollingPayments] = useState(false);
   const [lastSimulateBundle, setLastSimulateBundle] = useState(null);
   const [lastPollBundle, setLastPollBundle] = useState(null);
+  const [showPreviewMenu, setShowPreviewMenu] = useState(false);
 
   useEffect(() => {
     loadClaim();
@@ -805,29 +806,29 @@ export default function ClaimDetails() {
   return (
     <div className="space-y-6 pb-10">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate('/claim-submissions')}>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/claim-submissions')} className="mt-1 flex-shrink-0">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-gray-900">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 truncate">
                 {claim.claim_number || `CLM-${claim.id}`}
               </h1>
               {getStatusBadge(claim.status, claim.adjudication_outcome || adjudicationOutcome)}
             </div>
-            <p className="text-gray-600 mt-1">
+            <p className="text-gray-600 text-sm mt-1">
               {getClaimTypeDisplay(extractCodeValue(claim.claim_type))} Claim
               {claim.pre_auth_ref && (
-                <span className="ml-2 text-blue-600 font-mono">
-                  • Pre-Auth Ref: {claim.pre_auth_ref}
+                <span className="ml-2 text-blue-600 font-mono text-xs">
+                  • {claim.pre_auth_ref}
                 </span>
               )}
               {claim.prior_auth_id && (
                 <Link 
                   to={`/prior-authorizations/${claim.prior_auth_id}`}
-                  className="ml-2 text-purple-600 hover:underline inline-flex items-center gap-1"
+                  className="ml-2 text-purple-600 hover:underline inline-flex items-center gap-1 text-xs"
                 >
                   <ExternalLink className="h-3 w-3" />
                   View Prior Auth
@@ -836,117 +837,175 @@ export default function ClaimDetails() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleLoadBundle} disabled={actionLoading}>
-            <Code className="h-4 w-4 mr-2" />
-            View FHIR Bundle
-          </Button>
-          
-          {(claim.status === 'draft' || claim.status === 'error') && (
-            <Button onClick={handleSendToNphies} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
-              <Send className="h-4 w-4 mr-2" />
-              Send to NPHIES
+        <div className="flex flex-wrap gap-2 items-start">
+          {/* Primary Actions Group */}
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" onClick={handleLoadBundle} disabled={actionLoading} size="sm">
+              <Code className="h-4 w-4 mr-1.5" />
+              <span className="hidden sm:inline">View FHIR Bundle</span>
+              <span className="sm:hidden">Bundle</span>
             </Button>
-          )}
-          
-          {claim.status === 'queued' && (
-            <Button onClick={loadClaim} disabled={actionLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${actionLoading ? 'animate-spin' : ''}`} />
-              Refresh Status
-            </Button>
-          )}
-          
-          {/* Cancel button - Show for approved, queued, or pended claims that haven't been cancelled/paid */}
-          {(claim.status === 'approved' || claim.status === 'queued' || claim.status === 'pended' || claim.adjudication_outcome === 'approved') && 
-           claim.status !== 'cancelled' && claim.status !== 'paid' && (
-            <Button 
-              variant="outline" 
-              onClick={() => setShowCancelDialog(true)} 
-              disabled={actionLoading}
-              className="text-red-500 border-red-300 hover:bg-red-50"
-            >
-              <XCircle className="h-4 w-4 mr-2" />
-              Cancel
-            </Button>
-          )}
-          
-          {/* Payment Actions - Show for approved claims */}
-          {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
-            <Button 
-              onClick={handleSimulatePayment} 
-              disabled={simulatingPayment}
-              variant="outline"
-              className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
-            >
-              {simulatingPayment ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Banknote className="h-4 w-4 mr-2" />
-              )}
-              {simulatingPayment ? 'Simulating...' : 'Simulate Payment'}
-            </Button>
-          )}
-          
-          <Button 
-            onClick={handlePollPayments} 
-            disabled={pollingPayments}
-            variant="outline"
-            className="border-purple-500 text-purple-600 hover:bg-purple-50"
-          >
-            {pollingPayments ? (
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Wallet className="h-4 w-4 mr-2" />
+            
+            {(claim.status === 'draft' || claim.status === 'error') && (
+              <Button onClick={handleSendToNphies} disabled={actionLoading} size="sm" className="bg-blue-500 hover:bg-blue-600">
+                <Send className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">Send to NPHIES</span>
+                <span className="sm:hidden">Send</span>
+              </Button>
             )}
-            {pollingPayments ? 'Polling...' : 'Poll NPHIES Payments'}
-          </Button>
-          
-          {/* Preview JSON Buttons (copy before sending) */}
-          {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
+            
+            {claim.status === 'queued' && (
+              <Button onClick={loadClaim} disabled={actionLoading} size="sm">
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${actionLoading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh Status</span>
+                <span className="sm:hidden">Refresh</span>
+              </Button>
+            )}
+            
+            {/* Cancel button */}
+            {(claim.status === 'approved' || claim.status === 'queued' || claim.status === 'pended' || claim.adjudication_outcome === 'approved') && 
+             claim.status !== 'cancelled' && claim.status !== 'paid' && (
+              <Button 
+                variant="outline" 
+                onClick={() => setShowCancelDialog(true)} 
+                disabled={actionLoading}
+                size="sm"
+                className="text-red-500 border-red-300 hover:bg-red-50"
+              >
+                <XCircle className="h-4 w-4 mr-1.5" />
+                Cancel
+              </Button>
+            )}
+          </div>
+
+          {/* Separator */}
+          <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+
+          {/* Payment Actions Group */}
+          <div className="flex gap-2 flex-wrap">
+            {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
+              <Button 
+                onClick={handleSimulatePayment} 
+                disabled={simulatingPayment}
+                variant="outline"
+                size="sm"
+                className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+              >
+                {simulatingPayment ? (
+                  <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Banknote className="h-4 w-4 mr-1.5" />
+                )}
+                <span className="hidden sm:inline">Simulate Payment</span>
+                <span className="sm:hidden">Simulate</span>
+              </Button>
+            )}
+            
             <Button 
-              onClick={handlePreviewSimulate}
+              onClick={handlePollPayments} 
+              disabled={pollingPayments}
               variant="outline"
-              className="border-orange-500 text-orange-600 hover:bg-orange-50"
-              title="Preview and copy the PaymentReconciliation bundle (without sending)"
+              size="sm"
+              className="border-purple-500 text-purple-600 hover:bg-purple-50"
             >
-              <Eye className="h-4 w-4 mr-2" />
-              Preview Simulate
+              {pollingPayments ? (
+                <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <Wallet className="h-4 w-4 mr-1.5" />
+              )}
+              <span className="hidden sm:inline">Poll Payments</span>
+              <span className="sm:hidden">Poll</span>
             </Button>
-          )}
-          
-          <Button 
-            onClick={handlePreviewPoll}
-            variant="outline"
-            className="border-cyan-500 text-cyan-600 hover:bg-cyan-50"
-            title="Preview and copy the poll request bundle (without sending)"
-          >
-            <Eye className="h-4 w-4 mr-2" />
-            Preview Poll
-          </Button>
-          
-          {/* Copy JSON Buttons (after sending) */}
-          {lastSimulateBundle && (
-            <Button 
-              onClick={handleCopySimulateBundle}
-              variant="outline"
-              className="border-green-500 text-green-600 hover:bg-green-50"
-              title="Copy the last generated PaymentReconciliation FHIR bundle"
-            >
-              <Copy className="h-4 w-4 mr-2" />
-              Copy Simulate JSON
-            </Button>
-          )}
-          
-          {lastPollBundle && (
-            <Button 
-              onClick={handleCopyPollBundle}
-              variant="outline"
-              className="border-blue-500 text-blue-600 hover:bg-blue-50"
-              title="Copy the last poll request FHIR bundle"
-            >
-              <Copy className="h-4 w-4 mr-2" />
-              Copy Poll JSON
-            </Button>
+          </div>
+
+          {/* Preview/Copy Actions - Dropdown Menu */}
+          {((claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') || lastSimulateBundle || lastPollBundle) && (
+            <>
+              <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+              <div className="relative">
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPreviewMenu(!showPreviewMenu)}
+                  className="border-gray-300"
+                >
+                  <MoreVertical className="h-4 w-4 mr-1.5" />
+                  <span className="hidden sm:inline">More</span>
+                  <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showPreviewMenu ? 'rotate-180' : ''}`} />
+                </Button>
+                
+                {/* Dropdown Menu */}
+                {showPreviewMenu && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setShowPreviewMenu(false)}
+                    ></div>
+                    <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
+                      {/* Preview Actions */}
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                        Preview JSON
+                      </div>
+                      {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
+                        <button
+                          onClick={() => {
+                            handlePreviewSimulate();
+                            setShowPreviewMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 flex items-center gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          Preview Simulate
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          handlePreviewPoll();
+                          setShowPreviewMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-cyan-600 hover:bg-cyan-50 flex items-center gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Preview Poll
+                      </button>
+                      
+                      {/* Copy Actions */}
+                      {(lastSimulateBundle || lastPollBundle) && (
+                        <>
+                          <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-t border-gray-100 mt-1">
+                            Copy JSON
+                          </div>
+                          {lastSimulateBundle && (
+                            <button
+                              onClick={() => {
+                                handleCopySimulateBundle();
+                                setShowPreviewMenu(false);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center gap-2"
+                            >
+                              <Copy className="h-4 w-4" />
+                              Copy Simulate JSON
+                            </button>
+                          )}
+                          {lastPollBundle && (
+                            <button
+                              onClick={() => {
+                                handleCopyPollBundle();
+                                setShowPreviewMenu(false);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2"
+                            >
+                              <Copy className="h-4 w-4" />
+                              Copy Poll JSON
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
