@@ -904,7 +904,11 @@ export default function ClaimDetails() {
                   </div>
                   <div>
                     <Label className="text-gray-500">Sub Type</Label>
-                    <p className="font-medium capitalize">{claim.sub_type || '-'}</p>
+                    <p className="font-medium capitalize">
+                      {typeof claim.sub_type === 'object' 
+                        ? (claim.sub_type?.coding?.[0]?.code || claim.sub_type?.code || '-')
+                        : (claim.sub_type || '-')}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-gray-500">Priority</Label>
