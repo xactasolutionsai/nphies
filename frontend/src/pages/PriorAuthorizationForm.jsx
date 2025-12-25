@@ -1486,44 +1486,44 @@ export default function PriorAuthorizationForm() {
     // BV-00041: Validate that item servicedDate is within encounter period
     // This prevents NPHIES error: "Claim item serviced[x] is not within the encounter period"
     if (formData.encounter_start && formData.items && formData.items.length > 0) {
-      // Extract date part (YYYY-MM-DD) from encounter_start for comparison
-      // This handles both date-only strings and datetime strings
-      const encounterStartDateStr = formData.encounter_start.split('T')[0].split(' ')[0]; // Get YYYY-MM-DD part
-      const encounterStart = new Date(encounterStartDateStr + 'T00:00:00');
-      encounterStart.setHours(0, 0, 0, 0); // Normalize to start of day
+      // Parse encounter_start with full datetime (including time if provided)
+      const encounterStart = new Date(formData.encounter_start);
       
+      // Parse encounter_end with full datetime (including time if provided)
       const encounterEnd = formData.encounter_end 
-        ? (() => {
-            const endDateStr = formData.encounter_end.split('T')[0].split(' ')[0]; // Get YYYY-MM-DD part
-            const endDate = new Date(endDateStr + 'T23:59:59');
-            endDate.setHours(23, 59, 59, 999); // Normalize to end of day
-            return endDate;
-          })()
+        ? new Date(formData.encounter_end)
         : null;
       
       const itemsOutsidePeriod = formData.items.filter((item, idx) => {
         if (!item.serviced_date) return false; // No date set, will use encounter_start by default
         
-        // Extract date part (YYYY-MM-DD) from serviced_date for comparison
-        const servicedDateStr = item.serviced_date.split('T')[0].split(' ')[0]; // Get YYYY-MM-DD part
-        const servicedDate = new Date(servicedDateStr + 'T12:00:00');
-        servicedDate.setHours(12, 0, 0, 0); // Normalize to midday for comparison
+        // Parse serviced_date - if it's date-only, use current time as default
+        let servicedDate;
+        const servicedDateStr = item.serviced_date.trim();
         
-        // Compare dates: serviced_date should be >= encounter_start date
-        const servicedDateOnly = servicedDateStr; // YYYY-MM-DD format
-        const encounterStartDateOnly = encounterStartDateStr; // YYYY-MM-DD format
+        // Check if serviced_date includes time (has 'T' or space with time)
+        const hasTime = servicedDateStr.includes('T') || 
+                       (servicedDateStr.includes(' ') && servicedDateStr.match(/\d{2}:\d{2}/));
         
-        // Simple string comparison for dates (works because YYYY-MM-DD is sortable)
-        if (servicedDateOnly < encounterStartDateOnly) {
+        if (hasTime) {
+          // Has time component, parse as-is
+          servicedDate = new Date(servicedDateStr);
+        } else {
+          // Date-only: extract date part and add current time
+          const datePart = servicedDateStr.split('T')[0].split(' ')[0]; // Get YYYY-MM-DD part
+          const now = new Date();
+          // Use current time but set the date part from serviced_date
+          servicedDate = new Date(`${datePart}T${now.toTimeString().split(' ')[0]}`);
+        }
+        
+        // Validate: serviced_date should be >= encounter_start (with time)
+        if (servicedDate < encounterStart) {
           return true; // Serviced date is before encounter start
         }
         
         // Check if servicedDate is after encounter end (if end date exists)
-        if (encounterEnd) {
-          const encounterEndDateStr = formData.encounter_end.split('T')[0].split(' ')[0];
-          if (servicedDateOnly > encounterEndDateStr) {
-            return true; // Serviced date is after encounter end
-          }
+        if (encounterEnd && servicedDate > encounterEnd) {
+          return true; // Serviced date is after encounter end
         }
         
         return false;

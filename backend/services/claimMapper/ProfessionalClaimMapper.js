@@ -936,15 +936,35 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     
     // Validate and auto-correct servicedDate to be within encounter period
     // This prevents NPHIES error BV-00041: "Claim item serviced[x] is not within the encounter period"
+    // If serviced_date is date-only, default to current time
     if (encounterPeriod?.start) {
       const periodStart = new Date(encounterPeriod.start);
-      const periodEnd = encounterPeriod.end ? new Date(encounterPeriod.end) : null;
       
-      if (servicedDate < periodStart) {
-        servicedDate = periodStart;
+      // If servicedDate doesn't have a time component (is at midnight or was date-only),
+      // default to current time while keeping the date part
+      const isMidnight = servicedDate.getHours() === 0 && 
+                        servicedDate.getMinutes() === 0 && 
+                        servicedDate.getSeconds() === 0;
+      
+      if (isMidnight && item.serviced_date && !item.serviced_date.includes('T') && !item.serviced_date.match(/\d{2}:\d{2}/)) {
+        // Date-only was provided, use current time with the same date
+        const now = new Date();
+        const datePart = servicedDate.toISOString().split('T')[0];
+        const timePart = now.toTimeString().split(' ')[0]; // Get HH:mm:ss
+        servicedDate = new Date(`${datePart}T${timePart}`);
       }
-      if (periodEnd && servicedDate > periodEnd) {
-        servicedDate = periodEnd;
+      
+      // Validate: serviced_date should be >= encounter_start (with time)
+      if (servicedDate < periodStart) {
+        servicedDate = periodStart; // Auto-correct to encounter start
+      }
+      
+      // Check if servicedDate is after encounter end (if end date exists)
+      if (encounterPeriod.end) {
+        const periodEnd = new Date(encounterPeriod.end);
+        if (servicedDate > periodEnd) {
+          servicedDate = periodEnd; // Auto-correct to encounter end
+        }
       }
     }
     
