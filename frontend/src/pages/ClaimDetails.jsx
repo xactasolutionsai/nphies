@@ -735,9 +735,13 @@ export default function ClaimDetails() {
       const response = await api.cancelClaimSubmission(id, cancelReason);
       
       if (response.success) {
-        alert('Claim cancelled successfully');
+        // Immediately update the claim state from response if available
+        if (response.data) {
+          setClaim(response.data);
+        }
         setShowCancelDialog(false);
         setCancelReason('');
+        // Reload to ensure we have the latest data including responses
         await loadClaim();
       } else {
         alert(`Error: ${response.error?.message || response.message || 'Failed to cancel claim'}`);
@@ -751,8 +755,10 @@ export default function ClaimDetails() {
   };
 
   const getStatusBadge = (status, outcome) => {
-    // Use outcome for display if available (approved, denied, etc.)
-    const displayStatus = outcome || status;
+    // Priority: status takes precedence for terminal states (cancelled, error, paid)
+    // Otherwise, use outcome if available (approved, denied, etc.)
+    const terminalStates = ['cancelled', 'error', 'paid'];
+    const displayStatus = (terminalStates.includes(status) || !outcome) ? status : (outcome || status);
     
     const configs = {
       draft: { variant: 'outline', icon: FileText, className: 'text-gray-600 border-gray-300' },
@@ -764,7 +770,8 @@ export default function ClaimDetails() {
       partial: { variant: 'default', icon: AlertCircle, className: 'bg-orange-500' },
       denied: { variant: 'destructive', icon: XCircle, className: '' },
       rejected: { variant: 'destructive', icon: XCircle, className: '' },
-      cancelled: { variant: 'outline', icon: XCircle, className: 'text-gray-500' },
+      cancelled: { variant: 'outline', icon: XCircle, className: 'text-gray-500 border-gray-400' },
+      paid: { variant: 'default', icon: CheckCircle, className: 'bg-emerald-500' },
       error: { variant: 'destructive', icon: AlertCircle, className: '' }
     };
     const config = configs[displayStatus] || configs.draft;
