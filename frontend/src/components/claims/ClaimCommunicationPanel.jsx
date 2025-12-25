@@ -193,8 +193,9 @@ const ClaimCommunicationPanel = ({
         api.getClaimCommunications(claimId)
       ]);
       
-      setCommunicationRequests(requestsRes.data || []);
-      setCommunications(commsRes.data || []);
+      // Backend returns { communicationRequests: [...] } and { communications: [...] }
+      setCommunicationRequests(requestsRes.communicationRequests || requestsRes.data || []);
+      setCommunications(commsRes.communications || commsRes.data || []);
     } catch (err) {
       console.error('Error loading communication data:', err);
       setError('Failed to load communication data');
