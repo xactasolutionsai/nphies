@@ -373,11 +373,13 @@ class ProfessionalMapper extends BaseMapper {
         }
       ]
     };
+    // Use explicit sub_type if provided, otherwise derive from encounter_class
+    // This ensures the sub_type selected in the form is preserved in the FHIR bundle
     claim.subType = {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-          code: this.getClaimSubTypeCode(priorAuth.encounter_class || 'ambulatory', 'professional')
+          code: priorAuth.sub_type || this.getClaimSubTypeCode(priorAuth.encounter_class || 'ambulatory', 'professional')
         }
       ]
     };

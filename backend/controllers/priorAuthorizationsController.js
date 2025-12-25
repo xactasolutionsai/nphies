@@ -12,6 +12,34 @@ class PriorAuthorizationsController extends BaseController {
   }
 
   /**
+   * Derive sub_type from encounter_class following NPHIES rules
+   * This ensures consistency between Prior Auth and Claims
+   */
+  getSubTypeFromEncounterClass(encounterClass, authType) {
+    // Map encounter class to claim subtype
+    const subTypes = {
+      'inpatient': 'ip',
+      'outpatient': 'op',
+      'daycase': 'ip',
+      'emergency': 'emr',
+      'ambulatory': 'op',
+      'home': 'op',
+      'telemedicine': 'op'
+    };
+    
+    // Default based on auth type if encounter class not found
+    const defaultByAuthType = {
+      'institutional': 'ip',
+      'professional': 'op',
+      'pharmacy': 'op',
+      'dental': 'op',
+      'vision': 'op'
+    };
+    
+    return subTypes[encounterClass] || defaultByAuthType[authType] || 'op';
+  }
+
+  /**
    * Get coverage data for a patient/insurer combination
    * @param {string} patientId - Patient UUID
    * @param {string} insurerId - Insurer UUID
@@ -1663,7 +1691,8 @@ class PriorAuthorizationsController extends BaseController {
         birth_weight: formData.birth_weight ? parseFloat(formData.birth_weight) : null,
         // Service type for institutional claims
         service_type: formData.service_type || null,
-        sub_type: formData.sub_type || 'op',
+        // Use explicit sub_type, or derive from encounter_class (ensures consistency with Claims)
+        sub_type: formData.sub_type || this.getSubTypeFromEncounterClass(formData.encounter_class, formData.auth_type),
         // Lab observations for professional claims (LOINC codes)
         lab_observations: formData.lab_observations || [],
         // Medication safety analysis for pharmacy claims

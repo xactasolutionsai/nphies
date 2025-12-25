@@ -183,12 +183,12 @@ class InstitutionalMapper extends BaseMapper {
         }
       ]
     };
-    // Institutional uses 'ip' subType for inpatient/daycase
+    // Institutional uses 'ip' subType for inpatient/daycase (default), but respect explicit sub_type if provided
     claim.subType = {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-          code: 'ip'
+          code: priorAuth.sub_type || 'ip'
         }
       ]
     };

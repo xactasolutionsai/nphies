@@ -10,6 +10,34 @@ class ClaimSubmissionsController extends BaseController {
     super('claim_submissions', validationSchemas.claimSubmission);
   }
 
+  /**
+   * Derive sub_type from encounter_class following NPHIES rules
+   * This ensures consistency between Prior Auth and Claims
+   */
+  getSubTypeFromEncounterClass(encounterClass, authType) {
+    // Map encounter class to claim subtype
+    const subTypes = {
+      'inpatient': 'ip',
+      'outpatient': 'op',
+      'daycase': 'ip',
+      'emergency': 'emr',
+      'ambulatory': 'op',
+      'home': 'op',
+      'telemedicine': 'op'
+    };
+    
+    // Default based on auth type if encounter class not found
+    const defaultByAuthType = {
+      'institutional': 'ip',
+      'professional': 'op',
+      'pharmacy': 'op',
+      'dental': 'op',
+      'vision': 'op'
+    };
+    
+    return subTypes[encounterClass] || defaultByAuthType[authType] || 'op';
+  }
+
   async getCoverageData(patientId, insurerId, coverageId = null) {
     try {
       let coverageResult;
@@ -197,7 +225,8 @@ class ClaimSubmissionsController extends BaseController {
       const claimData = {
         claim_number: `CLM-${Date.now()}`,
         claim_type: pa.auth_type,
-        sub_type: pa.sub_type || 'ip',
+        // Use explicit sub_type from PA, or derive from encounter_class (not hardcoded default)
+        sub_type: pa.sub_type || this.getSubTypeFromEncounterClass(pa.encounter_class, pa.auth_type),
         patient_id: pa.patient_id,
         provider_id: pa.provider_id,
         insurer_id: pa.insurer_id,
@@ -418,7 +447,8 @@ class ClaimSubmissionsController extends BaseController {
       const claim = {
         claim_number: formData.claim_number || `PREVIEW-${Date.now()}`,
         claim_type: formData.claim_type || 'institutional',
-        sub_type: formData.sub_type || 'ip',
+        // Use explicit sub_type, or derive from encounter_class (not hardcoded default)
+        sub_type: formData.sub_type || this.getSubTypeFromEncounterClass(formData.encounter_class, formData.claim_type),
         status: 'draft',
         priority: formData.priority || 'normal',
         encounter_class: formData.encounter_class,

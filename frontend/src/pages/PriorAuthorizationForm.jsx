@@ -906,11 +906,55 @@ export default function PriorAuthorizationForm() {
     }));
   };
 
+  /**
+   * Helper to derive sub_type from encounter_class
+   * Ensures consistency between Prior Auth and Claims (prevents BV-00041 type errors)
+   */
+  const getSubTypeFromEncounterClass = (encounterClass, authType) => {
+    const subTypes = {
+      'inpatient': 'ip',
+      'outpatient': 'op',
+      'daycase': 'ip',
+      'emergency': 'emr',
+      'ambulatory': 'op',
+      'home': 'op',
+      'telemedicine': 'op'
+    };
+    
+    const defaultByAuthType = {
+      'institutional': 'ip',
+      'professional': 'op',
+      'pharmacy': 'op',
+      'dental': 'op',
+      'vision': 'op'
+    };
+    
+    return subTypes[encounterClass] || defaultByAuthType[authType] || 'op';
+  };
+
   const handleChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData(prev => {
+      const updates = { [field]: value };
+      
+      // Auto-sync sub_type when encounter_class changes to maintain consistency
+      // This prevents NPHIES errors where auth and claim have mismatched subtypes
+      if (field === 'encounter_class') {
+        const newSubType = getSubTypeFromEncounterClass(value, prev.auth_type);
+        // Only auto-update if current sub_type doesn't match the new encounter class
+        const currentExpectedSubType = getSubTypeFromEncounterClass(prev.encounter_class, prev.auth_type);
+        if (prev.sub_type === currentExpectedSubType || !prev.sub_type) {
+          updates.sub_type = newSubType;
+        }
+      }
+      
+      // Also sync when auth_type changes
+      if (field === 'auth_type') {
+        const newSubType = getSubTypeFromEncounterClass(prev.encounter_class, value);
+        updates.sub_type = newSubType;
+      }
+      
+      return { ...prev, ...updates };
+    });
     
     // If patient changed, load their coverages
     if (field === 'patient_id') {
@@ -1436,6 +1480,47 @@ export default function PriorAuthorizationForm() {
         }
       } else {
         validationErrors.push({ field: 'items', message: `All items must have a service code` });
+      }
+    }
+    
+    // BV-00041: Validate that item servicedDate is within encounter period
+    // This prevents NPHIES error: "Claim item serviced[x] is not within the encounter period"
+    if (formData.encounter_start && formData.items && formData.items.length > 0) {
+      const encounterStart = new Date(formData.encounter_start);
+      encounterStart.setHours(0, 0, 0, 0); // Normalize to start of day
+      
+      const encounterEnd = formData.encounter_end 
+        ? new Date(formData.encounter_end) 
+        : null;
+      if (encounterEnd) {
+        encounterEnd.setHours(23, 59, 59, 999); // Normalize to end of day
+      }
+      
+      const itemsOutsidePeriod = formData.items.filter((item, idx) => {
+        if (!item.serviced_date) return false; // No date set, will use encounter_start by default
+        
+        const servicedDate = new Date(item.serviced_date);
+        servicedDate.setHours(12, 0, 0, 0); // Normalize to midday
+        
+        // Check if servicedDate is before encounter start
+        if (servicedDate < encounterStart) {
+          return true;
+        }
+        
+        // Check if servicedDate is after encounter end (if end date exists)
+        if (encounterEnd && servicedDate > encounterEnd) {
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (itemsOutsidePeriod.length > 0) {
+        const itemNumbers = itemsOutsidePeriod.map(item => item.sequence || formData.items.indexOf(item) + 1).join(', ');
+        validationErrors.push({ 
+          field: 'items', 
+          message: `Item(s) ${itemNumbers} have serviced date outside the encounter period. NPHIES requires item servicedDate to be within encounter start${encounterEnd ? ' and end' : ''} dates (BV-00041).` 
+        });
       }
     }
     

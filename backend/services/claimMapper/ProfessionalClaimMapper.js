@@ -930,9 +930,24 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       coding: [productOrServiceCoding]
     };
 
-    // Serviced date
+    // Serviced date - must be within encounter period per BV-00041
     let servicedDate = item.serviced_date ? new Date(item.serviced_date) : 
                        (encounterPeriod?.start ? new Date(encounterPeriod.start) : new Date());
+    
+    // Validate and auto-correct servicedDate to be within encounter period
+    // This prevents NPHIES error BV-00041: "Claim item serviced[x] is not within the encounter period"
+    if (encounterPeriod?.start) {
+      const periodStart = new Date(encounterPeriod.start);
+      const periodEnd = encounterPeriod.end ? new Date(encounterPeriod.end) : null;
+      
+      if (servicedDate < periodStart) {
+        servicedDate = periodStart;
+      }
+      if (periodEnd && servicedDate > periodEnd) {
+        servicedDate = periodEnd;
+      }
+    }
+    
     claimItem.servicedDate = this.formatDate(servicedDate);
 
     // Quantity (required)
