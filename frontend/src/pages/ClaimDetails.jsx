@@ -480,10 +480,21 @@ export default function ClaimDetails() {
       return parts[parts.length - 1];
     };
 
-    // Extract adjudication outcome from extension
-    const adjudicationOutcome = claimResponse.extension?.find(
+    // Extract adjudication outcome from extension - safely handle object structures
+    const adjudicationOutcomeExt = claimResponse.extension?.find(
       ext => ext.url?.includes('extension-adjudication-outcome')
-    )?.valueCodeableConcept?.coding?.[0]?.code;
+    );
+    let adjudicationOutcome = null;
+    if (adjudicationOutcomeExt?.valueCodeableConcept) {
+      const value = adjudicationOutcomeExt.valueCodeableConcept;
+      if (typeof value === 'string') {
+        adjudicationOutcome = value;
+      } else if (value.coding && Array.isArray(value.coding)) {
+        adjudicationOutcome = value.coding[0]?.code || null;
+      } else if (value.code) {
+        adjudicationOutcome = value.code;
+      }
+    }
 
     // Extract batch extensions
     const batchIdentifier = claimResponse.extension?.find(
@@ -498,6 +509,17 @@ export default function ClaimDetails() {
       ext => ext.url?.includes('extension-batch-period')
     )?.valuePeriod;
 
+    // Helper to safely extract code from CodeableConcept
+    const extractCode = (codeableConcept) => {
+      if (!codeableConcept) return null;
+      if (typeof codeableConcept === 'string') return codeableConcept;
+      if (codeableConcept.coding && Array.isArray(codeableConcept.coding)) {
+        return codeableConcept.coding[0]?.code || null;
+      }
+      if (codeableConcept.code) return codeableConcept.code;
+      return null;
+    };
+
     return {
       id: claimResponse.id,
       profile: claimResponse.meta?.profile?.[0],
@@ -506,8 +528,8 @@ export default function ClaimDetails() {
       identifier: claimResponse.identifier?.[0]?.value,
       identifierSystem: claimResponse.identifier?.[0]?.system,
       status: claimResponse.status,
-      type: claimResponse.type?.coding?.[0]?.code,
-      subType: claimResponse.subType?.coding?.[0]?.code,
+      type: extractCode(claimResponse.type),
+      subType: extractCode(claimResponse.subType),
       use: claimResponse.use,
       outcome: claimResponse.outcome,
       adjudicationOutcome: adjudicationOutcome, // Pended, approved, rejected, partial
@@ -1061,9 +1083,20 @@ export default function ClaimDetails() {
                       const responseItem = claimResponseForItems?.item?.find(i => i.itemSequence === item.sequence);
                       
                       const itemAdjudications = responseItem?.adjudication || [];
-                      const itemOutcome = responseItem?.extension?.find(
+                      const itemOutcomeExt = responseItem?.extension?.find(
                         ext => ext.url?.includes('extension-adjudication-outcome')
-                      )?.valueCodeableConcept?.coding?.[0]?.code;
+                      );
+                      let itemOutcome = null;
+                      if (itemOutcomeExt?.valueCodeableConcept) {
+                        const value = itemOutcomeExt.valueCodeableConcept;
+                        if (typeof value === 'string') {
+                          itemOutcome = value;
+                        } else if (value.coding && Array.isArray(value.coding)) {
+                          itemOutcome = value.coding[0]?.code || null;
+                        } else if (value.code) {
+                          itemOutcome = value.code;
+                        }
+                      }
                       
                       return (
                         <div key={index} className="p-4 border rounded-lg bg-gray-50">
@@ -1078,10 +1111,10 @@ export default function ClaimDetails() {
                               </div>
                             </div>
                             <Badge variant={
-                              (itemOutcome === 'approved' || item.adjudication_status === 'approved') ? 'default' : 
-                              (itemOutcome === 'rejected' || item.adjudication_status === 'denied') ? 'destructive' : 'outline'
-                            } className={(itemOutcome === 'approved' || item.adjudication_status === 'approved') ? 'bg-green-500' : ''}>
-                              {itemOutcome || item.adjudication_status || 'pending'}
+                              (extractCodeValue(itemOutcome) === 'approved' || extractCodeValue(item.adjudication_status) === 'approved') ? 'default' : 
+                              (extractCodeValue(itemOutcome) === 'rejected' || extractCodeValue(item.adjudication_status) === 'denied') ? 'destructive' : 'outline'
+                            } className={(extractCodeValue(itemOutcome) === 'approved' || extractCodeValue(item.adjudication_status) === 'approved') ? 'bg-green-500' : ''}>
+                              {extractCodeValue(itemOutcome) || extractCodeValue(item.adjudication_status) || 'pending'}
                             </Badge>
                           </div>
                           
@@ -1115,7 +1148,7 @@ export default function ClaimDetails() {
                               </p>
                               <div className="grid grid-cols-4 gap-4 text-sm">
                                 {itemAdjudications.map((adj, adjIdx) => {
-                                  const category = adj.category?.coding?.[0]?.code;
+                                  const category = extractCodeValue(adj.category);
                                   const amount = adj.amount?.value;
                                   const value = adj.value;
                                   const displayValue = amount !== undefined 
@@ -1134,7 +1167,7 @@ export default function ClaimDetails() {
                                   
                                   return (
                                     <div key={adjIdx}>
-                                      <p className="text-gray-500 capitalize">{category?.replace('-', ' ')}</p>
+                                      <p className="text-gray-500 capitalize">{category?.replace('-', ' ') || '-'}</p>
                                       <p className={`font-medium ${categoryColors[category] || ''}`}>
                                         {displayValue}
                                       </p>
@@ -1449,33 +1482,33 @@ export default function ClaimDetails() {
                         <div>
                           <Label className="text-gray-500">Status</Label>
                           <Badge variant="outline" className="mt-1 capitalize">
-                            {claimResponseDetails.status || '-'}
+                            {extractCodeValue(claimResponseDetails.status)}
                           </Badge>
                         </div>
                         <div>
                           <Label className="text-gray-500">Outcome</Label>
                           <Badge 
-                            variant={claimResponseDetails.outcome === 'complete' ? 'default' : 'secondary'}
-                            className={claimResponseDetails.outcome === 'complete' ? 'bg-green-500 mt-1' : 'mt-1'}
+                            variant={extractCodeValue(claimResponseDetails.outcome) === 'complete' ? 'default' : 'secondary'}
+                            className={extractCodeValue(claimResponseDetails.outcome) === 'complete' ? 'bg-green-500 mt-1' : 'mt-1'}
                           >
-                            {claimResponseDetails.outcome || '-'}
+                            {extractCodeValue(claimResponseDetails.outcome)}
                           </Badge>
                         </div>
                         <div>
                           <Label className="text-gray-500">Adjudication Outcome</Label>
                           {claimResponseDetails.adjudicationOutcome ? (
                             <Badge 
-                              variant={claimResponseDetails.adjudicationOutcome === 'approved' ? 'default' : 
-                                      claimResponseDetails.adjudicationOutcome === 'rejected' ? 'destructive' :
-                                      claimResponseDetails.adjudicationOutcome === 'pended' ? 'secondary' : 'secondary'}
+                              variant={extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'approved' ? 'default' : 
+                                      extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'rejected' ? 'destructive' :
+                                      extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'pended' ? 'secondary' : 'secondary'}
                               className={
-                                claimResponseDetails.adjudicationOutcome === 'approved' ? 'bg-green-500 mt-1' :
-                                claimResponseDetails.adjudicationOutcome === 'rejected' ? 'bg-red-500 mt-1' :
-                                claimResponseDetails.adjudicationOutcome === 'pended' ? 'bg-amber-500 text-white mt-1' :
-                                claimResponseDetails.adjudicationOutcome === 'partial' ? 'bg-orange-500 mt-1' : 'mt-1'
+                                extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'approved' ? 'bg-green-500 mt-1' :
+                                extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'rejected' ? 'bg-red-500 mt-1' :
+                                extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'pended' ? 'bg-amber-500 text-white mt-1' :
+                                extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'partial' ? 'bg-orange-500 mt-1' : 'mt-1'
                               }
                             >
-                              {claimResponseDetails.adjudicationOutcome}
+                              {extractCodeValue(claimResponseDetails.adjudicationOutcome)}
                             </Badge>
                           ) : (
                             <p className="text-sm text-gray-500 mt-1">-</p>
@@ -1484,7 +1517,7 @@ export default function ClaimDetails() {
                         <div>
                           <Label className="text-gray-500">Use</Label>
                           <Badge variant="outline" className="mt-1">
-                            {claimResponseDetails.use || '-'}
+                            {extractCodeValue(claimResponseDetails.use)}
                           </Badge>
                         </div>
                       </div>
@@ -1494,11 +1527,11 @@ export default function ClaimDetails() {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <Label className="text-gray-500">Type</Label>
-                          <p className="font-medium capitalize">{claimResponseDetails.type || '-'}</p>
+                          <p className="font-medium capitalize">{extractCodeValue(claimResponseDetails.type)}</p>
                         </div>
                         <div>
                           <Label className="text-gray-500">Sub Type</Label>
-                          <p className="font-medium uppercase">{claimResponseDetails.subType || '-'}</p>
+                          <p className="font-medium uppercase">{extractCodeValue(claimResponseDetails.subType)}</p>
                         </div>
                         <div>
                           <Label className="text-gray-500">Created Date</Label>
