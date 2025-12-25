@@ -155,7 +155,9 @@ const extractFromFhirBundle = (bundle) => {
   if (!bundle || !bundle.entry) return {};
   
   const result = {
-    patient: null,
+    patient: null, // Primary patient (newborn for newborn cases)
+    motherPatient: null, // Mother patient (for newborn cases)
+    patients: [], // All patient resources
     coverage: null,
     insurer: null,
     eligibilityResponse: null,
@@ -169,6 +171,9 @@ const extractFromFhirBundle = (bundle) => {
     
     switch (resource.resourceType) {
       case 'Patient':
+        // Store all patients
+        result.patients.push(resource);
+        // For now, use the last patient as primary (will be determined by Coverage references)
         result.patient = resource;
         break;
       case 'Coverage':
@@ -189,6 +194,29 @@ const extractFromFhirBundle = (bundle) => {
       case 'MessageHeader':
         result.messageHeader = resource;
         break;
+    }
+  }
+  
+  // For newborn cases: Identify newborn vs mother based on Coverage references
+  // Coverage.beneficiary = newborn, Coverage.subscriber = mother
+  if (result.coverage && result.patients.length >= 2) {
+    const beneficiaryRef = result.coverage.beneficiary?.reference;
+    const subscriberRef = result.coverage.subscriber?.reference;
+    
+    if (beneficiaryRef && subscriberRef) {
+      // Extract patient IDs from references (format: "Patient/patient-xxx" or full URL)
+      const beneficiaryId = beneficiaryRef.split('/').pop();
+      const subscriberId = subscriberRef.split('/').pop();
+      
+      // Find patients by ID match
+      const beneficiaryPatient = result.patients.find(p => p.id === beneficiaryId || beneficiaryRef.includes(p.id));
+      const subscriberPatient = result.patients.find(p => p.id === subscriberId || subscriberRef.includes(p.id));
+      
+      if (beneficiaryPatient && subscriberPatient) {
+        // Newborn is beneficiary, mother is subscriber
+        result.patient = beneficiaryPatient; // Newborn (primary patient)
+        result.motherPatient = subscriberPatient; // Mother
+      }
     }
   }
   
@@ -309,6 +337,9 @@ export default function NphiesEligibilityDetails() {
   const disposition = eligibilityResponse.disposition || record?.disposition;
   const servicedPeriod = eligibilityResponse.servicedPeriod || record?.serviced_period;
   
+  // Extract inforce status from insurance[0].inforce (from FHIR response)
+  const inforceFromResponse = eligibilityResponse.insurance?.[0]?.inforce;
+  
   // Extract Eligibility Reference ID (needed for Prior Authorization)
   // This is the CoverageEligibilityResponse.id (e.g., "76999")
   const eligibilityRefId = eligibilityResponse.id || record?.eligibility_ref || record?.eligibility_response_id;
@@ -416,9 +447,9 @@ export default function NphiesEligibilityDetails() {
                     Outcome: {record.outcome?.toUpperCase()}
                   </Badge>
                 )}
-                {record.inforce !== undefined && (
-                  <Badge className={record.inforce ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                    {record.inforce ? 'In Force' : 'Not In Force'}
+                {(record.inforce !== undefined || inforceFromResponse !== undefined) && (
+                  <Badge className={(record.inforce ?? inforceFromResponse) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                    {(record.inforce ?? inforceFromResponse) ? 'In Force' : 'Not In Force'}
                   </Badge>
                 )}
               </div>
@@ -476,7 +507,7 @@ export default function NphiesEligibilityDetails() {
             <div className="bg-gray-50 p-4 rounded-lg">
               <p className="text-sm text-gray-600 mb-1">Coverage Status</p>
               <p className="text-lg font-semibold">
-                {record.inforce ? (
+                {(record.inforce ?? inforceFromResponse) ? (
                   <span className="text-green-600 flex items-center">
                     <CheckCircle className="h-5 w-5 mr-1" /> In Force
                   </span>
@@ -757,6 +788,160 @@ export default function NphiesEligibilityDetails() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Mother Patient Information (for Newborn Cases) */}
+      {motherPatientData.id && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-lg">
+              <User className="h-5 w-5 text-purple-600 mr-2" />
+              Mother Patient Information
+            </CardTitle>
+            <CardDescription>
+              Coverage subscriber information for newborn eligibility
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Basic Info */}
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <User className="h-3 w-3 mr-1" /> Full Name
+                  </p>
+                  <p className="font-semibold text-lg">
+                    {motherPatientData.name?.[0]?.text || 
+                      [motherPatientData.name?.[0]?.given?.join(' '), motherPatientData.name?.[0]?.family].filter(Boolean).join(' ') || 
+                      'N/A'}
+                  </p>
+                </div>
+                {motherPatientData.identifier?.[0]?.value && (
+                  <div>
+                    <p className="text-sm text-gray-600 flex items-center">
+                      <Hash className="h-3 w-3 mr-1" /> {motherPatientData.identifier?.[0]?.type?.coding?.[0]?.display || 'Identifier'}
+                    </p>
+                    <p className="font-mono bg-gray-100 px-2 py-1 rounded inline-block text-sm">
+                      {motherPatientData.identifier[0].value}
+                    </p>
+                    {motherPatientData.identifier[0].extension?.find(e => e.url?.includes('country'))?.valueCodeableConcept?.coding?.[0]?.display && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Country: {motherPatientData.identifier[0].extension.find(e => e.url?.includes('country')).valueCodeableConcept.coding[0].display}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Demographics */}
+              <div className="space-y-4">
+                {motherPatientData.gender && (
+                  <div>
+                    <p className="text-sm text-gray-600">Gender</p>
+                    <Badge variant="outline" className="capitalize">
+                      {getGenderDisplay(motherPatientData.gender)}
+                    </Badge>
+                  </div>
+                )}
+                {motherPatientData.birthDate && (
+                  <div>
+                    <p className="text-sm text-gray-600 flex items-center">
+                      <Calendar className="h-3 w-3 mr-1" /> Date of Birth
+                    </p>
+                    <p className="font-medium">{formatDate(motherPatientData.birthDate)}</p>
+                  </div>
+                )}
+                {motherPatientData.maritalStatus?.coding?.[0]?.code && (
+                  <div>
+                    <p className="text-sm text-gray-600 flex items-center">
+                      <Heart className="h-3 w-3 mr-1" /> Marital Status
+                    </p>
+                    <p className="font-medium">{getMaritalStatusDisplay(motherPatientData.maritalStatus.coding[0].code)}</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Contact Info */}
+              <div className="space-y-4">
+                {motherPatientData.telecom?.find(t => t.system === 'phone')?.value && (
+                  <div>
+                    <p className="text-sm text-gray-600 flex items-center">
+                      <Phone className="h-3 w-3 mr-1" /> Phone
+                    </p>
+                    <p className="font-medium">{motherPatientData.telecom.find(t => t.system === 'phone').value}</p>
+                  </div>
+                )}
+                {motherPatientData.telecom?.find(t => t.system === 'email')?.value && (
+                  <div>
+                    <p className="text-sm text-gray-600">Email</p>
+                    <p className="font-medium text-sm">{motherPatientData.telecom.find(t => t.system === 'email').value}</p>
+                  </div>
+                )}
+                {motherPatientData.extension?.find(e => e.url?.includes('occupation'))?.valueCodeableConcept?.coding?.[0]?.code && (
+                  <div>
+                    <p className="text-sm text-gray-600 flex items-center">
+                      <Briefcase className="h-3 w-3 mr-1" /> Occupation
+                    </p>
+                    <Badge variant="secondary" className="capitalize">
+                      {motherPatientData.extension.find(e => e.url?.includes('occupation')).valueCodeableConcept.coding[0].code}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+              
+              {/* Status Info */}
+              <div className="space-y-4">
+                {motherPatientData.active !== undefined && (
+                  <div>
+                    <p className="text-sm text-gray-600">Patient Status</p>
+                    <Badge className={motherPatientData.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                      {motherPatientData.active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                )}
+                {motherPatientData.deceasedBoolean !== undefined && motherPatientData.deceasedBoolean && (
+                  <div>
+                    <p className="text-sm text-gray-600">Deceased</p>
+                    <Badge variant="destructive">Yes</Badge>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Coverage Relationship Information (for Newborn Cases) */}
+      {coverageRelationship === 'child' && coverageSubscriber && coverageBeneficiary && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-lg">
+              <Users className="h-5 w-5 text-indigo-600 mr-2" />
+              Coverage Relationship
+            </CardTitle>
+            <CardDescription>
+              Newborn coverage relationship information
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-600 mb-1">Subscriber (Mother)</p>
+                <p className="font-mono text-sm break-all">{coverageSubscriber}</p>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <p className="text-sm text-purple-600 mb-1">Beneficiary (Newborn)</p>
+                <p className="font-mono text-sm break-all">{coverageBeneficiary}</p>
+              </div>
+              <div className="bg-indigo-50 p-4 rounded-lg">
+                <p className="text-sm text-indigo-600 mb-1">Relationship</p>
+                <Badge variant="outline" className="mt-1">
+                  {getRelationshipDisplay(coverageRelationship)}
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Provider and Insurer Information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
