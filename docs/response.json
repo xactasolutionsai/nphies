@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "4a0fcedb-05d0-487b-8a6c-5e6235a5c4fe",
+    "id": "8bd79fa4-bcf1-4107-bbda-06a1bb0a7137",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-24T22:50:29.630+00:00",
+    "timestamp": "2025-12-25T13:51:06.201+03:00",
     "entry": [
         {
-            "fullUrl": "http://pseudo-payer.com.sa/MessageHeader/ec42ab03-f1dd-4afc-8839-12a7bf59d513",
+            "fullUrl": "http://nphies.sa/MessageHeader/f0c3b251-8d3c-46f0-b1b0-a46400b4808b",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "ec42ab03-f1dd-4afc-8839-12a7bf59d513",
+                "id": "f0c3b251-8d3c-46f0-b1b0-a46400b4808b",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -38,51 +38,44 @@
                 "sender": {
                     "type": "Organization",
                     "identifier": {
-                        "system": "http://nphies.sa/license/payer-license",
-                        "value": "INS-FHIR"
+                        "system": "http://nphies.sa/license/nphies",
+                        "value": "NPHIES"
                     }
                 },
                 "source": {
-                    "endpoint": "http://payer.com"
+                    "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "839e2033-d5b2-426d-9699-2bb328297e91",
+                    "identifier": "33984189-8fd9-47f3-b541-c5d8311daeb1",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://pseudo-payer.com.sa/ClaimResponse/d2ac52fb-3dc2-4014-8018-62bab90f739b"
+                        "reference": "http://nphies.sa/ClaimResponse/531"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://pseudo-payer.com.sa/ClaimResponse/d2ac52fb-3dc2-4014-8018-62bab90f739b",
+            "fullUrl": "http://nphies.sa/ClaimResponse/531",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "d2ac52fb-3dc2-4014-8018-62bab90f739b",
+                "id": "531",
                 "meta": {
                     "profile": [
-                        "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/prior-auth-response|1.0.0"
+                        "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
+                    ],
+                    "tag": [
+                        {
+                            "code": "NPHIES generated",
+                            "display": "NPHIES generated"
+                        }
                     ]
                 },
-                "extension": [
-                    {
-                        "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
-                        "valueCodeableConcept": {
-                            "coding": [
-                                {
-                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
-                                    "code": "pended"
-                                }
-                            ]
-                        }
-                    }
-                ],
                 "identifier": [
                     {
-                        "system": "http://pseudo-payer.com.sa/claimresponse",
-                        "value": "05535b78-5859-4d7c-b8c3-f38a86e68702"
+                        "system": "http://nphies.sa/ClaimResponse",
+                        "value": "DUP-1766659832186"
                     }
                 ],
                 "status": "active",
@@ -90,53 +83,81 @@
                     "coding": [
                         {
                             "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-                            "code": "institutional"
-                        }
-                    ]
-                },
-                "subType": {
-                    "coding": [
-                        {
-                            "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype",
-                            "code": "ip"
+                            "code": "professional"
                         }
                     ]
                 },
                 "use": "preauthorization",
                 "patient": {
-                    "reference": "http://provider.com/Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
+                    "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
                 },
-                "created": "2025-12-25",
+                "created": "2025-12-25T10:50:58.101Z",
                 "insurer": {
-                    "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+                    "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
                 "requestor": {
-                    "reference": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
+                    "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
                 },
                 "request": {
                     "type": "Claim",
                     "identifier": {
                         "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-                        "value": "DUP-1766616612687"
+                        "value": "DUP-1766659832186"
                     }
                 },
-                "outcome": "queued",
+                "outcome": "error",
                 "insurance": [
                     {
                         "sequence": 1,
                         "focal": true,
                         "coverage": {
-                            "reference": "http://provider.com/Coverage/50dd0db9-2e5b-4c63-b071-4978433e2566"
+                            "reference": "Coverage/c8dcca19-abdc-4b87-88eb-276c5581e067"
+                        }
+                    }
+                ],
+                "error": [
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[1].resource.facility"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00905",
+                                    "display": "Claim.facility shall be provided when associated with 'Ambulatory' outpatient or 'Virtual' telemedicine encounters"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[2].resource.period.start"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00811",
+                                    "display": "Date time format up to seconds SHALL be mandatory"
+                                }
+                            ]
                         }
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://provider.com/Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a",
+            "fullUrl": "http://nphies.sa/Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161",
             "resource": {
                 "resourceType": "Patient",
-                "id": "cc938f77-8f1b-45f8-9f3b-b403c7ebef2a",
+                "id": "1a72f430-d5b2-4402-91f3-59ee1ed73161",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
@@ -175,25 +196,31 @@
                             "coding": [
                                 {
                                     "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                    "code": "PRC",
-                                    "display": "Permanent Resident Card"
+                                    "code": "PPN",
+                                    "display": "Passport Number"
                                 }
                             ]
                         },
-                        "system": "http://nphies.sa/identifier/iqama",
-                        "value": "2000000002"
+                        "system": "http://nphies.sa/identifier/passportnumber",
+                        "value": "G12345678"
                     }
                 ],
                 "active": true,
                 "name": [
                     {
                         "use": "official",
-                        "text": "Muhammad Khaled Abbas",
+                        "text": "Ahmad Khaled Abbas",
                         "family": "Abbas",
                         "given": [
-                            "Muhammad",
+                            "Ahmad",
                             "Khaled"
                         ]
+                    }
+                ],
+                "telecom": [
+                    {
+                        "system": "phone",
+                        "value": "+966512345691"
                     }
                 ],
                 "gender": "male",
@@ -212,7 +239,7 @@
                         }
                     ]
                 },
-                "birthDate": "2010-08-19",
+                "birthDate": "1984-12-21",
                 "deceasedBoolean": false,
                 "maritalStatus": {
                     "coding": [
@@ -225,7 +252,7 @@
             }
         },
         {
-            "fullUrl": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
+            "fullUrl": "http://nphies.sa/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
             "resource": {
                 "resourceType": "Organization",
                 "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
@@ -280,7 +307,7 @@
             }
         },
         {
-            "fullUrl": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
+            "fullUrl": "http://nphies.sa/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
             "resource": {
                 "resourceType": "Organization",
                 "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
@@ -331,10 +358,10 @@
             }
         },
         {
-            "fullUrl": "http://provider.com/Coverage/50dd0db9-2e5b-4c63-b071-4978433e2566",
+            "fullUrl": "http://nphies.sa/Coverage/c8dcca19-abdc-4b87-88eb-276c5581e067",
             "resource": {
                 "resourceType": "Coverage",
-                "id": "50dd0db9-2e5b-4c63-b071-4978433e2566",
+                "id": "c8dcca19-abdc-4b87-88eb-276c5581e067",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
@@ -343,7 +370,7 @@
                 "identifier": [
                     {
                         "system": "http://payer.com/memberid",
-                        "value": "2000000002"
+                        "value": "0000000002"
                     }
                 ],
                 "status": "active",
@@ -357,13 +384,13 @@
                     ]
                 },
                 "policyHolder": {
-                    "reference": "Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
+                    "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
                 },
                 "subscriber": {
-                    "reference": "Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
+                    "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
                 },
                 "beneficiary": {
-                    "reference": "Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
+                    "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
                 },
                 "relationship": {
                     "coding": [
@@ -375,12 +402,12 @@
                     ]
                 },
                 "period": {
-                    "start": "2021-03-16",
-                    "end": "2028-03-16"
+                    "start": "2021-09-28",
+                    "end": "2028-09-28"
                 },
                 "payor": [
                     {
-                        "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+                        "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                     }
                 ],
                 "class": [
@@ -394,7 +421,7 @@
                             ]
                         },
                         "value": "default-plan",
-                        "name": "Insurance Plan"
+                        "name": "Dream Team"
                     }
                 ]
             }

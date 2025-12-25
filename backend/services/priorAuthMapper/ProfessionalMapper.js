@@ -384,6 +384,13 @@ class ProfessionalMapper extends BaseMapper {
     claim.created = this.formatDateTime(priorAuth.request_date || new Date());
     claim.insurer = { reference: `Organization/${insurerRef}` };
     claim.provider = { reference: `Organization/${providerRef}` };
+    
+    // BV-00905: Claim.facility SHALL be provided when associated with 'Ambulatory' outpatient or 'Virtual' telemedicine encounters
+    const encounterClass = priorAuth.encounter_class || 'ambulatory';
+    if (encounterClass === 'ambulatory' || encounterClass === 'virtual') {
+      claim.facility = { reference: `Organization/${providerRef}` };
+    }
+    
     claim.priority = {
       coding: [
         {
@@ -744,30 +751,14 @@ class ProfessionalMapper extends BaseMapper {
     // Subject
     encounter.subject = { reference: `Patient/${patientId}` };
 
-    // Period - format depends on encounter class
-    // BV-00811: Emergency (EMER) requires datetime with timezone format
-    // AMB: date-only format per NPHIES Encounter-10123.json
-    // EMER/IMP/SS: datetime with timezone per NPHIES Encounter-10122.json and BV-00811
-    const needsDateTime = ['daycase', 'inpatient', 'emergency'].includes(encounterClass);
-    
-    if (needsDateTime) {
-      encounter.period = {
-        start: this.formatDateTimeWithTimezone(priorAuth.encounter_start || new Date())
-      };
-      if (priorAuth.encounter_end) {
-        encounter.period.end = this.formatDateTimeWithTimezone(priorAuth.encounter_end);
-      }
-    } else {
-      // AMB only: date-only format per NPHIES Encounter-10123.json
-      const startDateRaw = priorAuth.encounter_start || new Date();
-      let dateOnlyStart;
-      if (typeof startDateRaw === 'string' && startDateRaw.includes('T')) {
-        dateOnlyStart = startDateRaw.split('T')[0];
-      } else {
-        dateOnlyStart = this.formatDate(startDateRaw);
-      }
-      
-      encounter.period = { start: dateOnlyStart };
+    // Period - BV-00811: Date time format up to seconds SHALL be mandatory
+    // All encounter classes require datetime format with seconds (including AMB)
+    // Format: "2025-12-24T00:00:00.000Z" or with timezone "2025-12-24T00:00:00.000+03:00"
+    encounter.period = {
+      start: this.formatDateTimeWithTimezone(priorAuth.encounter_start || new Date())
+    };
+    if (priorAuth.encounter_end) {
+      encounter.period.end = this.formatDateTimeWithTimezone(priorAuth.encounter_end);
     }
 
     // ServiceProvider

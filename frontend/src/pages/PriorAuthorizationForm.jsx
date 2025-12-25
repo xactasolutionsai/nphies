@@ -2231,11 +2231,24 @@ export default function PriorAuthorizationForm() {
                         <div className="datepicker-wrapper">
                           <DatePicker
                             selected={formData.encounter_start ? new Date(formData.encounter_start) : null}
-                            onChange={(date) => handleChange('encounter_start', date ? (
-                              needsDateTime 
-                                ? date.toISOString() 
-                                : date.toISOString().split('T')[0]
-                            ) : '')}
+                            onChange={(date) => {
+                              // BV-00811: Always use full datetime format with seconds (required for all encounter classes)
+                              // For AMB encounters without time picker, default to midnight (00:00:00)
+                              if (date) {
+                                let dateWithTime;
+                                if (needsDateTime) {
+                                  // User selected date & time - use as is
+                                  dateWithTime = date;
+                                } else {
+                                  // AMB: User selected date only - set to midnight UTC
+                                  dateWithTime = new Date(date);
+                                  dateWithTime.setUTCHours(0, 0, 0, 0);
+                                }
+                                handleChange('encounter_start', dateWithTime.toISOString());
+                              } else {
+                                handleChange('encounter_start', '');
+                              }
+                            }}
                             showTimeSelect={needsDateTime}
                             dateFormat={needsDateTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"}
                             className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
