@@ -288,8 +288,11 @@ export default function NphiesEligibilityDetails() {
   // Extract detailed data from FHIR response bundle
   const fhirData = useMemo(() => extractFromFhirBundle(rawResponse), [rawResponse]);
   
-  // Patient details from FHIR
+  // Patient details from FHIR (primary patient - newborn for newborn cases)
   const patientData = fhirData.patient || {};
+  
+  // Mother patient details (for newborn cases)
+  const motherPatientData = fhirData.motherPatient || {};
   const patientName = useMemo(() => {
     return patientData.name?.[0]?.text || 
       [patientData.name?.[0]?.given?.join(' '), patientData.name?.[0]?.family].filter(Boolean).join(' ') ||
