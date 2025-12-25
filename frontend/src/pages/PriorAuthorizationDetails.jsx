@@ -1269,15 +1269,34 @@ export default function PriorAuthorizationDetails() {
                             </div>
                           )}
                           
-                          {/* Additional item details */}
-                          {(item.tooth_number || item.eye || item.days_supply) && (
-                            <div className="mt-3 pt-3 border-t text-sm">
-                              {item.tooth_number && <span className="mr-4">Tooth: {item.tooth_number}</span>}
-                              {item.tooth_surface && <span className="mr-4">Surface: {item.tooth_surface}</span>}
-                              {item.eye && <span className="mr-4">Eye: {item.eye}</span>}
-                              {item.days_supply && <span>Days Supply: {item.days_supply}</span>}
-                            </div>
-                          )}
+                          {/* Additional item details - Show only relevant fields based on auth type */}
+                          {(() => {
+                            const hasDentalFields = priorAuth.auth_type === 'dental' && (item.tooth_number || item.tooth_surface);
+                            const hasVisionFields = priorAuth.auth_type === 'vision' && item.eye;
+                            const hasPharmacyFields = priorAuth.auth_type === 'pharmacy' && item.days_supply;
+                            
+                            if (!hasDentalFields && !hasVisionFields && !hasPharmacyFields) return null;
+                            
+                            return (
+                              <div className="mt-3 pt-3 border-t text-sm">
+                                {/* Dental fields - only for dental auth type */}
+                                {priorAuth.auth_type === 'dental' && (
+                                  <>
+                                    {item.tooth_number && <span className="mr-4">Tooth: {item.tooth_number}</span>}
+                                    {item.tooth_surface && <span className="mr-4">Surface: {item.tooth_surface}</span>}
+                                  </>
+                                )}
+                                {/* Vision fields - only for vision auth type */}
+                                {priorAuth.auth_type === 'vision' && item.eye && (
+                                  <span className="mr-4">Eye: {item.eye}</span>
+                                )}
+                                {/* Pharmacy fields - only for pharmacy auth type */}
+                                {priorAuth.auth_type === 'pharmacy' && item.days_supply && (
+                                  <span>Days Supply: {item.days_supply}</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}
