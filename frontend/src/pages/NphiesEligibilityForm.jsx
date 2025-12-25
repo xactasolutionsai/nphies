@@ -180,6 +180,19 @@ export default function NphiesEligibilityForm() {
   const [isNewborn, setIsNewborn] = useState(false);
   const [isTransfer, setIsTransfer] = useState(false);
   
+  // Mother patient state (for newborn requests)
+  const [motherPatientMode, setMotherPatientMode] = useState('existing'); // 'existing' | 'manual'
+  const [selectedMotherPatient, setSelectedMotherPatient] = useState('');
+  const [motherPatientData, setMotherPatientData] = useState({
+    name: '',
+    identifier: '',
+    identifierType: 'iqama',
+    gender: '',
+    birthDate: '',
+    phone: '',
+    email: ''
+  });
+  
   // UI state
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -272,6 +285,18 @@ export default function NphiesEligibilityForm() {
     if (patientMode === 'manual' && !patientData.identifier) {
       setError('Please enter patient identifier');
       return;
+    }
+
+    // Validate mother patient for newborn requests
+    if (isNewborn) {
+      if (motherPatientMode === 'existing' && !selectedMotherPatient) {
+        setError('Please select mother patient for newborn request');
+        return;
+      }
+      if (motherPatientMode === 'manual' && !motherPatientData.identifier) {
+        setError('Please enter mother Iqama number for newborn request');
+        return;
+      }
     }
 
     if (insurerMode === 'existing' && !selectedInsurer) {
@@ -385,6 +410,10 @@ export default function NphiesEligibilityForm() {
           ? { patientId: selectedPatient || undefined }
           : { patientData: { ...patientData, birthDate: patientData.birthDate } }
         ),
+        ...(isNewborn && (motherPatientMode === 'existing'
+          ? { motherPatientId: selectedMotherPatient || undefined }
+          : { motherPatientData: { ...motherPatientData, birthDate: motherPatientData.birthDate, identifierType: 'iqama' } }
+        )),
         ...(providerMode === 'existing'
           ? { providerId: selectedProvider || undefined }
           : { providerData }
@@ -448,6 +477,17 @@ export default function NphiesEligibilityForm() {
     setServicedDate(new Date());
     setIsNewborn(false);
     setIsTransfer(false);
+    setMotherPatientMode('existing');
+    setSelectedMotherPatient('');
+    setMotherPatientData({
+      name: '',
+      identifier: '',
+      identifierType: 'iqama',
+      gender: '',
+      birthDate: '',
+      phone: '',
+      email: ''
+    });
     setResult(null);
     setError(null);
   };
@@ -976,6 +1016,110 @@ export default function NphiesEligibilityForm() {
                 </label>
               </div>
             </div>
+
+            {/* Mother Patient Information (for newborn requests) */}
+            {isNewborn && (
+              <div className="bg-pink-50 rounded-xl p-4 border border-pink-200">
+                <div className="flex items-center space-x-2 mb-3">
+                  <User className="h-5 w-5 text-pink-600" />
+                  <label className="text-sm font-medium text-gray-700">
+                    Mother Patient Information <RequiredFieldIndicator />
+                  </label>
+                </div>
+                <p className="text-sm text-pink-700 mb-3">
+                  For newborn requests, the mother's coverage will be used. The newborn has MRN identifier, and the mother has Iqama identifier.
+                </p>
+                
+                <ModeToggle
+                  mode={motherPatientMode}
+                  setMode={setMotherPatientMode}
+                  options={['existing', 'manual']}
+                  labels={['Select Existing', 'Enter Manually']}
+                />
+
+                {motherPatientMode === 'existing' ? (
+                  <Select
+                    value={patientOptions.find(opt => opt.value === selectedMotherPatient)}
+                    onChange={(option) => setSelectedMotherPatient(option?.value || '')}
+                    options={patientOptions.filter(p => {
+                      // Filter to show patients with Iqama identifier type (typically starting with 2)
+                      const patient = patients.find(pa => pa.patient_id === p.value);
+                      return patient && (patient.identifier_type === 'iqama' || (patient.identifier && patient.identifier.startsWith('2')));
+                    })}
+                    styles={selectStyles}
+                    placeholder="Search and select mother patient (Iqama ID)..."
+                    isClearable
+                    isSearchable
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                      <input
+                        type="text"
+                        value={motherPatientData.name}
+                        onChange={(e) => setMotherPatientData({...motherPatientData, name: e.target.value})}
+                        className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholder="e.g. Maria Khaled Rizwan"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Iqama Number <RequiredFieldIndicator />
+                        </label>
+                        <input
+                          type="text"
+                          value={motherPatientData.identifier}
+                          onChange={(e) => setMotherPatientData({...motherPatientData, identifier: e.target.value})}
+                          className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                          placeholder="e.g. 2000000001"
+                          maxLength="10"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                        <Select
+                          value={GENDER_OPTIONS.find(opt => opt.value === motherPatientData.gender)}
+                          onChange={(option) => setMotherPatientData({...motherPatientData, gender: option?.value || ''})}
+                          options={GENDER_OPTIONS}
+                          styles={selectStyles}
+                          placeholder="Select..."
+                          isClearable
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                      <div className="datepicker-wrapper">
+                        <DatePicker
+                          selected={parseDate(motherPatientData.birthDate)}
+                          onChange={(date) => setMotherPatientData({...motherPatientData, birthDate: formatDate(date)})}
+                          dateFormat="yyyy-MM-dd"
+                          className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                          placeholderText="YYYY-MM-DD"
+                          showYearDropdown
+                          scrollableYearDropdown
+                          yearDropdownItemNumber={100}
+                          maxDate={new Date()}
+                        />
+                        <Calendar className="datepicker-icon h-4 w-4" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                      <input
+                        type="tel"
+                        value={motherPatientData.phone}
+                        onChange={(e) => setMotherPatientData({...motherPatientData, phone: e.target.value})}
+                        className="w-full rounded-[4px] border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholder="+966 XX XXX XXXX"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Error Message */}
             {error && (

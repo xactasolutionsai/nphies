@@ -66,7 +66,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
    * - preAuthRef is required in insurance
    */
   buildClaimRequestBundle(data) {
-    const { claim, patient, provider, insurer, coverage, policyHolder } = data;
+    const { claim, patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -74,13 +74,30 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       provider: provider.provider_id || this.generateId(),
       insurer: insurer.insurer_id || this.generateId(),
       coverage: coverage?.id || coverage?.coverage_id || this.generateId(),
-      policyHolder: policyHolder?.id || this.generateId()
+      policyHolder: policyHolder?.id || this.generateId(),
+      motherPatient: (claim.is_newborn && motherPatient) ? (motherPatient.patient_id || this.generateId()) : null
     };
 
-    const patientResource = this.buildPatientResourceWithId(patient, bundleResourceIds.patient);
+    // For newborn cases, patient is the newborn, and we also need mother patient resource
+    const newbornPatientResource = this.buildPatientResourceWithId(patient, bundleResourceIds.patient);
     const providerResource = this.buildProviderOrganizationWithId(provider, bundleResourceIds.provider);
     const insurerResource = this.buildInsurerOrganizationWithId(insurer, bundleResourceIds.insurer);
-    const coverageResource = this.buildCoverageResourceWithId(coverage, patient, insurer, policyHolder, bundleResourceIds);
+    
+    // Build mother patient resource if provided (for newborn requests)
+    const motherPatientResource = (claim.is_newborn && motherPatient && bundleResourceIds.motherPatient) 
+      ? this.buildPatientResourceWithId(motherPatient, bundleResourceIds.motherPatient) 
+      : null;
+    
+    // For newborn cases, pass motherPatient and motherPatientId to buildCoverageResourceWithId
+    const coverageResource = this.buildCoverageResourceWithId(
+      coverage, 
+      patient, 
+      insurer, 
+      policyHolder, 
+      bundleResourceIds,
+      motherPatient,
+      bundleResourceIds.motherPatient
+    );
     
     // Build Claim resource (no encounter, no practitioner per NPHIES example)
     const claimResource = this.buildPharmacyClaimResource(claim, patient, provider, insurer, coverage, bundleResourceIds);
@@ -102,7 +119,8 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       coverageResource,
       providerResource,
       insurerResource,
-      patientResource,
+      newbornPatientResource, // Newborn patient
+      ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present
       ...binaryResources
     ];
 
@@ -256,6 +274,15 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-reference',
         valueString: claim.eligibility_offline_ref
+      });
+    }
+
+    // Newborn extension - for newborn patient claims
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    if (claim.is_newborn) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-newborn',
+        valueBoolean: true
       });
     }
 
@@ -506,6 +533,34 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       },
       valueString: existingHistoryPresentIllness?.value_string || claim.history_of_present_illness || claim.chief_complaint || 'Patient presents with symptoms requiring medication'
     });
+
+    // 7. birth-weight supportingInfo for newborn patients
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    // Per NPHIES Test Case 8: Newborn claim should include birth-weight
+    // BV-00509: birth-weight valueQuantity SHALL use 'kg' code from UCUM
+    if (claim.is_newborn && claim.birth_weight) {
+      const hasBirthWeight = supportingInfoList.some(info => 
+        info.category?.coding?.[0]?.code === 'birth-weight' || info.category === 'birth-weight'
+      );
+      if (!hasBirthWeight) {
+        // Convert grams to kilograms for NPHIES (BV-00509 requires kg)
+        const weightInKg = parseFloat(claim.birth_weight) / 1000;
+        supportingInfoList.push({
+          sequence: sequenceNum++,
+          category: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+              code: 'birth-weight'
+            }]
+          },
+          valueQuantity: {
+            value: weightInKg,
+            system: 'http://unitsofmeasure.org',
+            code: 'kg'
+          }
+        });
+      }
+    }
 
     claimResource.supportingInfo = supportingInfoList;
 

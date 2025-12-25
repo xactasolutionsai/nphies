@@ -141,6 +141,17 @@ export default function PriorAuthorizationForm() {
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     is_newborn: false, // Flag indicating if this is a newborn patient authorization
     birth_weight: '', // Birth weight in grams (required when is_newborn is true)
+    mother_patient_id: '', // Mother patient ID (for newborn requests)
+    mother_patient_mode: 'existing', // 'existing' | 'manual' - mode for mother patient input
+    mother_patient_data: { // Mother patient data (when entering manually)
+      name: '',
+      identifier: '',
+      identifierType: 'iqama',
+      gender: '',
+      birthDate: '',
+      phone: '',
+      email: ''
+    },
     // Transfer extension fields (per NPHIES Test Case 9)
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-transfer.html
     is_transfer: false, // Flag indicating if this is a transfer/referral request
@@ -1622,6 +1633,24 @@ export default function PriorAuthorizationForm() {
         dataToSave.related_claim_identifier = followUpData.related_claim_identifier;
         dataToSave.related_auth_id = followUpData.related_auth_id;
       }
+      
+      // Handle mother patient data for newborn requests
+      if (dataToSave.is_newborn) {
+        if (dataToSave.mother_patient_mode === 'existing' && dataToSave.mother_patient_id) {
+          // Use existing mother patient ID
+          dataToSave.mother_patient_id = dataToSave.mother_patient_id;
+          delete dataToSave.mother_patient_data; // Don't send data if using existing patient
+        } else if (dataToSave.mother_patient_mode === 'manual' && dataToSave.mother_patient_data) {
+          // Send mother patient data for upsert
+          dataToSave.mother_patient_data = dataToSave.mother_patient_data;
+          delete dataToSave.mother_patient_id; // Don't send ID if entering manually
+        }
+      } else {
+        // Not a newborn request - remove mother patient fields
+        delete dataToSave.mother_patient_id;
+        delete dataToSave.mother_patient_data;
+        delete dataToSave.mother_patient_mode;
+      }
 
       let response;
       if (isEditMode) {
@@ -1721,6 +1750,24 @@ export default function PriorAuthorizationForm() {
         dataToSave.is_update = followUpData.is_update;
         dataToSave.related_claim_identifier = followUpData.related_claim_identifier;
         dataToSave.related_auth_id = followUpData.related_auth_id;
+      }
+      
+      // Handle mother patient data for newborn requests
+      if (dataToSave.is_newborn) {
+        if (dataToSave.mother_patient_mode === 'existing' && dataToSave.mother_patient_id) {
+          // Use existing mother patient ID
+          dataToSave.mother_patient_id = dataToSave.mother_patient_id;
+          delete dataToSave.mother_patient_data; // Don't send data if using existing patient
+        } else if (dataToSave.mother_patient_mode === 'manual' && dataToSave.mother_patient_data) {
+          // Send mother patient data for upsert
+          dataToSave.mother_patient_data = dataToSave.mother_patient_data;
+          delete dataToSave.mother_patient_id; // Don't send ID if entering manually
+        }
+      } else {
+        // Not a newborn request - remove mother patient fields
+        delete dataToSave.mother_patient_id;
+        delete dataToSave.mother_patient_data;
+        delete dataToSave.mother_patient_mode;
       }
 
       // Save first

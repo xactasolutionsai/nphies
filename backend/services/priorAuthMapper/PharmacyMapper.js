@@ -101,7 +101,7 @@ class PharmacyMapper extends BaseMapper {
    * - NO careTeam in Claim
    */
   buildPriorAuthRequestBundle(data) {
-    const { priorAuth, patient, provider, insurer, coverage, policyHolder } = data;
+    const { priorAuth, patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -109,13 +109,30 @@ class PharmacyMapper extends BaseMapper {
       provider: provider.provider_id || this.generateId(),
       insurer: insurer.insurer_id || this.generateId(),
       coverage: coverage?.id || coverage?.coverage_id || this.generateId(),
-      policyHolder: policyHolder?.id || this.generateId()
+      policyHolder: policyHolder?.id || this.generateId(),
+      motherPatient: (priorAuth.is_newborn && motherPatient) ? (motherPatient.patient_id || this.generateId()) : null
     };
 
-    const patientResource = this.buildPatientResourceWithId(patient, bundleResourceIds.patient);
+    // For newborn cases, patient is the newborn, and we also need mother patient resource
+    const newbornPatientResource = this.buildPatientResourceWithId(patient, bundleResourceIds.patient);
     const providerResource = this.buildProviderOrganizationWithId(provider, bundleResourceIds.provider);
     const insurerResource = this.buildInsurerOrganizationWithId(insurer, bundleResourceIds.insurer);
-    const coverageResource = this.buildCoverageResourceWithId(coverage, patient, insurer, policyHolder, bundleResourceIds);
+    
+    // Build mother patient resource if provided (for newborn requests)
+    const motherPatientResource = (priorAuth.is_newborn && motherPatient && bundleResourceIds.motherPatient) 
+      ? this.buildPatientResourceWithId(motherPatient, bundleResourceIds.motherPatient) 
+      : null;
+    
+    // For newborn cases, pass motherPatient and motherPatientId to buildCoverageResourceWithId
+    const coverageResource = this.buildCoverageResourceWithId(
+      coverage, 
+      patient, 
+      insurer, 
+      policyHolder, 
+      bundleResourceIds,
+      motherPatient,
+      bundleResourceIds.motherPatient
+    );
     
     // Build Claim resource (no encounter, no practitioner per NPHIES example)
     const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, null, null, bundleResourceIds);
@@ -130,13 +147,15 @@ class PharmacyMapper extends BaseMapper {
     }
 
     // Bundle entries per NPHIES example - NO Encounter, NO Practitioner
+    // For newborn cases, add both newborn and mother patient resources
     const entries = [
       messageHeader,
       claimResource,
       coverageResource,
       providerResource,
       insurerResource,
-      patientResource,
+      newbornPatientResource, // Newborn patient
+      ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present
       ...binaryResources
     ];
 

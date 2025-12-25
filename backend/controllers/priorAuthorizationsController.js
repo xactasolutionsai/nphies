@@ -4,6 +4,7 @@ import { validationSchemas } from '../models/schema.js';
 import priorAuthMapper, { getMapper } from '../services/priorAuthMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
 import communicationService from '../services/communicationService.js';
+import nphiesDataService from '../services/nphiesDataService.js';
 import CommunicationMapper from '../services/communicationMapper.js';
 
 class PriorAuthorizationsController extends BaseController {
@@ -342,6 +343,31 @@ class PriorAuthorizationsController extends BaseController {
         value.status = 'draft';
       }
 
+      // Handle mother patient data for newborn requests
+      // If mother_patient_data is provided, upsert the mother patient first
+      if (value.is_newborn && value.mother_patient_data && !value.mother_patient_id) {
+        try {
+          const motherPatientData = value.mother_patient_data;
+          const motherPatient = await nphiesDataService.upsertPatient({
+            name: motherPatientData.name,
+            identifier: motherPatientData.identifier,
+            identifierType: motherPatientData.identifierType || 'iqama',
+            gender: motherPatientData.gender,
+            birthDate: motherPatientData.birthDate,
+            phone: motherPatientData.phone,
+            email: motherPatientData.email,
+            isNewborn: false // Mother is not a newborn
+          });
+          value.mother_patient_id = motherPatient.patient_id;
+          console.log(`[createPriorAuth] Upserted mother patient: ${motherPatient.name}`);
+        } catch (error) {
+          console.error('[createPriorAuth] Error upserting mother patient:', error);
+          return res.status(400).json({ error: `Failed to process mother patient: ${error.message}` });
+        }
+      }
+      // Remove mother_patient_data from value (we only store mother_patient_id)
+      delete value.mother_patient_data;
+
       // Prepare JSONB fields for PostgreSQL (stringify objects/arrays)
       this.prepareJsonbFields(value);
 
@@ -434,6 +460,30 @@ class PriorAuthorizationsController extends BaseController {
           message: errors[0].message
         });
       }
+
+      // Handle mother patient data for newborn requests (same logic as create)
+      if (value.is_newborn && value.mother_patient_data && !value.mother_patient_id) {
+        try {
+          const motherPatientData = value.mother_patient_data;
+          const motherPatient = await nphiesDataService.upsertPatient({
+            name: motherPatientData.name,
+            identifier: motherPatientData.identifier,
+            identifierType: motherPatientData.identifierType || 'iqama',
+            gender: motherPatientData.gender,
+            birthDate: motherPatientData.birthDate,
+            phone: motherPatientData.phone,
+            email: motherPatientData.email,
+            isNewborn: false // Mother is not a newborn
+          });
+          value.mother_patient_id = motherPatient.patient_id;
+          console.log(`[updatePriorAuth] Upserted mother patient: ${motherPatient.name}`);
+        } catch (error) {
+          console.error('[updatePriorAuth] Error upserting mother patient:', error);
+          return res.status(400).json({ error: `Failed to process mother patient: ${error.message}` });
+        }
+      }
+      // Remove mother_patient_data from value (we only store mother_patient_id)
+      delete value.mother_patient_data;
 
       // Prepare JSONB fields for PostgreSQL (stringify objects/arrays)
       this.prepareJsonbFields(value);
@@ -566,6 +616,18 @@ class PriorAuthorizationsController extends BaseController {
         priorAuth.coverage_id
       );
 
+      // Fetch mother patient if this is a newborn request
+      let motherPatient = null;
+      if (priorAuth.is_newborn && priorAuth.mother_patient_id) {
+        const motherResult = await query('SELECT * FROM patients WHERE patient_id = $1', [priorAuth.mother_patient_id]);
+        if (motherResult.rows.length > 0) {
+          motherPatient = motherResult.rows[0];
+          console.log(`[sendToNphies] Using mother patient: ${motherPatient.name}`);
+        } else {
+          console.warn(`[sendToNphies] Mother patient not found for ID: ${priorAuth.mother_patient_id}`);
+        }
+      }
+
       // For resubmission, ensure related_claim_identifier is set to the original request_number
       // This is used to reference the original Claim using its original identifier (provider system + request_number)
       if (priorAuth.is_resubmission && priorAuth.related_auth_id && !priorAuth.related_claim_identifier) {
@@ -599,7 +661,8 @@ class PriorAuthorizationsController extends BaseController {
         provider,
         insurer,
         coverage,
-        policyHolder: null // policyHolder can reference the patient if self, or a RelatedPerson/Organization
+        policyHolder: null, // policyHolder can reference the patient if self, or a RelatedPerson/Organization
+        motherPatient: motherPatient
       });
 
       // Generate request ID
@@ -1594,6 +1657,15 @@ class PriorAuthorizationsController extends BaseController {
         priorAuth.coverage_id
       );
 
+      // Fetch mother patient if this is a newborn request
+      let motherPatient = null;
+      if (priorAuth.is_newborn && priorAuth.mother_patient_id) {
+        const motherResult = await query('SELECT * FROM patients WHERE patient_id = $1', [priorAuth.mother_patient_id]);
+        if (motherResult.rows.length > 0) {
+          motherPatient = motherResult.rows[0];
+        }
+      }
+
       // Build FHIR bundle
       const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
         priorAuth,
@@ -1601,7 +1673,8 @@ class PriorAuthorizationsController extends BaseController {
         provider,
         insurer,
         coverage,
-        policyHolder: null
+        policyHolder: null,
+        motherPatient: motherPatient
       });
 
       res.json({ data: bundle });
@@ -1738,7 +1811,8 @@ class PriorAuthorizationsController extends BaseController {
         provider,
         insurer,
         coverage,
-        policyHolder: null
+        policyHolder: null,
+        motherPatient: motherPatient
       });
 
       // If we have an existing record ID, save the request bundle to the database

@@ -550,6 +550,9 @@ class EligibilityController extends BaseController {
         // Patient - either ID or manual data
         patientId,
         patientData,
+        // Mother Patient - either ID or manual data (for newborn requests)
+        motherPatientId,
+        motherPatientData,
         // Provider - either ID or manual data
         providerId,
         providerData,
@@ -716,6 +719,45 @@ class EligibilityController extends BaseController {
         });
       }
 
+      // --- 5. Resolve Mother Patient (for newborn requests) ---
+      let motherPatient = null;
+      if (isNewborn) {
+        if (motherPatientId) {
+          // Fetch existing mother patient
+          const motherResult = await query(
+            'SELECT * FROM patients WHERE patient_id = $1',
+            [motherPatientId]
+          );
+          if (motherResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Mother patient not found' });
+          }
+          motherPatient = motherResult.rows[0];
+          console.log(`[NPHIES Dynamic] Using existing mother patient: ${motherPatient.name}`);
+        } else if (motherPatientData) {
+          // UPSERT mother patient from form data
+          if (!motherPatientData.identifier) {
+            return res.status(400).json({ success: false, error: 'Mother patient identifier is required for newborn requests' });
+          }
+          // Ensure identifier type is iqama for mother (per NPHIES example)
+          motherPatient = await nphiesDataService.upsertPatient({
+            name: motherPatientData.name,
+            identifier: motherPatientData.identifier,
+            identifierType: motherPatientData.identifierType || 'iqama',
+            gender: motherPatientData.gender,
+            birthDate: motherPatientData.birthDate,
+            phone: motherPatientData.phone,
+            email: motherPatientData.email,
+            isNewborn: false // Mother is not a newborn
+          });
+          console.log(`[NPHIES Dynamic] Upserted mother patient: ${motherPatient.name}`);
+        } else {
+          return res.status(400).json({
+            success: false,
+            error: 'Mother patient information is required when isNewborn is true. Provide either motherPatientId or motherPatientData.'
+          });
+        }
+      }
+
       console.log('[NPHIES Dynamic] Building eligibility request bundle...');
       if (isNewborn) console.log('[NPHIES Dynamic] Newborn extension enabled');
       if (isTransfer) console.log('[NPHIES Dynamic] Transfer extension enabled');
@@ -730,7 +772,8 @@ class EligibilityController extends BaseController {
         purpose: purpose || ['benefits', 'validation'],
         servicedDate: servicedDate || new Date(),
         isNewborn: Boolean(isNewborn),
-        isTransfer: Boolean(isTransfer)
+        isTransfer: Boolean(isTransfer),
+        motherPatient: motherPatient
       });
 
       console.log('[NPHIES Dynamic] Sending request to NPHIES API...');
@@ -785,6 +828,7 @@ class EligibilityController extends BaseController {
         provider,
         insurer: updatedEntities.insurer || insurer,
         coverage: updatedEntities.coverage || coverage,
+        motherPatient: isNewborn ? motherPatient : null,
         requestBundle,
         responseBundle: nphiesResponse.data,
         parsedResponse,

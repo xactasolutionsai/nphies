@@ -545,6 +545,8 @@ class NphiesDataService {
     providerId,     // Direct ID alternative
     insurerId,      // Direct ID alternative
     coverageId,     // Direct ID alternative
+    motherPatient,  // Object with patient_id (for newborn requests)
+    motherPatientId, // Direct mother patient ID alternative
     purpose,
     servicedDate,
     isTransfer,
@@ -558,17 +560,18 @@ class NphiesDataService {
     const finalProviderId = provider?.provider_id || providerId;
     const finalInsurerId = insurer?.insurer_id || insurerId;
     const finalCoverageId = coverage?.coverage_id || coverageId || null;
+    const finalMotherPatientId = motherPatient?.patient_id || motherPatientId || null;
 
     const insertQuery = `
       INSERT INTO eligibility (
-        patient_id, provider_id, insurer_id, coverage_id,
+        patient_id, provider_id, insurer_id, coverage_id, mother_patient_id,
         purpose, serviced_date, status, outcome, inforce,
         nphies_request_id, nphies_response_id,
         is_transfer, site_eligibility,
         raw_request, raw_response, benefits, error_codes,
         request_date, response_date
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW()
       )
       RETURNING eligibility_id
     `;
@@ -578,6 +581,7 @@ class NphiesDataService {
       finalProviderId,
       finalInsurerId,
       finalCoverageId,
+      finalMotherPatientId,
       Array.isArray(purpose) ? purpose.join(',') : purpose,
       servicedDate || new Date(),
       parsedResponse?.inforce ? 'eligible' : 'not_eligible',

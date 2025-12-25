@@ -169,3 +169,8 @@ generated/
 debug/
 *.debug
 
+# =====================================================
+# VendorsCertificationProgram
+# =====================================================
+VendorsCertificationProgram/
+VendorsCertificationProgram/*

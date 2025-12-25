@@ -241,11 +241,16 @@ class ClaimSubmissionsController extends BaseController {
         eligibility_ref: pa.eligibility_ref,
         eligibility_offline_ref: pa.eligibility_offline_ref,
         eligibility_offline_date: pa.eligibility_offline_date,
+        mother_patient_id: pa.mother_patient_id, // Copy mother_patient_id from prior auth for newborn claims
         practice_code: pa.practice_code,
         priority: priority || pa.priority || 'normal', // Use provided priority, fallback to PA priority, then 'normal'
         total_amount: pa.approved_amount || pa.total_amount,
         currency: pa.currency,
-        service_date: serviceDate
+        service_date: serviceDate,
+        // Copy newborn extension fields from prior authorization
+        is_newborn: pa.is_newborn || false,
+        birth_weight: pa.birth_weight || null,
+        mother_patient_id: pa.mother_patient_id || null // Copy mother_patient_id from prior auth for newborn claims
       };
 
       const columns = Object.keys(claimData).filter(key => claimData[key] !== undefined && claimData[key] !== null);
@@ -361,7 +366,16 @@ class ClaimSubmissionsController extends BaseController {
       const insurer = insurerResult.rows[0];
       const coverage = await this.getCoverageData(claim.patient_id, claim.insurer_id, claim.coverage_id);
 
-      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, policyHolder: null });
+      // Fetch mother patient if this is a newborn claim
+      let motherPatient = null;
+      if (claim.is_newborn && claim.mother_patient_id) {
+        const motherResult = await query('SELECT * FROM patients WHERE patient_id = $1', [claim.mother_patient_id]);
+        if (motherResult.rows.length > 0) {
+          motherPatient = motherResult.rows[0];
+        }
+      }
+
+      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, policyHolder: null, motherPatient });
       const nphiesRequestId = `clm-req-${Date.now()}`;
 
       await query(`UPDATE claim_submissions SET status = 'pending', nphies_request_id = $1, request_bundle = $2, request_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $3`, [nphiesRequestId, JSON.stringify(bundle), id]);
@@ -466,7 +480,7 @@ class ClaimSubmissionsController extends BaseController {
         service_type: formData.service_type
       };
 
-      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, policyHolder: null });
+      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, policyHolder: null, motherPatient });
       res.json({
         success: true,
         entities: { patient: { name: patient.name, identifier: patient.identifier }, provider: { name: provider.provider_name, nphiesId: provider.nphies_id }, insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id } },

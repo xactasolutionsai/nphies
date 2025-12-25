@@ -663,11 +663,28 @@ class BaseMapper {
 
   /**
    * Build Coverage resource with consistent IDs
+   * Supports newborn requests where subscriber = mother, beneficiary = newborn
+   * @param {Object} coverage - Coverage data
+   * @param {Object} patient - Patient data (newborn patient in newborn cases)
+   * @param {Object} insurer - Insurer data
+   * @param {Object} policyHolder - PolicyHolder Organization data (optional)
+   * @param {Object} bundleResourceIds - Resource IDs for bundle
+   * @param {Object} motherPatient - Mother patient data (optional, for newborn requests)
+   * @param {String} motherPatientId - Mother patient ID in bundle (optional, for newborn requests)
    */
-  buildCoverageResourceWithId(coverage, patient, insurer, policyHolder, bundleResourceIds) {
+  buildCoverageResourceWithId(coverage, patient, insurer, policyHolder, bundleResourceIds, motherPatient = null, motherPatientId = null) {
     const coverageId = bundleResourceIds.coverage;
     const patientId = bundleResourceIds.patient;
     const insurerId = bundleResourceIds.insurer;
+
+    // For newborn cases: subscriber = mother, beneficiary = newborn
+    // Per NPHIES example: Newborn Elig Request.json
+    const subscriberPatientId = (motherPatient && motherPatientId) ? motherPatientId : patientId;
+    const beneficiaryPatientId = patientId; // Always the newborn/primary patient
+    const relationshipCode = (motherPatient && motherPatientId) ? 'child' : (coverage?.relationship || 'self');
+    const policyHolderPatientId = (motherPatient && motherPatientId && !policyHolder) 
+      ? motherPatientId 
+      : (policyHolder?.id || patientId);
 
     const coverageResource = {
       resourceType: 'Coverage',
@@ -692,20 +709,20 @@ class BaseMapper {
         ]
       },
       policyHolder: {
-        reference: `Patient/${policyHolder?.id || patientId}`
+        reference: `Patient/${policyHolderPatientId}`
       },
       subscriber: {
-        reference: `Patient/${patientId}`
+        reference: `Patient/${subscriberPatientId}`
       },
       beneficiary: {
-        reference: `Patient/${patientId}`
+        reference: `Patient/${beneficiaryPatientId}`
       },
       relationship: {
         coding: [
           {
             system: 'http://terminology.hl7.org/CodeSystem/subscriber-relationship',
-            code: coverage?.relationship || 'self',
-            display: this.getRelationshipDisplay(coverage?.relationship || 'self')
+            code: relationshipCode,
+            display: this.getRelationshipDisplay(relationshipCode)
           }
         ]
       },
