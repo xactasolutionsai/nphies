@@ -4,12 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import DataTable from '@/components/DataTable';
+import Select from 'react-select';
 import api, { extractErrorMessage } from '@/services/api';
 import { 
   FileText, Edit, Trash2, Eye, Send, RefreshCw, 
   XCircle, Clock, CheckCircle, AlertCircle,
-  Filter, Search, Copy, Receipt, DollarSign
+  Filter, Search, Copy, Receipt, DollarSign, X, AlertTriangle, Plus
 } from 'lucide-react';
 
 // Claim type display helper
@@ -36,6 +38,38 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString();
 };
 
+// Custom Modal Component
+const Modal = ({ open, onClose, title, description, children, footer }) => {
+  if (!open) return null;
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose}></div>
+      <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden">
+        <div className="p-6 border-b">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">{title}</h2>
+              {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+        <div className="p-6 overflow-auto max-h-[60vh]">
+          {children}
+        </div>
+        {footer && (
+          <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function ClaimSubmissionsList() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -52,10 +86,36 @@ export default function ClaimSubmissionsList() {
     status: searchParams.get('status') || '',
     claim_type: searchParams.get('claim_type') || ''
   });
+  
+  // Test Claim Modal State
+  const [showTestClaimModal, setShowTestClaimModal] = useState(false);
+  const [testClaimForm, setTestClaimForm] = useState({
+    claim_type: 'professional',
+    patient_id: '',
+    provider_id: '',
+    insurer_id: '',
+    priority: 'normal',
+    encounter_class: 'ambulatory',
+    service_date: new Date().toISOString().split('T')[0],
+    total_amount: '',
+    currency: 'SAR'
+  });
+  const [patients, setPatients] = useState([]);
+  const [providers, setProviders] = useState([]);
+  const [insurers, setInsurers] = useState([]);
+  const [creatingTestClaim, setCreatingTestClaim] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
 
   useEffect(() => {
     loadClaims();
   }, [pagination.page, filters.status, filters.claim_type]);
+
+  // Load reference data when modal opens
+  useEffect(() => {
+    if (showTestClaimModal) {
+      loadReferenceData();
+    }
+  }, [showTestClaimModal]);
 
   const loadClaims = async () => {
     try {
@@ -155,6 +215,177 @@ export default function ClaimSubmissionsList() {
       } finally {
         setLoading(false);
       }
+    }
+  };
+
+  const loadReferenceData = async () => {
+    try {
+      const [patientsRes, providersRes, insurersRes] = await Promise.all([
+        api.getPatients({ limit: 1000 }),
+        api.getProviders({ limit: 1000 }),
+        api.getInsurers({ limit: 1000 })
+      ]);
+      setPatients(patientsRes?.data || []);
+      setProviders(providersRes?.data || []);
+      setInsurers(insurersRes?.data || []);
+      
+      // Auto-select patient with Iqama 2333333333 for Test Case 5
+      const testPatient = (patientsRes?.data || []).find(p => p.identifier === '2333333333');
+      if (testPatient) {
+        setTestClaimForm(prev => ({ ...prev, patient_id: testPatient.patient_id }));
+      }
+    } catch (error) {
+      console.error('Error loading reference data:', error);
+    }
+  };
+
+  const handleTestClaimFormChange = (field, value) => {
+    setTestClaimForm(prev => ({ ...prev, [field]: value }));
+    // Clear error when user changes field
+    if (formErrors[field]) {
+      setFormErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
+    
+    // Auto-set encounter class based on claim type
+    if (field === 'claim_type') {
+      const defaultEncounterClasses = {
+        professional: 'ambulatory',
+        institutional: 'inpatient',
+        pharmacy: 'ambulatory',
+        dental: 'ambulatory',
+        vision: 'ambulatory'
+      };
+      setTestClaimForm(prev => ({ 
+        ...prev, 
+        encounter_class: defaultEncounterClasses[value] || 'ambulatory' 
+      }));
+    }
+  };
+
+  const validateTestClaimForm = () => {
+    const errors = {};
+    if (!testClaimForm.claim_type) errors.claim_type = 'Claim type is required';
+    if (!testClaimForm.patient_id) errors.patient_id = 'Patient is required';
+    if (!testClaimForm.provider_id) errors.provider_id = 'Provider is required';
+    if (!testClaimForm.insurer_id) errors.insurer_id = 'Insurer is required';
+    if (!testClaimForm.priority) errors.priority = 'Priority is required';
+    if (!testClaimForm.service_date) errors.service_date = 'Service date is required';
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const generateMinimalItems = () => {
+    // Generate minimal item structure for test claim
+    const items = [{
+      sequence: 1,
+      product_or_service_code: '99213', // Common office visit CPT code
+      product_or_service_system: 'http://www.ama-assn.org/go/cpt',
+      product_or_service_display: 'Office or other outpatient visit',
+      quantity: 1,
+      unit_price: parseFloat(testClaimForm.total_amount) || 100,
+      net_amount: parseFloat(testClaimForm.total_amount) || 100,
+      currency: testClaimForm.currency || 'SAR',
+      serviced_date: testClaimForm.service_date
+    }];
+    return items;
+  };
+
+  const generateMinimalDiagnoses = () => {
+    // Generate minimal diagnosis structure
+    const diagnoses = [{
+      sequence: 1,
+      diagnosis_code: 'Z00.00',
+      diagnosis_system: 'http://hl7.org/fhir/sid/icd-10',
+      diagnosis_display: 'Encounter for general adult medical examination without abnormal findings'
+    }];
+    return diagnoses;
+  };
+
+  const handleCreateTestClaim = async (sendToNphies = false) => {
+    if (!validateTestClaimForm()) {
+      return;
+    }
+
+    try {
+      setCreatingTestClaim(true);
+      
+      // Prepare claim data - explicitly exclude references
+      const claimData = {
+        claim_type: testClaimForm.claim_type,
+        patient_id: testClaimForm.patient_id,
+        provider_id: testClaimForm.provider_id,
+        insurer_id: testClaimForm.insurer_id,
+        priority: testClaimForm.priority || 'normal', // Test Case 5 requirement
+        encounter_class: testClaimForm.encounter_class,
+        service_date: testClaimForm.service_date,
+        total_amount: testClaimForm.total_amount ? parseFloat(testClaimForm.total_amount) : 100,
+        currency: testClaimForm.currency || 'SAR',
+        status: 'draft',
+        // Explicitly exclude prior auth and eligibility references
+        pre_auth_ref: null,
+        prior_auth_id: null,
+        eligibility_ref: null,
+        eligibility_offline_ref: null,
+        // Auto-generate minimal required data
+        items: generateMinimalItems(),
+        diagnoses: generateMinimalDiagnoses(),
+        supporting_info: []
+      };
+
+      const response = await api.createClaimSubmission(claimData);
+      const claimId = response.data?.id || response.id;
+
+      if (!claimId) {
+        alert('Failed to create test claim. Please try again.');
+        return;
+      }
+
+      if (sendToNphies) {
+        // Send to NPHIES immediately
+        try {
+          const sendResponse = await api.sendClaimSubmissionToNphies(claimId);
+          if (sendResponse.success) {
+            alert('Test claim created and sent to NPHIES. Expected to receive error response (Test Case 5).');
+          } else {
+            alert(`Test claim created but failed to send to NPHIES: ${sendResponse.error?.message || 'Unknown error'}`);
+          }
+        } catch (sendError) {
+          console.error('Error sending to NPHIES:', sendError);
+          alert(`Test claim created but failed to send to NPHIES: ${extractErrorMessage(sendError)}`);
+        }
+      } else {
+        alert('Test claim created successfully. Navigate to claim details to send to NPHIES.');
+      }
+
+      // Close modal and reset form
+      setShowTestClaimModal(false);
+      setTestClaimForm({
+        claim_type: 'professional',
+        patient_id: '',
+        provider_id: '',
+        insurer_id: '',
+        priority: 'normal',
+        encounter_class: 'ambulatory',
+        service_date: new Date().toISOString().split('T')[0],
+        total_amount: '',
+        currency: 'SAR'
+      });
+      setFormErrors({});
+
+      // Reload claims list
+      await loadClaims();
+
+      // Navigate to claim details
+      navigate(`/claim-submissions/${claimId}`);
+    } catch (error) {
+      console.error('Error creating test claim:', error);
+      alert(`Error: ${extractErrorMessage(error)}`);
+    } finally {
+      setCreatingTestClaim(false);
     }
   };
 
@@ -389,11 +620,21 @@ export default function ClaimSubmissionsList() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg border border-blue-200">
-              <FileText className="h-5 w-5 text-blue-600" />
-              <span className="text-sm text-blue-700">
-                Claims are created from approved Prior Authorizations
-              </span>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setShowTestClaimModal(true)}
+                variant="outline"
+                className="border-orange-500 text-orange-600 hover:bg-orange-50"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Test Claim
+              </Button>
+              <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg border border-blue-200">
+                <FileText className="h-5 w-5 text-blue-600" />
+                <span className="text-sm text-blue-700">
+                  Claims are created from approved Prior Authorizations
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -577,6 +818,277 @@ export default function ClaimSubmissionsList() {
           )}
         </CardContent>
       </Card>
+
+      {/* Create Test Claim Modal */}
+      <Modal
+        open={showTestClaimModal}
+        onClose={() => {
+          setShowTestClaimModal(false);
+          setFormErrors({});
+        }}
+        title="Create Test Claim (Without References)"
+        description="Create a claim without prior authorization or eligibility references for testing NPHIES error responses (Test Case 5)"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowTestClaimModal(false);
+                setFormErrors({});
+              }}
+              disabled={creatingTestClaim}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleCreateTestClaim(false)}
+              disabled={creatingTestClaim}
+              variant="outline"
+              className="border-blue-500 text-blue-600 hover:bg-blue-50"
+            >
+              {creatingTestClaim ? 'Creating...' : 'Create Draft'}
+            </Button>
+            <Button
+              onClick={() => handleCreateTestClaim(true)}
+              disabled={creatingTestClaim}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              {creatingTestClaim ? 'Creating & Sending...' : 'Create & Send to NPHIES'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-6">
+          {/* Warning Message */}
+          <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-orange-800">
+                  Test Claim - Expected Error Response
+                </p>
+                <p className="text-sm text-orange-700 mt-1">
+                  This claim will be submitted without prior authorization or eligibility references. 
+                  According to Test Case 5, NPHIES should return an error response when a claim is submitted 
+                  without any references. Priority must be set to "normal" and use member Iqama 2333333333 for testing.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Claim Type */}
+            <div className="space-y-2">
+              <Label htmlFor="claim_type">Claim Type *</Label>
+              <select
+                id="claim_type"
+                value={testClaimForm.claim_type}
+                onChange={(e) => handleTestClaimFormChange('claim_type', e.target.value)}
+                className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30 ${
+                  formErrors.claim_type ? 'border-red-300' : 'border-gray-200'
+                }`}
+              >
+                <option value="professional">Professional</option>
+                <option value="institutional">Institutional</option>
+                <option value="pharmacy">Pharmacy</option>
+                <option value="dental">Dental</option>
+                <option value="vision">Vision</option>
+              </select>
+              {formErrors.claim_type && (
+                <p className="text-xs text-red-600">{formErrors.claim_type}</p>
+              )}
+            </div>
+
+            {/* Priority */}
+            <div className="space-y-2">
+              <Label htmlFor="priority">Priority *</Label>
+              <select
+                id="priority"
+                value={testClaimForm.priority}
+                onChange={(e) => handleTestClaimFormChange('priority', e.target.value)}
+                className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30 ${
+                  formErrors.priority ? 'border-red-300' : 'border-gray-200'
+                }`}
+              >
+                <option value="normal">Normal (Test Case 5)</option>
+                <option value="urgent">Urgent</option>
+                <option value="asap">ASAP</option>
+              </select>
+              {formErrors.priority && (
+                <p className="text-xs text-red-600">{formErrors.priority}</p>
+              )}
+            </div>
+
+            {/* Patient */}
+            <div className="space-y-2">
+              <Label htmlFor="patient">Patient * (Use Iqama 2333333333 for Test Case 5)</Label>
+              <Select
+                value={patients.map(p => ({ 
+                  value: p.patient_id, 
+                  label: `${p.name}${p.identifier ? ` (${p.identifier})` : ''}` 
+                })).find(opt => opt.value === testClaimForm.patient_id)}
+                onChange={(option) => handleTestClaimFormChange('patient_id', option?.value || '')}
+                options={patients.map(p => ({ 
+                  value: p.patient_id, 
+                  label: `${p.name}${p.identifier ? ` (${p.identifier})` : ''}` 
+                }))}
+                placeholder="Search and select patient..."
+                isClearable
+                isSearchable
+                menuPortalTarget={document.body}
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    borderColor: formErrors.patient_id ? '#fca5a5' : base.borderColor,
+                    '&:hover': {
+                      borderColor: formErrors.patient_id ? '#fca5a5' : base.borderColor
+                    }
+                  }),
+                  menuPortal: (base) => ({ ...base, zIndex: 9999 })
+                }}
+              />
+              {formErrors.patient_id && (
+                <p className="text-xs text-red-600">{formErrors.patient_id}</p>
+              )}
+            </div>
+
+            {/* Provider */}
+            <div className="space-y-2">
+              <Label htmlFor="provider">Provider *</Label>
+              <Select
+                value={providers.map(p => ({ 
+                  value: p.provider_id, 
+                  label: `${p.provider_name || p.name}${p.nphies_id ? ` (${p.nphies_id})` : ''}` 
+                })).find(opt => opt.value === testClaimForm.provider_id)}
+                onChange={(option) => handleTestClaimFormChange('provider_id', option?.value || '')}
+                options={providers.map(p => ({ 
+                  value: p.provider_id, 
+                  label: `${p.provider_name || p.name}${p.nphies_id ? ` (${p.nphies_id})` : ''}` 
+                }))}
+                placeholder="Search and select provider..."
+                isClearable
+                isSearchable
+                menuPortalTarget={document.body}
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    borderColor: formErrors.provider_id ? '#fca5a5' : base.borderColor,
+                    '&:hover': {
+                      borderColor: formErrors.provider_id ? '#fca5a5' : base.borderColor
+                    }
+                  }),
+                  menuPortal: (base) => ({ ...base, zIndex: 9999 })
+                }}
+              />
+              {formErrors.provider_id && (
+                <p className="text-xs text-red-600">{formErrors.provider_id}</p>
+              )}
+            </div>
+
+            {/* Insurer */}
+            <div className="space-y-2">
+              <Label htmlFor="insurer">Insurer *</Label>
+              <Select
+                value={insurers.map(i => ({ 
+                  value: i.insurer_id, 
+                  label: `${i.insurer_name || i.name}${i.nphies_id ? ` (${i.nphies_id})` : ''}` 
+                })).find(opt => opt.value === testClaimForm.insurer_id)}
+                onChange={(option) => handleTestClaimFormChange('insurer_id', option?.value || '')}
+                options={insurers.map(i => ({ 
+                  value: i.insurer_id, 
+                  label: `${i.insurer_name || i.name}${i.nphies_id ? ` (${i.nphies_id})` : ''}` 
+                }))}
+                placeholder="Search and select insurer..."
+                isClearable
+                isSearchable
+                menuPortalTarget={document.body}
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    borderColor: formErrors.insurer_id ? '#fca5a5' : base.borderColor,
+                    '&:hover': {
+                      borderColor: formErrors.insurer_id ? '#fca5a5' : base.borderColor
+                    }
+                  }),
+                  menuPortal: (base) => ({ ...base, zIndex: 9999 })
+                }}
+              />
+              {formErrors.insurer_id && (
+                <p className="text-xs text-red-600">{formErrors.insurer_id}</p>
+              )}
+            </div>
+
+            {/* Encounter Class */}
+            <div className="space-y-2">
+              <Label htmlFor="encounter_class">Encounter Class</Label>
+              <select
+                id="encounter_class"
+                value={testClaimForm.encounter_class}
+                onChange={(e) => handleTestClaimFormChange('encounter_class', e.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+              >
+                <option value="inpatient">Inpatient</option>
+                <option value="outpatient">Outpatient</option>
+                <option value="daycase">Day Case</option>
+                <option value="emergency">Emergency</option>
+                <option value="ambulatory">Ambulatory</option>
+                <option value="home">Home</option>
+                <option value="telemedicine">Telemedicine</option>
+              </select>
+            </div>
+
+            {/* Service Date */}
+            <div className="space-y-2">
+              <Label htmlFor="service_date">Service Date *</Label>
+              <Input
+                id="service_date"
+                type="date"
+                value={testClaimForm.service_date}
+                onChange={(e) => handleTestClaimFormChange('service_date', e.target.value)}
+                className={formErrors.service_date ? 'border-red-300' : ''}
+              />
+              {formErrors.service_date && (
+                <p className="text-xs text-red-600">{formErrors.service_date}</p>
+              )}
+            </div>
+
+            {/* Total Amount */}
+            <div className="space-y-2">
+              <Label htmlFor="total_amount">Total Amount (SAR)</Label>
+              <Input
+                id="total_amount"
+                type="number"
+                step="0.01"
+                value={testClaimForm.total_amount}
+                onChange={(e) => handleTestClaimFormChange('total_amount', e.target.value)}
+                placeholder="100.00"
+              />
+            </div>
+
+            {/* Currency */}
+            <div className="space-y-2">
+              <Label htmlFor="currency">Currency</Label>
+              <select
+                id="currency"
+                value={testClaimForm.currency}
+                onChange={(e) => handleTestClaimFormChange('currency', e.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+              >
+                <option value="SAR">SAR</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-600">
+              <strong>Note:</strong> Minimal required data (items, diagnoses) will be auto-generated. 
+              This claim will be created without prior authorization or eligibility references to test NPHIES error handling.
+            </p>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
