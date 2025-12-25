@@ -281,12 +281,12 @@ export default function ClaimSubmissionsList() {
   const generateMinimalItems = () => {
     // Generate minimal item structure for test claim
     // Per NPHIES IB-00030: Use codes from the specified ValueSet
-    // Use NPHIES procedures CodeSystem with valid code
+    // Use NPHIES oral-health-op CodeSystem with valid code
     const items = [{
       sequence: 1,
-      product_or_service_code: '30571-00-00', // Valid NPHIES procedure code
-      product_or_service_system: 'http://nphies.sa/terminology/CodeSystem/procedures',
-      product_or_service_display: 'Appendicectomy',
+      product_or_service_code: '97011-00-00', // Valid NPHIES oral health code
+      product_or_service_system: 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
+      product_or_service_display: 'Comprehensive oral examination',
       quantity: 1,
       unit_price: parseFloat(testClaimForm.total_amount) || 100,
       net_amount: parseFloat(testClaimForm.total_amount) || 100,
