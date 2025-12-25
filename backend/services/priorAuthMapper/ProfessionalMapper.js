@@ -386,8 +386,13 @@ class ProfessionalMapper extends BaseMapper {
     claim.provider = { reference: `Organization/${providerRef}` };
     
     // BV-00905: Claim.facility SHALL be provided when associated with 'Ambulatory' outpatient or 'Virtual' telemedicine encounters
+    // Check encounter resource class code directly (AMB or VR), or fall back to priorAuth.encounter_class
+    const encounterClassCode = encounter?.class?.code;
     const encounterClass = priorAuth.encounter_class || 'ambulatory';
-    if (encounterClass === 'ambulatory' || encounterClass === 'virtual') {
+    const needsFacility = encounterClassCode === 'AMB' || encounterClassCode === 'VR' || 
+                          encounterClass === 'ambulatory' || encounterClass === 'virtual' || encounterClass === 'telemedicine';
+    
+    if (needsFacility) {
       claim.facility = { reference: `Organization/${providerRef}` };
     }
     
