@@ -247,7 +247,7 @@ class BaseMapper {
     const systems = {
       'chief-complaint': 'http://snomed.info/sct',
       'investigation-result': 'http://nphies.sa/terminology/CodeSystem/investigation-result',
-      'onset': 'http://snomed.info/sct',
+      'onset': 'http://hl7.org/fhir/sid/icd-10-am', // BV-00428: Onset requires ICD-10 code for symptoms/illness
       'hospitalized': 'http://snomed.info/sct'
     };
     return systems[category] || 'http://nphies.sa/terminology/CodeSystem/supporting-info-code';

@@ -500,6 +500,99 @@ class ProfessionalMapper extends BaseMapper {
         });
       }
     }
+    
+    // BV-00428: Fix onset supportingInfo - requires ICD-10 code and starting date
+    // IB-00045: Onset code must use ICD-10-AM system, not SNOMED
+    // Per NPHIES: https://portal.nphies.sa/ig/StructureDefinition-exsupportinginfo-onset.profile.json.html
+    // - code (CodeableConcept with ICD-10-AM) is REQUIRED (min: 1)
+    // - timingDate is REQUIRED (min: 1)
+    const principalDiagnosis = priorAuth.diagnoses?.find(d => 
+      (d.diagnosis_type || 'principal').toLowerCase() === 'principal'
+    ) || priorAuth.diagnoses?.[0];
+    
+    supportingInfoList = supportingInfoList.map(info => {
+      const category = (info.category || '').toLowerCase();
+      if (category === 'onset') {
+        // Per NPHIES spec: https://portal.nphies.sa/ig/StructureDefinition-exsupportinginfo-onset.profile.json.html
+        // Extension.extension:code is REQUIRED (min: 1) with binding to diagnosis-icd-10-am ValueSet
+        // Extension.extension:timingDate is REQUIRED (min: 1)
+        
+        // BV-00428: Onset requires ICD-10 code for symptoms/illness
+        // IB-00045: Code must use a value from the specified ValueSet (diagnosis-icd-10-am)
+        const currentCode = (info.code || '').trim();
+        const isInvalidCode = !currentCode || 
+                             currentCode.toLowerCase() === 'onset' || 
+                             currentCode === '' ||
+                             // Check if code system is wrong (should be ICD-10-AM)
+                             (info.code_system && info.code_system !== 'http://hl7.org/fhir/sid/icd-10-am');
+        
+        if (isInvalidCode) {
+          if (principalDiagnosis?.diagnosis_code) {
+            info.code = principalDiagnosis.diagnosis_code;
+            info.code_display = principalDiagnosis.diagnosis_display;
+          } else {
+            // If no diagnosis available, remove onset to avoid validation error
+            // BV-00428 requires both ICD-10 code and date - can't satisfy without diagnosis
+            console.warn('[ProfessionalMapper] Onset supportingInfo requires ICD-10 code but no diagnosis found. Removing onset entry.');
+            return null; // Will be filtered out
+          }
+        }
+        
+        // Force ICD-10-AM system for onset (BV-00428, IB-00045)
+        // Per NPHIES spec: code must bind to http://nphies.sa/terminology/ValueSet/diagnosis-icd-10-am
+        // The ValueSet uses system: http://hl7.org/fhir/sid/icd-10-am
+        info.code_system = 'http://hl7.org/fhir/sid/icd-10-am';
+        
+        // BV-00428: Convert value_string date to timing_date if it looks like a date
+        // Per NPHIES spec: timingDate is REQUIRED (min: 1)
+        if (info.value_string && !info.timing_date && !info.timing_period_start) {
+          // Try to parse date string (format: DD-MM-YYYY or YYYY-MM-DD)
+          const dateStr = info.value_string.trim();
+          let parsedDate = null;
+          
+          // Try DD-MM-YYYY format (e.g., "24-12-2025")
+          const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+          if (ddmmyyyyMatch) {
+            const [, day, month, year] = ddmmyyyyMatch;
+            parsedDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
+          } else {
+            // Try YYYY-MM-DD format
+            parsedDate = new Date(dateStr);
+          }
+          
+          if (parsedDate && !isNaN(parsedDate.getTime())) {
+            info.timing_date = parsedDate;
+            // Remove value_string since we're using timing_date (per NPHIES spec, use timingDate not valueString)
+            delete info.value_string;
+          } else {
+            // If value_string is not a valid date and no timing_date exists, use encounter start date as fallback
+            // Per NPHIES spec: timingDate is REQUIRED
+            if (priorAuth.encounter_start) {
+              const encounterStart = new Date(priorAuth.encounter_start);
+              if (!isNaN(encounterStart.getTime())) {
+                info.timing_date = encounterStart;
+                delete info.value_string;
+              }
+            }
+          }
+        }
+        
+        // Ensure timingDate is present (REQUIRED per NPHIES spec - min: 1)
+        if (!info.timing_date && !info.timing_period_start) {
+          // Use encounter start date or request date as fallback
+          const fallbackDate = priorAuth.encounter_start || priorAuth.request_date || new Date();
+          info.timing_date = new Date(fallbackDate);
+        }
+        
+        // Ensure code is present (REQUIRED per NPHIES spec - min: 1)
+        // Double-check after all processing
+        if (!info.code && principalDiagnosis?.diagnosis_code) {
+          info.code = principalDiagnosis.diagnosis_code;
+          info.code_display = principalDiagnosis.diagnosis_display;
+        }
+      }
+      return info;
+    }).filter(Boolean); // Remove null entries (invalid onset without diagnosis)
 
     // Add birth-weight supportingInfo for newborn patients
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html

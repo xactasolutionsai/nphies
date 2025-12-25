@@ -1,19 +1,19 @@
 {
     "resourceType": "Bundle",
-    "id": "f8bc6864-f782-404d-af7e-c4b231d27519",
+    "id": "2056dd04-561a-41f1-afc4-f3c312054af4",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
     "type": "message",
-    "timestamp": "2025-12-25T14:39:10.076+03:00",
+    "timestamp": "2025-12-25T14:50:34.692+03:00",
     "entry": [
         {
-            "fullUrl": "http://nphies.sa/MessageHeader/178df9fb-4b29-4321-a88a-8a252a83d5db",
+            "fullUrl": "http://nphies.sa/MessageHeader/c770a655-c81c-428c-98dc-69d99ed29977",
             "resource": {
                 "resourceType": "MessageHeader",
-                "id": "178df9fb-4b29-4321-a88a-8a252a83d5db",
+                "id": "c770a655-c81c-428c-98dc-69d99ed29977",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -52,21 +52,21 @@
                     "endpoint": "http://nphies.sa/"
                 },
                 "response": {
-                    "identifier": "14e355d3-ed2e-4d63-ac12-7ff0727f8580",
+                    "identifier": "160946d5-7820-4acb-9835-ef43c3ca9e7f",
                     "code": "ok"
                 },
                 "focus": [
                     {
-                        "reference": "http://nphies.sa/ClaimResponse/964"
+                        "reference": "http://nphies.sa/ClaimResponse/393"
                     }
                 ]
             }
         },
         {
-            "fullUrl": "http://nphies.sa/ClaimResponse/964",
+            "fullUrl": "http://nphies.sa/ClaimResponse/393",
             "resource": {
                 "resourceType": "ClaimResponse",
-                "id": "964",
+                "id": "393",
                 "meta": {
                     "profile": [
                         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
@@ -97,7 +97,7 @@
                 "patient": {
                     "reference": "Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
                 },
-                "created": "2025-12-25T11:34:13.814Z",
+                "created": "2025-12-25T11:50:26.467Z",
                 "insurer": {
                     "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
                 },
@@ -129,12 +129,29 @@
                                     "extension": [
                                         {
                                             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                                            "valueString": "Bundle.entry[1].resource.facility"
+                                            "valueString": "bundle.entry[3].resource.supportingInfo[0].code.coding"
                                         }
                                     ],
                                     "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                    "code": "RE-00005",
-                                    "display": "Claim facility is not referring to a valid resource"
+                                    "code": "IB-00045",
+                                    "display": "Claim supportingInfo code is not using a value from the specified ValueSet"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "extension": [
+                                        {
+                                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                                            "valueString": "bundle.entry[3].resource.supportingInfo[0]"
+                                        }
+                                    ],
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "BV-00428",
+                                    "display": "Supporting information 'onset' requires the starting date and the ICD 10 code for the symptoms / illness"
                                 }
                             ]
                         }
