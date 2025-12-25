@@ -280,11 +280,31 @@ export default function ClaimSubmissionsList() {
 
   const generateMinimalItems = () => {
     // Generate minimal item structure for test claim
+    // Per NPHIES IB-00030: Professional Claims require codes from services ValueSet
+    // Use NPHIES services CodeSystem (not CPT or procedures)
+    // Default to a common professional service code - adjust based on claim_type if needed
+    let serviceCode = '91.03'; // Urinalysis - common lab service
+    let serviceDisplay = 'Urinalysis';
+    let serviceSystem = 'http://nphies.sa/terminology/CodeSystem/services';
+    
+    // Use appropriate codes based on claim type
+    if (testClaimForm.claim_type === 'professional') {
+      // For professional claims, use services CodeSystem
+      serviceCode = '91.03'; // Use a valid NPHIES service code
+      serviceDisplay = 'Urinalysis';
+      serviceSystem = 'http://nphies.sa/terminology/CodeSystem/services';
+    } else if (testClaimForm.claim_type === 'pharmacy') {
+      // Pharmacy claims use medication codes
+      serviceCode = 'MED001'; // Placeholder - should use actual medication code
+      serviceDisplay = 'Medication';
+      serviceSystem = 'http://nphies.sa/terminology/CodeSystem/medication-codes';
+    }
+    
     const items = [{
       sequence: 1,
-      product_or_service_code: '99213', // Common office visit CPT code
-      product_or_service_system: 'http://www.ama-assn.org/go/cpt',
-      product_or_service_display: 'Office or other outpatient visit',
+      product_or_service_code: serviceCode,
+      product_or_service_system: serviceSystem,
+      product_or_service_display: serviceDisplay,
       quantity: 1,
       unit_price: parseFloat(testClaimForm.total_amount) || 100,
       net_amount: parseFloat(testClaimForm.total_amount) || 100,
@@ -296,10 +316,12 @@ export default function ClaimSubmissionsList() {
 
   const generateMinimalDiagnoses = () => {
     // Generate minimal diagnosis structure
+    // Per NPHIES IB-00242: diagnosis system MUST be icd-10-am, NOT icd-10
+    // Use a valid ICD-10-AM code
     const diagnoses = [{
       sequence: 1,
-      diagnosis_code: 'Z00.00',
-      diagnosis_system: 'http://hl7.org/fhir/sid/icd-10',
+      diagnosis_code: 'Z0000', // ICD-10-AM format (without dots)
+      diagnosis_system: 'http://hl7.org/fhir/sid/icd-10-am', // Must be ICD-10-AM, not ICD-10
       diagnosis_display: 'Encounter for general adult medical examination without abnormal findings'
     }];
     return diagnoses;
