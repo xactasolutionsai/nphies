@@ -162,6 +162,8 @@ const ClaimCommunicationPanel = ({
   const [previewJson, setPreviewJson] = useState(null);
   const [previewJsonTitle, setPreviewJsonTitle] = useState('');
   const [jsonCopied, setJsonCopied] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [previewMetadata, setPreviewMetadata] = useState(null);
   
   // Response bundle preview state
   const [showResponsePreview, setShowResponsePreview] = useState(false);
@@ -173,6 +175,7 @@ const ClaimCommunicationPanel = ({
   const [lastPollRequest, setLastPollRequest] = useState(null);
   const [lastPollResponse, setLastPollResponse] = useState(null);
   const [pollRequestJsonCopied, setPollRequestJsonCopied] = useState(false);
+  const [pollPreviewCopied, setPollPreviewCopied] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -453,6 +456,283 @@ const ClaimCommunicationPanel = ({
     setSelectedRequestId(request.id);
     setShowComposeForm(true);
     setExpandedSections(prev => ({ ...prev, compose: true }));
+  };
+
+  // Preview communication bundle from backend
+  const handleShowPreview = async () => {
+    setIsLoadingPreview(true);
+    setError(null);
+    
+    try {
+      const payloads = buildPayloadsForApi();
+      if (payloads.length === 0) {
+        setError('Please enter some text or attach at least one file');
+        setIsLoadingPreview(false);
+        return;
+      }
+
+      const result = await api.previewClaimCommunicationBundle(
+        claimId,
+        payloads,
+        communicationType,
+        communicationType === 'solicited' ? selectedRequestId : null
+      );
+
+      if (result.success && result.bundle) {
+        setPreviewJson(result.bundle);
+        setPreviewMetadata(result.metadata);
+        setPreviewJsonTitle(`${communicationType === 'unsolicited' ? 'Unsolicited' : 'Solicited'} Communication Bundle (Preview)`);
+        setShowJsonPreview(true);
+      } else {
+        setError(result.error || 'Failed to generate preview');
+      }
+    } catch (err) {
+      console.error('Error fetching preview:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to generate preview');
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  // Copy communication JSON to clipboard
+  const copyJsonToClipboard = async () => {
+    setIsLoadingPreview(true);
+    try {
+      const payloads = buildPayloadsForApi();
+      if (payloads.length === 0) {
+        setError('Please enter some text or attach at least one file');
+        setIsLoadingPreview(false);
+        return;
+      }
+
+      const result = await api.previewClaimCommunicationBundle(
+        claimId,
+        payloads,
+        communicationType,
+        communicationType === 'solicited' ? selectedRequestId : null
+      );
+
+      if (result.success && result.bundle) {
+        await navigator.clipboard.writeText(JSON.stringify(result.bundle, null, 2));
+        setJsonCopied(true);
+        setTimeout(() => setJsonCopied(false), 2000);
+      } else {
+        setError(result.error || 'Failed to generate bundle');
+      }
+    } catch (err) {
+      console.error('Error copying JSON:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to copy JSON');
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  // Poll for acknowledgment of a specific communication
+  const handlePollAcknowledgment = async (communicationId) => {
+    setPollingAckFor(communicationId);
+    setAckPollResult(null);
+    setError(null);
+    
+    try {
+      const result = await api.pollClaimCommunicationAcknowledgment(claimId, communicationId);
+      
+      setAckPollResult(result);
+      
+      // Reload communications to get updated acknowledgment status
+      await loadData();
+      
+      // Show success/info message
+      if (result.acknowledgmentFound) {
+        setAckPollResult({
+          ...result,
+          message: `Acknowledgment received: ${result.acknowledgmentStatus}`
+        });
+      } else if (result.alreadyAcknowledged) {
+        setAckPollResult({
+          ...result,
+          message: 'Communication was already acknowledged'
+        });
+      }
+    } catch (err) {
+      console.error('Error polling for acknowledgment:', err);
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to poll for acknowledgment';
+      setError(errorMessage);
+    } finally {
+      setPollingAckFor(null);
+    }
+  };
+
+  // Poll for all queued acknowledgments
+  const handlePollAllAcknowledgments = async () => {
+    setIsPolling(true);
+    setAckPollResult(null);
+    setError(null);
+    
+    try {
+      const result = await api.pollAllClaimQueuedAcknowledgments(claimId);
+      
+      setAckPollResult(result);
+      
+      // Reload communications to get updated acknowledgment status
+      await loadData();
+    } catch (err) {
+      console.error('Error polling for all acknowledgments:', err);
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to poll for acknowledgments';
+      setError(errorMessage);
+    } finally {
+      setIsPolling(false);
+    }
+  };
+
+  // Copy poll JSON to clipboard
+  const handleCopyPollJson = async () => {
+    const pollBundle = generatePollRequestBundle();
+    await navigator.clipboard.writeText(JSON.stringify(pollBundle, null, 2));
+    setPollPreviewCopied(true);
+    setTimeout(() => setPollPreviewCopied(false), 2000);
+  };
+
+  // Generate poll request bundle for copy functionality
+  const generatePollRequestBundle = () => {
+    const bundleId = crypto.randomUUID();
+    const messageHeaderId = crypto.randomUUID();
+    const taskId = `${Date.now()}`;
+    const providerOrgId = `provider-org-${Date.now()}`;
+    const providerId = communications?.[0]?.sender_identifier || '1010613708';
+    const providerName = 'Healthcare Provider';
+    const providerEndpoint = 'http://provider.com/fhir';
+    const nphiesBaseURL = 'http://176.105.150.83';
+    const timestamp = new Date().toISOString();
+    const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
+    const taskFullUrl = `${providerBaseUrl}/Task/${taskId}`;
+    const providerOrgFullUrl = `${providerBaseUrl}/Organization/${providerOrgId}`;
+    const nphiesOrgFullUrl = `${providerBaseUrl}/Organization/NPHIES`;
+
+    return {
+      resourceType: 'Bundle',
+      id: bundleId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
+      },
+      type: 'message',
+      timestamp: timestamp,
+      entry: [
+        {
+          fullUrl: `urn:uuid:${messageHeaderId}`,
+          resource: {
+            resourceType: 'MessageHeader',
+            id: messageHeaderId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
+            },
+            eventCoding: {
+              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
+              code: 'poll-request'
+            },
+            sender: {
+              type: 'Organization',
+              identifier: {
+                system: 'http://nphies.sa/license/provider-license',
+                value: providerId
+              }
+            },
+            source: {
+              endpoint: providerBaseUrl
+            },
+            destination: [{
+              endpoint: `${nphiesBaseURL}/$process-message`,
+              receiver: {
+                type: 'Organization',
+                identifier: {
+                  system: 'http://nphies.sa/license/nphies',
+                  value: 'NPHIES'
+                }
+              }
+            }],
+            focus: [{
+              reference: taskFullUrl
+            }]
+          }
+        },
+        {
+          fullUrl: taskFullUrl,
+          resource: {
+            resourceType: 'Task',
+            id: taskId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
+            },
+            identifier: [{
+              system: `${providerBaseUrl}/identifiers/poll-request`,
+              value: `req_${taskId}`
+            }],
+            status: 'requested',
+            intent: 'order',
+            code: {
+              coding: [{
+                system: 'http://nphies.sa/terminology/CodeSystem/task-code',
+                code: 'poll'
+              }]
+            },
+            requester: {
+              reference: `Organization/${providerOrgId}`
+            },
+            owner: {
+              reference: 'Organization/NPHIES'
+            },
+            authoredOn: timestamp
+          }
+        },
+        {
+          fullUrl: providerOrgFullUrl,
+          resource: {
+            resourceType: 'Organization',
+            id: providerOrgId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
+            },
+            identifier: [{
+              system: 'http://nphies.sa/license/provider-license',
+              value: providerId
+            }],
+            active: true,
+            type: [{
+              coding: [{
+                system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
+                code: 'prov'
+              }]
+            }],
+            name: providerName
+          }
+        },
+        {
+          fullUrl: nphiesOrgFullUrl,
+          resource: {
+            resourceType: 'Organization',
+            id: 'NPHIES',
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
+            },
+            identifier: [{
+              use: 'official',
+              system: 'http://nphies.sa/license/nphies',
+              value: 'NPHIES'
+            }],
+            active: true,
+            name: 'National Program for Health Information Exchange Services'
+          }
+        }
+      ]
+    };
+  };
+
+  // Toggle item sequence selection
+  const toggleItemSequence = (sequence) => {
+    setSelectedItemSequences(prev => 
+      prev.includes(sequence)
+        ? prev.filter(s => s !== sequence)
+        : [...prev, sequence]
+    );
   };
 
   // View communication response/request bundles
@@ -1169,13 +1449,7 @@ const ClaimCommunicationPanel = ({
                       return (
                         <button
                           key={sequence}
-                          onClick={() => {
-                            setSelectedItemSequences(prev => 
-                              prev.includes(sequence)
-                                ? prev.filter(s => s !== sequence)
-                                : [...prev, sequence]
-                            );
-                          }}
+                          onClick={() => toggleItemSequence(sequence)}
                           className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
                             isSelected
                               ? 'bg-blue-100 border-blue-500 text-blue-700'
@@ -1191,7 +1465,50 @@ const ClaimCommunicationPanel = ({
               )}
 
               {/* Action Buttons */}
-              <div className="flex justify-end">
+              <div className="flex justify-between items-center">
+                {/* Preview & Copy JSON Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleShowPreview}
+                    disabled={isLoadingPreview}
+                    className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    {isLoadingPreview ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-4 h-4 mr-2" />
+                        Preview JSON
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={copyJsonToClipboard}
+                    disabled={isLoadingPreview}
+                    className={`flex items-center px-4 py-2 border rounded-lg transition-colors disabled:opacity-50 ${
+                      jsonCopied 
+                        ? 'border-green-500 text-green-700 bg-green-50' 
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {jsonCopied ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy JSON
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Send Button */}
                 <button
                   onClick={handleSend}
                   disabled={isSending}
@@ -1215,6 +1532,74 @@ const ClaimCommunicationPanel = ({
         </div>
       )}
 
+      {/* Acknowledgment Poll Result */}
+      {ackPollResult && (
+        <div className={`border rounded-lg p-4 ${
+          ackPollResult.acknowledgmentFound || ackPollResult.acknowledged > 0
+            ? 'bg-green-50 border-green-200'
+            : 'bg-blue-50 border-blue-200'
+        }`}>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className={`font-medium ${
+                ackPollResult.acknowledgmentFound || ackPollResult.acknowledged > 0
+                  ? 'text-green-800'
+                  : 'text-blue-800'
+              }`}>
+                {ackPollResult.message || 'Poll completed'}
+              </p>
+              {ackPollResult.totalPolled !== undefined && (
+                <p className="text-sm mt-1 text-gray-600">
+                  Polled: {ackPollResult.totalPolled} | Acknowledged: {ackPollResult.acknowledged} | Still Queued: {ackPollResult.stillQueued}
+                </p>
+              )}
+              {/* JSON Copy Buttons */}
+              {(ackPollResult.pollBundle || ackPollResult.responseBundle) && (
+                <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-gray-200">
+                  <p className="text-xs text-gray-500">
+                    <strong>Poll Request:</strong> POST /$process-message with poll-request Bundle
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {ackPollResult.pollBundle && (
+                      <button
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(JSON.stringify(ackPollResult.pollBundle, null, 2));
+                          setAckPollJsonCopied('request');
+                          setTimeout(() => setAckPollJsonCopied(null), 2000);
+                        }}
+                        className="flex items-center px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        {ackPollJsonCopied === 'request' ? '✓ Copied!' : 'Copy Poll Bundle'}
+                      </button>
+                    )}
+                    {ackPollResult.responseBundle && (
+                      <button
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(JSON.stringify(ackPollResult.responseBundle, null, 2));
+                          setAckPollJsonCopied('response');
+                          setTimeout(() => setAckPollJsonCopied(null), 2000);
+                        }}
+                        className="flex items-center px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        {ackPollJsonCopied === 'response' ? '✓ Copied!' : 'Copy Response JSON'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setAckPollResult(null)}
+              className="text-gray-400 hover:text-gray-600 ml-2"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Communication History */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         <div className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
@@ -1226,15 +1611,33 @@ const ClaimCommunicationPanel = ({
             <span className="font-medium text-gray-800">
               Communication History ({communications.length})
             </span>
+            {/* Show count of queued communications */}
             {communications.filter(c => c.acknowledgment_status === 'queued' || (!c.acknowledgment_received && c.status === 'completed')).length > 0 && (
               <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full">
                 {communications.filter(c => c.acknowledgment_status === 'queued' || (!c.acknowledgment_received && c.status === 'completed')).length} awaiting ack
               </span>
             )}
           </button>
-          <button onClick={() => toggleSection('history')}>
-            {expandedSections.history ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Poll All Acknowledgments button */}
+            {communications.filter(c => c.acknowledgment_status === 'queued' || (!c.acknowledgment_received && c.status === 'completed')).length > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePollAllAcknowledgments();
+                }}
+                disabled={isPolling}
+                className="flex items-center px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Poll for all pending acknowledgments"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
+                {isPolling ? 'Polling...' : 'Poll All Acks'}
+              </button>
+            )}
+            <button onClick={() => toggleSection('history')}>
+              {expandedSections.history ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
 
         {expandedSections.history && (
@@ -1266,7 +1669,29 @@ const ClaimCommunicationPanel = ({
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Poll for Acknowledgment button - show when queued or not acknowledged */}
+                        {(!comm.acknowledgment_received || comm.acknowledgment_status === 'queued') && (
+                          <>
+                            <button
+                              onClick={handleCopyPollJson}
+                              className="flex items-center px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+                              title="Copy the $poll Parameters JSON that will be sent to NPHIES"
+                            >
+                              <Copy className="w-3 h-3 mr-1" />
+                              {pollPreviewCopied ? '✓ Copied!' : 'Copy Poll JSON'}
+                            </button>
+                            <button
+                              onClick={() => handlePollAcknowledgment(comm.communication_id)}
+                              disabled={pollingAckFor === comm.communication_id}
+                              className="flex items-center px-2 py-1 text-xs bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              title="Poll NPHIES for acknowledgment"
+                            >
+                              <RefreshCw className={`w-3 h-3 mr-1 ${pollingAckFor === comm.communication_id ? 'animate-spin' : ''}`} />
+                              {pollingAckFor === comm.communication_id ? 'Polling...' : 'Poll Ack'}
+                            </button>
+                          </>
+                        )}
                         <button
                           onClick={() => handleViewResponse(comm)}
                           className="flex items-center px-2 py-1 text-xs bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 transition-colors"
@@ -1303,6 +1728,62 @@ const ClaimCommunicationPanel = ({
                             )}
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {/* Response Summary - Show key info from response_bundle */}
+                    {comm.response_bundle && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-xs font-medium text-gray-500 mb-2">NPHIES Response:</p>
+                        <div className="bg-white rounded border p-3 space-y-2">
+                          {/* Extract MessageHeader response info */}
+                          {(() => {
+                            const responseBundle = typeof comm.response_bundle === 'string' 
+                              ? JSON.parse(comm.response_bundle) 
+                              : comm.response_bundle;
+                            const messageHeader = responseBundle.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+                            const responseCode = messageHeader?.response?.code;
+                            const eventCode = messageHeader?.eventCoding?.code;
+                            
+                            return (
+                              <>
+                                <div className="flex items-center gap-3">
+                                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                    responseCode === 'ok' 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : responseCode === 'fatal-error' 
+                                        ? 'bg-red-100 text-red-800'
+                                        : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {responseCode === 'ok' ? (
+                                      <CheckCircle className="w-3 h-3 mr-1" />
+                                    ) : (
+                                      <AlertCircle className="w-3 h-3 mr-1" />
+                                    )}
+                                    {responseCode?.toUpperCase() || 'PENDING'}
+                                  </span>
+                                  {eventCode && (
+                                    <span className="text-xs text-gray-500">
+                                      Event: {eventCode}
+                                    </span>
+                                  )}
+                                </div>
+                                {messageHeader?.response?.identifier && (
+                                  <p className="text-xs text-gray-600">
+                                    Response to: {messageHeader.response.identifier}
+                                  </p>
+                                )}
+                                {/* Check for queued-messages tag */}
+                                {messageHeader?.meta?.tag?.some(t => t.code === 'queued-messages') && (
+                                  <p className="text-xs text-blue-600 flex items-center">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    Message queued for processing
+                                  </p>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
                       </div>
                     )}
                   </div>

@@ -1229,6 +1229,364 @@ class ClaimCommunicationService {
       client.release();
     }
   }
+
+  // ============================================================================
+  // PREVIEW AND ACKNOWLEDGMENT POLLING
+  // ============================================================================
+
+  /**
+   * Preview Communication bundle WITHOUT sending to NPHIES
+   * Returns the exact FHIR bundle that would be sent
+   * 
+   * @param {number} claimId - Claim Submission ID
+   * @param {Array} payloads - Array of payload objects
+   * @param {string} type - 'unsolicited' or 'solicited'
+   * @param {number} communicationRequestId - For solicited type
+   * @param {string} schemaName - Database schema name
+   * @returns {Object} Preview bundle and metadata
+   */
+  async previewCommunicationBundle(claimId, payloads, type = 'unsolicited', communicationRequestId = null, schemaName = 'public') {
+    const client = await pool.connect();
+    
+    try {
+      await client.query(`SET search_path TO ${schemaName}`);
+
+      // Get Claim with related data
+      const claimResult = await client.query(`
+        SELECT 
+          cs.*,
+          p.patient_id,
+          p.name as patient_name,
+          p.identifier as patient_identifier,
+          p.identifier_type as patient_identifier_type,
+          p.gender as patient_gender,
+          p.birth_date as patient_birth_date,
+          p.phone as patient_phone,
+          p.address as patient_address,
+          pr.provider_id,
+          pr.provider_name,
+          pr.nphies_id as provider_nphies_id,
+          pr.provider_type,
+          pr.address as provider_address,
+          i.insurer_id,
+          i.insurer_name,
+          i.nphies_id as insurer_nphies_id,
+          i.address as insurer_address
+        FROM claim_submissions cs
+        LEFT JOIN patients p ON cs.patient_id = p.patient_id
+        LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
+        LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
+        WHERE cs.id = $1
+      `, [claimId]);
+
+      if (claimResult.rows.length === 0) {
+        throw new Error('Claim not found');
+      }
+
+      const claim = claimResult.rows[0];
+      const claimIdentifier = claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id;
+
+      let communicationBundle;
+      let metadata = {
+        type,
+        claimId,
+        claimNumber: claim.claim_number,
+        payloadCount: payloads.length
+      };
+
+      if (type === 'solicited' && communicationRequestId) {
+        // Get CommunicationRequest data
+        const crResult = await client.query(`
+          SELECT * FROM nphies_communication_requests WHERE id = $1
+        `, [communicationRequestId]);
+
+        if (crResult.rows.length === 0) {
+          throw new Error('CommunicationRequest not found');
+        }
+
+        const commRequest = crResult.rows[0];
+        metadata.communicationRequestId = communicationRequestId;
+        metadata.respondingTo = commRequest.request_id;
+
+        communicationBundle = this.mapper.buildSolicitedCommunicationBundle({
+          communicationRequest: {
+            request_id: commRequest.request_id,
+            about_reference: commRequest.about_reference,
+            about_type: commRequest.about_type || 'Claim'
+          },
+          priorAuth: {
+            nphies_request_id: claim.nphies_request_id,
+            request_number: claim.claim_number,
+            pre_auth_ref: claimIdentifier
+          },
+          patient: {
+            patient_id: claim.patient_id,
+            identifier: claim.patient_identifier,
+            identifier_type: claim.patient_identifier_type || 'national_id',
+            name: claim.patient_name,
+            gender: claim.patient_gender,
+            birth_date: claim.patient_birth_date,
+            phone: claim.patient_phone,
+            address: claim.patient_address
+          },
+          provider: {
+            provider_id: claim.provider_id,
+            provider_name: claim.provider_name,
+            nphies_id: claim.provider_nphies_id,
+            provider_type: claim.provider_type,
+            address: claim.provider_address
+          },
+          insurer: {
+            insurer_id: claim.insurer_id,
+            insurer_name: claim.insurer_name,
+            nphies_id: claim.insurer_nphies_id,
+            address: claim.insurer_address
+          },
+          coverage: null,
+          payloads
+        });
+      } else {
+        // Unsolicited communication
+        communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
+          priorAuth: {
+            nphies_request_id: claim.nphies_request_id,
+            request_number: claim.claim_number,
+            pre_auth_ref: claimIdentifier
+          },
+          patient: {
+            patient_id: claim.patient_id,
+            identifier: claim.patient_identifier,
+            identifier_type: claim.patient_identifier_type || 'national_id',
+            name: claim.patient_name,
+            gender: claim.patient_gender,
+            birth_date: claim.patient_birth_date,
+            phone: claim.patient_phone,
+            address: claim.patient_address
+          },
+          provider: {
+            provider_id: claim.provider_id,
+            provider_name: claim.provider_name,
+            nphies_id: claim.provider_nphies_id,
+            provider_type: claim.provider_type,
+            address: claim.provider_address
+          },
+          insurer: {
+            insurer_id: claim.insurer_id,
+            insurer_name: claim.insurer_name,
+            nphies_id: claim.insurer_nphies_id,
+            address: claim.insurer_address
+          },
+          coverage: null,
+          payloads
+        });
+      }
+
+      return {
+        success: true,
+        bundle: communicationBundle,
+        metadata
+      };
+
+    } catch (error) {
+      console.error('[ClaimCommunicationService] Error previewing communication bundle:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Poll for acknowledgment of a specific Communication
+   * Use when communication has acknowledgment_status = 'queued'
+   * 
+   * @param {number} claimId - Claim Submission ID
+   * @param {string} communicationId - Communication UUID
+   * @param {string} schemaName - Database schema name
+   * @returns {Object} Poll result with acknowledgment status
+   */
+  async pollCommunicationAcknowledgment(claimId, communicationId, schemaName = 'public') {
+    const client = await pool.connect();
+    
+    try {
+      await client.query(`SET search_path TO ${schemaName}`);
+
+      // 1. Get the communication
+      const commResult = await client.query(`
+        SELECT c.*, cs.claim_number, pr.nphies_id as provider_nphies_id, pr.provider_name
+        FROM nphies_communications c
+        LEFT JOIN claim_submissions cs ON c.claim_id = cs.id
+        LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
+        WHERE c.communication_id = $1 AND c.claim_id = $2
+      `, [communicationId, claimId]);
+
+      if (commResult.rows.length === 0) {
+        throw new Error('Communication not found');
+      }
+
+      const comm = commResult.rows[0];
+
+      // 2. Check if already acknowledged
+      if (comm.acknowledgment_received && comm.acknowledgment_status === 'ok') {
+        return {
+          success: true,
+          alreadyAcknowledged: true,
+          acknowledgmentStatus: comm.acknowledgment_status,
+          message: 'Communication was already acknowledged'
+        };
+      }
+
+      // 3. Build poll request
+      const pollBundle = this.mapper.buildPollRequestBundle(
+        comm.provider_nphies_id,
+        comm.provider_name || 'Healthcare Provider'
+      );
+
+      // 4. Send poll request
+      const pollResponse = await nphiesService.sendPoll(pollBundle);
+
+      if (!pollResponse.success) {
+        return {
+          success: false,
+          error: pollResponse.error || 'Poll request failed',
+          pollBundle,
+          responseBundle: pollResponse.data
+        };
+      }
+
+      // 5. Look for acknowledgment in response
+      const communications = nphiesService.extractCommunicationsFromPoll(pollResponse.data);
+      
+      let acknowledgmentFound = false;
+      let acknowledgmentStatus = null;
+
+      for (const respComm of communications) {
+        const parsed = this.mapper.parseCommunication(respComm);
+        
+        if (parsed.inResponseTo) {
+          const responseToId = this.mapper.extractIdFromReference(parsed.inResponseTo);
+          
+          if (responseToId === communicationId) {
+            acknowledgmentFound = true;
+            acknowledgmentStatus = parsed.status;
+
+            // Update communication with acknowledgment
+            await client.query(`
+              UPDATE nphies_communications
+              SET acknowledgment_received = TRUE,
+                  acknowledgment_at = NOW(),
+                  acknowledgment_status = $1,
+                  acknowledgment_bundle = $2
+              WHERE communication_id = $3
+            `, [acknowledgmentStatus, JSON.stringify(respComm), communicationId]);
+
+            break;
+          }
+        }
+      }
+
+      return {
+        success: true,
+        acknowledgmentFound,
+        acknowledgmentStatus,
+        pollBundle,
+        responseBundle: pollResponse.data,
+        message: acknowledgmentFound 
+          ? `Acknowledgment received: ${acknowledgmentStatus}`
+          : 'No acknowledgment found. The message may still be processing.'
+      };
+
+    } catch (error) {
+      console.error('[ClaimCommunicationService] Error polling for acknowledgment:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Poll for all queued acknowledgments for a Claim
+   * 
+   * @param {number} claimId - Claim Submission ID
+   * @param {string} schemaName - Database schema name
+   * @returns {Object} Results for all polled communications
+   */
+  async pollAllQueuedAcknowledgments(claimId, schemaName = 'public') {
+    const client = await pool.connect();
+    
+    try {
+      await client.query(`SET search_path TO ${schemaName}`);
+
+      // 1. Get all communications with queued acknowledgments
+      const commsResult = await client.query(`
+        SELECT c.communication_id
+        FROM nphies_communications c
+        WHERE c.claim_id = $1
+          AND (c.acknowledgment_status = 'queued' OR (c.acknowledgment_received = FALSE AND c.status = 'completed'))
+      `, [claimId]);
+
+      if (commsResult.rows.length === 0) {
+        return {
+          success: true,
+          totalPolled: 0,
+          acknowledged: 0,
+          stillQueued: 0,
+          results: [],
+          message: 'No communications awaiting acknowledgment'
+        };
+      }
+
+      // 2. Poll for each communication
+      const results = [];
+      let acknowledged = 0;
+      let stillQueued = 0;
+      const errors = [];
+
+      for (const row of commsResult.rows) {
+        try {
+          const pollResult = await this.pollCommunicationAcknowledgment(
+            claimId,
+            row.communication_id,
+            schemaName
+          );
+
+          if (pollResult.acknowledgmentFound) {
+            acknowledged++;
+          } else if (!pollResult.alreadyAcknowledged) {
+            stillQueued++;
+          }
+
+          results.push({
+            communicationId: row.communication_id,
+            ...pollResult
+          });
+        } catch (err) {
+          errors.push({
+            communicationId: row.communication_id,
+            error: err.message
+          });
+        }
+      }
+
+      return {
+        success: true,
+        totalPolled: commsResult.rows.length,
+        acknowledged,
+        stillQueued,
+        errors: errors.length > 0 ? errors : undefined,
+        results,
+        message: `Polled ${commsResult.rows.length} communication(s): ${acknowledged} acknowledged, ${stillQueued} still queued`
+      };
+
+    } catch (error) {
+      console.error('[ClaimCommunicationService] Error polling all acknowledgments:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 export default new ClaimCommunicationService();

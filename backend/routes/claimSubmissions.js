@@ -108,4 +108,29 @@ router.get('/:id/communication-requests', (req, res) => claimSubmissionsControll
  */
 router.get('/:id/communications', (req, res) => claimSubmissionsController.getCommunications(req, res));
 
+/**
+ * Preview Communication Bundle (without sending)
+ * POST /api/claim-submissions/:id/communication/preview
+ * 
+ * Returns the exact FHIR bundle that would be sent to NPHIES.
+ * Body: { payloads: [...], type: 'unsolicited'|'solicited', communicationRequestId?: number }
+ */
+router.post('/:id/communication/preview', (req, res) => claimSubmissionsController.previewCommunicationBundle(req, res));
+
+/**
+ * Poll for acknowledgment of a specific Communication
+ * POST /api/claim-submissions/:id/communications/:communicationId/poll-acknowledgment
+ * 
+ * Use when communication has acknowledgment_status = 'queued'
+ */
+router.post('/:id/communications/:communicationId/poll-acknowledgment', (req, res) => claimSubmissionsController.pollCommunicationAcknowledgment(req, res));
+
+/**
+ * Poll for all queued acknowledgments
+ * POST /api/claim-submissions/:id/communications/poll-all-acknowledgments
+ * 
+ * Polls NPHIES for acknowledgments of all communications with status = 'queued'
+ */
+router.post('/:id/communications/poll-all-acknowledgments', (req, res) => claimSubmissionsController.pollAllQueuedAcknowledgments(req, res));
+
 export default router;

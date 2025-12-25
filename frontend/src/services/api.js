@@ -823,6 +823,46 @@ class ApiService {
     return this.request(`/claim-submissions/${claimId}/communications`);
   }
 
+  /**
+   * Preview Communication bundle for a claim (without sending)
+   * Returns the exact FHIR bundle that would be sent to NPHIES
+   * 
+   * @param {number} claimId - Claim submission ID
+   * @param {Array} payloads - Payload objects
+   * @param {string} type - 'unsolicited' or 'solicited'
+   * @param {number} communicationRequestId - For solicited type
+   */
+  async previewClaimCommunicationBundle(claimId, payloads, type = 'unsolicited', communicationRequestId = null) {
+    return this.request(`/claim-submissions/${claimId}/communication/preview`, {
+      method: 'POST',
+      body: JSON.stringify({ payloads, type, communicationRequestId })
+    });
+  }
+
+  /**
+   * Poll for acknowledgment of a specific claim Communication
+   * Use when communication has acknowledgment_status = 'queued'
+   * 
+   * @param {number} claimId - Claim submission ID
+   * @param {string} communicationId - Communication UUID
+   */
+  async pollClaimCommunicationAcknowledgment(claimId, communicationId) {
+    return this.request(`/claim-submissions/${claimId}/communications/${communicationId}/poll-acknowledgment`, {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Poll for all queued acknowledgments for a Claim
+   * 
+   * @param {number} claimId - Claim submission ID
+   */
+  async pollAllClaimQueuedAcknowledgments(claimId) {
+    return this.request(`/claim-submissions/${claimId}/communications/poll-all-acknowledgments`, {
+      method: 'POST'
+    });
+  }
+
   // ICD-10 Codes
   /**
    * Search ICD-10 codes for async dropdown

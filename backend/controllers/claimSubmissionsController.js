@@ -773,6 +773,122 @@ class ClaimSubmissionsController extends BaseController {
       });
     }
   }
+
+  /**
+   * Preview Communication bundle (without sending)
+   * POST /claim-submissions/:id/communication/preview
+   */
+  async previewCommunicationBundle(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const schemaName = req.schemaName || 'public';
+      const { payloads, type, communicationRequestId } = req.body;
+
+      if (!payloads || !Array.isArray(payloads) || payloads.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Payloads array is required'
+        });
+      }
+
+      console.log(`[ClaimSubmissions] Previewing ${type} communication bundle for claim ${claimId}`);
+
+      const result = await claimCommunicationService.previewCommunicationBundle(
+        claimId,
+        payloads,
+        type || 'unsolicited',
+        communicationRequestId,
+        schemaName
+      );
+
+      res.json({
+        success: result.success,
+        bundle: result.bundle,
+        metadata: result.metadata,
+        error: result.error
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Preview communication bundle error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to preview communication bundle'
+      });
+    }
+  }
+
+  /**
+   * Poll for acknowledgment of a specific communication
+   * POST /claim-submissions/:id/communications/:communicationId/poll-acknowledgment
+   */
+  async pollCommunicationAcknowledgment(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const { communicationId } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      console.log(`[ClaimSubmissions] Polling acknowledgment for communication ${communicationId} on claim ${claimId}`);
+
+      const result = await claimCommunicationService.pollCommunicationAcknowledgment(
+        claimId,
+        communicationId,
+        schemaName
+      );
+
+      res.json({
+        success: result.success,
+        acknowledgmentFound: result.acknowledgmentFound,
+        acknowledgmentStatus: result.acknowledgmentStatus,
+        alreadyAcknowledged: result.alreadyAcknowledged,
+        pollBundle: result.pollBundle,
+        responseBundle: result.responseBundle,
+        message: result.message,
+        error: result.error
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Poll acknowledgment error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to poll for acknowledgment'
+      });
+    }
+  }
+
+  /**
+   * Poll for all queued acknowledgments
+   * POST /claim-submissions/:id/communications/poll-all-acknowledgments
+   */
+  async pollAllQueuedAcknowledgments(req, res) {
+    try {
+      const claimId = parseInt(req.params.id);
+      const schemaName = req.schemaName || 'public';
+
+      console.log(`[ClaimSubmissions] Polling all queued acknowledgments for claim ${claimId}`);
+
+      const result = await claimCommunicationService.pollAllQueuedAcknowledgments(
+        claimId,
+        schemaName
+      );
+
+      res.json({
+        success: result.success,
+        totalPolled: result.totalPolled,
+        acknowledged: result.acknowledged,
+        stillQueued: result.stillQueued,
+        errors: result.errors,
+        results: result.results,
+        message: result.message
+      });
+
+    } catch (error) {
+      console.error('[ClaimSubmissions] Poll all acknowledgments error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to poll for acknowledgments'
+      });
+    }
+  }
 }
 
 export default new ClaimSubmissionsController();
