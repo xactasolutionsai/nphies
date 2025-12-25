@@ -1502,7 +1502,7 @@ export default function PriorAuthorizationForm() {
       
       // Parse encounter_end with full datetime (including time if provided)
       const encounterEnd = formData.encounter_end 
-        ? new Date(formData.encounter_end)
+        ? new Date(formData.encounter_end) 
         : null;
       
       const itemsOutsidePeriod = formData.items.filter((item, idx) => {

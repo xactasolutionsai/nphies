@@ -572,7 +572,11 @@ class EligibilityController extends BaseController {
       console.log('[NPHIES Dynamic] Processing eligibility request...');
 
       // --- 1. Resolve Patient ---
+      // Track if patient needs to be upserted (only after successful API call)
       let patient;
+      let shouldUpsertPatient = false;
+      let patientDataToUpsert = null;
+      
       if (patientId) {
         // Fetch existing patient
         const patientResult = await query(
@@ -585,11 +589,12 @@ class EligibilityController extends BaseController {
         patient = patientResult.rows[0];
         console.log(`[NPHIES Dynamic] Using existing patient: ${patient.name}`);
       } else if (patientData) {
-        // UPSERT patient from form data
+        // Create temporary patient object from form data (don't upsert yet)
         if (!patientData.identifier) {
           return res.status(400).json({ success: false, error: 'Patient identifier is required' });
         }
-        patient = await nphiesDataService.upsertPatient({
+        // Store patient data for later upsert (only if API call succeeds)
+        patientDataToUpsert = {
           name: patientData.name,
           identifier: patientData.identifier,
           identifierType: patientData.identifierType || 'national_id',
@@ -598,8 +603,19 @@ class EligibilityController extends BaseController {
           phone: patientData.phone,
           email: patientData.email,
           isNewborn: isNewborn
-        });
-        console.log(`[NPHIES Dynamic] Upserted patient: ${patient.name} (newborn: ${isNewborn})`);
+        };
+        // Create temporary patient object for bundle building (without patient_id)
+        patient = {
+          name: patientData.name,
+          identifier: patientData.identifier,
+          identifier_type: patientData.identifierType || 'national_id',
+          gender: patientData.gender,
+          birth_date: patientData.birthDate,
+          phone: patientData.phone,
+          email: patientData.email
+        };
+        shouldUpsertPatient = true;
+        console.log(`[NPHIES Dynamic] Created temporary patient object (will upsert after successful API call): ${patient.name}`);
       } else {
         return res.status(400).json({
           success: false,
@@ -721,6 +737,9 @@ class EligibilityController extends BaseController {
 
       // --- 5. Resolve Mother Patient (for newborn requests) ---
       let motherPatient = null;
+      let shouldUpsertMotherPatient = false;
+      let motherPatientDataToUpsert = null;
+      
       if (isNewborn) {
         if (motherPatientId) {
           // Fetch existing mother patient
@@ -734,12 +753,12 @@ class EligibilityController extends BaseController {
           motherPatient = motherResult.rows[0];
           console.log(`[NPHIES Dynamic] Using existing mother patient: ${motherPatient.name}`);
         } else if (motherPatientData) {
-          // UPSERT mother patient from form data
+          // Create temporary mother patient object from form data (don't upsert yet)
           if (!motherPatientData.identifier) {
             return res.status(400).json({ success: false, error: 'Mother patient identifier is required for newborn requests' });
           }
-          // Ensure identifier type is iqama for mother (per NPHIES example)
-          motherPatient = await nphiesDataService.upsertPatient({
+          // Store mother patient data for later upsert (only if API call succeeds)
+          motherPatientDataToUpsert = {
             name: motherPatientData.name,
             identifier: motherPatientData.identifier,
             identifierType: motherPatientData.identifierType || 'iqama',
@@ -748,8 +767,19 @@ class EligibilityController extends BaseController {
             phone: motherPatientData.phone,
             email: motherPatientData.email,
             isNewborn: false // Mother is not a newborn
-          });
-          console.log(`[NPHIES Dynamic] Upserted mother patient: ${motherPatient.name}`);
+          };
+          // Create temporary mother patient object for bundle building (without patient_id)
+          motherPatient = {
+            name: motherPatientData.name,
+            identifier: motherPatientData.identifier,
+            identifier_type: motherPatientData.identifierType || 'iqama',
+            gender: motherPatientData.gender,
+            birth_date: motherPatientData.birthDate,
+            phone: motherPatientData.phone,
+            email: motherPatientData.email
+          };
+          shouldUpsertMotherPatient = true;
+          console.log(`[NPHIES Dynamic] Created temporary mother patient object (will upsert after successful API call): ${motherPatient.name}`);
         } else {
           return res.status(400).json({
             success: false,
@@ -782,32 +812,24 @@ class EligibilityController extends BaseController {
       const nphiesResponse = await nphiesService.checkEligibility(requestBundle);
 
       if (!nphiesResponse.success) {
-        // Store failed request
-        const failedResult = await nphiesDataService.storeEligibilityResult({
-          patient,
-          provider,
-          insurer,
-          coverage,
-          requestBundle,
-          responseBundle: null,
-          parsedResponse: {
-            success: false,
-            outcome: 'error',
-            inforce: false,
-            errors: [nphiesResponse.error]
-          },
-          purpose,
-          servicedDate,
-          isNewborn,
-          isTransfer
-        });
-
+        // Don't save patients if API call failed (validation error)
+        // Return error without saving eligibility record
         return res.status(500).json({
           success: false,
-          eligibilityId: failedResult.eligibilityId,
           error: 'NPHIES request failed',
           details: nphiesResponse.error
         });
+      }
+
+      // API call succeeded - now upsert patients if needed
+      if (shouldUpsertPatient && patientDataToUpsert) {
+        patient = await nphiesDataService.upsertPatient(patientDataToUpsert);
+        console.log(`[NPHIES Dynamic] Upserted patient after successful API call: ${patient.name}`);
+      }
+      
+      if (shouldUpsertMotherPatient && motherPatientDataToUpsert) {
+        motherPatient = await nphiesDataService.upsertPatient(motherPatientDataToUpsert);
+        console.log(`[NPHIES Dynamic] Upserted mother patient after successful API call: ${motherPatient.name}`);
       }
 
       console.log('[NPHIES Dynamic] Parsing response and storing data...');
@@ -901,6 +923,8 @@ class EligibilityController extends BaseController {
       const {
         patientId,
         patientData,
+        motherPatientId,
+        motherPatientData,
         providerId,
         providerData,
         insurerId,
@@ -934,7 +958,7 @@ class EligibilityController extends BaseController {
           identifier: patientData.identifier,
           identifier_type: patientData.identifierType || 'national_id',
           gender: patientData.gender,
-          birthdate: patientData.birthDate,
+          birth_date: patientData.birthDate, // Use birth_date (with underscore) to match mapper expectations
           phone: patientData.phone
         };
       } else {
@@ -1022,7 +1046,34 @@ class EligibilityController extends BaseController {
         };
       }
 
-      // --- 5. Build FHIR Bundle (without sending) ---
+      // --- 5. Resolve Mother Patient (for newborn requests, without UPSERT for preview) ---
+      let motherPatient = null;
+      if (isNewborn) {
+        if (motherPatientId) {
+          // Fetch existing mother patient
+          const motherResult = await query(
+            'SELECT * FROM patients WHERE patient_id = $1',
+            [motherPatientId]
+          );
+          if (motherResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Mother patient not found' });
+          }
+          motherPatient = motherResult.rows[0];
+        } else if (motherPatientData) {
+          // For preview, just use the data as-is without saving
+          motherPatient = {
+            patient_id: 'preview-mother-patient-id',
+            name: motherPatientData.name || 'Preview Mother Patient',
+            identifier: motherPatientData.identifier,
+            identifier_type: motherPatientData.identifierType || 'iqama',
+            gender: motherPatientData.gender,
+            birth_date: motherPatientData.birthDate, // Use birth_date (with underscore) to match mapper expectations
+            phone: motherPatientData.phone
+          };
+        }
+      }
+
+      // --- 6. Build FHIR Bundle (without sending) ---
       const requestBundle = nphiesMapper.buildEligibilityRequestBundle({
         patient,
         provider,
@@ -1031,7 +1082,8 @@ class EligibilityController extends BaseController {
         purpose: purpose || ['benefits', 'validation'],
         servicedDate: servicedDate || new Date(),
         isNewborn: Boolean(isNewborn),
-        isTransfer: Boolean(isTransfer)
+        isTransfer: Boolean(isTransfer),
+        motherPatient: motherPatient
       });
 
       console.log('[NPHIES Preview] Bundle built successfully');
@@ -1048,7 +1100,7 @@ class EligibilityController extends BaseController {
             identifier: patient.identifier,
             identifierType: patient.identifier_type,
             gender: patient.gender,
-            birthDate: patient.birthdate
+            birthDate: patient.birth_date || patient.birthDate || patient.birthdate
           },
           provider: {
             name: provider.provider_name || provider.name,

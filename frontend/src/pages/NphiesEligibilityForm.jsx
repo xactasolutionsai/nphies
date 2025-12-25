@@ -183,6 +183,7 @@ export default function NphiesEligibilityForm() {
   // Mother patient state (for newborn requests)
   const [motherPatientMode, setMotherPatientMode] = useState('existing'); // 'existing' | 'manual'
   const [selectedMotherPatient, setSelectedMotherPatient] = useState('');
+  const [selectedMotherPatientDetails, setSelectedMotherPatientDetails] = useState(null); // Store full patient details when selected
   const [motherPatientData, setMotherPatientData] = useState({
     name: '',
     identifier: '',
@@ -228,6 +229,16 @@ export default function NphiesEligibilityForm() {
       loadAllCoverages();
     }
   }, [selectedPatient, patientMode]);
+
+  // Update selected mother patient details when selection changes
+  useEffect(() => {
+    if (selectedMotherPatient && motherPatientMode === 'existing') {
+      const patient = patients.find(p => p.patient_id === selectedMotherPatient);
+      setSelectedMotherPatientDetails(patient || null);
+    } else {
+      setSelectedMotherPatientDetails(null);
+    }
+  }, [selectedMotherPatient, motherPatientMode, patients]);
 
   const loadInitialData = async () => {
     try {
@@ -341,6 +352,11 @@ export default function NphiesEligibilityForm() {
           ? { patientId: selectedPatient }
           : { patientData: { ...patientData, birthDate: patientData.birthDate } }
         ),
+        // Mother Patient (for newborn requests)
+        ...(isNewborn && (motherPatientMode === 'existing'
+          ? { motherPatientId: selectedMotherPatient }
+          : { motherPatientData: { ...motherPatientData, birthDate: motherPatientData.birthDate, identifierType: 'iqama' } }
+        )),
         // Provider
         ...(providerMode === 'existing'
           ? { providerId: selectedProvider }
@@ -479,6 +495,7 @@ export default function NphiesEligibilityForm() {
     setIsTransfer(false);
     setMotherPatientMode('existing');
     setSelectedMotherPatient('');
+    setSelectedMotherPatientDetails(null);
     setMotherPatientData({
       name: '',
       identifier: '',
@@ -1038,19 +1055,74 @@ export default function NphiesEligibilityForm() {
                 />
 
                 {motherPatientMode === 'existing' ? (
-                  <Select
-                    value={patientOptions.find(opt => opt.value === selectedMotherPatient)}
-                    onChange={(option) => setSelectedMotherPatient(option?.value || '')}
-                    options={patientOptions.filter(p => {
-                      // Filter to show patients with Iqama identifier type (typically starting with 2)
-                      const patient = patients.find(pa => pa.patient_id === p.value);
-                      return patient && (patient.identifier_type === 'iqama' || (patient.identifier && patient.identifier.startsWith('2')));
-                    })}
-                    styles={selectStyles}
-                    placeholder="Search and select mother patient (Iqama ID)..."
-                    isClearable
-                    isSearchable
-                  />
+                  <div className="space-y-3">
+                    <Select
+                      value={patientOptions.find(opt => opt.value === selectedMotherPatient)}
+                      onChange={(option) => {
+                        setSelectedMotherPatient(option?.value || '');
+                        // Find and store the full patient details
+                        if (option?.value) {
+                          const patient = patients.find(p => p.patient_id === option.value);
+                          setSelectedMotherPatientDetails(patient || null);
+                        } else {
+                          setSelectedMotherPatientDetails(null);
+                        }
+                      }}
+                      options={patientOptions.filter(p => {
+                        // Filter to show patients with Iqama identifier type (typically starting with 2)
+                        const patient = patients.find(pa => pa.patient_id === p.value);
+                        return patient && (patient.identifier_type === 'iqama' || (patient.identifier && patient.identifier.startsWith('2')));
+                      })}
+                      styles={selectStyles}
+                      placeholder="Search and select mother patient (Iqama ID)..."
+                      isClearable
+                      isSearchable
+                    />
+                    
+                    {/* Display selected mother patient details */}
+                    {selectedMotherPatientDetails && (
+                      <div className="bg-white rounded-lg p-4 border border-pink-300 space-y-2">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <User className="h-4 w-4 text-pink-600" />
+                          <span className="text-sm font-semibold text-gray-700">Selected Mother Patient Details</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="text-gray-500">Name:</span>
+                            <span className="ml-2 font-medium text-gray-800">{selectedMotherPatientDetails.name || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Iqama Number:</span>
+                            <span className="ml-2 font-medium text-gray-800">{selectedMotherPatientDetails.identifier || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Date of Birth:</span>
+                            <span className="ml-2 font-medium text-gray-800">
+                              {selectedMotherPatientDetails.birth_date 
+                                ? new Date(selectedMotherPatientDetails.birth_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                                : 'N/A'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Gender:</span>
+                            <span className="ml-2 font-medium text-gray-800 capitalize">{selectedMotherPatientDetails.gender || 'N/A'}</span>
+                          </div>
+                          {selectedMotherPatientDetails.phone && (
+                            <div>
+                              <span className="text-gray-500">Phone:</span>
+                              <span className="ml-2 font-medium text-gray-800">{selectedMotherPatientDetails.phone}</span>
+                            </div>
+                          )}
+                          {selectedMotherPatientDetails.email && (
+                            <div>
+                              <span className="text-gray-500">Email:</span>
+                              <span className="ml-2 font-medium text-gray-800">{selectedMotherPatientDetails.email}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     <div>
