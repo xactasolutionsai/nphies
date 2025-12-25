@@ -159,6 +159,7 @@ const extractFromFhirBundle = (bundle) => {
     coverage: null,
     insurer: null,
     eligibilityResponse: null,
+    eligibilityResponseFullUrl: null,
     messageHeader: null
   };
   
@@ -183,6 +184,7 @@ const extractFromFhirBundle = (bundle) => {
         break;
       case 'CoverageEligibilityResponse':
         result.eligibilityResponse = resource;
+        result.eligibilityResponseFullUrl = entry.fullUrl; // Capture fullUrl for reference
         break;
       case 'MessageHeader':
         result.messageHeader = resource;
@@ -306,6 +308,18 @@ export default function NphiesEligibilityDetails() {
   const eligibilityResponse = fhirData.eligibilityResponse || {};
   const disposition = eligibilityResponse.disposition || record?.disposition;
   const servicedPeriod = eligibilityResponse.servicedPeriod || record?.serviced_period;
+  
+  // Extract Eligibility Reference ID (needed for Prior Authorization)
+  // This is the CoverageEligibilityResponse.id (e.g., "76999")
+  const eligibilityRefId = eligibilityResponse.id || record?.eligibility_ref || record?.eligibility_response_id;
+  
+  // Extract fullUrl from bundle entry (contains full reference URL)
+  const eligibilityResponseFullUrl = fhirData.eligibilityResponseFullUrl;
+  
+  // Extract Eligibility Response Identifier (alternative identifier)
+  const eligibilityResponseIdentifier = eligibilityResponse.identifier?.[0];
+  const eligibilityResponseIdentifierValue = eligibilityResponseIdentifier?.value;
+  const eligibilityResponseIdentifierSystem = eligibilityResponseIdentifier?.system;
   
   // Site Eligibility from response extension
   const responseSiteEligibility = eligibilityResponse.extension?.find(
@@ -527,6 +541,56 @@ export default function NphiesEligibilityDetails() {
                   <p className="font-mono text-sm">{messageResponseId}</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Eligibility Reference ID - Important for Prior Authorization */}
+          {eligibilityRefId && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-lg border-2 border-purple-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-purple-900 mb-1 flex items-center">
+                      <Shield className="h-4 w-4 mr-2" />
+                      Eligibility Reference ID (For Prior Authorization)
+                    </p>
+                    <p className="text-xs text-purple-700 mb-2">
+                      Use this ID when creating a Prior Authorization request
+                    </p>
+                    <div className="bg-white rounded-lg p-3 border border-purple-300">
+                      <p className="font-mono text-lg font-bold text-purple-900">{eligibilityRefId}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-4"
+                    onClick={() => {
+                      navigator.clipboard.writeText(eligibilityRefId);
+                      setCopiedToClipboard(true);
+                      setTimeout(() => setCopiedToClipboard(false), 2000);
+                    }}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy
+                  </Button>
+                </div>
+                {eligibilityResponseFullUrl && (
+                  <div className="mt-3 pt-3 border-t border-purple-200">
+                    <p className="text-xs text-purple-600 mb-1">Full Reference URL</p>
+                    <p className="font-mono text-xs text-purple-800 break-all">{eligibilityResponseFullUrl}</p>
+                  </div>
+                )}
+                {eligibilityResponseIdentifierValue && (
+                  <div className="mt-3 pt-3 border-t border-purple-200">
+                    <p className="text-xs text-purple-600 mb-1">Alternative Identifier</p>
+                    <p className="font-mono text-sm text-purple-800">{eligibilityResponseIdentifierValue}</p>
+                    {eligibilityResponseIdentifierSystem && (
+                      <p className="text-xs text-purple-500 mt-1">{eligibilityResponseIdentifierSystem}</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
