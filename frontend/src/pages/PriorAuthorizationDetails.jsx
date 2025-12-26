@@ -684,6 +684,9 @@ export default function PriorAuthorizationDetails() {
         practice_code: priorAuth.practice_code,
         service_type: priorAuth.service_type,
         eligibility_offline_ref: priorAuth.eligibility_offline_ref,
+        is_newborn: priorAuth.is_newborn || false,
+        birth_weight: priorAuth.birth_weight || null,
+        mother_patient_id: priorAuth.mother_patient_id || null,
         items: priorAuth.items?.map((item, idx) => {
           // Extract date without timezone conversion
           // If item.serviced_date is ISO string like "2023-12-03T21:00:00.000Z", extract just the date part

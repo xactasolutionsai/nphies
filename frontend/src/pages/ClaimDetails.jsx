@@ -56,6 +56,36 @@ const formatDateTime = (dateString) => {
   return new Date(dateString).toLocaleString();
 };
 
+// Calculate age from birth date with appropriate units (days, months, years)
+const calculateAge = (birthDate) => {
+  if (!birthDate) return null;
+  const today = new Date();
+  const birth = new Date(birthDate);
+  
+  // Calculate difference in milliseconds
+  const diffMs = today - birth;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  // Less than 1 month - show days
+  if (diffDays < 30) {
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+  }
+  
+  // Less than 2 years - show months
+  const diffMonths = Math.floor(diffDays / 30.44); // Average days per month
+  if (diffMonths < 24) {
+    return `${diffMonths} month${diffMonths !== 1 ? 's' : ''}`;
+  }
+  
+  // 2 years or more - show years
+  let years = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    years--;
+  }
+  return `${years} year${years !== 1 ? 's' : ''}`;
+};
+
 /**
  * Safely extract value from FHIR CodeableConcept or simple value
  * Handles cases where value might be:
@@ -132,6 +162,8 @@ export default function ClaimDetails() {
   const [loading, setLoading] = useState(true);
   const [claim, setClaim] = useState(null);
   const [bundle, setBundle] = useState(null);
+  const [motherPatient, setMotherPatient] = useState(null);
+  const [motherPatientLoading, setMotherPatientLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
   const [showBundleDialog, setShowBundleDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -156,6 +188,15 @@ export default function ClaimDetails() {
       loadPayments();
     }
   }, [claim?.claim_number, claim?.nphies_claim_id]);
+
+  // Fetch mother patient when claim is loaded and has mother_patient_id
+  useEffect(() => {
+    if (claim?.is_newborn && claim?.mother_patient_id) {
+      loadMotherPatient();
+    } else {
+      setMotherPatient(null);
+    }
+  }, [claim?.mother_patient_id]);
 
   const loadClaim = async () => {
     try {
@@ -183,6 +224,22 @@ export default function ClaimDetails() {
       setPayments([]);
     } finally {
       setPaymentsLoading(false);
+    }
+  };
+
+  const loadMotherPatient = async () => {
+    if (!claim?.mother_patient_id) return;
+    
+    try {
+      setMotherPatientLoading(true);
+      const response = await api.getPatient(claim.mother_patient_id);
+      setMotherPatient(response.data);
+    } catch (error) {
+      console.error('Error loading mother patient:', error);
+      // Don't show error alert for mother patient - it's optional info
+      setMotherPatient(null);
+    } finally {
+      setMotherPatientLoading(false);
     }
   };
 
@@ -2165,21 +2222,85 @@ export default function ClaimDetails() {
               <CardTitle className="text-lg flex items-center gap-2">
                 <User className="h-5 w-5" />
                 Patient
+                {claim.is_newborn && (
+                  <Badge className="bg-pink-100 text-pink-700 border-pink-300 ml-2">
+                    Newborn
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 <p className="font-medium text-lg">{claim.patient_name || 'Unknown'}</p>
                 <p className="text-sm text-gray-500 font-mono">{claim.patient_identifier}</p>
-                {claim.patient_gender && (
-                  <p className="text-sm capitalize">{claim.patient_gender}</p>
+                {(claim.patient_birth_date || claim.patient_gender) && (
+                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                    {claim.patient_birth_date && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {calculateAge(claim.patient_birth_date)}
+                      </span>
+                    )}
+                    {claim.patient_gender && (
+                      <span className="capitalize">{claim.patient_gender}</span>
+                    )}
+                  </div>
                 )}
-                {claim.patient_birth_date && (
-                  <p className="text-sm text-gray-500">DOB: {formatDate(claim.patient_birth_date)}</p>
+                {/* Newborn Extension Details */}
+                {claim.is_newborn && claim.birth_weight && (
+                  <div className="mt-3 p-2 bg-pink-50 rounded-md border border-pink-200">
+                    <p className="text-sm text-pink-700">
+                      <span className="font-medium">Birth Weight:</span> {claim.birth_weight} g
+                    </p>
+                  </div>
                 )}
               </div>
             </CardContent>
           </Card>
+
+          {/* Mother Patient Card - Only for newborns */}
+          {claim.is_newborn && claim.mother_patient_id && (
+            <Card className="border-pink-200 bg-pink-50/30">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <User className="h-5 w-5 text-pink-600" />
+                  Mother Patient
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {motherPatientLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-pink-300 border-t-pink-600"></div>
+                  </div>
+                ) : motherPatient ? (
+                  <>
+                    <p className="font-medium">{motherPatient.name || '-'}</p>
+                    <p className="text-sm text-gray-500">{motherPatient.identifier}</p>
+                    {(motherPatient.birth_date || motherPatient.gender) && (
+                      <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
+                        {motherPatient.birth_date && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {calculateAge(motherPatient.birth_date)}
+                          </span>
+                        )}
+                        {motherPatient.gender && (
+                          <span className="capitalize">{motherPatient.gender}</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="mt-3 p-2 bg-pink-100 rounded-md border border-pink-200">
+                      <p className="text-xs text-pink-700">
+                        <span className="font-medium">Relationship:</span> Mother of Newborn
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500">Mother patient information not available</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Provider Info */}
           <Card>
