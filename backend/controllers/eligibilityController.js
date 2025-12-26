@@ -379,6 +379,7 @@ class EligibilityController extends BaseController {
       const result = await query(`
         SELECT 
           e.*,
+          e.mother_patient_id, -- Explicitly include mother_patient_id
           p.name as patient_name,
           p.identifier as patient_identifier,
           p.is_newborn as patient_is_newborn,
@@ -1166,14 +1167,14 @@ class EligibilityController extends BaseController {
         return res.status(400).json({ error: 'Patient ID is required' });
       }
 
-      console.log(`[getMotherPatientForNewborn] Looking for mother_patient_id for patient_id: ${patientId}`);
+      console.log(`[getMotherPatientForNewborn] Looking for mother_patient_id for patient_id: ${patientId} (type: ${typeof patientId})`);
 
       // First, check eligibility table for most recent record
       // Note: eligibility table doesn't have is_newborn column, so we check if mother_patient_id exists
       const eligibilityQuery = `
-        SELECT mother_patient_id, created_at
+        SELECT mother_patient_id, created_at, patient_id, eligibility_id
         FROM eligibility 
-        WHERE patient_id = $1 
+        WHERE patient_id = $1::uuid
           AND mother_patient_id IS NOT NULL 
         ORDER BY created_at DESC 
         LIMIT 1
@@ -1182,7 +1183,8 @@ class EligibilityController extends BaseController {
       
       console.log(`[getMotherPatientForNewborn] Eligibility query result:`, {
         rowCount: eligibilityResult.rows.length,
-        result: eligibilityResult.rows[0] || null
+        result: eligibilityResult.rows[0] || null,
+        searchedPatientId: patientId
       });
 
       if (eligibilityResult.rows.length > 0 && eligibilityResult.rows[0].mother_patient_id) {
@@ -1194,9 +1196,9 @@ class EligibilityController extends BaseController {
 
       // If not found in eligibility, check prior_authorizations table
       const priorAuthQuery = `
-        SELECT mother_patient_id, created_at
+        SELECT mother_patient_id, created_at, patient_id, prior_auth_id
         FROM prior_authorizations 
-        WHERE patient_id = $1 
+        WHERE patient_id = $1::uuid
           AND is_newborn = true 
           AND mother_patient_id IS NOT NULL 
         ORDER BY created_at DESC 
@@ -1206,7 +1208,8 @@ class EligibilityController extends BaseController {
       
       console.log(`[getMotherPatientForNewborn] Prior auth query result:`, {
         rowCount: priorAuthResult.rows.length,
-        result: priorAuthResult.rows[0] || null
+        result: priorAuthResult.rows[0] || null,
+        searchedPatientId: patientId
       });
 
       if (priorAuthResult.rows.length > 0 && priorAuthResult.rows[0].mother_patient_id) {
@@ -1219,18 +1222,20 @@ class EligibilityController extends BaseController {
       // Debug: Let's also check if there are any records at all for this patient
       const debugEligibilityQuery = `
         SELECT COUNT(*) as total, 
-               COUNT(mother_patient_id) as with_mother_id
+               COUNT(mother_patient_id) as with_mother_id,
+               COUNT(CASE WHEN mother_patient_id IS NOT NULL THEN 1 END) as not_null_count
         FROM eligibility 
-        WHERE patient_id = $1
+        WHERE patient_id = $1::uuid
       `;
       const debugEligibilityResult = await query(debugEligibilityQuery, [patientId]);
       
       const debugPriorAuthQuery = `
         SELECT COUNT(*) as total,
                COUNT(CASE WHEN is_newborn = true THEN 1 END) as newborn_count,
-               COUNT(mother_patient_id) as with_mother_id
+               COUNT(mother_patient_id) as with_mother_id,
+               COUNT(CASE WHEN mother_patient_id IS NOT NULL THEN 1 END) as not_null_count
         FROM prior_authorizations 
-        WHERE patient_id = $1
+        WHERE patient_id = $1::uuid
       `;
       const debugPriorAuthResult = await query(debugPriorAuthQuery, [patientId]);
       
