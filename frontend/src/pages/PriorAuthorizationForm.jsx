@@ -146,17 +146,7 @@ export default function PriorAuthorizationForm() {
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     is_newborn: false, // Flag indicating if this is a newborn patient authorization
     birth_weight: '', // Birth weight in grams (required when is_newborn is true)
-    mother_patient_id: '', // Mother patient ID (for newborn requests)
-    mother_patient_mode: 'existing', // 'existing' | 'manual' - mode for mother patient input
-    mother_patient_data: { // Mother patient data (when entering manually)
-      name: '',
-      identifier: '',
-      identifierType: 'iqama',
-      gender: '',
-      birthDate: '',
-      phone: '',
-      email: ''
-    },
+    mother_patient_id: '', // Mother patient ID (for newborn requests - auto-populated from eligibility)
     // Transfer extension fields (per NPHIES Test Case 9)
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-transfer.html
     is_transfer: false, // Flag indicating if this is a transfer/referral request
@@ -250,13 +240,13 @@ export default function PriorAuthorizationForm() {
 
   // Update selectedMotherPatientDetails when mother patient is selected
   useEffect(() => {
-    if (formData.mother_patient_id && formData.mother_patient_mode === 'existing') {
+    if (formData.mother_patient_id) {
       const patient = patients.find(p => p.patient_id === formData.mother_patient_id);
       setSelectedMotherPatientDetails(patient || null);
     } else {
       setSelectedMotherPatientDetails(null);
     }
-  }, [formData.mother_patient_id, formData.mother_patient_mode, patients]);
+  }, [formData.mother_patient_id, patients]);
 
   // Auto-populate mother patient when is_newborn is checked and patient_id exists
   useEffect(() => {
@@ -273,8 +263,7 @@ export default function PriorAuthorizationForm() {
           if (response?.data?.mother_patient_id) {
             setFormData(prev => ({
               ...prev,
-              mother_patient_id: response.data.mother_patient_id,
-              mother_patient_mode: 'existing'
+              mother_patient_id: response.data.mother_patient_id
             }));
             setMotherAutoPopulated(true);
           }
@@ -286,13 +275,6 @@ export default function PriorAuthorizationForm() {
     }
   }, [formData.is_newborn, formData.patient_id]);
 
-  // Reset auto-populated flag when mother_patient_id is manually changed (not via auto-populate)
-  // This is tricky to detect, so we'll reset it when mother_patient_mode changes to 'manual'
-  useEffect(() => {
-    if (formData.mother_patient_mode === 'manual') {
-      setMotherAutoPopulated(false);
-    }
-  }, [formData.mother_patient_mode]);
 
   // Auto-analyze medication safety when pharmacy items change
   // NOTE: This is disabled when AI_FEATURES_ENABLED is false in api.js
@@ -577,18 +559,7 @@ export default function PriorAuthorizationForm() {
           prescriber_license: '',
           right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
           left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
-        },
-        // Ensure mother_patient_data is initialized if missing
-        mother_patient_data: data.mother_patient_data || {
-          name: '',
-          identifier: '',
-          identifierType: 'iqama',
-          gender: '',
-          birthDate: '',
-          phone: '',
-          email: ''
-        },
-        mother_patient_mode: data.mother_patient_mode || 'existing'
+        }
       });
       
       // Load coverages for the patient (if patient exists)
@@ -748,18 +719,7 @@ export default function PriorAuthorizationForm() {
           prescriber_license: '',
           right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
           left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
-        },
-        // Ensure mother_patient_data is initialized if missing
-        mother_patient_data: data.mother_patient_data || {
-          name: '',
-          identifier: '',
-          identifierType: 'iqama',
-          gender: '',
-          birthDate: '',
-          phone: '',
-          email: ''
-        },
-        mother_patient_mode: data.mother_patient_mode || 'existing'
+        }
       });
       
       // Load coverages for the patient
@@ -922,18 +882,7 @@ export default function PriorAuthorizationForm() {
           prescriber_license: '',
           right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
           left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
-        },
-        // Ensure mother_patient_data is initialized if missing
-        mother_patient_data: data.mother_patient_data || {
-          name: '',
-          identifier: '',
-          identifierType: 'iqama',
-          gender: '',
-          birthDate: '',
-          phone: '',
-          email: ''
-        },
-        mother_patient_mode: data.mother_patient_mode || 'existing'
+        }
       });
       
       // Load coverages for the patient
@@ -1051,17 +1000,8 @@ export default function PriorAuthorizationForm() {
       // Clear mother patient data when is_newborn is unchecked
       if (field === 'is_newborn' && !value) {
         updates.mother_patient_id = '';
-        updates.mother_patient_mode = 'existing';
-        updates.mother_patient_data = {
-          name: '',
-          identifier: '',
-          identifierType: 'iqama',
-          gender: '',
-          birthDate: '',
-          phone: '',
-          email: ''
-        };
         setSelectedMotherPatientDetails(null);
+        setMotherAutoPopulated(false);
       }
       
       return { ...prev, ...updates };
@@ -1736,20 +1676,13 @@ export default function PriorAuthorizationForm() {
       
       // Handle mother patient data for newborn requests
       if (dataToSave.is_newborn) {
-        if (dataToSave.mother_patient_mode === 'existing' && dataToSave.mother_patient_id) {
-          // Use existing mother patient ID
-          dataToSave.mother_patient_id = dataToSave.mother_patient_id;
-          delete dataToSave.mother_patient_data; // Don't send data if using existing patient
-        } else if (dataToSave.mother_patient_mode === 'manual' && dataToSave.mother_patient_data) {
-          // Send mother patient data for upsert
-          dataToSave.mother_patient_data = dataToSave.mother_patient_data;
-          delete dataToSave.mother_patient_id; // Don't send ID if entering manually
+        // Only send mother_patient_id if it exists (always using existing patient)
+        if (!dataToSave.mother_patient_id) {
+          delete dataToSave.mother_patient_id;
         }
       } else {
         // Not a newborn request - remove mother patient fields
         delete dataToSave.mother_patient_id;
-        delete dataToSave.mother_patient_data;
-        delete dataToSave.mother_patient_mode;
       }
 
       let response;
@@ -1854,20 +1787,13 @@ export default function PriorAuthorizationForm() {
       
       // Handle mother patient data for newborn requests
       if (dataToSave.is_newborn) {
-        if (dataToSave.mother_patient_mode === 'existing' && dataToSave.mother_patient_id) {
-          // Use existing mother patient ID
-          dataToSave.mother_patient_id = dataToSave.mother_patient_id;
-          delete dataToSave.mother_patient_data; // Don't send data if using existing patient
-        } else if (dataToSave.mother_patient_mode === 'manual' && dataToSave.mother_patient_data) {
-          // Send mother patient data for upsert
-          dataToSave.mother_patient_data = dataToSave.mother_patient_data;
-          delete dataToSave.mother_patient_id; // Don't send ID if entering manually
+        // Only send mother_patient_id if it exists (always using existing patient)
+        if (!dataToSave.mother_patient_id) {
+          delete dataToSave.mother_patient_id;
         }
       } else {
         // Not a newborn request - remove mother patient fields
         delete dataToSave.mother_patient_id;
-        delete dataToSave.mother_patient_data;
-        delete dataToSave.mother_patient_mode;
       }
 
       // Save first
@@ -2667,61 +2593,37 @@ export default function PriorAuthorizationForm() {
                 {/* Mother Patient Information (for newborn requests) */}
                 {formData.is_newborn && (
                   <div className="mt-4 p-4 bg-pink-50 rounded-lg border border-pink-200">
-                    <div className="flex items-center space-x-2 mb-3">
-                      <User className="h-5 w-5 text-pink-600" />
-                      <label className="text-sm font-medium text-gray-700">
-                        Mother Patient Information *
-                      </label>
-                    </div>
-                    <p className="text-sm text-pink-700 mb-3">
-                      For newborn requests, the mother's coverage will be used. The newborn has MRN identifier, and the mother has Iqama identifier.
-                    </p>
-                    
-                    {/* Auto-populated indicator */}
-                    {motherAutoPopulated && formData.mother_patient_id && (
-                      <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="text-sm text-green-700 font-medium">
-                            Mother patient auto-filled from previous eligibility check
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        <User className="h-5 w-5 text-pink-600" />
+                        <label className="text-sm font-medium text-gray-700">
+                          Mother Patient Information *
+                        </label>
+                      </div>
+                      {/* Auto-populated indicator */}
+                      {motherAutoPopulated && formData.mother_patient_id && (
+                        <div className="flex items-center gap-2 px-2 py-1 bg-green-50 border border-green-200 rounded-md">
+                          <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                          <span className="text-xs text-green-700 font-medium">
+                            Auto-filled from previous eligibility
                           </span>
                         </div>
-                      </div>
-                    )}
-                    
-                    {/* Mode Toggle */}
-                    <div className="flex space-x-1 bg-gray-100 rounded-lg p-1 mb-3">
-                      <button
-                        type="button"
-                        onClick={() => handleChange('mother_patient_mode', 'existing')}
-                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
-                          formData.mother_patient_mode === 'existing'
-                            ? 'bg-white text-primary-purple shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        Select Existing
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleChange('mother_patient_mode', 'manual')}
-                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
-                          formData.mother_patient_mode === 'manual'
-                            ? 'bg-white text-primary-purple shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        Enter Manually
-                      </button>
+                      )}
                     </div>
-
-                    {formData.mother_patient_mode === 'existing' ? (
-                      <div className="space-y-3">
+                    
+                    <p className="text-sm text-pink-700 mb-4">
+                      The mother's coverage will be used for this newborn request. The mother patient will be automatically selected if found from previous eligibility checks.
+                    </p>
+                    
+                    <div className="bg-white rounded-lg p-4 border border-pink-300 space-y-4">
+                      {/* Mother Patient Selection */}
+                      <div>
+                        <Label className="text-sm text-gray-700 mb-2 block">Select Mother Patient:</Label>
                         <Select
                           value={patients.map(p => ({ value: p.patient_id, label: `${p.name}${p.identifier ? ` (${p.identifier})` : ''}` })).find(opt => opt.value == formData.mother_patient_id)}
                           onChange={(option) => {
                             handleChange('mother_patient_id', option?.value || '');
-                            // selectedMotherPatientDetails will be updated by useEffect
+                            setMotherAutoPopulated(false); // Reset flag when manually changed
                           }}
                           options={patients.filter(p => {
                             // Filter to show patients with Iqama identifier type (typically starting with 2)
@@ -2736,134 +2638,52 @@ export default function PriorAuthorizationForm() {
                           isSearchable
                           menuPortalTarget={document.body}
                         />
-                        
-                        {/* Display selected mother patient details */}
-                        {selectedMotherPatientDetails && (
-                          <div className="bg-white rounded-lg p-4 border border-pink-300 space-y-2">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <User className="h-4 w-4 text-pink-600" />
-                              <span className="text-sm font-semibold text-gray-700">Selected Mother Patient Details</span>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                              <div>
-                                <span className="text-gray-500">Name:</span>
-                                <span className="ml-2 font-medium text-gray-800">{selectedMotherPatientDetails.name || 'N/A'}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Iqama Number:</span>
-                                <span className="ml-2 font-medium text-gray-800">{selectedMotherPatientDetails.identifier || 'N/A'}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Date of Birth:</span>
-                                <span className="ml-2 font-medium text-gray-800">
-                                  {selectedMotherPatientDetails.birth_date 
-                                    ? new Date(selectedMotherPatientDetails.birth_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                                    : 'N/A'}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Gender:</span>
-                                <span className="ml-2 font-medium text-gray-800 capitalize">{selectedMotherPatientDetails.gender || 'N/A'}</span>
-                              </div>
-                              {selectedMotherPatientDetails.phone && (
-                                <div>
-                                  <span className="text-gray-500">Phone:</span>
-                                  <span className="ml-2 font-medium text-gray-800">{selectedMotherPatientDetails.phone}</span>
-                                </div>
-                              )}
-                              {selectedMotherPatientDetails.email && (
-                                <div>
-                                  <span className="text-gray-500">Email:</span>
-                                  <span className="ml-2 font-medium text-gray-800">{selectedMotherPatientDetails.email}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div>
-                          <Label>Full Name</Label>
-                          <Input
-                            value={formData.mother_patient_data?.name || ''}
-                            onChange={(e) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), name: e.target.value })}
-                            placeholder="e.g. Maria Khaled Rizwan"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label>Iqama Number *</Label>
-                            <Input
-                              type="text"
-                              value={formData.mother_patient_data?.identifier || ''}
-                              onChange={(e) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), identifier: e.target.value })}
-                              placeholder="e.g. 2000000001"
-                              maxLength={10}
-                            />
+
+                      {/* Display selected mother patient details */}
+                      {selectedMotherPatientDetails && formData.mother_patient_id && (
+                        <div className="pt-4 border-t border-pink-200">
+                          <div className="flex items-center space-x-2 mb-3">
+                            <User className="h-4 w-4 text-pink-600" />
+                            <span className="text-sm font-semibold text-gray-700">Mother Patient Details</span>
                           </div>
-                          <div>
-                            <Label>Gender</Label>
-                            <Select
-                              value={[
-                                { value: 'male', label: 'Male' },
-                                { value: 'female', label: 'Female' },
-                                { value: 'other', label: 'Other' },
-                                { value: 'unknown', label: 'Unknown' }
-                              ].find(opt => opt.value === formData.mother_patient_data?.gender)}
-                              onChange={(option) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), gender: option?.value || '' })}
-                              options={[
-                                { value: 'male', label: 'Male' },
-                                { value: 'female', label: 'Female' },
-                                { value: 'other', label: 'Other' },
-                                { value: 'unknown', label: 'Unknown' }
-                              ]}
-                              styles={selectStyles}
-                              placeholder="Select..."
-                              isClearable
-                              menuPortalTarget={document.body}
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label>Date of Birth</Label>
-                          <div className="datepicker-wrapper">
-                            <DatePicker
-                              selected={formData.mother_patient_data?.birthDate ? new Date(formData.mother_patient_data.birthDate) : null}
-                              onChange={(date) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), birthDate: date ? date.toISOString().split('T')[0] : '' })}
-                              dateFormat="yyyy-MM-dd"
-                              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                              placeholderText="YYYY-MM-DD"
-                              showYearDropdown
-                              scrollableYearDropdown
-                              yearDropdownItemNumber={100}
-                              maxDate={new Date()}
-                            />
-                            <Calendar className="datepicker-icon h-4 w-4" />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-gray-500 block mb-1">Full Name</span>
+                              <span className="font-medium text-gray-900">{selectedMotherPatientDetails.name || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 block mb-1">Iqama Number</span>
+                              <span className="font-medium text-gray-900 font-mono">{selectedMotherPatientDetails.identifier || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 block mb-1">Date of Birth</span>
+                              <span className="font-medium text-gray-900">
+                                {selectedMotherPatientDetails.birth_date 
+                                  ? new Date(selectedMotherPatientDetails.birth_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 block mb-1">Gender</span>
+                              <span className="font-medium text-gray-900 capitalize">{selectedMotherPatientDetails.gender || 'N/A'}</span>
+                            </div>
+                            {selectedMotherPatientDetails.phone && (
+                              <div>
+                                <span className="text-gray-500 block mb-1">Phone</span>
+                                <span className="font-medium text-gray-900">{selectedMotherPatientDetails.phone}</span>
+                              </div>
+                            )}
+                            {selectedMotherPatientDetails.email && (
+                              <div>
+                                <span className="text-gray-500 block mb-1">Email</span>
+                                <span className="font-medium text-gray-900">{selectedMotherPatientDetails.email}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label>Phone Number</Label>
-                            <Input
-                              type="tel"
-                              value={formData.mother_patient_data?.phone || ''}
-                              onChange={(e) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), phone: e.target.value })}
-                              placeholder="e.g. +966501234567"
-                            />
-                          </div>
-                          <div>
-                            <Label>Email</Label>
-                            <Input
-                              type="email"
-                              value={formData.mother_patient_data?.email || ''}
-                              onChange={(e) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), email: e.target.value })}
-                              placeholder="e.g. maria@example.com"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

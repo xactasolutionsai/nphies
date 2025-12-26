@@ -1146,11 +1146,11 @@ class EligibilityController extends BaseController {
       }
 
       // First, check eligibility table for most recent record
+      // Note: eligibility table doesn't have is_newborn column, so we check if mother_patient_id exists
       const eligibilityQuery = `
         SELECT mother_patient_id 
         FROM eligibility 
         WHERE patient_id = $1 
-          AND is_newborn = true 
           AND mother_patient_id IS NOT NULL 
         ORDER BY created_at DESC 
         LIMIT 1
