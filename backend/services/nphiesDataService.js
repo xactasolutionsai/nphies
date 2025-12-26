@@ -584,12 +584,12 @@ class NphiesDataService {
       RETURNING eligibility_id
     `;
 
-    const result = await query(insertQuery, [
+    const insertParams = [
       finalPatientId,
       finalProviderId,
       finalInsurerId,
       finalCoverageId,
-      finalMotherPatientId,
+      finalMotherPatientId, // $5 - This should be the mother_patient_id
       Array.isArray(purpose) ? purpose.join(',') : purpose,
       servicedDate || new Date(),
       parsedResponse?.inforce ? 'eligible' : 'not_eligible',
@@ -603,10 +603,34 @@ class NphiesDataService {
       JSON.stringify(responseBundle),
       JSON.stringify(parsedResponse?.benefits || []),
       JSON.stringify(parsedResponse?.errors || [])
-    ]);
+    ];
 
-    console.log(`[NPHIES Data] Stored eligibility result: ${result.rows[0].eligibility_id}`);
-    return { eligibilityId: result.rows[0].eligibility_id };
+    console.log(`[NPHIES Data] Insert params for eligibility:`, {
+      param5_mother_patient_id: insertParams[4], // $5 is at index 4
+      allParams: insertParams.map((p, i) => ({
+        index: i + 1,
+        param: i === 14 || i === 15 || i === 16 || i === 17 ? `${typeof p} (${p?.length || 0} chars)` : p
+      }))
+    });
+
+    const result = await query(insertQuery, insertParams);
+    const eligibilityId = result.rows[0].eligibility_id;
+
+    // Verify what was actually stored
+    const verifyQuery = await query(
+      'SELECT mother_patient_id FROM eligibility WHERE eligibility_id = $1',
+      [eligibilityId]
+    );
+    const storedMotherPatientId = verifyQuery.rows[0]?.mother_patient_id;
+    
+    console.log(`[NPHIES Data] Stored eligibility result: ${eligibilityId}`);
+    console.log(`[NPHIES Data] Verification - Expected mother_patient_id: ${finalMotherPatientId}, Stored: ${storedMotherPatientId}`);
+    
+    if (finalMotherPatientId && !storedMotherPatientId) {
+      console.error(`[NPHIES Data] ERROR: mother_patient_id was NOT stored correctly! Expected: ${finalMotherPatientId}, but got: ${storedMotherPatientId}`);
+    }
+    
+    return { eligibilityId };
   }
 
   /**
