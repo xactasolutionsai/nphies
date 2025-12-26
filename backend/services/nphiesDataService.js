@@ -562,6 +562,14 @@ class NphiesDataService {
     const finalCoverageId = coverage?.coverage_id || coverageId || null;
     const finalMotherPatientId = motherPatient?.patient_id || motherPatientId || null;
 
+    console.log(`[NPHIES Data] Storing eligibility result with:`, {
+      patient_id: finalPatientId,
+      mother_patient_id: finalMotherPatientId,
+      has_motherPatient: !!motherPatient,
+      motherPatient_patient_id: motherPatient?.patient_id,
+      motherPatientId_param: motherPatientId
+    });
+
     const insertQuery = `
       INSERT INTO eligibility (
         patient_id, provider_id, insurer_id, coverage_id, mother_patient_id,
