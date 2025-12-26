@@ -124,6 +124,8 @@ export default function PriorAuthorizationForm() {
   
   // Mother patient details state (for displaying selected mother patient info)
   const [selectedMotherPatientDetails, setSelectedMotherPatientDetails] = useState(null);
+  // Track if mother patient was auto-populated from previous eligibility/prior auth
+  const [motherAutoPopulated, setMotherAutoPopulated] = useState(false);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -255,6 +257,42 @@ export default function PriorAuthorizationForm() {
       setSelectedMotherPatientDetails(null);
     }
   }, [formData.mother_patient_id, formData.mother_patient_mode, patients]);
+
+  // Auto-populate mother patient when is_newborn is checked and patient_id exists
+  useEffect(() => {
+    // Reset auto-populated flag when is_newborn is unchecked
+    if (!formData.is_newborn) {
+      setMotherAutoPopulated(false);
+      return;
+    }
+
+    // Only run if is_newborn is true, patient_id exists, and mother_patient_id is not already set
+    if (formData.is_newborn && formData.patient_id && !formData.mother_patient_id) {
+      api.getMotherPatientForNewborn(formData.patient_id)
+        .then(response => {
+          if (response?.data?.mother_patient_id) {
+            setFormData(prev => ({
+              ...prev,
+              mother_patient_id: response.data.mother_patient_id,
+              mother_patient_mode: 'existing'
+            }));
+            setMotherAutoPopulated(true);
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching mother patient for newborn:', error);
+          // Silently fail - don't block form usage
+        });
+    }
+  }, [formData.is_newborn, formData.patient_id]);
+
+  // Reset auto-populated flag when mother_patient_id is manually changed (not via auto-populate)
+  // This is tricky to detect, so we'll reset it when mother_patient_mode changes to 'manual'
+  useEffect(() => {
+    if (formData.mother_patient_mode === 'manual') {
+      setMotherAutoPopulated(false);
+    }
+  }, [formData.mother_patient_mode]);
 
   // Auto-analyze medication safety when pharmacy items change
   // NOTE: This is disabled when AI_FEATURES_ENABLED is false in api.js
@@ -2638,6 +2676,18 @@ export default function PriorAuthorizationForm() {
                     <p className="text-sm text-pink-700 mb-3">
                       For newborn requests, the mother's coverage will be used. The newborn has MRN identifier, and the mother has Iqama identifier.
                     </p>
+                    
+                    {/* Auto-populated indicator */}
+                    {motherAutoPopulated && formData.mother_patient_id && (
+                      <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="text-sm text-green-700 font-medium">
+                            Mother patient auto-filled from previous eligibility check
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Mode Toggle */}
                     <div className="flex space-x-1 bg-gray-100 rounded-lg p-1 mb-3">

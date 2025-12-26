@@ -39,6 +39,9 @@ router.get('/:id/nphies-details', eligibilityController.getNphiesDetails.bind(el
 // GET /api/eligibility/patient/:patientId/coverages - Get patient coverages
 router.get('/patient/:patientId/coverages', eligibilityController.getPatientCoverages.bind(eligibilityController));
 
+// GET /api/eligibility/patient/:patientId/mother-patient - Get mother patient ID for a newborn
+router.get('/patient/:patientId/mother-patient', eligibilityController.getMotherPatientForNewborn.bind(eligibilityController));
+
 // GET /api/coverages - Get all coverages (mounted separately in index.js)
 // This is handled in a separate coverages route
 

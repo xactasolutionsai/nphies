@@ -1134,6 +1134,60 @@ class EligibilityController extends BaseController {
       });
     }
   }
+
+  // Get mother patient ID for a newborn patient
+  // Checks both eligibility and prior_authorizations tables
+  async getMotherPatientForNewborn(req, res) {
+    try {
+      const { patientId } = req.params;
+
+      if (!patientId) {
+        return res.status(400).json({ error: 'Patient ID is required' });
+      }
+
+      // First, check eligibility table for most recent record
+      const eligibilityQuery = `
+        SELECT mother_patient_id 
+        FROM eligibility 
+        WHERE patient_id = $1 
+          AND is_newborn = true 
+          AND mother_patient_id IS NOT NULL 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `;
+      const eligibilityResult = await query(eligibilityQuery, [patientId]);
+
+      if (eligibilityResult.rows.length > 0 && eligibilityResult.rows[0].mother_patient_id) {
+        return res.json({ 
+          mother_patient_id: eligibilityResult.rows[0].mother_patient_id 
+        });
+      }
+
+      // If not found in eligibility, check prior_authorizations table
+      const priorAuthQuery = `
+        SELECT mother_patient_id 
+        FROM prior_authorizations 
+        WHERE patient_id = $1 
+          AND is_newborn = true 
+          AND mother_patient_id IS NOT NULL 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `;
+      const priorAuthResult = await query(priorAuthQuery, [patientId]);
+
+      if (priorAuthResult.rows.length > 0 && priorAuthResult.rows[0].mother_patient_id) {
+        return res.json({ 
+          mother_patient_id: priorAuthResult.rows[0].mother_patient_id 
+        });
+      }
+
+      // No mother patient relationship found
+      return res.json({ mother_patient_id: null });
+    } catch (error) {
+      console.error('Error getting mother patient for newborn:', error);
+      res.status(500).json({ error: 'Failed to fetch mother patient information' });
+    }
+  }
 }
 
 export default new EligibilityController();
