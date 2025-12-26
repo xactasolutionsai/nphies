@@ -539,7 +539,18 @@ export default function PriorAuthorizationForm() {
           prescriber_license: '',
           right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
           left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
-        }
+        },
+        // Ensure mother_patient_data is initialized if missing
+        mother_patient_data: data.mother_patient_data || {
+          name: '',
+          identifier: '',
+          identifierType: 'iqama',
+          gender: '',
+          birthDate: '',
+          phone: '',
+          email: ''
+        },
+        mother_patient_mode: data.mother_patient_mode || 'existing'
       });
       
       // Load coverages for the patient (if patient exists)
@@ -699,7 +710,18 @@ export default function PriorAuthorizationForm() {
           prescriber_license: '',
           right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
           left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
-        }
+        },
+        // Ensure mother_patient_data is initialized if missing
+        mother_patient_data: data.mother_patient_data || {
+          name: '',
+          identifier: '',
+          identifierType: 'iqama',
+          gender: '',
+          birthDate: '',
+          phone: '',
+          email: ''
+        },
+        mother_patient_mode: data.mother_patient_mode || 'existing'
       });
       
       // Load coverages for the patient
@@ -862,7 +884,18 @@ export default function PriorAuthorizationForm() {
           prescriber_license: '',
           right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
           left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
-        }
+        },
+        // Ensure mother_patient_data is initialized if missing
+        mother_patient_data: data.mother_patient_data || {
+          name: '',
+          identifier: '',
+          identifierType: 'iqama',
+          gender: '',
+          birthDate: '',
+          phone: '',
+          email: ''
+        },
+        mother_patient_mode: data.mother_patient_mode || 'existing'
       });
       
       // Load coverages for the patient
@@ -2703,8 +2736,8 @@ export default function PriorAuthorizationForm() {
                         <div>
                           <Label>Full Name</Label>
                           <Input
-                            value={formData.mother_patient_data.name || ''}
-                            onChange={(e) => handleChange('mother_patient_data', { ...formData.mother_patient_data, name: e.target.value })}
+                            value={formData.mother_patient_data?.name || ''}
+                            onChange={(e) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), name: e.target.value })}
                             placeholder="e.g. Maria Khaled Rizwan"
                           />
                         </div>
@@ -2713,8 +2746,8 @@ export default function PriorAuthorizationForm() {
                             <Label>Iqama Number *</Label>
                             <Input
                               type="text"
-                              value={formData.mother_patient_data.identifier || ''}
-                              onChange={(e) => handleChange('mother_patient_data', { ...formData.mother_patient_data, identifier: e.target.value })}
+                              value={formData.mother_patient_data?.identifier || ''}
+                              onChange={(e) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), identifier: e.target.value })}
                               placeholder="e.g. 2000000001"
                               maxLength={10}
                             />
@@ -2727,8 +2760,8 @@ export default function PriorAuthorizationForm() {
                                 { value: 'female', label: 'Female' },
                                 { value: 'other', label: 'Other' },
                                 { value: 'unknown', label: 'Unknown' }
-                              ].find(opt => opt.value === formData.mother_patient_data.gender)}
-                              onChange={(option) => handleChange('mother_patient_data', { ...formData.mother_patient_data, gender: option?.value || '' })}
+                              ].find(opt => opt.value === formData.mother_patient_data?.gender)}
+                              onChange={(option) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), gender: option?.value || '' })}
                               options={[
                                 { value: 'male', label: 'Male' },
                                 { value: 'female', label: 'Female' },
@@ -2746,8 +2779,8 @@ export default function PriorAuthorizationForm() {
                           <Label>Date of Birth</Label>
                           <div className="datepicker-wrapper">
                             <DatePicker
-                              selected={formData.mother_patient_data.birthDate ? new Date(formData.mother_patient_data.birthDate) : null}
-                              onChange={(date) => handleChange('mother_patient_data', { ...formData.mother_patient_data, birthDate: date ? date.toISOString().split('T')[0] : '' })}
+                              selected={formData.mother_patient_data?.birthDate ? new Date(formData.mother_patient_data.birthDate) : null}
+                              onChange={(date) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), birthDate: date ? date.toISOString().split('T')[0] : '' })}
                               dateFormat="yyyy-MM-dd"
                               className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
                               placeholderText="YYYY-MM-DD"
@@ -2764,8 +2797,8 @@ export default function PriorAuthorizationForm() {
                             <Label>Phone Number</Label>
                             <Input
                               type="tel"
-                              value={formData.mother_patient_data.phone || ''}
-                              onChange={(e) => handleChange('mother_patient_data', { ...formData.mother_patient_data, phone: e.target.value })}
+                              value={formData.mother_patient_data?.phone || ''}
+                              onChange={(e) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), phone: e.target.value })}
                               placeholder="e.g. +966501234567"
                             />
                           </div>
@@ -2773,8 +2806,8 @@ export default function PriorAuthorizationForm() {
                             <Label>Email</Label>
                             <Input
                               type="email"
-                              value={formData.mother_patient_data.email || ''}
-                              onChange={(e) => handleChange('mother_patient_data', { ...formData.mother_patient_data, email: e.target.value })}
+                              value={formData.mother_patient_data?.email || ''}
+                              onChange={(e) => handleChange('mother_patient_data', { ...(formData.mother_patient_data || {}), email: e.target.value })}
                               placeholder="e.g. maria@example.com"
                             />
                           </div>
