@@ -248,32 +248,65 @@ export default function PriorAuthorizationForm() {
     }
   }, [formData.mother_patient_id, patients]);
 
+  // Track the last patient_id we fetched mother for (to avoid re-fetching unnecessarily)
+  const [lastFetchedPatientId, setLastFetchedPatientId] = useState(null);
+
+  // Clear auto-populated mother when patient changes
+  useEffect(() => {
+    if (formData.is_newborn && formData.patient_id && formData.patient_id !== lastFetchedPatientId && motherAutoPopulated) {
+      // Patient changed, clear the previously auto-populated mother
+      setFormData(prev => ({
+        ...prev,
+        mother_patient_id: ''
+      }));
+      setMotherAutoPopulated(false);
+    }
+  }, [formData.patient_id, formData.is_newborn, lastFetchedPatientId, motherAutoPopulated]);
+
   // Auto-populate mother patient when is_newborn is checked and patient_id exists
   useEffect(() => {
     // Reset auto-populated flag when is_newborn is unchecked
     if (!formData.is_newborn) {
       setMotherAutoPopulated(false);
+      setLastFetchedPatientId(null);
       return;
     }
 
-    // Only run if is_newborn is true, patient_id exists, and mother_patient_id is not already set
-    if (formData.is_newborn && formData.patient_id && !formData.mother_patient_id) {
+    // Only fetch if:
+    // 1. is_newborn is true
+    // 2. patient_id exists
+    // 3. We haven't already fetched for this patient (to avoid unnecessary API calls)
+    // 4. mother_patient_id is not set (either cleared by patient change or never set)
+    const shouldFetch = formData.is_newborn && 
+                       formData.patient_id && 
+                       formData.patient_id !== lastFetchedPatientId &&
+                       !formData.mother_patient_id;
+
+    if (shouldFetch) {
       api.getMotherPatientForNewborn(formData.patient_id)
         .then(response => {
-          if (response?.data?.mother_patient_id) {
+          console.log('[PriorAuthForm] Mother patient response:', response);
+          // API returns {mother_patient_id: "..."} directly, not wrapped in data
+          if (response?.mother_patient_id) {
             setFormData(prev => ({
               ...prev,
-              mother_patient_id: response.data.mother_patient_id
+              mother_patient_id: response.mother_patient_id
             }));
             setMotherAutoPopulated(true);
+            setLastFetchedPatientId(formData.patient_id);
+            console.log('[PriorAuthForm] Auto-populated mother_patient_id:', response.mother_patient_id);
+          } else {
+            console.log('[PriorAuthForm] No mother_patient_id found in response');
+            setLastFetchedPatientId(formData.patient_id); // Mark as fetched even if null
           }
         })
         .catch(error => {
           console.error('Error fetching mother patient for newborn:', error);
           // Silently fail - don't block form usage
+          setLastFetchedPatientId(formData.patient_id); // Mark as fetched to avoid retrying
         });
     }
-  }, [formData.is_newborn, formData.patient_id]);
+  }, [formData.is_newborn, formData.patient_id, formData.mother_patient_id, lastFetchedPatientId]);
 
 
   // Auto-analyze medication safety when pharmacy items change
