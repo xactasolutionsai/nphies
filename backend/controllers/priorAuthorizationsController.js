@@ -195,7 +195,7 @@ class PriorAuthorizationsController extends BaseController {
         pa.is_update, pa.related_auth_id, pa.is_resubmission, pa.related_claim_identifier,
         pa.is_transfer, pa.transfer_provider_id,
         pa.transfer_auth_number, pa.transfer_period_start, pa.transfer_period_end,
-        pa.is_newborn, pa.birth_weight,
+        pa.is_newborn, pa.birth_weight, pa.mother_patient_id,
         pa.is_cancelled, pa.cancellation_reason, pa.eligibility_ref, pa.eligibility_offline_ref,
         pa.eligibility_offline_date, pa.diagnosis_codes, pa.primary_diagnosis, pa.priority,
         pa.total_amount, pa.approved_amount, pa.eligible_amount, pa.benefit_amount, pa.copay_amount,

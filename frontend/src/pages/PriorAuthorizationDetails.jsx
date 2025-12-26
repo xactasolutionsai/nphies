@@ -155,6 +155,8 @@ export default function PriorAuthorizationDetails() {
   const [loading, setLoading] = useState(true);
   const [priorAuth, setPriorAuth] = useState(null);
   const [bundle, setBundle] = useState(null);
+  const [motherPatient, setMotherPatient] = useState(null);
+  const [motherPatientLoading, setMotherPatientLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
   const [showBundleDialog, setShowBundleDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -190,6 +192,15 @@ export default function PriorAuthorizationDetails() {
     loadPriorAuthorization();
   }, [id]);
 
+  // Fetch mother patient when priorAuth is loaded and has mother_patient_id
+  useEffect(() => {
+    if (priorAuth?.is_newborn && priorAuth?.mother_patient_id) {
+      loadMotherPatient();
+    } else {
+      setMotherPatient(null);
+    }
+  }, [priorAuth?.mother_patient_id]);
+
   const loadPriorAuthorization = async () => {
     try {
       setLoading(true);
@@ -202,6 +213,22 @@ export default function PriorAuthorizationDetails() {
       setTimeout(() => navigate('/prior-authorizations'), 2000);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMotherPatient = async () => {
+    if (!priorAuth?.mother_patient_id) return;
+    
+    try {
+      setMotherPatientLoading(true);
+      const response = await api.getPatient(priorAuth.mother_patient_id);
+      setMotherPatient(response.data);
+    } catch (error) {
+      console.error('Error loading mother patient:', error);
+      // Don't show error modal for mother patient - it's optional info
+      setMotherPatient(null);
+    } finally {
+      setMotherPatientLoading(false);
     }
   };
 
@@ -2679,6 +2706,50 @@ export default function PriorAuthorizationDetails() {
               )}
             </CardContent>
           </Card>
+
+          {/* Mother Patient Card - Only for newborns */}
+          {priorAuth.is_newborn && priorAuth.mother_patient_id && (
+            <Card className="border-pink-200 bg-pink-50/30">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <User className="h-5 w-5 text-pink-600" />
+                  Mother Patient
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {motherPatientLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-pink-300 border-t-pink-600"></div>
+                  </div>
+                ) : motherPatient ? (
+                  <>
+                    <p className="font-medium">{motherPatient.name || '-'}</p>
+                    <p className="text-sm text-gray-500">{motherPatient.identifier}</p>
+                    {(motherPatient.birth_date || motherPatient.gender) && (
+                      <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
+                        {motherPatient.birth_date && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {calculateAge(motherPatient.birth_date)}
+                          </span>
+                        )}
+                        {motherPatient.gender && (
+                          <span className="capitalize">{motherPatient.gender}</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="mt-3 p-2 bg-pink-100 rounded-md border border-pink-200">
+                      <p className="text-xs text-pink-700">
+                        <span className="font-medium">Relationship:</span> Mother of Newborn
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500">Mother patient information not available</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Provider Card */}
           <Card>

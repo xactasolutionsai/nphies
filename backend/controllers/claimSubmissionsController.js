@@ -428,7 +428,25 @@ class ClaimSubmissionsController extends BaseController {
       if (insurerResult.rows.length === 0) return res.status(400).json({ error: 'Insurer not found' });
 
       const coverage = await this.getCoverageData(claim.patient_id, claim.insurer_id, claim.coverage_id);
-      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient: patientResult.rows[0], provider: providerResult.rows[0], insurer: insurerResult.rows[0], coverage, policyHolder: null });
+      
+      // Fetch mother patient if this is a newborn claim
+      let motherPatient = null;
+      if (claim.is_newborn && claim.mother_patient_id) {
+        const motherResult = await query('SELECT * FROM patients WHERE patient_id = $1', [claim.mother_patient_id]);
+        if (motherResult.rows.length > 0) {
+          motherPatient = motherResult.rows[0];
+        }
+      }
+      
+      const bundle = claimMapper.buildClaimRequestBundle({ 
+        claim, 
+        patient: patientResult.rows[0], 
+        provider: providerResult.rows[0], 
+        insurer: insurerResult.rows[0], 
+        coverage, 
+        policyHolder: null,
+        motherPatient: motherPatient
+      });
       res.json({ data: bundle });
     } catch (error) {
       console.error('Error generating bundle:', error);
@@ -458,6 +476,15 @@ class ClaimSubmissionsController extends BaseController {
       const insurer = insurerResult.rows[0];
       const coverage = await this.getCoverageData(formData.patient_id, formData.insurer_id, formData.coverage_id);
 
+      // Fetch mother patient if this is a newborn claim
+      let motherPatient = null;
+      if (formData.is_newborn && formData.mother_patient_id) {
+        const motherResult = await query('SELECT * FROM patients WHERE patient_id = $1', [formData.mother_patient_id]);
+        if (motherResult.rows.length > 0) {
+          motherPatient = motherResult.rows[0];
+        }
+      }
+
       const claim = {
         claim_number: formData.claim_number || `PREVIEW-${Date.now()}`,
         claim_type: formData.claim_type || 'institutional',
@@ -477,10 +504,21 @@ class ClaimSubmissionsController extends BaseController {
         pre_auth_ref: formData.pre_auth_ref,
         eligibility_offline_ref: formData.eligibility_offline_ref,
         practice_code: formData.practice_code,
-        service_type: formData.service_type
+        service_type: formData.service_type,
+        is_newborn: formData.is_newborn || false,
+        birth_weight: formData.birth_weight || null,
+        mother_patient_id: formData.mother_patient_id || null
       };
 
-      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, policyHolder: null, motherPatient });
+      const bundle = claimMapper.buildClaimRequestBundle({ 
+        claim, 
+        patient, 
+        provider, 
+        insurer, 
+        coverage, 
+        policyHolder: null, 
+        motherPatient: motherPatient
+      });
       res.json({
         success: true,
         entities: { patient: { name: patient.name, identifier: patient.identifier }, provider: { name: provider.provider_name, nphiesId: provider.nphies_id }, insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id } },
