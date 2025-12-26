@@ -617,19 +617,6 @@ class NphiesDataService {
     const eligibilityId = result.rows[0].eligibility_id;
 
     // Verify what was actually stored
-    const verifyQuery = await query(
-      'SELECT mother_patient_id FROM eligibility WHERE eligibility_id = $1',
-      [eligibilityId]
-    );
-    const storedMotherPatientId = verifyQuery.rows[0]?.mother_patient_id;
-    
-    console.log(`[NPHIES Data] Stored eligibility result: ${eligibilityId}`);
-    console.log(`[NPHIES Data] Verification - Expected mother_patient_id: ${finalMotherPatientId}, Stored: ${storedMotherPatientId}`);
-    
-    if (finalMotherPatientId && !storedMotherPatientId) {
-      console.error(`[NPHIES Data] ERROR: mother_patient_id was NOT stored correctly! Expected: ${finalMotherPatientId}, but got: ${storedMotherPatientId}`);
-    }
-    
     return { eligibilityId };
   }
 

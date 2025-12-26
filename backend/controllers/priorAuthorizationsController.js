@@ -359,7 +359,6 @@ class PriorAuthorizationsController extends BaseController {
             isNewborn: false // Mother is not a newborn
           });
           value.mother_patient_id = motherPatient.patient_id;
-          console.log(`[createPriorAuth] Upserted mother patient: ${motherPatient.name}`);
         } catch (error) {
           console.error('[createPriorAuth] Error upserting mother patient:', error);
           return res.status(400).json({ error: `Failed to process mother patient: ${error.message}` });
@@ -476,7 +475,6 @@ class PriorAuthorizationsController extends BaseController {
             isNewborn: false // Mother is not a newborn
           });
           value.mother_patient_id = motherPatient.patient_id;
-          console.log(`[updatePriorAuth] Upserted mother patient: ${motherPatient.name}`);
         } catch (error) {
           console.error('[updatePriorAuth] Error upserting mother patient:', error);
           return res.status(400).json({ error: `Failed to process mother patient: ${error.message}` });
@@ -622,9 +620,6 @@ class PriorAuthorizationsController extends BaseController {
         const motherResult = await query('SELECT * FROM patients WHERE patient_id = $1', [priorAuth.mother_patient_id]);
         if (motherResult.rows.length > 0) {
           motherPatient = motherResult.rows[0];
-          console.log(`[sendToNphies] Using mother patient: ${motherPatient.name}`);
-        } else {
-          console.warn(`[sendToNphies] Mother patient not found for ID: ${priorAuth.mother_patient_id}`);
         }
       }
 
@@ -1762,6 +1757,7 @@ class PriorAuthorizationsController extends BaseController {
         // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
         is_newborn: formData.is_newborn || false,
         birth_weight: formData.birth_weight ? parseFloat(formData.birth_weight) : null,
+        mother_patient_id: formData.mother_patient_id || null,
         // Service type for institutional claims
         service_type: formData.service_type || null,
         // Use explicit sub_type, or derive from encounter_class (ensures consistency with Claims)
@@ -1801,6 +1797,15 @@ class PriorAuthorizationsController extends BaseController {
           }
         } catch (error) {
           console.warn('[Preview] Could not look up original authorization for follow-up:', error.message);
+        }
+      }
+
+      // Fetch mother patient if this is a newborn request
+      let motherPatient = null;
+      if (priorAuth.is_newborn && priorAuth.mother_patient_id) {
+        const motherResult = await query('SELECT * FROM patients WHERE patient_id = $1', [priorAuth.mother_patient_id]);
+        if (motherResult.rows.length > 0) {
+          motherPatient = motherResult.rows[0];
         }
       }
 

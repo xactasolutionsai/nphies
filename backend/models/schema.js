@@ -427,6 +427,7 @@ export const validationSchemas = {
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     is_newborn: Joi.boolean().allow(null).optional(),
     birth_weight: Joi.number().precision(2).allow(null).optional(), // Weight in grams
+    mother_patient_id: Joi.string().uuid().allow(null, '').optional(), // Mother patient ID for newborn requests
     
     // Eligibility Reference
     eligibility_ref: Joi.string().max(100).allow(null, '').optional(),

@@ -754,7 +754,6 @@ class EligibilityController extends BaseController {
           }
           motherPatient = motherResult.rows[0];
           finalMotherPatientId = motherPatient.patient_id; // Store the ID we'll use
-          console.log(`[NPHIES Dynamic] Using existing mother patient: ${motherPatient.name} (ID: ${finalMotherPatientId})`);
         } else if (motherPatientData) {
           // Create temporary mother patient object from form data (don't upsert yet)
           if (!motherPatientData.identifier) {
@@ -782,7 +781,6 @@ class EligibilityController extends BaseController {
             email: motherPatientData.email
           };
           shouldUpsertMotherPatient = true;
-          console.log(`[NPHIES Dynamic] Created temporary mother patient object (will upsert after successful API call): ${motherPatient.name}`);
         } else {
           return res.status(400).json({
             success: false,
@@ -791,10 +789,6 @@ class EligibilityController extends BaseController {
         }
       }
 
-      console.log('[NPHIES Dynamic] Building eligibility request bundle...');
-      if (isNewborn) console.log('[NPHIES Dynamic] Newborn extension enabled');
-      if (isTransfer) console.log('[NPHIES Dynamic] Transfer extension enabled');
-      if (isDiscoveryMode) console.log('[NPHIES Dynamic] Discovery mode enabled');
 
       // Build FHIR bundle with extensions (handles null coverage for discovery)
       const requestBundle = nphiesMapper.buildEligibilityRequestBundle({
@@ -809,7 +803,6 @@ class EligibilityController extends BaseController {
         motherPatient: motherPatient
       });
 
-      console.log('[NPHIES Dynamic] Sending request to NPHIES API...');
 
       // Send to NPHIES
       const nphiesResponse = await nphiesService.checkEligibility(requestBundle);
@@ -827,16 +820,13 @@ class EligibilityController extends BaseController {
       // API call succeeded - now upsert patients if needed
       if (shouldUpsertPatient && patientDataToUpsert) {
         patient = await nphiesDataService.upsertPatient(patientDataToUpsert);
-        console.log(`[NPHIES Dynamic] Upserted patient after successful API call: ${patient.name}`);
       }
       
       if (shouldUpsertMotherPatient && motherPatientDataToUpsert) {
         motherPatient = await nphiesDataService.upsertPatient(motherPatientDataToUpsert);
         finalMotherPatientId = motherPatient.patient_id; // Update the ID after upsert
-        console.log(`[NPHIES Dynamic] Upserted mother patient after successful API call: ${motherPatient.name} (ID: ${finalMotherPatientId})`);
       }
 
-      console.log('[NPHIES Dynamic] Parsing response and storing data...');
 
       // Parse response
       const parsedResponse = nphiesMapper.parseEligibilityResponse(nphiesResponse.data);
@@ -855,17 +845,6 @@ class EligibilityController extends BaseController {
         finalMotherPatientId = motherPatient.patient_id;
       }
       
-      console.log(`[NPHIES Dynamic] Storing eligibility result with mother_patient_id: ${finalMotherPatientId}`);
-      if (isNewborn) {
-        console.log(`[NPHIES Dynamic] Mother patient info:`, {
-          finalMotherPatientId,
-          motherPatientHasId: !!motherPatient?.patient_id,
-          motherPatientId: motherPatient?.patient_id,
-          motherPatientName: motherPatient?.name,
-          motherPatientIdentifier: motherPatient?.identifier
-        });
-      }
-      
       const storedResult = await nphiesDataService.storeEligibilityResult({
         patient: updatedEntities.patient || patient,
         provider,
@@ -882,7 +861,6 @@ class EligibilityController extends BaseController {
         isTransfer
       });
 
-      console.log(`[NPHIES Dynamic] Eligibility check completed. ID: ${storedResult.eligibilityId}`);
 
       // Return response - success indicates if eligibility was granted, not if API call succeeded
       // The API call succeeded if we got here, so always include eligibilityId for navigation
@@ -1159,6 +1137,9 @@ class EligibilityController extends BaseController {
 
   // Get mother patient ID for a newborn patient
   // Checks both eligibility and prior_authorizations tables
+  // Get mother patient ID for a newborn patient
+  // Checks both eligibility and prior_authorizations tables for the most recent mother_patient_id
+  // Note: A patient should have only one mother, so we return the most recent record
   async getMotherPatientForNewborn(req, res) {
     try {
       const { patientId } = req.params;
@@ -1166,8 +1147,6 @@ class EligibilityController extends BaseController {
       if (!patientId) {
         return res.status(400).json({ error: 'Patient ID is required' });
       }
-
-      console.log(`[getMotherPatientForNewborn] Looking for mother_patient_id for patient_id: ${patientId} (type: ${typeof patientId})`);
 
       // First, check eligibility table for most recent record
       // Note: eligibility table doesn't have is_newborn column, so we check if mother_patient_id exists
@@ -1180,15 +1159,8 @@ class EligibilityController extends BaseController {
         LIMIT 1
       `;
       const eligibilityResult = await query(eligibilityQuery, [patientId]);
-      
-      console.log(`[getMotherPatientForNewborn] Eligibility query result:`, {
-        rowCount: eligibilityResult.rows.length,
-        result: eligibilityResult.rows[0] || null,
-        searchedPatientId: patientId
-      });
 
       if (eligibilityResult.rows.length > 0 && eligibilityResult.rows[0].mother_patient_id) {
-        console.log(`[getMotherPatientForNewborn] Found mother_patient_id in eligibility: ${eligibilityResult.rows[0].mother_patient_id}`);
         return res.json({ 
           mother_patient_id: eligibilityResult.rows[0].mother_patient_id 
         });
@@ -1196,7 +1168,7 @@ class EligibilityController extends BaseController {
 
       // If not found in eligibility, check prior_authorizations table
       const priorAuthQuery = `
-        SELECT mother_patient_id, created_at, patient_id, prior_auth_id
+        SELECT mother_patient_id, created_at, patient_id, id
         FROM prior_authorizations 
         WHERE patient_id = $1::uuid
           AND is_newborn = true 
@@ -1205,54 +1177,14 @@ class EligibilityController extends BaseController {
         LIMIT 1
       `;
       const priorAuthResult = await query(priorAuthQuery, [patientId]);
-      
-      console.log(`[getMotherPatientForNewborn] Prior auth query result:`, {
-        rowCount: priorAuthResult.rows.length,
-        result: priorAuthResult.rows[0] || null,
-        searchedPatientId: patientId
-      });
 
       if (priorAuthResult.rows.length > 0 && priorAuthResult.rows[0].mother_patient_id) {
-        console.log(`[getMotherPatientForNewborn] Found mother_patient_id in prior_authorizations: ${priorAuthResult.rows[0].mother_patient_id}`);
         return res.json({ 
           mother_patient_id: priorAuthResult.rows[0].mother_patient_id 
         });
       }
 
-      // Debug: Let's also check if there are any records at all for this patient
-      const debugEligibilityQuery = `
-        SELECT COUNT(*) as total, 
-               COUNT(mother_patient_id) as with_mother_id,
-               COUNT(CASE WHEN mother_patient_id IS NOT NULL THEN 1 END) as not_null_count
-        FROM eligibility 
-        WHERE patient_id = $1::uuid
-      `;
-      const debugEligibilityResult = await query(debugEligibilityQuery, [patientId]);
-      
-      const debugPriorAuthQuery = `
-        SELECT COUNT(*) as total,
-               COUNT(CASE WHEN is_newborn = true THEN 1 END) as newborn_count,
-               COUNT(mother_patient_id) as with_mother_id,
-               COUNT(CASE WHEN mother_patient_id IS NOT NULL THEN 1 END) as not_null_count
-        FROM prior_authorizations 
-        WHERE patient_id = $1::uuid
-      `;
-      const debugPriorAuthResult = await query(debugPriorAuthQuery, [patientId]);
-      
-      console.log(`[getMotherPatientForNewborn] Debug info:`, {
-        eligibility: {
-          total: debugEligibilityResult.rows[0]?.total || 0,
-          with_mother_id: debugEligibilityResult.rows[0]?.with_mother_id || 0
-        },
-        prior_authorizations: {
-          total: debugPriorAuthResult.rows[0]?.total || 0,
-          newborn_count: debugPriorAuthResult.rows[0]?.newborn_count || 0,
-          with_mother_id: debugPriorAuthResult.rows[0]?.with_mother_id || 0
-        }
-      });
-
-      // No mother patient relationship found
-      console.log(`[getMotherPatientForNewborn] No mother_patient_id found for patient_id: ${patientId}`);
+      // No mother patient relationship found - return null (this is a valid response, not an error)
       return res.json({ mother_patient_id: null });
     } catch (error) {
       console.error('Error getting mother patient for newborn:', error);

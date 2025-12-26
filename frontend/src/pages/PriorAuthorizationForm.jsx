@@ -285,7 +285,6 @@ export default function PriorAuthorizationForm() {
     if (shouldFetch) {
       api.getMotherPatientForNewborn(formData.patient_id)
         .then(response => {
-          console.log('[PriorAuthForm] Mother patient response:', response);
           // API returns {mother_patient_id: "..."} directly, not wrapped in data
           if (response?.mother_patient_id) {
             setFormData(prev => ({
@@ -294,14 +293,11 @@ export default function PriorAuthorizationForm() {
             }));
             setMotherAutoPopulated(true);
             setLastFetchedPatientId(formData.patient_id);
-            console.log('[PriorAuthForm] Auto-populated mother_patient_id:', response.mother_patient_id);
           } else {
-            console.log('[PriorAuthForm] No mother_patient_id found in response');
             setLastFetchedPatientId(formData.patient_id); // Mark as fetched even if null
           }
         })
         .catch(error => {
-          console.error('Error fetching mother patient for newborn:', error);
           // Silently fail - don't block form usage
           setLastFetchedPatientId(formData.patient_id); // Mark as fetched to avoid retrying
         });
@@ -2622,103 +2618,6 @@ export default function PriorAuthorizationForm() {
                     </div>
                   )}
                 </div>
-                
-                {/* Mother Patient Information (for newborn requests) */}
-                {formData.is_newborn && (
-                  <div className="mt-4 p-4 bg-pink-50 rounded-lg border border-pink-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-2">
-                        <User className="h-5 w-5 text-pink-600" />
-                        <label className="text-sm font-medium text-gray-700">
-                          Mother Patient Information *
-                        </label>
-                      </div>
-                      {/* Auto-populated indicator */}
-                      {motherAutoPopulated && formData.mother_patient_id && (
-                        <div className="flex items-center gap-2 px-2 py-1 bg-green-50 border border-green-200 rounded-md">
-                          <CheckCircle className="h-3.5 w-3.5 text-green-600" />
-                          <span className="text-xs text-green-700 font-medium">
-                            Auto-filled from previous eligibility
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <p className="text-sm text-pink-700 mb-4">
-                      The mother's coverage will be used for this newborn request. The mother patient will be automatically selected if found from previous eligibility checks.
-                    </p>
-                    
-                    <div className="bg-white rounded-lg p-4 border border-pink-300 space-y-4">
-                      {/* Mother Patient Selection */}
-                      <div>
-                        <Label className="text-sm text-gray-700 mb-2 block">Select Mother Patient:</Label>
-                        <Select
-                          value={patients.map(p => ({ value: p.patient_id, label: `${p.name}${p.identifier ? ` (${p.identifier})` : ''}` })).find(opt => opt.value == formData.mother_patient_id)}
-                          onChange={(option) => {
-                            handleChange('mother_patient_id', option?.value || '');
-                            setMotherAutoPopulated(false); // Reset flag when manually changed
-                          }}
-                          options={patients.filter(p => {
-                            // Filter to show patients with Iqama identifier type (typically starting with 2)
-                            return p.identifier_type === 'iqama' || (p.identifier && p.identifier.startsWith('2'));
-                          }).map(p => ({ 
-                            value: p.patient_id, 
-                            label: `${p.name}${p.identifier ? ` (${p.identifier})` : ''}` 
-                          }))}
-                          styles={selectStyles}
-                          placeholder="Search and select mother patient (Iqama ID)..."
-                          isClearable
-                          isSearchable
-                          menuPortalTarget={document.body}
-                        />
-                      </div>
-
-                      {/* Display selected mother patient details */}
-                      {selectedMotherPatientDetails && formData.mother_patient_id && (
-                        <div className="pt-4 border-t border-pink-200">
-                          <div className="flex items-center space-x-2 mb-3">
-                            <User className="h-4 w-4 text-pink-600" />
-                            <span className="text-sm font-semibold text-gray-700">Mother Patient Details</span>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                            <div>
-                              <span className="text-gray-500 block mb-1">Full Name</span>
-                              <span className="font-medium text-gray-900">{selectedMotherPatientDetails.name || 'N/A'}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500 block mb-1">Iqama Number</span>
-                              <span className="font-medium text-gray-900 font-mono">{selectedMotherPatientDetails.identifier || 'N/A'}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500 block mb-1">Date of Birth</span>
-                              <span className="font-medium text-gray-900">
-                                {selectedMotherPatientDetails.birth_date 
-                                  ? new Date(selectedMotherPatientDetails.birth_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                                  : 'N/A'}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500 block mb-1">Gender</span>
-                              <span className="font-medium text-gray-900 capitalize">{selectedMotherPatientDetails.gender || 'N/A'}</span>
-                            </div>
-                            {selectedMotherPatientDetails.phone && (
-                              <div>
-                                <span className="text-gray-500 block mb-1">Phone</span>
-                                <span className="font-medium text-gray-900">{selectedMotherPatientDetails.phone}</span>
-                              </div>
-                            )}
-                            {selectedMotherPatientDetails.email && (
-                              <div>
-                                <span className="text-gray-500 block mb-1">Email</span>
-                                <span className="font-medium text-gray-900">{selectedMotherPatientDetails.email}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Provider */}
@@ -2844,6 +2743,103 @@ export default function PriorAuthorizationForm() {
                 )}
               </div>
             </div>
+
+            {/* Mother Patient Information (for newborn requests) - Full Width */}
+            {formData.is_newborn && (
+              <Card className="mt-6 border-pink-200 bg-pink-50/30">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <User className="h-5 w-5 text-pink-600" />
+                      <CardTitle className="text-lg">Mother Patient Information *</CardTitle>
+                    </div>
+                    {/* Auto-populated indicator */}
+                    {motherAutoPopulated && formData.mother_patient_id && (
+                      <div className="flex items-center gap-2 px-2 py-1 bg-green-50 border border-green-200 rounded-md">
+                        <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                        <span className="text-xs text-green-700 font-medium">
+                          Auto-filled from previous eligibility
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <CardDescription className="text-pink-700">
+                    The mother's coverage will be used for this newborn request. The mother patient will be automatically selected if found from previous eligibility checks.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Mother Patient Selection */}
+                    <div>
+                      <Label className="text-sm text-gray-700 mb-2 block">Select Mother Patient:</Label>
+                      <Select
+                        value={patients.map(p => ({ value: p.patient_id, label: `${p.name}${p.identifier ? ` (${p.identifier})` : ''}` })).find(opt => opt.value == formData.mother_patient_id)}
+                        onChange={(option) => {
+                          handleChange('mother_patient_id', option?.value || '');
+                          setMotherAutoPopulated(false); // Reset flag when manually changed
+                        }}
+                        options={patients.filter(p => {
+                          // Filter to show patients with Iqama identifier type (typically starting with 2)
+                          return p.identifier_type === 'iqama' || (p.identifier && p.identifier.startsWith('2'));
+                        }).map(p => ({ 
+                          value: p.patient_id, 
+                          label: `${p.name}${p.identifier ? ` (${p.identifier})` : ''}` 
+                        }))}
+                        styles={selectStyles}
+                        placeholder="Search and select mother patient (Iqama ID)..."
+                        isClearable
+                        isSearchable
+                        menuPortalTarget={document.body}
+                      />
+                    </div>
+
+                    {/* Display selected mother patient details */}
+                    {selectedMotherPatientDetails && formData.mother_patient_id && (
+                      <div className="pt-4 border-t border-pink-200">
+                        <div className="flex items-center space-x-2 mb-3">
+                          <User className="h-4 w-4 text-pink-600" />
+                          <span className="text-sm font-semibold text-gray-700">Mother Patient Details</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-500 block mb-1">Full Name</span>
+                            <span className="font-medium text-gray-900">{selectedMotherPatientDetails.name || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 block mb-1">Iqama Number</span>
+                            <span className="font-medium text-gray-900 font-mono">{selectedMotherPatientDetails.identifier || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 block mb-1">Date of Birth</span>
+                            <span className="font-medium text-gray-900">
+                              {selectedMotherPatientDetails.birth_date 
+                                ? new Date(selectedMotherPatientDetails.birth_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                                : 'N/A'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 block mb-1">Gender</span>
+                            <span className="font-medium text-gray-900 capitalize">{selectedMotherPatientDetails.gender || 'N/A'}</span>
+                          </div>
+                          {selectedMotherPatientDetails.phone && (
+                            <div>
+                              <span className="text-gray-500 block mb-1">Phone</span>
+                              <span className="font-medium text-gray-900">{selectedMotherPatientDetails.phone}</span>
+                            </div>
+                          )}
+                          {selectedMotherPatientDetails.email && (
+                            <div>
+                              <span className="text-gray-500 block mb-1">Email</span>
+                              <span className="font-medium text-gray-900">{selectedMotherPatientDetails.email}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </CardContent>
         </Card>
       )}
