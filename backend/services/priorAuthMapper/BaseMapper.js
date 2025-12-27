@@ -1016,6 +1016,19 @@ class BaseMapper {
         supportingInfo.valueReference = {
           reference: info.value_reference
         };
+      } else if (info.value_attachment) {
+        // Handle valueAttachment for attachment category
+        supportingInfo.valueAttachment = {
+          contentType: info.value_attachment.contentType,
+          data: info.value_attachment.data
+        };
+        // Add optional fields if present
+        if (info.value_attachment.title) {
+          supportingInfo.valueAttachment.title = info.value_attachment.title;
+        }
+        if (info.value_attachment.creation) {
+          supportingInfo.valueAttachment.creation = info.value_attachment.creation;
+        }
       }
     }
 

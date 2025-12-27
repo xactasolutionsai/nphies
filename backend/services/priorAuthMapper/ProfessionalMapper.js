@@ -88,19 +88,12 @@ class ProfessionalMapper extends BaseMapper {
     // Build MessageHeader (must be first)
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
 
-    // Build attachments as Binary resources
-    const binaryResources = [];
-    if (priorAuth.attachments && priorAuth.attachments.length > 0) {
-      priorAuth.attachments.forEach(attachment => {
-        binaryResources.push(this.buildBinaryResource(attachment));
-      });
-    }
-
     // Assemble bundle per NPHIES spec order
     // RE-00005 fix: Organization resources (Provider and Insurer) must come BEFORE Claim
     // to ensure facility reference validation passes
-    // Observation resources are included after patient but before binary attachments
+    // Observation resources are included after patient
     // For newborn cases, add both newborn and mother patient resources
+    // Note: Attachments are now embedded in supportingInfo as valueAttachment, not as separate Binary resources
     const entries = [
       messageHeader,
       providerResource,      // Must be before Claim for facility reference validation
@@ -111,8 +104,7 @@ class ProfessionalMapper extends BaseMapper {
       practitionerResource,
       newbornPatientResource, // Newborn patient
       ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present
-      ...observationResources,
-      ...binaryResources
+      ...observationResources
     ];
 
     return {
@@ -647,6 +639,25 @@ class ProfessionalMapper extends BaseMapper {
       }
     }
     
+    // Add attachments as supportingInfo entries with valueAttachment
+    // Following NPHIES examples: attachments are embedded in supportingInfo, not as separate Binary resources
+    if (priorAuth.attachments && Array.isArray(priorAuth.attachments) && priorAuth.attachments.length > 0) {
+      priorAuth.attachments.forEach(attachment => {
+        // Only include attachments that have base64_content
+        if (attachment && attachment.base64_content && attachment.content_type) {
+          supportingInfoList.push({
+            category: 'attachment',
+            value_attachment: {
+              contentType: attachment.content_type,
+              data: attachment.base64_content,
+              title: attachment.file_name || attachment.title || 'Attachment',
+              creation: attachment.uploaded_at ? this.formatDate(attachment.uploaded_at) : this.formatDate(new Date())
+            }
+          });
+        }
+      });
+    }
+
     // Build supportingInfo array
     const supportingInfoArray = [];
     let sequenceCounter = 1;

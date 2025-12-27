@@ -72,19 +72,6 @@ class InstitutionalMapper extends BaseMapper {
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
     
-    // Build binary resources for attachments (standalone, not linked to supportingInfo)
-    const binaryResources = [];
-    
-    if (priorAuth.attachments && Array.isArray(priorAuth.attachments) && priorAuth.attachments.length > 0) {
-      priorAuth.attachments.forEach(attachment => {
-        // Only include attachments that have base64_content
-        if (attachment && attachment.base64_content && attachment.content_type) {
-          const binaryResource = this.buildBinaryResource(attachment);
-          binaryResources.push(binaryResource);
-        }
-      });
-    }
-    
     const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounterResource?.resource, practitioner, bundleResourceIds);
     
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
@@ -98,8 +85,7 @@ class InstitutionalMapper extends BaseMapper {
       providerResource,
       insurerResource,
       newbornPatientResource, // Newborn patient
-      ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present
-      ...binaryResources
+      ...(motherPatientResource ? [motherPatientResource] : []) // Mother patient if present
     ];
 
     return {
@@ -370,6 +356,25 @@ class InstitutionalMapper extends BaseMapper {
           value_quantity_unit: 'h'
         });
       }
+    }
+
+    // Add attachments as supportingInfo entries with valueAttachment
+    // Following NPHIES examples: attachments are embedded in supportingInfo, not as separate Binary resources
+    if (priorAuth.attachments && Array.isArray(priorAuth.attachments) && priorAuth.attachments.length > 0) {
+      priorAuth.attachments.forEach(attachment => {
+        // Only include attachments that have base64_content
+        if (attachment && attachment.base64_content && attachment.content_type) {
+          supportingInfoList.push({
+            category: 'attachment',
+            value_attachment: {
+              contentType: attachment.content_type,
+              data: attachment.base64_content,
+              title: attachment.file_name || attachment.title || 'Attachment',
+              creation: attachment.uploaded_at ? this.formatDate(attachment.uploaded_at) : this.formatDate(new Date())
+            }
+          });
+        }
+      });
     }
     
     if (supportingInfoList.length > 0) {
