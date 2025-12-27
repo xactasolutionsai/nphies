@@ -566,6 +566,7 @@ class OralClaimMapper extends DentalMapper {
             value: detailUnitPrice, 
             currency: detail.currency || item.currency || claim?.currency || 'SAR' 
           },
+          ...(detailFactor !== 1 ? { factor: detailFactor } : {}),
           net: { 
             value: detailNet, 
             currency: detail.currency || item.currency || claim?.currency || 'SAR' 

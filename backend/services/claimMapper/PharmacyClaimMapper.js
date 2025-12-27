@@ -911,6 +911,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
             value: detailUnitPrice, 
             currency: detail.currency || item.currency || 'SAR' 
           },
+          ...(detailFactor !== 1 ? { factor: detailFactor } : {}),
           net: { 
             value: detailNet, 
             currency: detail.currency || item.currency || 'SAR' 
