@@ -254,7 +254,7 @@ class PriorAuthorizationsController extends BaseController {
     // Get attachments
     const attachmentsQuery = `
       SELECT id, prior_auth_id, supporting_info_id, file_name, content_type, 
-             file_size, title, description, category, binary_id, created_at
+             file_size, base64_content, title, description, category, binary_id, created_at
       FROM prior_authorization_attachments
       WHERE prior_auth_id = $1
       ORDER BY created_at ASC
@@ -1966,10 +1966,46 @@ class PriorAuthorizationsController extends BaseController {
     const jsonbFields = ['vision_prescription', 'lab_observations', 'medication_safety_analysis'];
     jsonbFields.forEach(field => {
       if (data[field] !== undefined && data[field] !== null) {
-        // If it's already a string (JSON), leave it; otherwise stringify
-        if (typeof data[field] !== 'string') {
-          data[field] = JSON.stringify(data[field]);
+        // If it's already a string (JSON), validate it's valid JSON
+        if (typeof data[field] === 'string') {
+          // If it's an empty string, set to null
+          if (data[field].trim() === '') {
+            data[field] = null;
+          } else {
+            // Try to parse to validate it's valid JSON
+            try {
+              JSON.parse(data[field]);
+              // Valid JSON string, leave it as is
+            } catch (e) {
+              // Invalid JSON string, set to null to avoid database errors
+              console.warn(`[prepareJsonbFields] Field ${field} contains invalid JSON string, setting to null:`, e.message);
+              data[field] = null;
+            }
+          }
+        } else if (Array.isArray(data[field])) {
+          // It's an array - stringify it (empty arrays become '[]')
+          try {
+            data[field] = JSON.stringify(data[field]);
+          } catch (e) {
+            console.error(`[prepareJsonbFields] Error stringifying array ${field}:`, e);
+            data[field] = '[]'; // Default to empty array JSON
+          }
+        } else if (typeof data[field] === 'object') {
+          // It's an object - stringify it (empty objects become '{}')
+          try {
+            data[field] = JSON.stringify(data[field]);
+          } catch (e) {
+            console.error(`[prepareJsonbFields] Error stringifying object ${field}:`, e);
+            data[field] = '{}'; // Default to empty object JSON
+          }
+        } else {
+          // Other types (number, boolean, etc.) - shouldn't happen for JSONB, but handle gracefully
+          console.warn(`[prepareJsonbFields] Field ${field} has unexpected type: ${typeof data[field]}, setting to null`);
+          data[field] = null;
         }
+      } else {
+        // Set to null if undefined or null
+        data[field] = null;
       }
     });
     return data;

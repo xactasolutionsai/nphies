@@ -71,11 +71,9 @@ class InstitutionalMapper extends BaseMapper {
       bundleResourceIds.practitioner
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
-    const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounterResource?.resource, practitioner, bundleResourceIds);
     
-    const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
-
     // Build binary resources for attachments and create mapping for linking
+    // MUST be done BEFORE buildClaimResource so we can pass the map
     const binaryResources = [];
     const attachmentBinaryMap = {}; // Maps supporting_info_id -> Binary fullUrl
     
@@ -90,6 +88,10 @@ class InstitutionalMapper extends BaseMapper {
         }
       });
     }
+    
+    const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounterResource?.resource, practitioner, bundleResourceIds, attachmentBinaryMap);
+    
+    const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
 
     const entries = [
       messageHeader,
@@ -120,7 +122,7 @@ class InstitutionalMapper extends BaseMapper {
    * Build FHIR Claim resource for Institutional Prior Authorization
    * Includes required institutional fields: chief-complaint, estimated-length-of-stay, onAdmission
    */
-  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds) {
+  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds, attachmentBinaryMap = {}) {
     const claimId = bundleResourceIds.claim;
     const patientRef = bundleResourceIds.patient;
     const providerRef = bundleResourceIds.provider;
@@ -363,10 +365,12 @@ class InstitutionalMapper extends BaseMapper {
         supportingInfoSequences.push(seq);
         
         // Check if this supportingInfo has a linked attachment
+        // Use supporting_info_id (from DB) or id to match with attachmentBinaryMap
         let supportingInfoWithAttachment = { ...info, sequence: seq };
-        if (info.id && attachmentBinaryMap[info.id]) {
+        const supportingInfoId = info.supporting_info_id || info.id;
+        if (supportingInfoId && attachmentBinaryMap[supportingInfoId]) {
           // Add valueReference to Binary resource
-          supportingInfoWithAttachment.value_reference = attachmentBinaryMap[info.id];
+          supportingInfoWithAttachment.value_reference = attachmentBinaryMap[supportingInfoId];
         }
         
         return this.buildSupportingInfo(supportingInfoWithAttachment);
