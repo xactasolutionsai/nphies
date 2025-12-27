@@ -1044,6 +1044,38 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       currency: item.currency || claim?.currency || 'SAR'
     };
 
+    // Add detail array for package items (BV-00036: required when package=true)
+    if (item.is_package === true && item.details && Array.isArray(item.details) && item.details.length > 0) {
+      claimItem.detail = item.details.map((detail, idx) => {
+        const detailQuantity = parseFloat(detail.quantity || 1);
+        const detailUnitPrice = parseFloat(detail.unit_price || 0);
+        const detailFactor = parseFloat(detail.factor || 1);
+        const detailNet = (detailQuantity * detailUnitPrice * detailFactor);
+        const detailServicedDate = detail.serviced_date || servicedDate;
+
+        return {
+          sequence: detail.sequence || (idx + 1),
+          productOrService: {
+            coding: [{
+              system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/services',
+              code: detail.product_or_service_code,
+              display: detail.product_or_service_display
+            }]
+          },
+          servicedDate: this.formatDate(detailServicedDate),
+          quantity: { value: detailQuantity },
+          unitPrice: { 
+            value: detailUnitPrice, 
+            currency: detail.currency || item.currency || claim?.currency || 'SAR' 
+          },
+          net: { 
+            value: detailNet, 
+            currency: detail.currency || item.currency || claim?.currency || 'SAR' 
+          }
+        };
+      });
+    }
+
     return claimItem;
   }
 

@@ -243,6 +243,35 @@ class PriorAuthorizationsController extends BaseController {
       ORDER BY sequence ASC
     `;
     const itemsResult = await query(itemsQuery, [id]);
+    
+    // Get item details for package items
+    const itemIds = itemsResult.rows.map(item => item.id);
+    let itemDetailsMap = {};
+    if (itemIds.length > 0) {
+      const detailsQuery = `
+        SELECT * FROM prior_authorization_item_details
+        WHERE item_id = ANY($1::int[])
+        ORDER BY item_id, sequence ASC
+      `;
+      const detailsResult = await query(detailsQuery, [itemIds]);
+      
+      // Group details by item_id
+      detailsResult.rows.forEach(detail => {
+        if (!itemDetailsMap[detail.item_id]) {
+          itemDetailsMap[detail.item_id] = [];
+        }
+        itemDetailsMap[detail.item_id].push(detail);
+      });
+    }
+    
+    // Attach details to items
+    const itemsWithDetails = itemsResult.rows.map(item => {
+      const itemObj = { ...item };
+      if (itemDetailsMap[item.id]) {
+        itemObj.details = itemDetailsMap[item.id];
+      }
+      return itemObj;
+    });
 
     // Get supporting info
     const supportingInfoQuery = `
@@ -283,7 +312,7 @@ class PriorAuthorizationsController extends BaseController {
 
     return {
       ...priorAuth,
-      items: itemsResult.rows,
+      items: itemsWithDetails || itemsResult.rows,
       supporting_info: supportingInfoResult.rows,
       attachments: attachmentsResult.rows,
       diagnoses: diagnosesResult.rows,
@@ -592,6 +621,11 @@ class PriorAuthorizationsController extends BaseController {
       }
 
       // Delete and re-insert nested data
+      // Delete item details first (due to foreign key constraint)
+      await query(`
+        DELETE FROM prior_authorization_item_details
+        WHERE item_id IN (SELECT id FROM prior_authorization_items WHERE prior_auth_id = $1)
+      `, [id]);
       await query('DELETE FROM prior_authorization_items WHERE prior_auth_id = $1', [id]);
       await query('DELETE FROM prior_authorization_supporting_info WHERE prior_auth_id = $1', [id]);
       await query('DELETE FROM prior_authorization_diagnoses WHERE prior_auth_id = $1', [id]);
@@ -2134,8 +2168,9 @@ class PriorAuthorizationsController extends BaseController {
          pharmacist_selection_reason, pharmacist_substitute, patient_share, is_package, is_maternity,
          item_type)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+        RETURNING id
       `;
-      await query(itemQuery, [
+      const itemResult = await query(itemQuery, [
         priorAuthId,
         item.sequence,
         item.product_or_service_code || item.medication_code || null, // For pharmacy, use medication_code if no product code
@@ -2169,6 +2204,45 @@ class PriorAuthorizationsController extends BaseController {
         item.is_package || false,
         item.is_maternity || false,
         item.item_type || 'medication' // Save item_type (medication or device)
+      ]);
+      
+      const itemId = itemResult.rows[0].id;
+      
+      // Insert item details if this is a package item with details
+      if (item.is_package === true && item.details && Array.isArray(item.details) && item.details.length > 0) {
+        await this.insertItemDetails(itemId, item.details);
+      }
+    }
+  }
+
+  /**
+   * Insert item details (sub-items for package items)
+   */
+  async insertItemDetails(itemId, details) {
+    for (const detail of details) {
+      const detailQuery = `
+        INSERT INTO prior_authorization_item_details
+        (item_id, sequence, product_or_service_code, product_or_service_system,
+         product_or_service_display, quantity, unit_price, factor, net_amount, currency,
+         serviced_date, body_site_code, body_site_system, sub_site_code, description)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      `;
+      await query(detailQuery, [
+        itemId,
+        detail.sequence || null,
+        detail.product_or_service_code || null,
+        detail.product_or_service_system || null,
+        detail.product_or_service_display || null,
+        detail.quantity || 1,
+        detail.unit_price || null,
+        detail.factor || 1,
+        detail.net_amount || null,
+        detail.currency || 'SAR',
+        detail.serviced_date || null,
+        detail.body_site_code || null,
+        detail.body_site_system || null,
+        detail.sub_site_code || null,
+        detail.description || null
       ]);
     }
   }

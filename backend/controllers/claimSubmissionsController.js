@@ -140,10 +140,38 @@ class ClaimSubmissionsController extends BaseController {
       query('SELECT id, claim_id, response_type, outcome, disposition, nphies_claim_id, has_errors, errors, is_nphies_generated, nphies_response_id, received_at FROM claim_submission_responses WHERE claim_id = $1 ORDER BY received_at DESC', [id]),
       query('SELECT id, claim_id, supporting_info_id, file_name, content_type, file_size, title, description, category, binary_id, created_at FROM claim_submission_attachments WHERE claim_id = $1 ORDER BY created_at ASC', [id])
     ]);
+    
+    // Get item details for package items
+    const itemIds = itemsResult.rows.map(item => item.id);
+    let itemDetailsMap = {};
+    if (itemIds.length > 0) {
+      const detailsResult = await query(`
+        SELECT * FROM claim_submission_item_details
+        WHERE item_id = ANY($1::int[])
+        ORDER BY item_id, sequence ASC
+      `, [itemIds]);
+      
+      // Group details by item_id
+      detailsResult.rows.forEach(detail => {
+        if (!itemDetailsMap[detail.item_id]) {
+          itemDetailsMap[detail.item_id] = [];
+        }
+        itemDetailsMap[detail.item_id].push(detail);
+      });
+    }
+    
+    // Attach details to items
+    const itemsWithDetails = itemsResult.rows.map(item => {
+      const itemObj = { ...item };
+      if (itemDetailsMap[item.id]) {
+        itemObj.details = itemDetailsMap[item.id];
+      }
+      return itemObj;
+    });
 
     return {
       ...claim,
-      items: itemsResult.rows,
+      items: itemsWithDetails,
       supporting_info: supportingInfoResult.rows,
       diagnoses: diagnosesResult.rows,
       responses: responsesResult.rows,
@@ -218,6 +246,34 @@ class ClaimSubmissionsController extends BaseController {
         query('SELECT * FROM prior_authorization_supporting_info WHERE prior_auth_id = $1 ORDER BY sequence ASC', [paId]),
         query('SELECT id, prior_auth_id, supporting_info_id, file_name, content_type, file_size, base64_content, title, description, category, binary_id, created_at FROM prior_authorization_attachments WHERE prior_auth_id = $1 ORDER BY created_at ASC', [paId])
       ]);
+      
+      // Get item details for package items from prior authorization
+      const paItemIds = paItemsResult.rows.map(item => item.id);
+      let paItemDetailsMap = {};
+      if (paItemIds.length > 0) {
+        const paDetailsResult = await query(`
+          SELECT * FROM prior_authorization_item_details
+          WHERE item_id = ANY($1::int[])
+          ORDER BY item_id, sequence ASC
+        `, [paItemIds]);
+        
+        // Group details by item_id
+        paDetailsResult.rows.forEach(detail => {
+          if (!paItemDetailsMap[detail.item_id]) {
+            paItemDetailsMap[detail.item_id] = [];
+          }
+          paItemDetailsMap[detail.item_id].push(detail);
+        });
+      }
+      
+      // Attach details to PA items
+      const paItemsWithDetails = paItemsResult.rows.map(item => {
+        const itemObj = { ...item };
+        if (paItemDetailsMap[item.id]) {
+          itemObj.details = paItemDetailsMap[item.id];
+        }
+        return itemObj;
+      });
 
       // For claims, service_date must be within encounter period (BV-00041)
       // Use encounter_start as the service date, or today if no encounter dates exist
@@ -262,10 +318,10 @@ class ClaimSubmissionsController extends BaseController {
       const result = await query(insertQuery, values);
       const claimId = result.rows[0].id;
 
-      if (paItemsResult.rows.length > 0) {
+      if (paItemsWithDetails.length > 0) {
         // Apply service code overrides for professional claims if provided
         // Item servicedDate must be within encounter period (BV-00041)
-        const items = paItemsResult.rows.map((item, idx) => {
+        const items = paItemsWithDetails.map((item, idx) => {
           const override = itemOverrides?.find(o => o.sequence === idx + 1);
           return {
             ...item,
@@ -319,6 +375,11 @@ class ClaimSubmissionsController extends BaseController {
       const updateQuery = `UPDATE claim_submissions SET ${columns.map((col, i) => `${col} = $${i + 1}`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${columns.length + 1} RETURNING *`;
       await query(updateQuery, values);
 
+      // Delete item details first (due to foreign key constraint)
+      await query(`
+        DELETE FROM claim_submission_item_details
+        WHERE item_id IN (SELECT id FROM claim_submission_items WHERE claim_id = $1)
+      `, [id]);
       await query('DELETE FROM claim_submission_items WHERE claim_id = $1', [id]);
       await query('DELETE FROM claim_submission_supporting_info WHERE claim_id = $1', [id]);
       await query('DELETE FROM claim_submission_diagnoses WHERE claim_id = $1', [id]);
@@ -555,10 +616,49 @@ class ClaimSubmissionsController extends BaseController {
 
   async insertItems(claimId, items) {
     for (const item of items) {
-      await query(`
+      const itemResult = await query(`
         INSERT INTO claim_submission_items (claim_id, sequence, product_or_service_code, product_or_service_system, product_or_service_display, tooth_number, tooth_surface, eye, medication_code, medication_system, days_supply, quantity, unit_price, factor, tax, patient_share, payer_share, net_amount, currency, serviced_date, serviced_period_start, serviced_period_end, body_site_code, body_site_system, sub_site_code, is_package, is_maternity, patient_invoice, description, notes, item_type)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+        RETURNING id
       `, [claimId, item.sequence, item.product_or_service_code, item.product_or_service_system, item.product_or_service_display, item.tooth_number, item.tooth_surface, item.eye, item.medication_code, item.medication_system, item.days_supply, item.quantity, item.unit_price, item.factor || 1, item.tax || 0, item.patient_share || 0, item.payer_share, item.net_amount, item.currency || 'SAR', item.serviced_date, item.serviced_period_start, item.serviced_period_end, item.body_site_code, item.body_site_system, item.sub_site_code, item.is_package || false, item.is_maternity || false, item.patient_invoice, item.description, item.notes, item.item_type || 'medication']);
+      
+      const itemId = itemResult.rows[0].id;
+      
+      // Insert item details if this is a package item with details
+      if (item.is_package === true && item.details && Array.isArray(item.details) && item.details.length > 0) {
+        await this.insertItemDetails(itemId, item.details);
+      }
+    }
+  }
+
+  /**
+   * Insert item details (sub-items for package items)
+   */
+  async insertItemDetails(itemId, details) {
+    for (const detail of details) {
+      await query(`
+        INSERT INTO claim_submission_item_details
+        (item_id, sequence, product_or_service_code, product_or_service_system,
+         product_or_service_display, quantity, unit_price, factor, net_amount, currency,
+         serviced_date, body_site_code, body_site_system, sub_site_code, description)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      `, [
+        itemId,
+        detail.sequence || null,
+        detail.product_or_service_code || null,
+        detail.product_or_service_system || null,
+        detail.product_or_service_display || null,
+        detail.quantity || 1,
+        detail.unit_price || null,
+        detail.factor || 1,
+        detail.net_amount || null,
+        detail.currency || 'SAR',
+        detail.serviced_date || null,
+        detail.body_site_code || null,
+        detail.body_site_system || null,
+        detail.sub_site_code || null,
+        detail.description || null
+      ]);
     }
   }
 

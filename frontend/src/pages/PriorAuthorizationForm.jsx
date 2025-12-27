@@ -14,7 +14,7 @@ import {
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
   Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
-  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle
+  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle, Package
 } from 'lucide-react';
 
 // Import AI Medication Safety components
@@ -570,7 +570,9 @@ export default function PriorAuthorizationForm() {
         return {
           ...item,
           manual_code_entry: hasManualCodeEntry,
-          manual_prescribed_code_entry: hasManualPrescribedCodeEntry
+          manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
+          // Ensure details array exists if item has details from database
+          details: item.details || (item.is_package ? [] : undefined)
         };
       });
       
@@ -720,7 +722,9 @@ export default function PriorAuthorizationForm() {
         return {
           ...item,
           manual_code_entry: hasManualCodeEntry,
-          manual_prescribed_code_entry: hasManualPrescribedCodeEntry
+          manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
+          // Ensure details array exists if item has details from database
+          details: item.details || (item.is_package ? [] : undefined)
         };
       });
       
@@ -883,7 +887,9 @@ export default function PriorAuthorizationForm() {
         return {
           ...item,
           manual_code_entry: hasManualCodeEntry,
-          manual_prescribed_code_entry: hasManualPrescribedCodeEntry
+          manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
+          // Ensure details array exists if item has details from database
+          details: item.details || (item.is_package ? [] : undefined)
         };
       });
       
@@ -1046,13 +1052,47 @@ export default function PriorAuthorizationForm() {
   const handleItemChange = (index, field, value) => {
     setFormData(prev => {
       const newItems = [...prev.items];
-      newItems[index] = { ...newItems[index], [field]: value };
+      const currentItem = newItems[index];
+      newItems[index] = { ...currentItem, [field]: value };
+      const updatedItem = newItems[index]; // Get the item after update
       
-      // Auto-calculate net amount
+      // Auto-calculate net amount for quantity/unit_price changes
       if (field === 'quantity' || field === 'unit_price') {
-        const qty = field === 'quantity' ? value : newItems[index].quantity;
-        const price = field === 'unit_price' ? value : newItems[index].unit_price;
-        newItems[index].net_amount = (parseFloat(qty) || 0) * (parseFloat(price) || 0);
+        const qty = field === 'quantity' ? value : updatedItem.quantity;
+        const price = field === 'unit_price' ? value : updatedItem.unit_price;
+        // For package items, net amount should be sum of sub-items, so skip auto-calculation
+        if (!updatedItem.is_package) {
+          newItems[index].net_amount = (parseFloat(qty) || 0) * (parseFloat(price) || 0);
+        }
+      }
+      
+      // For package items: when details change, recalculate parent item's net_amount as sum of sub-items
+      if (field === 'details' && updatedItem.is_package && Array.isArray(value) && value.length > 0) {
+        const subItemsTotal = value.reduce((sum, detail) => {
+          return sum + (parseFloat(detail.net_amount) || 0);
+        }, 0);
+        newItems[index].net_amount = subItemsTotal.toFixed(2);
+      } else if (field === 'details' && updatedItem.is_package && (!value || value.length === 0)) {
+        // No sub-items: reset to 0 or use regular calculation
+        const qty = parseFloat(updatedItem.quantity || 0);
+        const price = parseFloat(updatedItem.unit_price || 0);
+        newItems[index].net_amount = (qty * price).toFixed(2);
+      }
+      
+      // When is_package flag changes, recalculate net_amount appropriately
+      if (field === 'is_package') {
+        if (value === true && updatedItem.details && Array.isArray(updatedItem.details) && updatedItem.details.length > 0) {
+          // Becoming a package with existing details: sum the sub-items
+          const subItemsTotal = updatedItem.details.reduce((sum, detail) => {
+            return sum + (parseFloat(detail.net_amount) || 0);
+          }, 0);
+          newItems[index].net_amount = subItemsTotal.toFixed(2);
+        } else if (value === false) {
+          // No longer a package: use regular calculation
+          const qty = parseFloat(updatedItem.quantity || 0);
+          const price = parseFloat(updatedItem.unit_price || 0);
+          newItems[index].net_amount = (qty * price).toFixed(2);
+        }
       }
       
       return { ...prev, items: newItems };
@@ -3842,25 +3882,230 @@ export default function PriorAuthorizationForm() {
 
                 {/* Package Item & Maternity checkboxes - For all auth types except pharmacy (pharmacy has its own section) */}
                 {formData.auth_type !== 'pharmacy' && (
-                  <div className="flex items-center gap-6 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={item.is_package || false}
-                        onChange={(e) => handleItemChange(index, 'is_package', e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm font-medium text-blue-800">Package Item</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={item.is_maternity || false}
-                        onChange={(e) => handleItemChange(index, 'is_maternity', e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm font-medium text-blue-800">Maternity Related</span>
-                    </label>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-6 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={item.is_package || false}
+                          onChange={(e) => handleItemChange(index, 'is_package', e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-blue-800">Package Item</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={item.is_maternity || false}
+                          onChange={(e) => handleItemChange(index, 'is_maternity', e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-blue-800">Maternity Related</span>
+                      </label>
+                    </div>
+                    
+                    {/* Package Item Details (Sub-items) - Required when is_package=true */}
+                    {item.is_package && (
+                      <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Package className="h-5 w-5 text-amber-600" />
+                            <Label className="text-amber-800 font-semibold">Package Details (Sub-items) *</Label>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const newDetails = [...(item.details || []), {
+                                sequence: (item.details?.length || 0) + 1,
+                                product_or_service_code: '',
+                                product_or_service_display: '',
+                                product_or_service_system: 'http://nphies.sa/terminology/CodeSystem/procedures',
+                                quantity: 1,
+                                unit_price: '',
+                                factor: 1,
+                                net_amount: '',
+                                currency: formData.currency || 'SAR',
+                                serviced_date: item.serviced_date || formData.encounter_start || ''
+                              }];
+                              handleItemChange(index, 'details', newDetails);
+                            }}
+                            className="text-amber-700 border-amber-300 hover:bg-amber-100"
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add Sub-item
+                          </Button>
+                        </div>
+                        <p className="text-xs text-amber-700 mb-3">
+                          Package items must include at least one sub-item per NPHIES BV-00036. Each sub-item represents a component of the package.
+                        </p>
+                        
+                        {(!item.details || item.details.length === 0) && (
+                          <div className="text-sm text-amber-600 italic p-2 bg-amber-100 rounded">
+                            No sub-items added. Please add at least one sub-item for this package.
+                          </div>
+                        )}
+                        
+                        {item.details && item.details.length > 0 && (
+                          <div className="space-y-3">
+                            {item.details.map((detail, detailIndex) => (
+                              <div key={detailIndex} className="p-3 bg-white rounded border border-amber-200">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-sm font-medium text-amber-800">Sub-item {detailIndex + 1}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newDetails = item.details.filter((_, i) => i !== detailIndex)
+                                        .map((d, i) => ({ ...d, sequence: i + 1 }));
+                                      handleItemChange(index, 'details', newDetails);
+                                    }}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 h-6 px-2"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Service Code *</Label>
+                                    <Select
+                                      value={
+                                        item.is_lab_service
+                                          ? NPHIES_LAB_SERVICE_OPTIONS.find(opt => opt.value === detail.product_or_service_code)
+                                          : NPHIES_PROCEDURE_OPTIONS.find(opt => opt.value === detail.product_or_service_code)
+                                      }
+                                      onChange={(option) => {
+                                        const newDetails = [...item.details];
+                                        // Extract description from label (format: "CODE - Description")
+                                        const description = option?.label?.includes(' - ') 
+                                          ? option.label.split(' - ').slice(1).join(' - ')
+                                          : '';
+                                        newDetails[detailIndex] = { 
+                                          ...detail, 
+                                          product_or_service_code: option?.value || '',
+                                          product_or_service_display: description,
+                                          product_or_service_system: 'http://nphies.sa/terminology/CodeSystem/procedures'
+                                        };
+                                        handleItemChange(index, 'details', newDetails);
+                                      }}
+                                      options={
+                                        item.is_lab_service
+                                          ? NPHIES_LAB_SERVICE_OPTIONS
+                                          : NPHIES_PROCEDURE_OPTIONS
+                                      }
+                                      styles={selectStyles}
+                                      placeholder={
+                                        item.is_lab_service
+                                          ? "Select NPHIES lab service..."
+                                          : "Select procedure..."
+                                      }
+                                      isClearable
+                                      isSearchable
+                                      menuPortalTarget={document.body}
+                                      className="text-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Description</Label>
+                                    <Input
+                                      value={detail.product_or_service_display || ''}
+                                      onChange={(e) => {
+                                        const newDetails = [...item.details];
+                                        newDetails[detailIndex] = { ...detail, product_or_service_display: e.target.value };
+                                        handleItemChange(index, 'details', newDetails);
+                                      }}
+                                      placeholder="Auto-filled from code selection"
+                                      className="text-sm bg-gray-50"
+                                      readOnly={!!detail.product_or_service_code}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Quantity *</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={detail.quantity || 1}
+                                      onChange={(e) => {
+                                        const qty = parseFloat(e.target.value) || 1;
+                                        const unitPrice = parseFloat(detail.unit_price || 0);
+                                        const factor = parseFloat(detail.factor || 1);
+                                        const net = qty * unitPrice * factor;
+                                        const newDetails = [...item.details];
+                                        newDetails[detailIndex] = { 
+                                          ...detail, 
+                                          quantity: qty,
+                                          net_amount: net.toFixed(2)
+                                        };
+                                        handleItemChange(index, 'details', newDetails);
+                                      }}
+                                      className="text-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Unit Price (SAR) *</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={detail.unit_price || ''}
+                                      onChange={(e) => {
+                                        const unitPrice = parseFloat(e.target.value) || 0;
+                                        const qty = parseFloat(detail.quantity || 1);
+                                        const factor = parseFloat(detail.factor || 1);
+                                        const net = qty * unitPrice * factor;
+                                        const newDetails = [...item.details];
+                                        newDetails[detailIndex] = { 
+                                          ...detail, 
+                                          unit_price: unitPrice,
+                                          net_amount: net.toFixed(2)
+                                        };
+                                        handleItemChange(index, 'details', newDetails);
+                                      }}
+                                      placeholder="0.00"
+                                      className="text-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Factor</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={detail.factor || 1}
+                                      onChange={(e) => {
+                                        const factor = parseFloat(e.target.value) || 1;
+                                        const qty = parseFloat(detail.quantity || 1);
+                                        const unitPrice = parseFloat(detail.unit_price || 0);
+                                        const net = qty * unitPrice * factor;
+                                        const newDetails = [...item.details];
+                                        newDetails[detailIndex] = { 
+                                          ...detail, 
+                                          factor: factor,
+                                          net_amount: net.toFixed(2)
+                                        };
+                                        handleItemChange(index, 'details', newDetails);
+                                      }}
+                                      placeholder="1.0"
+                                      className="text-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Net Amount (SAR)</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={detail.net_amount || ''}
+                                      readOnly
+                                      className="text-sm bg-gray-50"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
