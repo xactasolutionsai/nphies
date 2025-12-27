@@ -438,6 +438,12 @@ export const validationSchemas = {
     diagnosis_codes: Joi.string().allow(null, '').optional(),
     primary_diagnosis: Joi.string().max(50).allow(null, '').optional(),
     
+    // ICU Hours (for institutional inpatient/daycase)
+    icu_hours: Joi.alternatives().try(
+      Joi.number().precision(2).min(0),
+      Joi.string().allow('', null)
+    ).allow(null, '').optional(),
+    
     // Priority
     priority: Joi.string().valid('stat', 'normal', 'deferred').allow(null, '').optional(),
     
