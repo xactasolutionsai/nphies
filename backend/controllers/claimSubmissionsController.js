@@ -212,10 +212,11 @@ class ClaimSubmissionsController extends BaseController {
       const pa = paResult.rows[0];
       if (pa.status !== 'approved') return res.status(400).json({ error: 'Can only create claims from approved prior authorizations' });
 
-      const [paItemsResult, paDiagnosesResult, paSupportingInfoResult] = await Promise.all([
+      const [paItemsResult, paDiagnosesResult, paSupportingInfoResult, paAttachmentsResult] = await Promise.all([
         query('SELECT * FROM prior_authorization_items WHERE prior_auth_id = $1 ORDER BY sequence ASC', [paId]),
         query('SELECT * FROM prior_authorization_diagnoses WHERE prior_auth_id = $1 ORDER BY sequence ASC', [paId]),
-        query('SELECT * FROM prior_authorization_supporting_info WHERE prior_auth_id = $1 ORDER BY sequence ASC', [paId])
+        query('SELECT * FROM prior_authorization_supporting_info WHERE prior_auth_id = $1 ORDER BY sequence ASC', [paId]),
+        query('SELECT id, prior_auth_id, supporting_info_id, file_name, content_type, file_size, base64_content, title, description, category, binary_id, created_at FROM prior_authorization_attachments WHERE prior_auth_id = $1 ORDER BY created_at ASC', [paId])
       ]);
 
       // For claims, service_date must be within encounter period (BV-00041)
@@ -250,7 +251,9 @@ class ClaimSubmissionsController extends BaseController {
         // Copy newborn extension fields from prior authorization
         is_newborn: pa.is_newborn || false,
         birth_weight: pa.birth_weight || null,
-        mother_patient_id: pa.mother_patient_id || null // Copy mother_patient_id from prior auth for newborn claims
+        mother_patient_id: pa.mother_patient_id || null, // Copy mother_patient_id from prior auth for newborn claims
+        // Copy ICU hours for institutional claims
+        icu_hours: pa.icu_hours || null
       };
 
       const columns = Object.keys(claimData).filter(key => claimData[key] !== undefined && claimData[key] !== null);
@@ -286,6 +289,11 @@ class ClaimSubmissionsController extends BaseController {
 
       if (paDiagnosesResult.rows.length > 0) await this.insertDiagnoses(claimId, paDiagnosesResult.rows);
       if (paSupportingInfoResult.rows.length > 0) await this.insertSupportingInfo(claimId, paSupportingInfoResult.rows);
+      
+      // Copy attachments from prior authorization
+      if (paAttachmentsResult.rows.length > 0) {
+        await this.insertAttachments(claimId, paAttachmentsResult.rows);
+      }
 
       const completeData = await this.getByIdInternal(claimId);
       res.status(201).json({ data: completeData, message: 'Claim created from prior authorization. Review and submit.' });

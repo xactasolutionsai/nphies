@@ -1517,6 +1517,29 @@ export default function PriorAuthorizationDetails() {
                   )}
                 </div>
 
+                {/* ICU Hours - Only for institutional inpatient/daycase */}
+                {priorAuth.auth_type === 'institutional' && ['inpatient', 'daycase'].includes(priorAuth.encounter_class) && priorAuth.icu_hours && (
+                  <>
+                    <hr className="border-gray-200" />
+                    <div>
+                      <h4 className="font-medium mb-3 flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-red-600" />
+                        ICU Information
+                      </h4>
+                      <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <p className="text-sm text-gray-500">ICU Hours</p>
+                            <p className="text-lg font-medium text-red-700">
+                              {priorAuth.icu_hours} hours
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 {/* Attachments */}
                 {priorAuth.attachments && priorAuth.attachments.length > 0 && (
                   <>

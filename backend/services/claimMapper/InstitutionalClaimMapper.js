@@ -317,6 +317,53 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       }
     }
     
+    // Add ICU hours supportingInfo (for institutional inpatient/daycase)
+    // Check if icu_hours is a valid number (not null, undefined, empty string, or 0)
+    const icuHoursValue = claim.icu_hours != null && claim.icu_hours !== '' 
+      ? parseFloat(claim.icu_hours) 
+      : null;
+    if (icuHoursValue != null && !isNaN(icuHoursValue) && icuHoursValue > 0 && 
+        ['inpatient', 'daycase'].includes(claim.encounter_class)) {
+      const hasIcuHours = supportingInfoList.some(info => {
+        const category = (info.category || '').toLowerCase();
+        return category === 'icu-hours';
+      });
+      if (!hasIcuHours) {
+        supportingInfoList.push({
+          category: 'icu-hours',
+          value_quantity: icuHoursValue,
+          value_quantity_unit: 'h'
+        });
+      }
+    }
+
+    // Add attachments as supportingInfo entries with valueAttachment
+    // Following NPHIES examples: attachments are embedded in supportingInfo, not as separate Binary resources
+    if (claim.attachments && Array.isArray(claim.attachments) && claim.attachments.length > 0) {
+      claim.attachments.forEach(attachment => {
+        // Only include attachments that have base64_content
+        if (attachment && attachment.base64_content && attachment.content_type) {
+          const hasAttachment = supportingInfoList.some(info => {
+            // Check if this attachment is already in supportingInfo (by comparing file name or content)
+            return info.category === 'attachment' && 
+                   info.value_attachment && 
+                   info.value_attachment.title === (attachment.file_name || attachment.title);
+          });
+          if (!hasAttachment) {
+            supportingInfoList.push({
+              category: 'attachment',
+              value_attachment: {
+                contentType: attachment.content_type,
+                data: attachment.base64_content,
+                title: attachment.file_name || attachment.title || 'Attachment',
+                creation: attachment.created_at ? this.formatDate(attachment.created_at) : this.formatDate(new Date())
+              }
+            });
+          }
+        }
+      });
+    }
+    
     if (supportingInfoList.length > 0) {
       claimResource.supportingInfo = supportingInfoList.map((info, idx) => {
         const seq = idx + 1;
