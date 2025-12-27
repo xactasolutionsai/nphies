@@ -515,7 +515,11 @@ class ClaimSubmissionsController extends BaseController {
         service_type: formData.service_type,
         is_newborn: formData.is_newborn || false,
         birth_weight: formData.birth_weight || null,
-        mother_patient_id: formData.mother_patient_id || null
+        mother_patient_id: formData.mother_patient_id || null,
+        // ICU hours for institutional claims
+        icu_hours: formData.icu_hours ? parseFloat(formData.icu_hours) : null,
+        // Attachments
+        attachments: formData.attachments || []
       };
 
       const bundle = claimMapper.buildClaimRequestBundle({ 
