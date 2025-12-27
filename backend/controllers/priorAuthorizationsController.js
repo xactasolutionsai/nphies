@@ -1919,7 +1919,7 @@ class PriorAuthorizationsController extends BaseController {
     const dateFields = ['encounter_start', 'encounter_end', 'eligibility_offline_date',
                         'pre_auth_period_start', 'pre_auth_period_end', 
                         'transfer_period_start', 'transfer_period_end'];
-    const numberFields = ['coverage_id', 'related_auth_id', 'total_amount', 'approved_amount'];
+    const numberFields = ['coverage_id', 'related_auth_id', 'total_amount', 'approved_amount', 'icu_hours'];
     
     dateFields.forEach(field => {
       if (cleanedData[field] === '' || cleanedData[field] === null) {
@@ -1930,6 +1930,10 @@ class PriorAuthorizationsController extends BaseController {
     numberFields.forEach(field => {
       if (cleanedData[field] === '' || cleanedData[field] === null || cleanedData[field] === undefined) {
         cleanedData[field] = null;
+      } else if (typeof cleanedData[field] === 'string') {
+        // Convert string numbers to actual numbers
+        const numValue = parseFloat(cleanedData[field]);
+        cleanedData[field] = isNaN(numValue) ? null : numValue;
       }
     });
 
