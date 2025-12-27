@@ -889,7 +889,10 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
         const detailQuantity = parseFloat(detail.quantity || 1);
         const detailUnitPrice = parseFloat(detail.unit_price || 0);
         const detailFactor = parseFloat(detail.factor || 1);
-        const detailNet = (detailQuantity * detailUnitPrice * detailFactor);
+        // BV-00434: detail net must equal ((quantity * unit price) * factor) + tax
+        // For now, detail items don't have tax field, so use 0 (or could proportionally allocate parent item tax)
+        const detailTax = parseFloat(detail.tax || 0);
+        const detailNet = (detailQuantity * detailUnitPrice * detailFactor) + detailTax;
 
         // Use same code system as parent item (medication-codes or medical-devices)
         const detailCodeSystem = detail.product_or_service_system || codeSystem;
