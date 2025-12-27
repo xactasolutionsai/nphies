@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "d2e7ffc9-7c66-4cef-86c0-303fdc2e3963",
+  "id": "c0886664-8c9c-4d8a-a772-6c5a2f539a38",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2025-12-27T17:47:46.388Z",
+  "timestamp": "2025-12-27T18:14:41.632Z",
   "entry": [
     {
-      "fullUrl": "urn:uuid:8e68bd65-89ad-4943-8906-aec6c7d34796",
+      "fullUrl": "urn:uuid:680bde89-8164-4b32-9a06-5f63d470eefa",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "8e68bd65-89ad-4943-8906-aec6c7d34796",
+        "id": "680bde89-8164-4b32-9a06-5f63d470eefa",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -47,16 +47,16 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/6ce53cb4-7022-4fd8-8bcb-17d0acf2191f"
+            "reference": "http://provider.com/Claim/5d93a044-7a4e-4894-9231-49209fa2bb86"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/6ce53cb4-7022-4fd8-8bcb-17d0acf2191f",
+      "fullUrl": "http://provider.com/Claim/5d93a044-7a4e-4894-9231-49209fa2bb86",
       "resource": {
         "resourceType": "Claim",
-        "id": "6ce53cb4-7022-4fd8-8bcb-17d0acf2191f",
+        "id": "5d93a044-7a4e-4894-9231-49209fa2bb86",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/institutional-priorauth|1.0.0"
@@ -66,14 +66,14 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/1a296550-bcb4-4319-ad20-d38385776bc3"
+              "reference": "Encounter/305cd9cb-a4fb-406c-90ce-704f004fbe35"
             }
           }
         ],
         "identifier": [
           {
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization",
-            "value": "DUP-1766856294835"
+            "value": "DUP-1766859227574"
           }
         ],
         "status": "active",
@@ -97,7 +97,7 @@
         "patient": {
           "reference": "Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
         },
-        "created": "2025-12-27T17:47:46.384Z",
+        "created": "2025-12-27T18:14:41.632Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -126,7 +126,7 @@
           {
             "sequence": 1,
             "provider": {
-              "reference": "Practitioner/f2758515-9953-4265-8cf8-25e4459e1549"
+              "reference": "Practitioner/9e21c35a-c2af-4fd1-a469-7b716c53e247"
             },
             "role": {
               "coding": [
@@ -191,8 +191,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-17T21:00:00.000Z",
-              "end": "2023-11-17T21:00:00.000Z"
+              "start": "2023-11-11T21:00:00.000Z",
+              "end": "2023-11-11T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 120,
@@ -211,8 +211,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-17T21:00:00.000Z",
-              "end": "2023-11-17T21:00:00.000Z"
+              "start": "2023-11-11T21:00:00.000Z",
+              "end": "2023-11-11T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 80,
@@ -231,8 +231,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-17T21:00:00.000Z",
-              "end": "2023-11-17T21:00:00.000Z"
+              "start": "2023-11-11T21:00:00.000Z",
+              "end": "2023-11-11T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 160,
@@ -251,8 +251,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-17T21:00:00.000Z",
-              "end": "2023-11-17T21:00:00.000Z"
+              "start": "2023-11-11T21:00:00.000Z",
+              "end": "2023-11-11T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 129,
@@ -271,8 +271,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-17T21:00:00.000Z",
-              "end": "2023-11-17T21:00:00.000Z"
+              "start": "2023-11-11T21:00:00.000Z",
+              "end": "2023-11-11T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 100,
@@ -291,8 +291,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-17T21:00:00.000Z",
-              "end": "2023-11-17T21:00:00.000Z"
+              "start": "2023-11-11T21:00:00.000Z",
+              "end": "2023-11-11T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 37,
@@ -311,8 +311,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-17T21:00:00.000Z",
-              "end": "2023-11-17T21:00:00.000Z"
+              "start": "2023-11-11T21:00:00.000Z",
+              "end": "2023-11-11T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 100,
@@ -331,8 +331,8 @@
               ]
             },
             "timingPeriod": {
-              "start": "2023-11-17T21:00:00.000Z",
-              "end": "2023-11-17T21:00:00.000Z"
+              "start": "2023-11-11T21:00:00.000Z",
+              "end": "2023-11-11T21:00:00.000Z"
             },
             "valueQuantity": {
               "value": 70,
@@ -459,22 +459,6 @@
               "system": "http://unitsofmeasure.org",
               "code": "d"
             }
-          },
-          {
-            "sequence": 17,
-            "category": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                  "code": "icu-hours"
-                }
-              ]
-            },
-            "valueQuantity": {
-              "value": 24,
-              "system": "http://unitsofmeasure.org",
-              "code": "h"
-            }
           }
         ],
         "insurance": [
@@ -542,8 +526,7 @@
               13,
               14,
               15,
-              16,
-              17
+              16
             ],
             "productOrService": {
               "coding": [
@@ -554,7 +537,7 @@
                 }
               ]
             },
-            "servicedDate": "2023-11-17",
+            "servicedDate": "2023-11-11",
             "quantity": {
               "value": 1
             },
@@ -622,8 +605,7 @@
               13,
               14,
               15,
-              16,
-              17
+              16
             ],
             "productOrService": {
               "coding": [
@@ -634,7 +616,7 @@
                 }
               ]
             },
-            "servicedDate": "2023-11-17",
+            "servicedDate": "2023-11-11",
             "quantity": {
               "value": 1
             },
@@ -702,8 +684,7 @@
               13,
               14,
               15,
-              16,
-              17
+              16
             ],
             "productOrService": {
               "coding": [
@@ -714,7 +695,7 @@
                 }
               ]
             },
-            "servicedDate": "2023-11-17",
+            "servicedDate": "2023-11-11",
             "quantity": {
               "value": 1
             },
@@ -782,8 +763,7 @@
               13,
               14,
               15,
-              16,
-              17
+              16
             ],
             "productOrService": {
               "coding": [
@@ -794,7 +774,7 @@
                 }
               ]
             },
-            "servicedDate": "2023-11-17",
+            "servicedDate": "2023-11-11",
             "quantity": {
               "value": 1
             },
@@ -815,10 +795,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/1a296550-bcb4-4319-ad20-d38385776bc3",
+      "fullUrl": "http://provider.com/Encounter/305cd9cb-a4fb-406c-90ce-704f004fbe35",
       "resource": {
         "resourceType": "Encounter",
-        "id": "1a296550-bcb4-4319-ad20-d38385776bc3",
+        "id": "305cd9cb-a4fb-406c-90ce-704f004fbe35",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -827,7 +807,7 @@
         "identifier": [
           {
             "system": "http://PR-FHIR.com.sa/identifiers/encounter",
-            "value": "DUP-1766856294835"
+            "value": "DUP-1766859227574"
           }
         ],
         "status": "planned",
@@ -952,10 +932,10 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/f2758515-9953-4265-8cf8-25e4459e1549",
+      "fullUrl": "http://provider.com/Practitioner/9e21c35a-c2af-4fd1-a469-7b716c53e247",
       "resource": {
         "resourceType": "Practitioner",
-        "id": "f2758515-9953-4265-8cf8-25e4459e1549",
+        "id": "9e21c35a-c2af-4fd1-a469-7b716c53e247",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -973,7 +953,7 @@
               ]
             },
             "system": "http://nphies.sa/license/practitioner-license",
-            "value": "PRACT-f2758515"
+            "value": "PRACT-9e21c35a"
           }
         ],
         "active": true,

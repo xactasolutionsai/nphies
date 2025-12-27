@@ -75,10 +75,13 @@ class InstitutionalMapper extends BaseMapper {
     // Build binary resources for attachments (standalone, not linked to supportingInfo)
     const binaryResources = [];
     
-    if (priorAuth.attachments && priorAuth.attachments.length > 0) {
+    if (priorAuth.attachments && Array.isArray(priorAuth.attachments) && priorAuth.attachments.length > 0) {
       priorAuth.attachments.forEach(attachment => {
-        const binaryResource = this.buildBinaryResource(attachment);
-        binaryResources.push(binaryResource);
+        // Only include attachments that have base64_content
+        if (attachment && attachment.base64_content && attachment.content_type) {
+          const binaryResource = this.buildBinaryResource(attachment);
+          binaryResources.push(binaryResource);
+        }
       });
     }
     
@@ -353,12 +356,17 @@ class InstitutionalMapper extends BaseMapper {
     }
 
     // Add ICU hours supportingInfo (for institutional inpatient/daycase)
-    if (priorAuth.icu_hours && ['inpatient', 'daycase'].includes(priorAuth.encounter_class)) {
+    // Check if icu_hours is a valid number (not null, undefined, empty string, or 0)
+    const icuHoursValue = priorAuth.icu_hours != null && priorAuth.icu_hours !== '' 
+      ? parseFloat(priorAuth.icu_hours) 
+      : null;
+    if (icuHoursValue != null && !isNaN(icuHoursValue) && icuHoursValue > 0 && 
+        ['inpatient', 'daycase'].includes(priorAuth.encounter_class)) {
       const hasIcuHours = supportingInfoList.some(info => info.category === 'icu-hours');
       if (!hasIcuHours) {
         supportingInfoList.push({
           category: 'icu-hours',
-          value_quantity: parseFloat(priorAuth.icu_hours),
+          value_quantity: icuHoursValue,
           value_quantity_unit: 'h'
         });
       }

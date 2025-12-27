@@ -1860,7 +1860,11 @@ class PriorAuthorizationsController extends BaseController {
         related_claim_identifier: formData.related_claim_identifier || null,
         related_auth_id: formData.related_auth_id || formData.source_id || null,
         // Update/Follow-up fields - for adding services to approved authorization (Use Case 7)
-        is_update: formData.is_update || false
+        is_update: formData.is_update || false,
+        // ICU hours for institutional inpatient/daycase encounters
+        icu_hours: formData.icu_hours ? parseFloat(formData.icu_hours) : null,
+        // Attachments (standalone Binary resources)
+        attachments: formData.attachments || []
       };
 
       // For resubmission, ensure related_claim_identifier is set to the original request_number
