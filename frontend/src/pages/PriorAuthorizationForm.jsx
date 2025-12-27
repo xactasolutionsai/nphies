@@ -1565,7 +1565,10 @@ export default function PriorAuthorizationForm() {
     
     // BV-00041: Validate that item servicedDate is within encounter period
     // This prevents NPHIES error: "Claim item serviced[x] is not within the encounter period"
-    if (formData.encounter_start && formData.items && formData.items.length > 0) {
+    // NOTE: Vision and Pharmacy claims do NOT use encounters (BV-00354 for vision)
+    // Skip this validation for auth types that don't have encounters
+    if (formData.auth_type !== 'vision' && formData.auth_type !== 'pharmacy' && 
+        formData.encounter_start && formData.items && formData.items.length > 0) {
       // Parse encounter_start with full datetime (including time if provided)
       const encounterStart = new Date(formData.encounter_start);
       
