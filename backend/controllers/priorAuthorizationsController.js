@@ -489,9 +489,56 @@ class PriorAuthorizationsController extends BaseController {
 
       // Extract columns and values
       // Note: coverage_id is excluded because DB column is INTEGER but we use UUID from patient_coverage
+      // Also exclude JSONB fields that shouldn't be updated directly (request_bundle, response_bundle)
       const columns = Object.keys(value).filter(key => 
-        !['items', 'supporting_info', 'diagnoses', 'attachments', 'coverage_id'].includes(key)
+        !['items', 'supporting_info', 'diagnoses', 'attachments', 'coverage_id', 
+          'request_bundle', 'response_bundle', 'id', 'created_at', 'updated_at'].includes(key)
       );
+      
+      // Validate and clean JSONB fields before building query
+      const jsonbFields = ['vision_prescription', 'lab_observations', 'medication_safety_analysis'];
+      columns.forEach(col => {
+        if (jsonbFields.includes(col)) {
+          // Ensure JSONB fields are properly formatted
+          if (value[col] === null || value[col] === undefined || value[col] === '') {
+            value[col] = null;
+          } else if (typeof value[col] === 'string') {
+            // Validate JSON string
+            if (value[col].trim() === '') {
+              value[col] = null;
+            } else {
+              try {
+                JSON.parse(value[col]);
+                // Valid JSON, keep it
+              } catch (e) {
+                console.error(`[update] Invalid JSON in field ${col}, setting to null:`, e.message);
+                value[col] = null;
+              }
+            }
+          } else if (Array.isArray(value[col])) {
+            // Stringify arrays
+            try {
+              value[col] = JSON.stringify(value[col]);
+            } catch (e) {
+              console.error(`[update] Error stringifying array ${col}:`, e);
+              value[col] = '[]';
+            }
+          } else if (typeof value[col] === 'object') {
+            // Stringify objects
+            try {
+              value[col] = JSON.stringify(value[col]);
+            } catch (e) {
+              console.error(`[update] Error stringifying object ${col}:`, e);
+              value[col] = '{}';
+            }
+          } else {
+            // Unexpected type for JSONB field
+            console.warn(`[update] Unexpected type for JSONB field ${col}: ${typeof value[col]}, setting to null`);
+            value[col] = null;
+          }
+        }
+      });
+      
       const values = [...columns.map(col => value[col]), id];
 
       // Update main record
@@ -501,7 +548,23 @@ class PriorAuthorizationsController extends BaseController {
         WHERE id = $${columns.length + 1}
         RETURNING *
       `;
-      await query(updateQuery, values);
+      
+      try {
+        await query(updateQuery, values);
+      } catch (error) {
+        // Enhanced error logging for JSONB issues
+        if (error.message && error.message.includes('invalid input syntax for type json')) {
+          console.error('[update] JSONB field error. Columns:', columns);
+          console.error('[update] JSONB field values:', jsonbFields.map(f => ({ 
+            field: f, 
+            value: value[f], 
+            type: typeof value[f],
+            isNull: value[f] === null,
+            isUndefined: value[f] === undefined
+          })));
+        }
+        throw error;
+      }
 
       // Delete and re-insert nested data
       await query('DELETE FROM prior_authorization_items WHERE prior_auth_id = $1', [id]);
