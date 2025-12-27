@@ -1169,7 +1169,7 @@ export default function PriorAuthorizationForm() {
           };
           setFormData(prev => ({
             ...prev,
-            clinical_documents: [...prev.clinical_documents, newDocument]
+            clinical_documents: [...(prev.clinical_documents || []), newDocument]
           }));
         };
         reader.readAsDataURL(file);
@@ -1184,7 +1184,7 @@ export default function PriorAuthorizationForm() {
   const handleRemovePdf = (documentId) => {
     setFormData(prev => ({
       ...prev,
-      clinical_documents: prev.clinical_documents.filter(doc => doc.id !== documentId)
+      clinical_documents: (prev.clinical_documents || []).filter(doc => doc.id !== documentId)
     }));
   };
 
@@ -3422,13 +3422,13 @@ export default function PriorAuthorizationForm() {
               </div>
 
               {/* Uploaded Files List */}
-              {formData.clinical_documents?.length > 0 && (
+              {(formData.clinical_documents || []).length > 0 && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-gray-700">
-                    Uploaded Documents ({formData.clinical_documents.length})
+                    Uploaded Documents ({(formData.clinical_documents || []).length})
                   </p>
                   <div className="space-y-2">
-                    {formData.clinical_documents.map((doc) => (
+                    {(formData.clinical_documents || []).map((doc) => (
                       <div 
                         key={doc.id} 
                         className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
