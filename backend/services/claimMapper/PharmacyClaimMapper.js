@@ -890,7 +890,6 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
         const detailUnitPrice = parseFloat(detail.unit_price || 0);
         const detailFactor = parseFloat(detail.factor || 1);
         const detailNet = (detailQuantity * detailUnitPrice * detailFactor);
-        const detailServicedDate = detail.serviced_date || servicedDate;
 
         // Use same code system as parent item (medication-codes or medical-devices)
         const detailCodeSystem = detail.product_or_service_system || codeSystem;
@@ -904,7 +903,6 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
               display: detail.product_or_service_display
             }]
           },
-          servicedDate: this.formatDate(detailServicedDate),
           quantity: { value: detailQuantity },
           unitPrice: { 
             value: detailUnitPrice, 

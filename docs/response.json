@@ -1,5 +1,5 @@
 {
-  "id": "5ca3af91-b2cf-4c32-862b-db995c30c759",
+  "id": "70dfe0cc-0025-47dd-8b32-e674ec6353d3",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "http://nphies.sa/MessageHeader/12365298-5241-4e8c-9c6a-8d0a65e7625b",
+      "fullUrl": "http://nphies.sa/MessageHeader/6ab7c90d-9dab-4985-a158-27e2779ff6ae",
       "resource": {
-        "id": "12365298-5241-4e8c-9c6a-8d0a65e7625b",
+        "id": "6ab7c90d-9dab-4985-a158-27e2779ff6ae",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -18,7 +18,7 @@
         },
         "focus": [
           {
-            "reference": "http://nphies.sa/ClaimResponse/349"
+            "reference": "http://nphies.sa/ClaimResponse/663"
           }
         ],
         "sender": {
@@ -33,7 +33,7 @@
         },
         "response": {
           "code": "ok",
-          "identifier": "e0eadebf-fc91-4a5d-8b08-42a901a7641e"
+          "identifier": "d246faed-0c04-4e18-af9d-ce1a5389fe1c"
         },
         "destination": [
           {
@@ -48,17 +48,17 @@
           }
         ],
         "eventCoding": {
-          "code": "claim-response",
+          "code": "priorauth-response",
           "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events"
         },
         "resourceType": "MessageHeader"
       }
     },
     {
-      "fullUrl": "http://nphies.sa/ClaimResponse/349",
+      "fullUrl": "http://nphies.sa/ClaimResponse/663",
       "resource": {
-        "id": "349",
-        "use": "claim",
+        "id": "663",
+        "use": "preauthorization",
         "meta": {
           "tag": [
             {
@@ -83,13 +83,13 @@
             "code": {
               "coding": [
                 {
-                  "code": "BV-00036",
+                  "code": "FR-00027",
                   "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                  "display": "No Claim item detail provided when Claim item package='yes'",
+                  "display": "The element does not exist in the base FHIR profile",
                   "extension": [
                     {
                       "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                      "valueString": "bundle.entry[1].resource.extension[0].value"
+                      "valueString": "Bundle.entry[1].resource.item[0].detail[0].servicedDate"
                     }
                   ]
                 }
@@ -98,7 +98,7 @@
           }
         ],
         "status": "active",
-        "created": "2025-12-27T22:21:29+03:00",
+        "created": "2025-12-27T20:26:54.294Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -109,8 +109,8 @@
         "request": {
           "type": "Claim",
           "identifier": {
-            "value": "CLM-1766863289884",
-            "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
+            "value": "DUP-1766867214241",
+            "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
           }
         },
         "insurance": [
@@ -127,7 +127,7 @@
         },
         "identifier": [
           {
-            "value": "CLM-1766863289884",
+            "value": "DUP-1766867214241",
             "system": "http://nphies.sa/ClaimResponse"
           }
         ],
@@ -402,6 +402,6 @@
       }
     }
   ],
-  "timestamp": "2025-12-27T22:21:32.693+03:00",
+  "timestamp": "2025-12-27T23:27:30.228+03:00",
   "resourceType": "Bundle"
 }

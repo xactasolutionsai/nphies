@@ -1051,7 +1051,6 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
         const detailUnitPrice = parseFloat(detail.unit_price || 0);
         const detailFactor = parseFloat(detail.factor || 1);
         const detailNet = (detailQuantity * detailUnitPrice * detailFactor);
-        const detailServicedDate = detail.serviced_date || servicedDate;
 
         return {
           sequence: detail.sequence || (idx + 1),
@@ -1062,7 +1061,6 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
               display: detail.product_or_service_display
             }]
           },
-          servicedDate: this.formatDate(detailServicedDate),
           quantity: { value: detailQuantity },
           unitPrice: { 
             value: detailUnitPrice, 
