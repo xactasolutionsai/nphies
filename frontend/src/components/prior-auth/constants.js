@@ -607,7 +607,6 @@ export const SUPPORTING_INFO_CATEGORY_OPTIONS = [
   { value: 'respiratory-rate', label: 'respiratory-rate - Respiratory Rate', description: 'Respiratory rate per minute', needsCode: false },
   
   // Hospital/admission specific
-  { value: 'icu-hours', label: 'icu-hours - ICU Hours', description: 'Number of hours spent in ICU', needsCode: false },
   { value: 'ventilation-hours', label: 'ventilation-hours - Ventilation Hours', description: 'Number of hours under mechanical ventilation', needsCode: false },
   { value: 'admission-weight', label: 'admission-weight - Admission Weight', description: 'Admission Weight', needsCode: false },
   { value: 'estimated-Length-of-Stay', label: 'estimated-Length-of-Stay - Estimated Length Of Stay', description: 'Estimated Length Of Stay', needsCode: false },

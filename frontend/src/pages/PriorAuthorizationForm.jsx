@@ -198,8 +198,6 @@ export default function PriorAuthorizationForm() {
     },
     // ICU information (for institutional inpatient/daycase)
     icu_hours: '',
-    // Clinical Documents (PDF uploads for future use)
-    clinical_documents: [],
     // Lab Observations for Professional claims (LOINC codes for Observation resources)
     // Per NPHIES IG: Lab test details MUST be in Observation resources, NOT Claim.item.productOrService
     // These are referenced via Claim.supportingInfo with category = "laboratory"
@@ -1145,51 +1143,8 @@ export default function PriorAuthorizationForm() {
     }));
   };
 
-  // Handler for PDF file uploads
-  const handlePdfUpload = (e) => {
-    const files = Array.from(e.target.files);
-    const pdfFiles = files.filter(file => file.type === 'application/pdf');
-    
-    if (pdfFiles.length !== files.length) {
-      alert('Only PDF files are allowed');
-    }
-    
-    if (pdfFiles.length > 0) {
-      // Convert files to base64 for storage
-      pdfFiles.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const newDocument = {
-            id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            data: event.target.result, // base64 data
-            uploadedAt: new Date().toISOString()
-          };
-          setFormData(prev => ({
-            ...prev,
-            clinical_documents: [...(prev.clinical_documents || []), newDocument]
-          }));
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-    
-    // Reset input
-    e.target.value = '';
-  };
-
-  // Handler to remove uploaded PDF
-  const handleRemovePdf = (documentId) => {
-    setFormData(prev => ({
-      ...prev,
-      clinical_documents: (prev.clinical_documents || []).filter(doc => doc.id !== documentId)
-    }));
-  };
-
-  // Handler for attachment upload linked to supportingInfo
-  const handleAttachmentUpload = (supportingInfoIndex, e) => {
+  // Handler for attachment upload (PDF, JPEG, PNG files)
+  const handleAttachmentUpload = (e) => {
     const files = Array.from(e.target.files);
     const validFiles = files.filter(file => {
       const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -1211,8 +1166,6 @@ export default function PriorAuthorizationForm() {
             content_type: file.type,
             file_size: file.size,
             base64_content: base64Data,
-            supporting_info_sequence: formData.supporting_info[supportingInfoIndex]?.sequence || null,
-            supporting_info_index: supportingInfoIndex, // Temporary reference until saved
             title: file.name,
             description: '',
             category: 'attachment',
@@ -1561,17 +1514,8 @@ export default function PriorAuthorizationForm() {
       });
     }
 
-    // Add ICU hours (for institutional inpatient/daycase)
-    if (formData.auth_type === 'institutional' && 
-        ['inpatient', 'daycase'].includes(formData.encounter_class) &&
-        formData.icu_hours) {
-      supportingInfo.push({
-        sequence: sequence++,
-        category: 'icu-hours',
-        value_quantity: parseFloat(formData.icu_hours),
-        value_quantity_unit: 'h'
-      });
-    }
+    // Note: ICU hours is NOT added to supportingInfo - it's stored separately in icu_hours field
+    // and will be added by the mapper when building the FHIR bundle
 
     return supportingInfo;
   };
@@ -3388,61 +3332,61 @@ export default function PriorAuthorizationForm() {
             </div>
           )}
 
-          {/* Clinical Documents Upload Section */}
+          {/* Attachments Section */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <File className="h-5 w-5 text-red-500" />
-                Clinical Documents
+                <Paperclip className="h-5 w-5 text-blue-500" />
+                Attachments
               </CardTitle>
               <CardDescription>
-                Upload PDF documents related to the clinical case (lab results, medical reports, etc.)
+                Upload supporting documents (PDF, JPEG, PNG) for this prior authorization
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Upload Area */}
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 hover:bg-purple-50/30 transition-colors">
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
                 <input
                   type="file"
-                  accept=".pdf,application/pdf"
+                  accept=".pdf,application/pdf,image/jpeg,image/png,image/jpg"
                   multiple
-                  onChange={handlePdfUpload}
+                  onChange={handleAttachmentUpload}
                   className="hidden"
-                  id="pdf-upload"
+                  id="attachment-upload"
                 />
-                <label htmlFor="pdf-upload" className="cursor-pointer">
+                <label htmlFor="attachment-upload" className="cursor-pointer">
                   <Upload className="h-10 w-10 mx-auto text-gray-400 mb-3" />
                   <p className="text-sm font-medium text-gray-700">
-                    Click to upload PDF files
+                    Click to upload attachments
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    PDF files only • Multiple files allowed
+                    PDF, JPEG, PNG files • Multiple files allowed
                   </p>
                 </label>
               </div>
 
-              {/* Uploaded Files List */}
-              {(formData.clinical_documents || []).length > 0 && (
+              {/* Uploaded Attachments List */}
+              {(formData.attachments || []).length > 0 && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-gray-700">
-                    Uploaded Documents ({(formData.clinical_documents || []).length})
+                    Uploaded Attachments ({(formData.attachments || []).length})
                   </p>
                   <div className="space-y-2">
-                    {(formData.clinical_documents || []).map((doc) => (
+                    {(formData.attachments || []).map((att) => (
                       <div 
-                        key={doc.id} 
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
+                        key={att.id} 
+                        className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200 hover:border-blue-300 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-red-100 rounded-lg">
-                            <FileText className="h-5 w-5 text-red-600" />
+                          <div className="p-2 bg-blue-100 rounded-lg">
+                            <FileText className="h-5 w-5 text-blue-600" />
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-800 truncate max-w-xs">
-                              {doc.name}
+                              {att.file_name}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {formatFileSize(doc.size)} • Uploaded {new Date(doc.uploadedAt).toLocaleString()}
+                              {formatFileSize(att.file_size)} • {att.content_type}
                             </p>
                           </div>
                         </div>
@@ -3450,7 +3394,7 @@ export default function PriorAuthorizationForm() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemovePdf(doc.id)}
+                          onClick={() => handleRemoveAttachment(att.id)}
                           className="text-gray-400 hover:text-red-500 hover:bg-red-50"
                         >
                           <X className="h-4 w-4" />
@@ -3498,9 +3442,9 @@ export default function PriorAuthorizationForm() {
                   </p>
                 </div>
                 <div className="bg-white rounded-lg p-2 border">
-                  <p className="text-gray-500 text-xs">Documents</p>
+                  <p className="text-gray-500 text-xs">Attachments</p>
                   <p className="font-medium">
-                    {formData.clinical_documents?.length || 0} file(s)
+                    {formData.attachments?.length || 0} file(s)
                   </p>
                 </div>
               </div>
@@ -4866,72 +4810,8 @@ export default function PriorAuthorizationForm() {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                      {/* Attachment Upload Button */}
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept=".pdf,application/pdf,image/jpeg,image/png,image/jpg"
-                          onChange={(e) => handleAttachmentUpload(index, e)}
-                          className="hidden"
-                          id={`attachment-upload-${index}`}
-                        />
-                        <label htmlFor={`attachment-upload-${index}`}>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="w-full text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-300"
-                            asChild
-                          >
-                            <span>
-                              <Paperclip className="h-4 w-4 mr-1" />
-                              Attach
-                            </span>
-                          </Button>
-                        </label>
-                      </div>
                     </div>
                   </div>
-                    
-                    {/* Display attachments linked to this supportingInfo entry */}
-                    {formData.attachments?.filter(att => 
-                      att.supporting_info_index === index || 
-                      att.supporting_info_sequence === info.sequence
-                    ).length > 0 && (
-                      <div className="ml-12 space-y-2">
-                        <Label className="text-xs text-gray-500">Attachments:</Label>
-                        {formData.attachments
-                          .filter(att => 
-                            att.supporting_info_index === index || 
-                            att.supporting_info_sequence === info.sequence
-                          )
-                          .map((att) => (
-                            <div 
-                              key={att.id} 
-                              className="flex items-center justify-between p-2 bg-blue-50 rounded-lg border border-blue-200"
-                            >
-                              <div className="flex items-center gap-2">
-                                <FileText className="h-4 w-4 text-blue-600" />
-                                <span className="text-sm text-gray-700 truncate max-w-xs">
-                                  {att.file_name}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  ({formatFileSize(att.file_size)})
-                                </span>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveAttachment(att.id)}
-                                className="h-6 w-6 p-0 text-gray-400 hover:text-red-500"
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))}
-                      </div>
-                    )}
                   </div>
                 );
               })

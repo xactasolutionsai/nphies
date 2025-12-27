@@ -72,24 +72,17 @@ class InstitutionalMapper extends BaseMapper {
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
     
-    // Build binary resources for attachments and create mapping for linking
-    // MUST be done BEFORE buildClaimResource so we can pass the map
+    // Build binary resources for attachments (standalone, not linked to supportingInfo)
     const binaryResources = [];
-    const attachmentBinaryMap = {}; // Maps supporting_info_id -> Binary fullUrl
     
     if (priorAuth.attachments && priorAuth.attachments.length > 0) {
       priorAuth.attachments.forEach(attachment => {
         const binaryResource = this.buildBinaryResource(attachment);
         binaryResources.push(binaryResource);
-        
-        // Map attachment to supportingInfo if linked
-        if (attachment.supporting_info_id) {
-          attachmentBinaryMap[attachment.supporting_info_id] = binaryResource.fullUrl;
-        }
       });
     }
     
-    const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounterResource?.resource, practitioner, bundleResourceIds, attachmentBinaryMap);
+    const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounterResource?.resource, practitioner, bundleResourceIds);
     
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
 
@@ -122,7 +115,7 @@ class InstitutionalMapper extends BaseMapper {
    * Build FHIR Claim resource for Institutional Prior Authorization
    * Includes required institutional fields: chief-complaint, estimated-length-of-stay, onAdmission
    */
-  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds, attachmentBinaryMap = {}) {
+  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds) {
     const claimId = bundleResourceIds.claim;
     const patientRef = bundleResourceIds.patient;
     const providerRef = bundleResourceIds.provider;
@@ -358,22 +351,26 @@ class InstitutionalMapper extends BaseMapper {
         });
       }
     }
+
+    // Add ICU hours supportingInfo (for institutional inpatient/daycase)
+    if (priorAuth.icu_hours && ['inpatient', 'daycase'].includes(priorAuth.encounter_class)) {
+      const hasIcuHours = supportingInfoList.some(info => info.category === 'icu-hours');
+      if (!hasIcuHours) {
+        supportingInfoList.push({
+          category: 'icu-hours',
+          value_quantity: parseFloat(priorAuth.icu_hours),
+          value_quantity_unit: 'h'
+        });
+      }
+    }
     
     if (supportingInfoList.length > 0) {
       claim.supportingInfo = supportingInfoList.map((info, idx) => {
         const seq = idx + 1;
         supportingInfoSequences.push(seq);
         
-        // Check if this supportingInfo has a linked attachment
-        // Use supporting_info_id (from DB) or id to match with attachmentBinaryMap
-        let supportingInfoWithAttachment = { ...info, sequence: seq };
-        const supportingInfoId = info.supporting_info_id || info.id;
-        if (supportingInfoId && attachmentBinaryMap[supportingInfoId]) {
-          // Add valueReference to Binary resource
-          supportingInfoWithAttachment.value_reference = attachmentBinaryMap[supportingInfoId];
-        }
-        
-        return this.buildSupportingInfo(supportingInfoWithAttachment);
+        // Note: Attachments are standalone and not linked to supportingInfo via valueReference
+        return this.buildSupportingInfo({ ...info, sequence: seq });
       });
     }
 

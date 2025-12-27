@@ -402,9 +402,9 @@ class PriorAuthorizationsController extends BaseController {
         await this.insertDiagnoses(priorAuthId, diagnoses);
       }
 
-      // Insert attachments with supporting_info_id linking
+      // Insert attachments (standalone, not linked to supportingInfo)
       if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-        await this.insertAttachments(priorAuthId, attachments, supportingInfoSequenceMap);
+        await this.insertAttachments(priorAuthId, attachments);
       }
 
       // Get complete record
@@ -490,12 +490,15 @@ class PriorAuthorizationsController extends BaseController {
       // Extract columns and values
       // Note: coverage_id is excluded because DB column is INTEGER but we use UUID from patient_coverage
       // Also exclude JSONB fields that shouldn't be updated directly (request_bundle, response_bundle)
+      // Exclude clinical_documents (frontend-only, not stored in DB)
       const columns = Object.keys(value).filter(key => 
         !['items', 'supporting_info', 'diagnoses', 'attachments', 'coverage_id', 
-          'request_bundle', 'response_bundle', 'id', 'created_at', 'updated_at'].includes(key)
+          'request_bundle', 'response_bundle', 'id', 'created_at', 'updated_at',
+          'clinical_documents'].includes(key)
       );
       
-      // Validate and clean JSONB fields before building query
+      // Note: prepareJsonbFields was already called above, so JSONB fields should already be strings
+      // But we'll do a final validation pass to catch any issues
       const jsonbFields = ['vision_prescription', 'lab_observations', 'medication_safety_analysis'];
       columns.forEach(col => {
         if (jsonbFields.includes(col)) {
@@ -503,38 +506,45 @@ class PriorAuthorizationsController extends BaseController {
           if (value[col] === null || value[col] === undefined || value[col] === '') {
             value[col] = null;
           } else if (typeof value[col] === 'string') {
-            // Validate JSON string
+            // Validate JSON string - check if it's already double-encoded
             if (value[col].trim() === '') {
               value[col] = null;
             } else {
               try {
-                JSON.parse(value[col]);
+                const parsed = JSON.parse(value[col]);
+                // If the parsed value is itself a string, it might be double-encoded
+                if (typeof parsed === 'string') {
+                  try {
+                    JSON.parse(parsed);
+                    // It's double-encoded, use the inner value
+                    console.warn(`[update] Field ${col} appears to be double-encoded, fixing...`);
+                    value[col] = parsed;
+                  } catch (e2) {
+                    // Not double-encoded, just a string value - this shouldn't happen for JSONB
+                    console.warn(`[update] Field ${col} is a JSON string containing a plain string, setting to null`);
+                    value[col] = null;
+                  }
+                }
                 // Valid JSON, keep it
               } catch (e) {
                 console.error(`[update] Invalid JSON in field ${col}, setting to null:`, e.message);
+                console.error(`[update] Field ${col} value preview:`, value[col].substring(0, 200));
                 value[col] = null;
               }
             }
-          } else if (Array.isArray(value[col])) {
-            // Stringify arrays
-            try {
-              value[col] = JSON.stringify(value[col]);
-            } catch (e) {
-              console.error(`[update] Error stringifying array ${col}:`, e);
-              value[col] = '[]';
-            }
-          } else if (typeof value[col] === 'object') {
-            // Stringify objects
-            try {
-              value[col] = JSON.stringify(value[col]);
-            } catch (e) {
-              console.error(`[update] Error stringifying object ${col}:`, e);
-              value[col] = '{}';
-            }
           } else {
-            // Unexpected type for JSONB field
-            console.warn(`[update] Unexpected type for JSONB field ${col}: ${typeof value[col]}, setting to null`);
-            value[col] = null;
+            // Shouldn't happen after prepareJsonbFields, but handle it
+            console.warn(`[update] Field ${col} is not a string after prepareJsonbFields, type: ${typeof value[col]}`);
+            if (Array.isArray(value[col]) || typeof value[col] === 'object') {
+              try {
+                value[col] = JSON.stringify(value[col]);
+              } catch (e) {
+                console.error(`[update] Error stringifying ${col}:`, e);
+                value[col] = null;
+              }
+            } else {
+              value[col] = null;
+            }
           }
         }
       });
@@ -562,6 +572,20 @@ class PriorAuthorizationsController extends BaseController {
             isNull: value[f] === null,
             isUndefined: value[f] === undefined
           })));
+          
+          // Log all values to find the problematic one
+          console.error('[update] All column values:');
+          columns.forEach((col, idx) => {
+            const val = value[col];
+            console.error(`  [${idx + 1}] ${col}:`, {
+              type: typeof val,
+              isString: typeof val === 'string',
+              isArray: Array.isArray(val),
+              isObject: typeof val === 'object' && val !== null && !Array.isArray(val),
+              length: typeof val === 'string' ? val.length : undefined,
+              preview: typeof val === 'string' ? val.substring(0, 100) : val
+            });
+          });
         }
         throw error;
       }
@@ -588,9 +612,9 @@ class PriorAuthorizationsController extends BaseController {
         await this.insertDiagnoses(id, diagnoses);
       }
 
-      // Re-insert attachments with supporting_info_id linking
+      // Re-insert attachments (standalone, not linked to supportingInfo)
       if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-        await this.insertAttachments(id, attachments, supportingInfoSequenceMap);
+        await this.insertAttachments(id, attachments);
       }
 
       // Get complete record
@@ -2029,7 +2053,7 @@ class PriorAuthorizationsController extends BaseController {
     const jsonbFields = ['vision_prescription', 'lab_observations', 'medication_safety_analysis'];
     jsonbFields.forEach(field => {
       if (data[field] !== undefined && data[field] !== null) {
-        // If it's already a string (JSON), validate it's valid JSON
+        // If it's already a string (JSON), validate it's valid JSON and not double-encoded
         if (typeof data[field] === 'string') {
           // If it's an empty string, set to null
           if (data[field].trim() === '') {
@@ -2037,11 +2061,26 @@ class PriorAuthorizationsController extends BaseController {
           } else {
             // Try to parse to validate it's valid JSON
             try {
-              JSON.parse(data[field]);
+              const parsed = JSON.parse(data[field]);
+              // Check if the parsed value is itself a string (double-encoded)
+              if (typeof parsed === 'string') {
+                try {
+                  // Try to parse again - if it succeeds, it's double-encoded
+                  JSON.parse(parsed);
+                  // It's double-encoded, use the inner value
+                  console.warn(`[prepareJsonbFields] Field ${field} is double-encoded, fixing...`);
+                  data[field] = parsed;
+                } catch (e2) {
+                  // Not double-encoded, just a string value - shouldn't happen for JSONB
+                  console.warn(`[prepareJsonbFields] Field ${field} is a JSON string containing a plain string, setting to null`);
+                  data[field] = null;
+                }
+              }
               // Valid JSON string, leave it as is
             } catch (e) {
               // Invalid JSON string, set to null to avoid database errors
               console.warn(`[prepareJsonbFields] Field ${field} contains invalid JSON string, setting to null:`, e.message);
+              console.warn(`[prepareJsonbFields] Field ${field} value preview:`, data[field].substring(0, 200));
               data[field] = null;
             }
           }
@@ -2206,33 +2245,19 @@ class PriorAuthorizationsController extends BaseController {
   }
 
   /**
-   * Insert attachments
+   * Insert attachments (standalone, not linked to supportingInfo)
    * @param {number} priorAuthId - Prior authorization ID
    * @param {Array} attachments - Array of attachment objects
-   * @param {Object} supportingInfoSequenceMap - Map of sequence -> supporting_info_id for linking
    */
-  async insertAttachments(priorAuthId, attachments, supportingInfoSequenceMap = {}) {
+  async insertAttachments(priorAuthId, attachments) {
     if (!attachments || !Array.isArray(attachments)) {
       return;
     }
     
     for (const att of attachments) {
       try {
-        // Find supporting_info_id from sequence if provided
-        let supportingInfoId = null;
-        if (att.supporting_info_sequence !== undefined && att.supporting_info_sequence !== null) {
-          const sequence = typeof att.supporting_info_sequence === 'string' 
-            ? parseInt(att.supporting_info_sequence, 10) 
-            : att.supporting_info_sequence;
-          if (!isNaN(sequence) && supportingInfoSequenceMap[sequence]) {
-            supportingInfoId = supportingInfoSequenceMap[sequence];
-          }
-        } else if (att.supporting_info_id !== undefined && att.supporting_info_id !== null) {
-          // Direct ID provided (for updates)
-          supportingInfoId = typeof att.supporting_info_id === 'string' 
-            ? parseInt(att.supporting_info_id, 10) 
-            : att.supporting_info_id;
-        }
+        // Attachments are standalone - no supporting_info_id linking
+        const supportingInfoId = null;
         
         // Ensure base64_content is a string (not an object)
         let base64Content = att.base64_content;
