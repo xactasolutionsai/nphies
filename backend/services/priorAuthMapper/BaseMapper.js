@@ -895,11 +895,7 @@ class BaseMapper {
       resource: {
         resourceType: 'Binary',
         id: binaryId,
-        meta: {
-          profile: [
-            'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/binary|1.0.0'
-          ]
-        },
+        meta: {}, // Binary resources require meta but typically don't have profiles
         contentType: attachment.content_type,
         data: attachment.base64_content
       }
