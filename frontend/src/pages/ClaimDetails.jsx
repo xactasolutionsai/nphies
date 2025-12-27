@@ -10,7 +10,7 @@ import {
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ExternalLink,
-  Wallet, Banknote, ArrowRight, MessageSquare, ChevronDown, MoreVertical
+  Wallet, Banknote, ArrowRight, MessageSquare, ChevronDown, MoreVertical, Download
 } from 'lucide-react';
 import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
 
@@ -434,6 +434,67 @@ export default function ClaimDetails() {
     } catch (error) {
       console.error('Failed to copy:', error);
       alert('Failed to copy to clipboard');
+    }
+  };
+
+  // Download attachment
+  const handleDownloadAttachment = (attachment) => {
+    try {
+      if (!attachment.base64_content) {
+        alert('File content not available');
+        return;
+      }
+
+      // Convert base64 to blob
+      const byteCharacters = atob(attachment.base64_content);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: attachment.content_type });
+
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = attachment.file_name || 'attachment';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading attachment:', error);
+      alert('Failed to download file');
+    }
+  };
+
+  // Preview attachment
+  const handlePreviewAttachment = (attachment) => {
+    try {
+      if (!attachment.base64_content) {
+        alert('File content not available');
+        return;
+      }
+
+      // Convert base64 to blob
+      const byteCharacters = atob(attachment.base64_content);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: attachment.content_type });
+
+      // Create preview URL and open in new tab
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      
+      // Clean up URL after a delay (browser will handle cleanup when tab closes)
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+    } catch (error) {
+      console.error('Error previewing attachment:', error);
+      alert('Failed to preview file');
     }
   };
 
@@ -1505,13 +1566,41 @@ export default function ClaimDetails() {
                       <h4 className="font-medium mb-3">Attachments</h4>
                       <div className="space-y-2">
                         {claim.attachments.map((att, index) => (
-                          <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                            <FileText className="h-5 w-5 text-gray-400" />
-                            <div>
-                              <p className="font-medium">{att.file_name}</p>
-                              <p className="text-sm text-gray-500">
-                                {att.content_type} • {att.file_size ? `${(att.file_size / 1024).toFixed(1)} KB` : 'Size unknown'}
-                              </p>
+                          <div key={index} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <FileText className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate">{att.file_name}</p>
+                                <p className="text-sm text-gray-500">
+                                  {att.content_type} • {att.file_size ? `${(att.file_size / 1024).toFixed(1)} KB` : 'Size unknown'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {att.base64_content && (
+                                <>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handlePreviewAttachment(att)}
+                                    className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    title="Preview file"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDownloadAttachment(att)}
+                                    className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    title="Download file"
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </div>
                         ))}
