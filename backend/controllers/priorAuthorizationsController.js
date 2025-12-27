@@ -2113,34 +2113,80 @@ class PriorAuthorizationsController extends BaseController {
    * @param {Object} supportingInfoSequenceMap - Map of sequence -> supporting_info_id for linking
    */
   async insertAttachments(priorAuthId, attachments, supportingInfoSequenceMap = {}) {
+    if (!attachments || !Array.isArray(attachments)) {
+      return;
+    }
+    
     for (const att of attachments) {
-      // Find supporting_info_id from sequence if provided
-      let supportingInfoId = null;
-      if (att.supporting_info_sequence && supportingInfoSequenceMap[att.supporting_info_sequence]) {
-        supportingInfoId = supportingInfoSequenceMap[att.supporting_info_sequence];
-      } else if (att.supporting_info_id) {
-        // Direct ID provided (for updates)
-        supportingInfoId = att.supporting_info_id;
+      try {
+        // Find supporting_info_id from sequence if provided
+        let supportingInfoId = null;
+        if (att.supporting_info_sequence !== undefined && att.supporting_info_sequence !== null) {
+          const sequence = typeof att.supporting_info_sequence === 'string' 
+            ? parseInt(att.supporting_info_sequence, 10) 
+            : att.supporting_info_sequence;
+          if (!isNaN(sequence) && supportingInfoSequenceMap[sequence]) {
+            supportingInfoId = supportingInfoSequenceMap[sequence];
+          }
+        } else if (att.supporting_info_id !== undefined && att.supporting_info_id !== null) {
+          // Direct ID provided (for updates)
+          supportingInfoId = typeof att.supporting_info_id === 'string' 
+            ? parseInt(att.supporting_info_id, 10) 
+            : att.supporting_info_id;
+        }
+        
+        // Ensure base64_content is a string (not an object)
+        let base64Content = att.base64_content;
+        if (!base64Content) {
+          console.warn('[insertAttachments] Missing base64_content, skipping attachment');
+          continue;
+        }
+        if (typeof base64Content !== 'string') {
+          console.warn('[insertAttachments] base64_content is not a string, type:', typeof base64Content);
+          // If it's an object or array, this is an error - skip this attachment
+          if (typeof base64Content === 'object') {
+            console.error('[insertAttachments] base64_content is an object, cannot convert. Skipping attachment:', att.file_name);
+            continue;
+          }
+          base64Content = String(base64Content);
+        }
+        
+        // Validate required fields
+        if (!att.file_name || !att.content_type) {
+          console.warn('[insertAttachments] Missing required fields, skipping attachment');
+          continue;
+        }
+        
+        const attQuery = `
+          INSERT INTO prior_authorization_attachments 
+          (prior_auth_id, supporting_info_id, file_name, content_type, file_size, base64_content,
+           title, description, category, binary_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `;
+        await query(attQuery, [
+          priorAuthId,
+          supportingInfoId,
+          att.file_name,
+          att.content_type,
+          att.file_size || null,
+          base64Content,
+          att.title || null,
+          att.description || null,
+          att.category || null,
+          att.binary_id || `binary-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        ]);
+      } catch (error) {
+        console.error('[insertAttachments] Error inserting attachment:', error);
+        console.error('[insertAttachments] Attachment data:', {
+          file_name: att?.file_name,
+          content_type: att?.content_type,
+          file_size: att?.file_size,
+          base64_length: att?.base64_content?.length,
+          has_base64: !!att?.base64_content
+        });
+        // Continue with other attachments instead of failing completely
+        throw error; // Re-throw to surface the error
       }
-      
-      const attQuery = `
-        INSERT INTO prior_authorization_attachments 
-        (prior_auth_id, supporting_info_id, file_name, content_type, file_size, base64_content,
-         title, description, category, binary_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      `;
-      await query(attQuery, [
-        priorAuthId,
-        supportingInfoId,
-        att.file_name,
-        att.content_type,
-        att.file_size || null,
-        att.base64_content,
-        att.title || null,
-        att.description || null,
-        att.category || null,
-        att.binary_id || `binary-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      ]);
     }
   }
 }

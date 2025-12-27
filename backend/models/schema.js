@@ -549,8 +549,16 @@ export const validationSchemas = {
       base64_content: Joi.string().required(),
       title: Joi.string().max(255).allow(null, '').optional(),
       description: Joi.string().allow(null, '').optional(),
-      category: Joi.string().max(50).allow(null, '').optional()
-    })).optional(),
+      category: Joi.string().max(50).allow(null, '').optional(),
+      // Fields for linking to supportingInfo (frontend-only, filtered before save)
+      supporting_info_sequence: Joi.alternatives().try(Joi.number().integer(), Joi.string().allow('', null)).allow(null, '').optional(),
+      supporting_info_id: Joi.number().integer().allow(null).optional(),
+      supporting_info_index: Joi.number().integer().allow(null).optional(),
+      // Frontend-only fields (filtered before save)
+      id: Joi.string().allow(null, '').optional(),
+      uploadedAt: Joi.string().allow(null, '').optional(),
+      binary_id: Joi.string().max(100).allow(null, '').optional()
+    }).unknown(true)).optional(), // Allow unknown fields to be filtered out
     
     // Clinical Documents (PDF uploads for future use)
     clinical_documents: Joi.array().items(Joi.object({
