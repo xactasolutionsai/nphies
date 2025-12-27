@@ -104,13 +104,10 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     
     const messageHeader = this.buildClaimMessageHeader(provider, insurer, claimResource.fullUrl);
 
-    // Build binary resources for attachments
-    const binaryResources = [];
-    if (claim.attachments && claim.attachments.length > 0) {
-      claim.attachments.forEach(attachment => {
-        binaryResources.push(this.buildBinaryResource(attachment));
-      });
-    }
+    // NOTE: Attachments should NOT be added as separate Binary resources
+    // They are already included in supportingInfo as valueAttachment (embedded data)
+    // Adding Binary resources causes GE-00013 error (invalid meta structure)
+    // Following NPHIES examples: attachments are embedded in supportingInfo only
 
     // Bundle entries per NPHIES example - NO Encounter, NO Practitioner
     const entries = [
@@ -120,8 +117,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       providerResource,
       insurerResource,
       newbornPatientResource, // Newborn patient
-      ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present
-      ...binaryResources
+      ...(motherPatientResource ? [motherPatientResource] : []) // Mother patient if present
     ];
 
     return {

@@ -117,9 +117,10 @@ class OralClaimMapper extends DentalMapper {
       ...(motherPatientResource ? [motherPatientResource] : []) // Mother patient if present
     ].filter(Boolean);
 
-    if (claim.attachments?.length > 0) {
-      claim.attachments.forEach(att => entries.push(this.buildBinaryResource(att)));
-    }
+    // NOTE: Attachments should NOT be added as separate Binary resources
+    // They are already included in supportingInfo as valueAttachment (embedded data)
+    // Adding Binary resources causes GE-00013 error (invalid meta structure)
+    // Following NPHIES examples: attachments are embedded in supportingInfo only
 
     return {
       resourceType: 'Bundle',
