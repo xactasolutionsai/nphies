@@ -652,6 +652,11 @@ export const ADMISSION_FIELDS = [
   { key: 'estimated_length_of_stay', category: 'estimated-Length-of-Stay', label: 'Estimated Length of Stay', unit: 'd', unitLabel: 'days', placeholder: '3' }
 ];
 
+// NPHIES ICU-specific Fields (for institutional inpatient/daycase)
+export const ICU_FIELDS = [
+  { key: 'icu_hours', category: 'icu-hours', label: 'ICU Hours', unit: 'h', unitLabel: 'hours', placeholder: '24' }
+];
+
 // NPHIES Service Event Type Options (for dental/oral and professional claims)
 // Reference: http://nphies.sa/terminology/CodeSystem/service-event-type
 export const SERVICE_EVENT_TYPE_OPTIONS = [

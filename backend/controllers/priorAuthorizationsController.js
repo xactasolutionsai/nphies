@@ -391,9 +391,10 @@ class PriorAuthorizationsController extends BaseController {
         await this.insertItems(priorAuthId, items);
       }
 
-      // Insert supporting info
+      // Insert supporting info and get sequence -> ID mapping
+      let supportingInfoSequenceMap = {};
       if (supporting_info && Array.isArray(supporting_info) && supporting_info.length > 0) {
-        await this.insertSupportingInfo(priorAuthId, supporting_info);
+        supportingInfoSequenceMap = await this.insertSupportingInfo(priorAuthId, supporting_info);
       }
 
       // Insert diagnoses
@@ -401,9 +402,9 @@ class PriorAuthorizationsController extends BaseController {
         await this.insertDiagnoses(priorAuthId, diagnoses);
       }
 
-      // Insert attachments
+      // Insert attachments with supporting_info_id linking
       if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-        await this.insertAttachments(priorAuthId, attachments);
+        await this.insertAttachments(priorAuthId, attachments, supportingInfoSequenceMap);
       }
 
       // Get complete record
@@ -513,9 +514,10 @@ class PriorAuthorizationsController extends BaseController {
         await this.insertItems(id, items);
       }
 
-      // Re-insert supporting info
+      // Re-insert supporting info and get sequence -> ID mapping
+      let supportingInfoSequenceMap = {};
       if (supporting_info && Array.isArray(supporting_info) && supporting_info.length > 0) {
-        await this.insertSupportingInfo(id, supporting_info);
+        supportingInfoSequenceMap = await this.insertSupportingInfo(id, supporting_info);
       }
 
       // Re-insert diagnoses
@@ -523,9 +525,9 @@ class PriorAuthorizationsController extends BaseController {
         await this.insertDiagnoses(id, diagnoses);
       }
 
-      // Re-insert attachments
+      // Re-insert attachments with supporting_info_id linking
       if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-        await this.insertAttachments(id, attachments);
+        await this.insertAttachments(id, attachments, supportingInfoSequenceMap);
       }
 
       // Get complete record
@@ -964,7 +966,7 @@ class PriorAuthorizationsController extends BaseController {
         await this.insertItems(newId, updateData.items);
       }
       if (updateData.supporting_info && updateData.supporting_info.length > 0) {
-        await this.insertSupportingInfo(newId, updateData.supporting_info);
+        const supportingInfoSequenceMap = await this.insertSupportingInfo(newId, updateData.supporting_info);
       }
       if (updateData.diagnoses && updateData.diagnoses.length > 0) {
         await this.insertDiagnoses(newId, updateData.diagnoses);
@@ -2020,8 +2022,10 @@ class PriorAuthorizationsController extends BaseController {
 
   /**
    * Insert supporting info
+   * Returns a map of sequence -> supporting_info_id for linking attachments
    */
   async insertSupportingInfo(priorAuthId, supportingInfo) {
+    const sequenceMap = {};
     for (const info of supportingInfo) {
       const infoQuery = `
         INSERT INTO prior_authorization_supporting_info 
@@ -2031,13 +2035,14 @@ class PriorAuthorizationsController extends BaseController {
          value_reference, timing_date, timing_period_start, timing_period_end,
          reason_code, reason_system)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        RETURNING id, sequence
       `;
       
       // For chief-complaint with code_text (free text format), store in value_string
       // This allows round-trip of free text chief complaints
       const valueString = info.code_text || info.value_string || null;
       
-      await query(infoQuery, [
+      const result = await query(infoQuery, [
         priorAuthId,
         info.sequence,
         info.category,
@@ -2059,7 +2064,13 @@ class PriorAuthorizationsController extends BaseController {
         info.reason_code || null,
         info.reason_system || null
       ]);
+      
+      // Map sequence to supporting_info_id for attachment linking
+      if (result.rows[0]) {
+        sequenceMap[info.sequence] = result.rows[0].id;
+      }
     }
+    return sequenceMap;
   }
 
   /**
@@ -2087,17 +2098,30 @@ class PriorAuthorizationsController extends BaseController {
 
   /**
    * Insert attachments
+   * @param {number} priorAuthId - Prior authorization ID
+   * @param {Array} attachments - Array of attachment objects
+   * @param {Object} supportingInfoSequenceMap - Map of sequence -> supporting_info_id for linking
    */
-  async insertAttachments(priorAuthId, attachments) {
+  async insertAttachments(priorAuthId, attachments, supportingInfoSequenceMap = {}) {
     for (const att of attachments) {
+      // Find supporting_info_id from sequence if provided
+      let supportingInfoId = null;
+      if (att.supporting_info_sequence && supportingInfoSequenceMap[att.supporting_info_sequence]) {
+        supportingInfoId = supportingInfoSequenceMap[att.supporting_info_sequence];
+      } else if (att.supporting_info_id) {
+        // Direct ID provided (for updates)
+        supportingInfoId = att.supporting_info_id;
+      }
+      
       const attQuery = `
         INSERT INTO prior_authorization_attachments 
-        (prior_auth_id, file_name, content_type, file_size, base64_content,
+        (prior_auth_id, supporting_info_id, file_name, content_type, file_size, base64_content,
          title, description, category, binary_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `;
       await query(attQuery, [
         priorAuthId,
+        supportingInfoId,
         att.file_name,
         att.content_type,
         att.file_size || null,
@@ -2105,7 +2129,7 @@ class PriorAuthorizationsController extends BaseController {
         att.title || null,
         att.description || null,
         att.category || null,
-        att.binary_id || `binary-${Date.now()}`
+        att.binary_id || `binary-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       ]);
     }
   }

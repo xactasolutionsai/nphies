@@ -75,10 +75,19 @@ class InstitutionalMapper extends BaseMapper {
     
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
 
+    // Build binary resources for attachments and create mapping for linking
     const binaryResources = [];
+    const attachmentBinaryMap = {}; // Maps supporting_info_id -> Binary fullUrl
+    
     if (priorAuth.attachments && priorAuth.attachments.length > 0) {
       priorAuth.attachments.forEach(attachment => {
-        binaryResources.push(this.buildBinaryResource(attachment));
+        const binaryResource = this.buildBinaryResource(attachment);
+        binaryResources.push(binaryResource);
+        
+        // Map attachment to supportingInfo if linked
+        if (attachment.supporting_info_id) {
+          attachmentBinaryMap[attachment.supporting_info_id] = binaryResource.fullUrl;
+        }
       });
     }
 
@@ -352,7 +361,15 @@ class InstitutionalMapper extends BaseMapper {
       claim.supportingInfo = supportingInfoList.map((info, idx) => {
         const seq = idx + 1;
         supportingInfoSequences.push(seq);
-        return this.buildSupportingInfo({ ...info, sequence: seq });
+        
+        // Check if this supportingInfo has a linked attachment
+        let supportingInfoWithAttachment = { ...info, sequence: seq };
+        if (info.id && attachmentBinaryMap[info.id]) {
+          // Add valueReference to Binary resource
+          supportingInfoWithAttachment.value_reference = attachmentBinaryMap[info.id];
+        }
+        
+        return this.buildSupportingInfo(supportingInfoWithAttachment);
       });
     }
 

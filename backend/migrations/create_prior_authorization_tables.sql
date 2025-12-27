@@ -283,6 +283,7 @@ CREATE INDEX IF NOT EXISTS idx_prior_auth_items_sequence ON prior_authorization_
 CREATE INDEX IF NOT EXISTS idx_prior_auth_supporting_info_prior_auth_id ON prior_authorization_supporting_info(prior_auth_id);
 
 CREATE INDEX IF NOT EXISTS idx_prior_auth_attachments_prior_auth_id ON prior_authorization_attachments(prior_auth_id);
+CREATE INDEX IF NOT EXISTS idx_prior_auth_attachments_supporting_info_id ON prior_authorization_attachments(supporting_info_id) WHERE supporting_info_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_prior_auth_responses_prior_auth_id ON prior_authorization_responses(prior_auth_id);
 CREATE INDEX IF NOT EXISTS idx_prior_auth_responses_received_at ON prior_authorization_responses(received_at);

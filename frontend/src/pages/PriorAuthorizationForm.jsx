@@ -195,6 +195,8 @@ export default function PriorAuthorizationForm() {
       admission_weight: '',
       estimated_length_of_stay: ''
     },
+    // ICU information (for institutional inpatient/daycase)
+    icu_hours: '',
     // Clinical Documents (PDF uploads for future use)
     clinical_documents: [],
     // Lab Observations for Professional claims (LOINC codes for Observation resources)
@@ -1185,6 +1187,57 @@ export default function PriorAuthorizationForm() {
     }));
   };
 
+  // Handler for attachment upload linked to supportingInfo
+  const handleAttachmentUpload = (supportingInfoIndex, e) => {
+    const files = Array.from(e.target.files);
+    const validFiles = files.filter(file => {
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+      return validTypes.includes(file.type);
+    });
+    
+    if (validFiles.length !== files.length) {
+      alert('Only PDF, JPEG, and PNG files are allowed');
+    }
+    
+    if (validFiles.length > 0) {
+      validFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64Data = event.target.result.split(',')[1]; // Remove data:type;base64, prefix
+          const newAttachment = {
+            id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            file_name: file.name,
+            content_type: file.type,
+            file_size: file.size,
+            base64_content: base64Data,
+            supporting_info_sequence: formData.supporting_info[supportingInfoIndex]?.sequence || null,
+            supporting_info_index: supportingInfoIndex, // Temporary reference until saved
+            title: file.name,
+            description: '',
+            category: 'attachment',
+            uploadedAt: new Date().toISOString()
+          };
+          setFormData(prev => ({
+            ...prev,
+            attachments: [...(prev.attachments || []), newAttachment]
+          }));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    
+    // Reset input
+    e.target.value = '';
+  };
+
+  // Handler to remove attachment
+  const handleRemoveAttachment = (attachmentId) => {
+    setFormData(prev => ({
+      ...prev,
+      attachments: (prev.attachments || []).filter(att => att.id !== attachmentId)
+    }));
+  };
+
   // Format file size for display
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -1507,6 +1560,18 @@ export default function PriorAuthorizationForm() {
       });
     }
 
+    // Add ICU hours (for institutional inpatient/daycase)
+    if (formData.auth_type === 'institutional' && 
+        ['inpatient', 'daycase'].includes(formData.encounter_class) &&
+        formData.icu_hours) {
+      supportingInfo.push({
+        sequence: sequence++,
+        category: 'icu-hours',
+        value_quantity: parseFloat(formData.icu_hours),
+        value_quantity_unit: 'h'
+      });
+    }
+
     return supportingInfo;
   };
 
@@ -1560,6 +1625,32 @@ export default function PriorAuthorizationForm() {
         }
       } else {
         validationErrors.push({ field: 'items', message: `All items must have a service code` });
+      }
+    }
+    
+    // Validate ICU hours for institutional claims with offline eligibility
+    // Per test case requirements: ICU hours should be provided for institutional claims with offline eligibility references
+    if (formData.auth_type === 'institutional' && 
+        ['inpatient', 'daycase'].includes(formData.encounter_class) &&
+        formData.eligibility_offline_ref && 
+        !formData.icu_hours) {
+      validationErrors.push({ 
+        field: 'icu_hours', 
+        message: 'ICU hours is required for institutional claims with offline eligibility references' 
+      });
+    }
+    
+    // Validate attachment file types
+    if (formData.attachments && formData.attachments.length > 0) {
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+      const invalidAttachments = formData.attachments.filter(att => 
+        att.content_type && !validTypes.includes(att.content_type.toLowerCase())
+      );
+      if (invalidAttachments.length > 0) {
+        validationErrors.push({ 
+          field: 'attachments', 
+          message: `Invalid attachment file types. Only PDF, JPEG, and PNG files are allowed. Invalid files: ${invalidAttachments.map(a => a.file_name).join(', ')}` 
+        });
       }
     }
     
@@ -3245,6 +3336,46 @@ export default function PriorAuthorizationForm() {
             </Card>
           )}
 
+          {/* ICU Information Section - Only for institutional inpatient/daycase */}
+          {formData.auth_type === 'institutional' && ['inpatient', 'daycase'].includes(formData.encounter_class) && (
+            <Card className="border-red-200 bg-red-50/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-red-600" />
+                  ICU Information
+                </CardTitle>
+                <CardDescription>
+                  ICU hours for institutional {formData.encounter_class === 'inpatient' ? 'inpatient' : 'day case'} encounters
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {ICU_FIELDS.map((field) => (
+                    <div key={field.key} className="space-y-2">
+                      <Label htmlFor={field.key}>{field.label}</Label>
+                      <div className="relative">
+                        <Input
+                          id={field.key}
+                          type="number"
+                          step="0.1"
+                          value={formData.icu_hours ?? ''}
+                          onChange={(e) => handleChange('icu_hours', e.target.value)}
+                          placeholder={field.placeholder}
+                          className="pr-16"
+                        />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <Badge variant="secondary" className="font-mono text-xs">
+                            {field.unitLabel}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Non-admission hint */}
           {!['inpatient', 'daycase'].includes(formData.encounter_class) && (
             <div className="flex items-center gap-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
@@ -4658,11 +4789,12 @@ export default function PriorAuthorizationForm() {
                 const needsCode = selectedCategory?.needsCode || false;
                 
                 return (
-                  <div key={index} className="flex items-start gap-4 p-4 border rounded-lg bg-gray-50">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-cyan text-white flex items-center justify-center text-sm font-medium">
-                      {info.sequence}
-                    </div>
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div key={index} className="space-y-4">
+                    <div className="flex items-start gap-4 p-4 border rounded-lg bg-gray-50">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-cyan text-white flex items-center justify-center text-sm font-medium">
+                        {info.sequence}
+                      </div>
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label>Category</Label>
                         <Select
@@ -4723,15 +4855,82 @@ export default function PriorAuthorizationForm() {
                         </div>
                       )}
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:text-red-700"
-                      onClick={() => removeSupportingInfo(index)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700"
+                        onClick={() => removeSupportingInfo(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      {/* Attachment Upload Button */}
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf,image/jpeg,image/png,image/jpg"
+                          onChange={(e) => handleAttachmentUpload(index, e)}
+                          className="hidden"
+                          id={`attachment-upload-${index}`}
+                        />
+                        <label htmlFor={`attachment-upload-${index}`}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-300"
+                            asChild
+                          >
+                            <span>
+                              <Paperclip className="h-4 w-4 mr-1" />
+                              Attach
+                            </span>
+                          </Button>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                    
+                    {/* Display attachments linked to this supportingInfo entry */}
+                    {formData.attachments?.filter(att => 
+                      att.supporting_info_index === index || 
+                      att.supporting_info_sequence === info.sequence
+                    ).length > 0 && (
+                      <div className="ml-12 space-y-2">
+                        <Label className="text-xs text-gray-500">Attachments:</Label>
+                        {formData.attachments
+                          .filter(att => 
+                            att.supporting_info_index === index || 
+                            att.supporting_info_sequence === info.sequence
+                          )
+                          .map((att) => (
+                            <div 
+                              key={att.id} 
+                              className="flex items-center justify-between p-2 bg-blue-50 rounded-lg border border-blue-200"
+                            >
+                              <div className="flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-blue-600" />
+                                <span className="text-sm text-gray-700 truncate max-w-xs">
+                                  {att.file_name}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  ({formatFileSize(att.file_size)})
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveAttachment(att.id)}
+                                className="h-6 w-6 p-0 text-gray-400 hover:text-red-500"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 );
               })
