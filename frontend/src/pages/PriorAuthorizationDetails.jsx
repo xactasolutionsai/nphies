@@ -11,7 +11,7 @@ import {
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck, Pill,
-  MessageSquare, RotateCcw, PlusCircle, Download
+  MessageSquare, RotateCcw, PlusCircle, Download, Package
 } from 'lucide-react';
 
 // Import AI Medication Safety Panel
@@ -1447,6 +1447,65 @@ export default function PriorAuthorizationDetails() {
                               </div>
                             );
                           })()}
+                          
+                          {/* Package Item Details (Sub-items) */}
+                          {item.is_package === true && item.details && Array.isArray(item.details) && item.details.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-blue-200">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Package className="h-4 w-4 text-blue-600" />
+                                <p className="text-sm font-semibold text-blue-800">Package Details ({item.details.length} sub-item{item.details.length !== 1 ? 's' : ''})</p>
+                              </div>
+                              <div className="space-y-3">
+                                {item.details.map((detail, detailIndex) => (
+                                  <div key={detailIndex} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-medium">
+                                          {detail.sequence || detailIndex + 1}
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-medium">{detail.product_or_service_code}</p>
+                                          <p className="text-xs text-gray-600">{detail.product_or_service_display || 'No description'}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-xs">
+                                      <div>
+                                        <p className="text-gray-500">Quantity</p>
+                                        <p className="font-medium">{detail.quantity || 1}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-gray-500">Unit Price</p>
+                                        <p className="font-medium">{formatAmount(detail.unit_price, detail.currency || item.currency)}</p>
+                                      </div>
+                                      {detail.factor !== undefined && detail.factor !== 1 && (
+                                        <div>
+                                          <p className="text-gray-500">Factor</p>
+                                          <p className="font-medium">{detail.factor}</p>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <p className="text-gray-500">Net Amount</p>
+                                        <p className="font-medium">{formatAmount(detail.net_amount, detail.currency || item.currency)}</p>
+                                      </div>
+                                      {detail.serviced_date && (
+                                        <div>
+                                          <p className="text-gray-500">Service Date</p>
+                                          <p className="font-medium">{formatDate(detail.serviced_date)}</p>
+                                        </div>
+                                      )}
+                                      {detail.description && (
+                                        <div className="col-span-full">
+                                          <p className="text-gray-500">Description</p>
+                                          <p className="font-medium">{detail.description}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
