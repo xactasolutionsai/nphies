@@ -255,9 +255,15 @@ export default function PriorAuthorizationDetails() {
   const getResponseTotals = () => {
     if (!priorAuth.response_bundle) return null;
     
-    const claimResponse = priorAuth.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'ClaimResponse'
-    )?.resource;
+    // Handle both Bundle format (with entry) and direct ClaimResponse format
+    let claimResponse = null;
+    if (priorAuth.response_bundle.resourceType === 'Bundle') {
+      claimResponse = priorAuth.response_bundle?.entry?.find(
+        e => e.resource?.resourceType === 'ClaimResponse'
+      )?.resource;
+    } else if (priorAuth.response_bundle.resourceType === 'ClaimResponse') {
+      claimResponse = priorAuth.response_bundle;
+    }
     
     if (!claimResponse?.total) return null;
     
@@ -273,9 +279,15 @@ export default function PriorAuthorizationDetails() {
   const getAdjudicationOutcome = () => {
     if (!priorAuth.response_bundle) return null;
     
-    const claimResponse = priorAuth.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'ClaimResponse'
-    )?.resource;
+    // Handle both Bundle format (with entry) and direct ClaimResponse format
+    let claimResponse = null;
+    if (priorAuth.response_bundle.resourceType === 'Bundle') {
+      claimResponse = priorAuth.response_bundle?.entry?.find(
+        e => e.resource?.resourceType === 'ClaimResponse'
+      )?.resource;
+    } else if (priorAuth.response_bundle.resourceType === 'ClaimResponse') {
+      claimResponse = priorAuth.response_bundle;
+    }
     
     return claimResponse?.extension?.find(
       ext => ext.url?.includes('extension-adjudication-outcome')
@@ -285,6 +297,11 @@ export default function PriorAuthorizationDetails() {
   // Extract Bundle-level details from response bundle
   const getBundleDetails = () => {
     if (!priorAuth.response_bundle) return null;
+    
+    // If it's a ClaimResponse directly (not a Bundle), return null or handle differently
+    if (priorAuth.response_bundle.resourceType === 'ClaimResponse') {
+      return null; // Bundle details don't apply to direct ClaimResponse
+    }
     
     return {
       id: priorAuth.response_bundle.id,
@@ -299,9 +316,14 @@ export default function PriorAuthorizationDetails() {
   const getMessageHeaderDetails = () => {
     if (!priorAuth.response_bundle) return null;
     
-    const messageHeader = priorAuth.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'MessageHeader'
-    )?.resource;
+    // Handle both Bundle format (with entry) and direct ClaimResponse format
+    let messageHeader = null;
+    if (priorAuth.response_bundle.resourceType === 'Bundle') {
+      messageHeader = priorAuth.response_bundle?.entry?.find(
+        e => e.resource?.resourceType === 'MessageHeader'
+      )?.resource;
+    }
+    // MessageHeader only exists in Bundle format, not in direct ClaimResponse
     
     if (!messageHeader) return null;
 
@@ -330,9 +352,15 @@ export default function PriorAuthorizationDetails() {
   const getClaimResponseDetails = () => {
     if (!priorAuth.response_bundle) return null;
     
-    const claimResponse = priorAuth.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'ClaimResponse'
-    )?.resource;
+    // Handle both Bundle format (with entry) and direct ClaimResponse format
+    let claimResponse = null;
+    if (priorAuth.response_bundle.resourceType === 'Bundle') {
+      claimResponse = priorAuth.response_bundle?.entry?.find(
+        e => e.resource?.resourceType === 'ClaimResponse'
+      )?.resource;
+    } else if (priorAuth.response_bundle.resourceType === 'ClaimResponse') {
+      claimResponse = priorAuth.response_bundle;
+    }
     
     if (!claimResponse) return null;
 
@@ -384,7 +412,7 @@ export default function PriorAuthorizationDetails() {
       requestorReference: claimResponse.requestor?.reference,
       requestorId: extractIdFromRef(claimResponse.requestor?.reference),
       // Original request details
-      requestType: claimResponse.request?.type,
+      requestType: claimResponse.request?.type?.coding?.[0]?.code || (typeof claimResponse.request?.type === 'string' ? claimResponse.request.type : null),
       requestIdentifier: claimResponse.request?.identifier?.value,
       requestIdentifierSystem: claimResponse.request?.identifier?.system,
       // Insurance details
@@ -398,9 +426,14 @@ export default function PriorAuthorizationDetails() {
   const getCoverageDetails = () => {
     if (!priorAuth.response_bundle) return null;
     
-    const coverage = priorAuth.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'Coverage'
-    )?.resource;
+    // Handle both Bundle format (with entry) and direct ClaimResponse format
+    let coverage = null;
+    if (priorAuth.response_bundle.resourceType === 'Bundle') {
+      coverage = priorAuth.response_bundle?.entry?.find(
+        e => e.resource?.resourceType === 'Coverage'
+      )?.resource;
+    }
+    // Coverage only exists in Bundle format, not in direct ClaimResponse
     
     if (!coverage) return null;
 
@@ -439,9 +472,14 @@ export default function PriorAuthorizationDetails() {
   const getPatientFromResponse = () => {
     if (!priorAuth.response_bundle) return null;
     
-    const patient = priorAuth.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'Patient'
-    )?.resource;
+    // Handle both Bundle format (with entry) and direct ClaimResponse format
+    let patient = null;
+    if (priorAuth.response_bundle.resourceType === 'Bundle') {
+      patient = priorAuth.response_bundle?.entry?.find(
+        e => e.resource?.resourceType === 'Patient'
+      )?.resource;
+    }
+    // Patient only exists in Bundle format, not in direct ClaimResponse
     
     if (!patient) return null;
 
@@ -489,10 +527,15 @@ export default function PriorAuthorizationDetails() {
   const getProviderFromResponse = () => {
     if (!priorAuth.response_bundle) return null;
     
-    const provider = priorAuth.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'Organization' && 
-           e.resource?.type?.some(t => t.coding?.some(c => c.code === 'prov'))
-    )?.resource;
+    // Handle both Bundle format (with entry) and direct ClaimResponse format
+    let provider = null;
+    if (priorAuth.response_bundle.resourceType === 'Bundle') {
+      provider = priorAuth.response_bundle?.entry?.find(
+        e => e.resource?.resourceType === 'Organization' && 
+             e.resource?.type?.some(t => t.coding?.some(c => c.code === 'prov'))
+      )?.resource;
+    }
+    // Provider only exists in Bundle format, not in direct ClaimResponse
     
     if (!provider) return null;
 
@@ -516,10 +559,15 @@ export default function PriorAuthorizationDetails() {
   const getInsurerFromResponse = () => {
     if (!priorAuth.response_bundle) return null;
     
-    const insurer = priorAuth.response_bundle?.entry?.find(
-      e => e.resource?.resourceType === 'Organization' && 
-           e.resource?.type?.some(t => t.coding?.some(c => c.code === 'ins'))
-    )?.resource;
+    // Handle both Bundle format (with entry) and direct ClaimResponse format
+    let insurer = null;
+    if (priorAuth.response_bundle.resourceType === 'Bundle') {
+      insurer = priorAuth.response_bundle?.entry?.find(
+        e => e.resource?.resourceType === 'Organization' && 
+             e.resource?.type?.some(t => t.coding?.some(c => c.code === 'ins'))
+      )?.resource;
+    }
+    // Insurer only exists in Bundle format, not in direct ClaimResponse
     
     if (!insurer) return null;
 
@@ -527,7 +575,7 @@ export default function PriorAuthorizationDetails() {
       id: insurer.id,
       name: insurer.name,
       identifier: insurer.identifier?.[0]?.value,
-      organizationType: insurer.type?.[0]?.coding?.[0]?.display,
+      organizationType: insurer.type?.[0]?.coding?.[0]?.display || insurer.type?.[0]?.coding?.[0]?.code || null,
       active: insurer.active,
       address: insurer.address?.[0]
     };
@@ -1204,9 +1252,16 @@ export default function PriorAuthorizationDetails() {
                   <div className="space-y-4">
                     {priorAuth.items.map((item, index) => {
                       // Get item-level adjudication details from response bundle
-                      const responseItem = priorAuth.response_bundle?.entry?.find(
-                        e => e.resource?.resourceType === 'ClaimResponse'
-                      )?.resource?.item?.find(i => i.itemSequence === item.sequence);
+                      // Handle both Bundle format (with entry) and direct ClaimResponse format
+                      let claimResponse = null;
+                      if (priorAuth.response_bundle?.resourceType === 'Bundle') {
+                        claimResponse = priorAuth.response_bundle?.entry?.find(
+                          e => e.resource?.resourceType === 'ClaimResponse'
+                        )?.resource;
+                      } else if (priorAuth.response_bundle?.resourceType === 'ClaimResponse') {
+                        claimResponse = priorAuth.response_bundle;
+                      }
+                      const responseItem = claimResponse?.item?.find(i => i.itemSequence === item.sequence);
                       
                       const itemAdjudications = responseItem?.adjudication || [];
                       const itemOutcome = responseItem?.extension?.find(
