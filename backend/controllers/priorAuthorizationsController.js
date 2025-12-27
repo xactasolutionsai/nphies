@@ -1919,7 +1919,7 @@ class PriorAuthorizationsController extends BaseController {
     const dateFields = ['encounter_start', 'encounter_end', 'eligibility_offline_date',
                         'pre_auth_period_start', 'pre_auth_period_end', 
                         'transfer_period_start', 'transfer_period_end'];
-    const numberFields = ['coverage_id', 'related_auth_id', 'total_amount', 'approved_amount', 'icu_hours'];
+    const numberFields = ['coverage_id', 'related_auth_id', 'total_amount', 'approved_amount'];
     
     dateFields.forEach(field => {
       if (cleanedData[field] === '' || cleanedData[field] === null) {
@@ -1930,12 +1930,18 @@ class PriorAuthorizationsController extends BaseController {
     numberFields.forEach(field => {
       if (cleanedData[field] === '' || cleanedData[field] === null || cleanedData[field] === undefined) {
         cleanedData[field] = null;
-      } else if (typeof cleanedData[field] === 'string') {
-        // Convert string numbers to actual numbers
-        const numValue = parseFloat(cleanedData[field]);
-        cleanedData[field] = isNaN(numValue) ? null : numValue;
       }
     });
+    
+    // Handle icu_hours separately - convert string to number or null
+    if (cleanedData.icu_hours !== undefined && cleanedData.icu_hours !== null) {
+      if (cleanedData.icu_hours === '') {
+        cleanedData.icu_hours = null;
+      } else if (typeof cleanedData.icu_hours === 'string') {
+        const numValue = parseFloat(cleanedData.icu_hours);
+        cleanedData.icu_hours = isNaN(numValue) ? null : numValue;
+      }
+    }
 
     // Convert empty strings to null for UUID fields
     ['patient_id', 'provider_id', 'insurer_id', 'practitioner_id', 'transfer_provider_id'].forEach(field => {
