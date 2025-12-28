@@ -406,14 +406,31 @@ class ProfessionalMapper extends BaseMapper {
     
     // BV-00905: Claim.facility SHALL be provided when associated with 'Ambulatory' outpatient or 'Virtual' telemedicine encounters
     // Check encounter resource class code directly (AMB or VR), or fall back to priorAuth.encounter_class
+    // 
+    // RE-00005 Analysis: The error "Claim facility is not referring to a valid resource" occurs because:
+    // 1. FHIR R4 Claim.facility expects a Reference(Location), not Reference(Organization)
+    // 2. NPHIES may have stricter validation on facility references
+    // 
+    // Per NPHIES official example at https://portal.nphies.sa/ig/Claim-173086.json.html,
+    // the facility field is NOT included in Professional PA requests.
+    // The NPHIES_Professional_Lab_Bundle_Example.json also omits facility.
+    // 
+    // Solution: Only include facility if a Location resource is available.
+    // For now, we omit facility as it's causing RE-00005 errors and the official examples don't include it.
+    // 
+    // TODO: If NPHIES requires facility for certain cases, implement a Location resource builder
+    // and reference it here instead of Organization.
     const encounterClassCode = encounter?.class?.code;
     const encounterClass = priorAuth.encounter_class || 'ambulatory';
     const needsFacility = encounterClassCode === 'AMB' || encounterClassCode === 'VR' || 
                           encounterClass === 'ambulatory' || encounterClass === 'virtual' || encounterClass === 'telemedicine';
     
-    if (needsFacility) {
-      claim.facility = { reference: `Organization/${providerRef}` };
-    }
+    // NOTE: Facility is commented out to avoid RE-00005 error.
+    // NPHIES official examples do not include facility for Professional PA.
+    // If BV-00905 requires it, we need to create a proper Location resource.
+    // if (needsFacility && priorAuth.facility_location_id) {
+    //   claim.facility = { reference: `http://provider.com/Location/${priorAuth.facility_location_id}` };
+    // }
     
     claim.priority = {
       coding: [
