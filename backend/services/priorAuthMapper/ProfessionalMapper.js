@@ -384,44 +384,35 @@ class ProfessionalMapper extends BaseMapper {
         }
       ]
     };
-    
-    // Determine encounter class for conditional fields
-    const encounterClassCode = encounter?.class?.code;
-    const encounterClass = priorAuth.encounter_class || 'ambulatory';
-    const isAmbOrVR = encounterClassCode === 'AMB' || encounterClassCode === 'VR' || 
-                      encounterClass === 'ambulatory' || encounterClass === 'virtual' || encounterClass === 'telemedicine';
-    
-    // Per official NPHIES examples:
-    // - AMB/VR encounters: NO subType, NO facility
-    // - EMER/HH encounters: subType and facility are included
-    if (!isAmbOrVR) {
-      // BV-00365, BV-00034: Professional claims MUST use OP or EMR subType only
-      let subTypeCode = priorAuth.sub_type || this.getClaimSubTypeCode(encounterClass, 'professional');
-      if (!['op', 'emr'].includes(subTypeCode)) {
-        console.warn(`[ProfessionalMapper] Invalid subType '${subTypeCode}' corrected to 'emr' (BV-00365, BV-00034)`);
-        subTypeCode = 'emr';
-      }
-      claim.subType = {
-        coding: [
-          {
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-            code: subTypeCode
-          }
-        ]
-      };
+    // BV-00365, BV-00034: Professional claims MUST use OP or EMR subType only
+    let subTypeCode = priorAuth.sub_type || this.getClaimSubTypeCode(priorAuth.encounter_class || 'ambulatory', 'professional');
+    if (!['op', 'emr'].includes(subTypeCode)) {
+      console.warn(`[ProfessionalMapper] Invalid subType '${subTypeCode}' corrected to 'op' (BV-00365, BV-00034)`);
+      subTypeCode = 'op';
     }
-    
+    claim.subType = {
+      coding: [
+        {
+          system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
+          code: subTypeCode
+        }
+      ]
+    };
     claim.use = 'preauthorization';
     claim.patient = { reference: `Patient/${patientRef}` };
     claim.created = this.formatDateTime(priorAuth.request_date || new Date());
     claim.insurer = { reference: `Organization/${insurerRef}` };
     claim.provider = { reference: `Organization/${providerRef}` };
     
-    // Per official NPHIES examples:
-    // - AMB/VR encounters: NO facility field
-    // - EMER/HH encounters: facility may be included
-    if (!isAmbOrVR) {
-      claim.facility = { reference: `http://provider.com/Organization/${providerRef}` };
+    // BV-00905: Claim.facility SHALL be provided when associated with 'Ambulatory' outpatient or 'Virtual' telemedicine encounters
+    // Check encounter resource class code directly (AMB or VR), or fall back to priorAuth.encounter_class
+    const encounterClassCode = encounter?.class?.code;
+    const encounterClass = priorAuth.encounter_class || 'ambulatory';
+    const needsFacility = encounterClassCode === 'AMB' || encounterClassCode === 'VR' || 
+                          encounterClass === 'ambulatory' || encounterClass === 'virtual' || encounterClass === 'telemedicine';
+    
+    if (needsFacility) {
+      claim.facility = { reference: `Organization/${providerRef}` };
     }
     
     claim.priority = {

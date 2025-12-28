@@ -1,5 +1,5 @@
 {
-  "id": "a4978786-758f-4891-90c3-e9c870042a86",
+  "id": "d003c30b-c6d9-4b62-af2f-7a27608bad79",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "urn:uuid:d77a278b-7943-4f33-b045-a012f3e09d0a",
+      "fullUrl": "urn:uuid:025ecad9-55ce-4c06-90f1-300a1ab10038",
       "resource": {
-        "id": "d77a278b-7943-4f33-b045-a012f3e09d0a",
+        "id": "025ecad9-55ce-4c06-90f1-300a1ab10038",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -18,7 +18,7 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/a878dd08-7816-4ad6-8814-095f5f6d0a00"
+            "reference": "http://provider.com/Claim/a3da1c86-c7c4-4bc8-b69d-56554d678690"
           }
         ],
         "sender": {
@@ -157,9 +157,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/a878dd08-7816-4ad6-8814-095f5f6d0a00",
+      "fullUrl": "http://provider.com/Claim/a3da1c86-c7c4-4bc8-b69d-56554d678690",
       "resource": {
-        "id": "a878dd08-7816-4ad6-8814-095f5f6d0a00",
+        "id": "a3da1c86-c7c4-4bc8-b69d-56554d678690",
         "use": "preauthorization",
         "item": [
           {
@@ -206,7 +206,7 @@
               "value": 0,
               "currency": "SAR"
             },
-            "servicedDate": "2025-12-19",
+            "servicedDate": "2025-12-17",
             "careTeamSequence": [
               1
             ],
@@ -269,20 +269,12 @@
           "currency": "SAR"
         },
         "status": "active",
-        "created": "2025-12-28T16:00:22.970Z",
+        "created": "2025-12-28T16:10:11.350Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
         "patient": {
           "reference": "Patient/cc938f77-8f1b-45f8-9f3b-b403c7ebef2a"
-        },
-        "subType": {
-          "coding": [
-            {
-              "code": "op",
-              "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype"
-            }
-          ]
         },
         "careTeam": [
           {
@@ -295,7 +287,7 @@
               ]
             },
             "provider": {
-              "reference": "Practitioner/b5f2ceef-747b-442d-a300-e3b69b4daf2f"
+              "reference": "Practitioner/6901b92f-4241-454b-a589-81fc86cbe7f8"
             },
             "sequence": 1,
             "qualification": {
@@ -308,9 +300,6 @@
             }
           }
         ],
-        "facility": {
-          "reference": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
-        },
         "priority": {
           "coding": [
             {
@@ -320,7 +309,7 @@
           ]
         },
         "provider": {
-          "reference": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
         },
         "diagnosis": [
           {
@@ -350,7 +339,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/9cb26e3e-b156-4f38-9b63-5bae1b715e1d"
+              "reference": "Encounter/c9d6767e-6c88-464f-a9dc-384be2aec893"
             }
           },
           {
@@ -374,7 +363,7 @@
         ],
         "identifier": [
           {
-            "value": "DUP-1766937622903",
+            "value": "DUP-1766938211292",
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
           }
         ],
@@ -412,8 +401,8 @@
             },
             "sequence": 2,
             "timingPeriod": {
-              "end": "2025-11-16T21:00:00.000Z",
-              "start": "2025-11-16T21:00:00.000Z"
+              "end": "2025-11-14T21:00:00.000Z",
+              "start": "2025-11-14T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "mm[Hg]",
@@ -432,8 +421,8 @@
             },
             "sequence": 3,
             "timingPeriod": {
-              "end": "2025-11-16T21:00:00.000Z",
-              "start": "2025-11-16T21:00:00.000Z"
+              "end": "2025-11-14T21:00:00.000Z",
+              "start": "2025-11-14T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "mm[Hg]",
@@ -452,8 +441,8 @@
             },
             "sequence": 4,
             "timingPeriod": {
-              "end": "2025-11-16T21:00:00.000Z",
-              "start": "2025-11-16T21:00:00.000Z"
+              "end": "2025-11-14T21:00:00.000Z",
+              "start": "2025-11-14T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "cm",
@@ -472,8 +461,8 @@
             },
             "sequence": 5,
             "timingPeriod": {
-              "end": "2025-11-16T21:00:00.000Z",
-              "start": "2025-11-16T21:00:00.000Z"
+              "end": "2025-11-14T21:00:00.000Z",
+              "start": "2025-11-14T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "kg",
@@ -492,8 +481,8 @@
             },
             "sequence": 6,
             "timingPeriod": {
-              "end": "2025-11-16T21:00:00.000Z",
-              "start": "2025-11-16T21:00:00.000Z"
+              "end": "2025-11-14T21:00:00.000Z",
+              "start": "2025-11-14T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "/min",
@@ -512,8 +501,8 @@
             },
             "sequence": 7,
             "timingPeriod": {
-              "end": "2025-11-16T21:00:00.000Z",
-              "start": "2025-11-16T21:00:00.000Z"
+              "end": "2025-11-14T21:00:00.000Z",
+              "start": "2025-11-14T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "Cel",
@@ -532,8 +521,8 @@
             },
             "sequence": 8,
             "timingPeriod": {
-              "end": "2025-11-16T21:00:00.000Z",
-              "start": "2025-11-16T21:00:00.000Z"
+              "end": "2025-11-14T21:00:00.000Z",
+              "start": "2025-11-14T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "%",
@@ -552,8 +541,8 @@
             },
             "sequence": 9,
             "timingPeriod": {
-              "end": "2025-11-16T21:00:00.000Z",
-              "start": "2025-11-16T21:00:00.000Z"
+              "end": "2025-11-14T21:00:00.000Z",
+              "start": "2025-11-14T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "/min",
@@ -653,9 +642,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/9cb26e3e-b156-4f38-9b63-5bae1b715e1d",
+      "fullUrl": "http://provider.com/Encounter/c9d6767e-6c88-464f-a9dc-384be2aec893",
       "resource": {
-        "id": "9cb26e3e-b156-4f38-9b63-5bae1b715e1d",
+        "id": "c9d6767e-6c88-464f-a9dc-384be2aec893",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -698,7 +687,7 @@
         ],
         "identifier": [
           {
-            "value": "DUP-1766937622903",
+            "value": "DUP-1766938211292",
             "system": "http://PR-FHIR.com.sa/identifiers/encounter"
           }
         ],
@@ -713,7 +702,7 @@
         },
         "resourceType": "Encounter",
         "serviceProvider": {
-          "reference": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
         }
       }
     },
@@ -787,9 +776,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/b5f2ceef-747b-442d-a300-e3b69b4daf2f",
+      "fullUrl": "http://provider.com/Practitioner/6901b92f-4241-454b-a589-81fc86cbe7f8",
       "resource": {
-        "id": "b5f2ceef-747b-442d-a300-e3b69b4daf2f",
+        "id": "6901b92f-4241-454b-a589-81fc86cbe7f8",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -817,7 +806,7 @@
                 }
               ]
             },
-            "value": "PRACT-b5f2ceef",
+            "value": "PRACT-6901b92f",
             "system": "http://nphies.sa/license/practitioner-license"
           }
         ],
@@ -930,6 +919,6 @@
       }
     }
   ],
-  "timestamp": "2025-12-28T16:00:36.696Z",
+  "timestamp": "2025-12-28T16:10:29.296Z",
   "resourceType": "Bundle"
 }
