@@ -922,23 +922,33 @@ class ClaimBatchesController extends BaseController {
         pa.id as auth_id,
         pa.request_number,
         pa.auth_type,
+        pa.sub_type,
         pa.status as auth_status,
         pa.pre_auth_ref,
         pa.encounter_class,
         pa.encounter_start,
         pa.encounter_end,
+        pa.encounter_identifier,
         pa.priority,
         pa.diagnosis_codes,
         pa.primary_diagnosis,
         pa.patient_id,
         pa.provider_id,
         pa.insurer_id,
+        pa.practitioner_id,
+        pa.coverage_id,
+        pa.practice_code,
+        pa.service_event_type,
         pa.request_bundle as auth_request_bundle,
         p.name as patient_name, 
         p.identifier as patient_identifier, 
+        p.identifier_type as patient_identifier_type,
         p.gender as patient_gender, 
         p.birth_date as patient_birth_date,
         p.nphies_patient_id as patient_nphies_id,
+        p.nationality as patient_nationality,
+        p.marital_status as patient_marital_status,
+        p.occupation as patient_occupation,
         pr.provider_name, 
         pr.nphies_id as provider_nphies_id, 
         pr.provider_type,
@@ -970,13 +980,81 @@ class ClaimBatchesController extends BaseController {
       ORDER BY sequence ASC
     `, [item.auth_id]);
 
+    // Get coverage data for the patient and insurer
+    const coverageResult = await query(`
+      SELECT * FROM patient_coverage 
+      WHERE patient_id = $1 AND insurer_id = $2 AND is_active = true
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [item.patient_id, item.insurer_id]);
+
+    // Practitioner data - use default if not available
+    // Note: practitioners table may not exist, so we use defaults based on claim type
+    let practitioner = null;
+
     // Build the data structure expected by claim mappers
     // Convert prior auth item to claim format
+    // IMPORTANT: items, diagnoses, supportingInfo MUST be inside the claim object
+    // The claim mappers access them as claim.items, claim.diagnoses, etc.
+    
+    const diagnosesArray = diagnosesResult.rows.map(d => ({
+      sequence: d.sequence,
+      diagnosis_code: d.diagnosis_code,
+      diagnosis_system: d.diagnosis_system,
+      diagnosis_display: d.diagnosis_display,
+      diagnosis_type: d.diagnosis_type,
+      on_admission: d.on_admission
+    }));
+
+    const itemsArray = [{
+      sequence: 1,
+      product_or_service_code: item.product_or_service_code,
+      product_or_service_system: item.product_or_service_system,
+      product_or_service_display: item.product_or_service_display,
+      quantity: item.quantity || 1,
+      unit_price: item.unit_price,
+      net_amount: item.adjudication_amount || item.net_amount,
+      serviced_date: item.serviced_date,
+      body_site_code: item.body_site_code,
+      body_site_system: item.body_site_system,
+      tooth_number: item.tooth_number,
+      tooth_surface: item.tooth_surface,
+      eye: item.eye,
+      medication_code: item.medication_code,
+      medication_system: item.medication_system,
+      days_supply: item.days_supply,
+      information_sequences: item.information_sequences
+    }];
+
+    // Build coverage object
+    const coverageData = coverageResult.rows.length > 0 ? coverageResult.rows[0] : null;
+    const coverage = coverageData ? {
+      id: coverageData.coverage_id,
+      coverage_id: coverageData.coverage_id,
+      member_id: coverageData.member_id || coverageData.policy_number,
+      policy_number: coverageData.policy_number,
+      coverage_type: coverageData.coverage_type || 'EHCPOL',
+      relationship: coverageData.relationship || 'self',
+      network: coverageData.network_type || coverageData.network,
+      class_code: coverageData.class_code,
+      class_name: coverageData.class_name || 'Insurance Plan',
+      period_start: coverageData.start_date || coverageData.period_start,
+      period_end: coverageData.end_date || coverageData.period_end
+    } : {
+      // Default coverage if none found
+      id: `cov-${item.patient_id}`,
+      coverage_id: `cov-${item.patient_id}`,
+      member_id: item.patient_identifier,
+      coverage_type: 'EHCPOL',
+      relationship: 'self'
+    };
+
     return {
       claim: {
         id: item.id,
         claim_number: `${item.request_number}-${item.sequence}`,
         claim_type: item.auth_type || 'institutional',
+        sub_type: item.sub_type || 'op',
         status: 'pending',
         priority: item.priority || 'normal',
         total_amount: item.adjudication_amount || item.net_amount,
@@ -984,16 +1062,28 @@ class ClaimBatchesController extends BaseController {
         encounter_class: item.encounter_class,
         encounter_start: item.encounter_start,
         encounter_end: item.encounter_end,
+        encounter_identifier: item.encounter_identifier,
         pre_auth_ref: item.pre_auth_ref,
-        primary_diagnosis: item.primary_diagnosis
+        primary_diagnosis: item.primary_diagnosis,
+        practice_code: item.practice_code || '08.00',
+        service_event_type: item.service_event_type || 'ICSE',
+        // CRITICAL: These must be inside claim object for mappers to find them
+        items: itemsArray,
+        diagnoses: diagnosesArray,
+        supportingInfo: supportingInfoResult.rows,
+        attachments: []
       },
       patient: {
         patient_id: item.patient_id,
         name: item.patient_name,
         identifier: item.patient_identifier,
+        identifier_type: item.patient_identifier_type,
         gender: item.patient_gender,
         birth_date: item.patient_birth_date,
-        nphies_id: item.patient_nphies_id
+        nphies_id: item.patient_nphies_id,
+        nationality: item.patient_nationality,
+        marital_status: item.patient_marital_status,
+        occupation: item.patient_occupation
       },
       provider: {
         provider_id: item.provider_id,
@@ -1006,33 +1096,16 @@ class ClaimBatchesController extends BaseController {
         name: item.insurer_name,
         nphies_id: item.insurer_nphies_id
       },
-      items: [{
-        sequence: 1,
-        product_or_service_code: item.product_or_service_code,
-        product_or_service_system: item.product_or_service_system,
-        product_or_service_display: item.product_or_service_display,
-        quantity: item.quantity || 1,
-        unit_price: item.unit_price,
-        net_amount: item.adjudication_amount || item.net_amount,
-        serviced_date: item.serviced_date,
-        body_site_code: item.body_site_code,
-        body_site_system: item.body_site_system,
-        tooth_number: item.tooth_number,
-        tooth_surface: item.tooth_surface,
-        eye: item.eye,
-        medication_code: item.medication_code,
-        medication_system: item.medication_system,
-        days_supply: item.days_supply
-      }],
+      coverage,
+      // Practitioner - use default values, mappers will create default practitioner resource
+      practitioner: {
+        name: 'Default Practitioner',
+        specialty_code: item.practice_code || '08.00'
+      },
+      // Also include at root level for backwards compatibility with some mappers
+      items: itemsArray,
+      diagnoses: diagnosesArray,
       supportingInfo: supportingInfoResult.rows,
-      diagnoses: diagnosesResult.rows.map(d => ({
-        sequence: d.sequence,
-        diagnosis_code: d.diagnosis_code,
-        diagnosis_system: d.diagnosis_system,
-        diagnosis_display: d.diagnosis_display,
-        diagnosis_type: d.diagnosis_type,
-        on_admission: d.on_admission
-      })),
       attachments: [],
       // Include pre-auth reference for claim submission
       preAuthRef: item.pre_auth_ref
