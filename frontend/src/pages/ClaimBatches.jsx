@@ -681,8 +681,8 @@ export default function ClaimBatches() {
             <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-2xl font-bold">Create Batch</h2>
-                  <p className="text-white/80 mt-1">Select claims to include in the batch</p>
+                  <h2 className="text-2xl font-bold">Create Batch Claim</h2>
+                  <p className="text-white/80 mt-1">Select approved authorization items to submit as batch claim</p>
                 </div>
                 <button onClick={() => setShowCreateModal(false)} className="text-white/80 hover:text-white p-2">
                   <X className="w-6 h-6" />
@@ -738,10 +738,10 @@ export default function ClaimBatches() {
               {/* Selection Info */}
               <div className="flex items-center justify-between mb-4 p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center space-x-4">
-                  <span className="font-medium">Selected: {selectedClaims.length} / 200</span>
+                  <span className="font-medium">Selected Items: {selectedClaims.length} / 200</span>
                   {selectedClaims.length > 0 && (
                     <span className="text-sm text-gray-500">
-                      Total: SAR {availableClaims
+                      Total Amount: SAR {availableClaims
                         .filter(c => selectedClaims.includes(c.id))
                         .reduce((sum, c) => sum + parseFloat(c.total_amount || 0), 0)
                         .toLocaleString()}
@@ -753,13 +753,14 @@ export default function ClaimBatches() {
                 </Button>
               </div>
 
-              {/* Claims List */}
+              {/* Approved Auth Items List */}
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Select</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Claim #</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Auth Request #</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Service</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Patient</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Insurer</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Amount</th>
@@ -767,44 +768,51 @@ export default function ClaimBatches() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {availableClaims.map((claim) => (
+                    {availableClaims.map((item) => (
                       <tr 
-                        key={claim.id} 
-                        className={`hover:bg-gray-50 cursor-pointer ${selectedClaims.includes(claim.id) ? 'bg-purple-50' : ''}`}
-                        onClick={() => handleClaimSelect(claim.id)}
+                        key={item.id} 
+                        className={`hover:bg-gray-50 cursor-pointer ${selectedClaims.includes(item.id) ? 'bg-purple-50' : ''}`}
+                        onClick={() => handleClaimSelect(item.id)}
                       >
                         <td className="px-4 py-3">
                           <Checkbox 
-                            checked={selectedClaims.includes(claim.id)}
-                            onCheckedChange={() => handleClaimSelect(claim.id)}
+                            checked={selectedClaims.includes(item.id)}
+                            onCheckedChange={() => handleClaimSelect(item.id)}
                           />
                         </td>
-                        <td className="px-4 py-3 text-sm font-medium">{claim.claim_number}</td>
-                        <td className="px-4 py-3 text-sm">{claim.patient_name}</td>
-                        <td className="px-4 py-3 text-sm">{claim.insurer_name}</td>
-                        <td className="px-4 py-3 text-sm">SAR {parseFloat(claim.total_amount || 0).toLocaleString()}</td>
                         <td className="px-4 py-3 text-sm">
-                          {claim.current_batch_identifier ? (
-                            <div className="flex flex-col">
-                              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-                                From: {claim.current_batch_identifier}
-                              </Badge>
-                              <span className="text-xs text-gray-400 mt-0.5">
-                                {claim.current_batch_status} - Can reuse
-                              </span>
-                            </div>
-                          ) : (
-                            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                              {claim.status || 'New'}
-                            </Badge>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{item.auth_request_number}</span>
+                            <span className="text-xs text-gray-400">Item #{item.sequence}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <div className="flex flex-col">
+                            <span className="font-medium">{item.product_code}</span>
+                            <span className="text-xs text-gray-400 truncate max-w-[200px]" title={item.product_display}>
+                              {item.product_display}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">{item.patient_name}</td>
+                        <td className="px-4 py-3 text-sm">{item.insurer_name}</td>
+                        <td className="px-4 py-3 text-sm">SAR {parseFloat(item.total_amount || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                            {item.status === 'approved' ? 'Approved' : item.status}
+                          </Badge>
+                          {item.pre_auth_ref && (
+                            <span className="text-xs text-gray-400 block mt-0.5">
+                              Ref: {item.pre_auth_ref}
+                            </span>
                           )}
                         </td>
                       </tr>
                     ))}
                     {availableClaims.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                          No claims available for batching. Create claims first or check if existing claims are in active batches.
+                        <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                          No approved authorization items available for batching. Submit prior authorizations and get them approved first.
                         </td>
                       </tr>
                     )}
@@ -815,7 +823,7 @@ export default function ClaimBatches() {
 
             <div className="bg-gray-50 px-6 py-4 border-t flex justify-between items-center">
               <p className="text-sm text-gray-500">
-                {selectedClaims.length < 2 ? 'Select at least 2 claims' : `${selectedClaims.length} claims selected`}
+                {selectedClaims.length < 2 ? 'Select at least 2 approved items' : `${selectedClaims.length} approved items selected`}
               </p>
               <div className="flex space-x-3">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)}>Cancel</Button>
@@ -824,7 +832,7 @@ export default function ClaimBatches() {
                   disabled={selectedClaims.length < 2 || createLoading}
                   className="bg-gradient-to-r from-primary-purple to-accent-purple"
                 >
-                  {createLoading ? 'Creating...' : 'Create Batch'}
+                  {createLoading ? 'Creating...' : 'Create Batch Claim'}
                 </Button>
               </div>
             </div>

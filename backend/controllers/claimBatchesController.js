@@ -143,36 +143,65 @@ class ClaimBatchesController extends BaseController {
 
     const batch = batchResult.rows[0];
 
-    // Get claims in this batch
-    const claimsResult = await query(`
-      SELECT 
-        cs.*,
-        p.name as patient_name,
-        p.identifier as patient_identifier,
-        (SELECT outcome FROM claim_submission_responses WHERE claim_id = cs.id ORDER BY received_at DESC LIMIT 1) as latest_outcome
-      FROM claim_submissions cs
-      LEFT JOIN patients p ON cs.patient_id = p.patient_id
-      WHERE cs.batch_id = $1
-      ORDER BY cs.batch_number ASC, cs.created_at DESC
-    `, [id]);
+    // Get item IDs from the batch's request_bundle metadata
+    let itemIds = [];
+    if (batch.request_bundle) {
+      const bundleData = typeof batch.request_bundle === 'string' 
+        ? JSON.parse(batch.request_bundle) 
+        : batch.request_bundle;
+      itemIds = bundleData.item_ids || [];
+    }
 
-    // Get batch statistics
-    const statsResult = await query(`
-      SELECT 
-        COUNT(*) as total_claims,
-        COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_claims,
-        COUNT(CASE WHEN status = 'pending' OR status = 'queued' THEN 1 END) as pending_claims,
-        COUNT(CASE WHEN status = 'denied' OR status = 'error' THEN 1 END) as rejected_claims,
-        COALESCE(SUM(total_amount), 0) as total_claim_amount,
-        COALESCE(SUM(approved_amount), 0) as approved_amount
-      FROM claim_submissions 
-      WHERE batch_id = $1
-    `, [id]);
+    // Get prior authorization items in this batch
+    let claims = [];
+    if (itemIds.length > 0) {
+      const itemsResult = await query(`
+        SELECT 
+          pai.id,
+          pai.prior_auth_id,
+          pai.sequence,
+          pai.product_or_service_code,
+          pai.product_or_service_display,
+          pai.quantity,
+          pai.unit_price,
+          pai.net_amount as total_amount,
+          pai.adjudication_status as status,
+          pai.adjudication_amount,
+          pai.serviced_date,
+          pa.request_number as claim_number,
+          pa.auth_type as claim_type,
+          pa.pre_auth_ref,
+          p.name as patient_name,
+          p.identifier as patient_identifier
+        FROM prior_authorization_items pai
+        INNER JOIN prior_authorizations pa ON pai.prior_auth_id = pa.id
+        LEFT JOIN patients p ON pa.patient_id = p.patient_id
+        WHERE pai.id = ANY($1::int[])
+        ORDER BY pai.id
+      `, [itemIds]);
+
+      // Add batch_number based on position in itemIds array
+      claims = itemsResult.rows.map(item => ({
+        ...item,
+        batch_number: itemIds.indexOf(item.id) + 1,
+        claim_number: `${item.claim_number}-${item.sequence}`
+      }));
+    }
+
+    // Calculate batch statistics from items
+    const statistics = {
+      total_claims: claims.length,
+      approved_claims: claims.filter(c => c.status === 'approved').length,
+      pending_claims: claims.filter(c => c.status === 'pending').length,
+      rejected_claims: claims.filter(c => c.status === 'denied').length,
+      total_claim_amount: claims.reduce((sum, c) => sum + parseFloat(c.total_amount || c.adjudication_amount || 0), 0),
+      approved_amount: claims.reduce((sum, c) => sum + parseFloat(c.adjudication_amount || 0), 0)
+    };
 
     return {
       ...batch,
-      claims: claimsResult.rows,
-      statistics: statsResult.rows[0]
+      claims,
+      statistics
     };
   }
 
@@ -201,69 +230,112 @@ class ClaimBatchesController extends BaseController {
   }
 
   /**
-   * Get available claims for batch creation
-   * Returns claims that:
-   * - Are not in any batch, OR
-   * - Are in a batch with Error/Rejected status (can be reused for testing)
+   * Get available items for batch claim creation
+   * Returns APPROVED prior authorization items that can be submitted as claims
+   * 
+   * Per NPHIES workflow:
+   * 1. Prior Authorization is submitted and approved
+   * 2. Approved items can then be submitted as claims (individually or in batch)
+   * 
+   * Items available for batch claims:
+   * - From prior authorizations with status 'approved' or 'partial'
+   * - Items with adjudication_status 'approved'
+   * - Not already submitted as claims (or from failed batches for testing)
    */
   async getAvailableClaims(req, res) {
     try {
       const { insurer_id, provider_id, include_failed_batch } = req.query;
 
-      // Base condition: claims not in a batch OR in a failed/error batch
-      // This allows reusing claims from failed batches for testing
       let whereConditions = [
-        `(
-          cs.batch_id IS NULL 
-          OR cb.status IN ('Error', 'Rejected', 'Draft')
-        )`,
-        "cs.status IN ('draft', 'pending', 'error')"
+        // Prior auth must be approved or partial
+        "pa.status IN ('approved', 'partial')",
+        // Item must be approved
+        "pai.adjudication_status = 'approved'"
       ];
       let queryParams = [];
       let paramIndex = 1;
 
       if (insurer_id) {
-        whereConditions.push(`cs.insurer_id = $${paramIndex}`);
+        whereConditions.push(`pa.insurer_id = $${paramIndex}`);
         queryParams.push(insurer_id);
         paramIndex++;
       }
 
       if (provider_id) {
-        whereConditions.push(`cs.provider_id = $${paramIndex}`);
+        whereConditions.push(`pa.provider_id = $${paramIndex}`);
         queryParams.push(provider_id);
         paramIndex++;
       }
 
       const result = await query(`
         SELECT 
-          cs.id,
-          cs.claim_number,
-          cs.claim_type,
-          cs.status,
-          cs.total_amount,
-          cs.service_date,
-          cs.created_at,
-          cs.batch_id,
+          pai.id,
+          pai.prior_auth_id,
+          pai.sequence,
+          pai.product_or_service_code,
+          pai.product_or_service_display,
+          pai.quantity,
+          pai.unit_price,
+          pai.net_amount as total_amount,
+          pai.adjudication_status,
+          pai.adjudication_amount,
+          pai.serviced_date,
+          pa.request_number as auth_request_number,
+          pa.auth_type as claim_type,
+          pa.status as auth_status,
+          pa.pre_auth_ref,
+          pa.total_amount as auth_total_amount,
+          pa.approved_amount as auth_approved_amount,
           p.name as patient_name,
           p.identifier as patient_identifier,
+          p.patient_id,
           pr.provider_name,
           pr.nphies_id as provider_nphies_id,
+          pr.provider_id,
           i.insurer_name,
           i.nphies_id as insurer_nphies_id,
           i.insurer_id,
-          cb.batch_identifier as current_batch_identifier,
-          cb.status as current_batch_status
-        FROM claim_submissions cs
-        LEFT JOIN patients p ON cs.patient_id = p.patient_id
-        LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
-        LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
-        LEFT JOIN claim_batches cb ON cs.batch_id = cb.id
+          pa.created_at
+        FROM prior_authorization_items pai
+        INNER JOIN prior_authorizations pa ON pai.prior_auth_id = pa.id
+        LEFT JOIN patients p ON pa.patient_id = p.patient_id
+        LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
+        LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
         WHERE ${whereConditions.join(' AND ')}
-        ORDER BY cs.created_at DESC
+        ORDER BY pa.created_at DESC, pai.sequence ASC
         LIMIT 500
       `, queryParams);
 
-      res.json({ data: result.rows });
+      // Group items by prior authorization for better display
+      const groupedData = result.rows.map(row => ({
+        id: row.id,
+        item_id: row.id,
+        prior_auth_id: row.prior_auth_id,
+        sequence: row.sequence,
+        claim_number: `${row.auth_request_number}-${row.sequence}`,
+        claim_type: row.claim_type,
+        status: row.adjudication_status,
+        total_amount: row.total_amount || row.adjudication_amount,
+        service_date: row.serviced_date,
+        created_at: row.created_at,
+        patient_name: row.patient_name,
+        patient_identifier: row.patient_identifier,
+        patient_id: row.patient_id,
+        provider_name: row.provider_name,
+        provider_nphies_id: row.provider_nphies_id,
+        provider_id: row.provider_id,
+        insurer_name: row.insurer_name,
+        insurer_nphies_id: row.insurer_nphies_id,
+        insurer_id: row.insurer_id,
+        pre_auth_ref: row.pre_auth_ref,
+        auth_request_number: row.auth_request_number,
+        product_code: row.product_or_service_code,
+        product_display: row.product_or_service_display,
+        quantity: row.quantity,
+        unit_price: row.unit_price
+      }));
+
+      res.json({ data: groupedData });
     } catch (error) {
       console.error('Error getting available claims:', error);
       res.status(500).json({ error: 'Failed to fetch available claims' });
@@ -275,18 +347,19 @@ class ClaimBatchesController extends BaseController {
   // ============================================
 
   /**
-   * Create a new batch from selected claims
+   * Create a new batch from selected APPROVED prior authorization items
    * 
    * Requirements:
-   * - All claims must be for the same insurer
-   * - Maximum 200 claims per batch
-   * - Claims must not already be in another batch
+   * - All items must be from approved prior authorizations
+   * - All items must be for the same insurer
+   * - Maximum 200 items per batch
+   * - Items must have adjudication_status = 'approved'
    */
   async createBatch(req, res) {
     try {
       const { 
         batch_identifier, 
-        claim_ids, 
+        claim_ids,  // These are actually prior_authorization_item IDs
         provider_id, 
         insurer_id,
         batch_period_start,
@@ -300,65 +373,73 @@ class ClaimBatchesController extends BaseController {
       }
 
       if (!claim_ids || !Array.isArray(claim_ids) || claim_ids.length < 2) {
-        return res.status(400).json({ error: 'At least 2 claims are required for a batch' });
+        return res.status(400).json({ error: 'At least 2 approved items are required for a batch' });
       }
 
       if (claim_ids.length > 200) {
-        return res.status(400).json({ error: 'Batch cannot exceed 200 claims' });
+        return res.status(400).json({ error: 'Batch cannot exceed 200 items' });
       }
 
-      // Verify all claims exist and are for the same insurer
-      // Also check if they're in a failed batch (which can be reused)
-      const claimsResult = await query(`
-        SELECT cs.id, cs.insurer_id, cs.provider_id, cs.batch_id, cs.status, cs.total_amount,
-               i.insurer_id as ins_uuid, i.nphies_id as insurer_nphies_id, i.insurer_name,
-               cb.status as batch_status, cb.batch_identifier as current_batch_identifier
-        FROM claim_submissions cs
-        LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
-        LEFT JOIN claim_batches cb ON cs.batch_id = cb.id
-        WHERE cs.id = ANY($1::int[])
+      // Verify all items exist, are approved, and are for the same insurer
+      const itemsResult = await query(`
+        SELECT 
+          pai.id,
+          pai.prior_auth_id,
+          pai.sequence,
+          pai.net_amount,
+          pai.adjudication_status,
+          pai.adjudication_amount,
+          pai.product_or_service_code,
+          pai.product_or_service_display,
+          pa.request_number,
+          pa.auth_type,
+          pa.status as auth_status,
+          pa.pre_auth_ref,
+          pa.patient_id,
+          pa.provider_id,
+          pa.insurer_id,
+          i.nphies_id as insurer_nphies_id, 
+          i.insurer_name,
+          pr.nphies_id as provider_nphies_id,
+          pr.provider_name
+        FROM prior_authorization_items pai
+        INNER JOIN prior_authorizations pa ON pai.prior_auth_id = pa.id
+        LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+        LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
+        WHERE pai.id = ANY($1::int[])
       `, [claim_ids]);
 
-      if (claimsResult.rows.length !== claim_ids.length) {
-        const foundIds = claimsResult.rows.map(c => c.id);
+      if (itemsResult.rows.length !== claim_ids.length) {
+        const foundIds = itemsResult.rows.map(c => c.id);
         const missingIds = claim_ids.filter(id => !foundIds.includes(id));
-        return res.status(400).json({ error: `Claims not found: ${missingIds.join(', ')}` });
+        return res.status(400).json({ error: `Items not found: ${missingIds.join(', ')}` });
       }
 
-      // Check all claims are for the same insurer
-      const insurerIds = [...new Set(claimsResult.rows.map(c => c.insurer_id))];
-      if (insurerIds.length > 1) {
-        return res.status(400).json({ error: 'All claims in a batch must be for the same insurer' });
-      }
-
-      // Check claims are not in an ACTIVE batch (allow reuse from Error/Rejected/Draft batches)
-      const claimsInActiveBatch = claimsResult.rows.filter(c => 
-        c.batch_id !== null && 
-        !['Error', 'Rejected', 'Draft'].includes(c.batch_status)
+      // Check all items are approved
+      const nonApprovedItems = itemsResult.rows.filter(item => 
+        item.adjudication_status !== 'approved' || 
+        !['approved', 'partial'].includes(item.auth_status)
       );
-      if (claimsInActiveBatch.length > 0) {
+      if (nonApprovedItems.length > 0) {
         return res.status(400).json({ 
-          error: `Claims are in an active batch: ${claimsInActiveBatch.map(c => `${c.id} (${c.current_batch_identifier})`).join(', ')}` 
+          error: `Some items are not approved: ${nonApprovedItems.map(i => `Item ${i.id} (${i.adjudication_status})`).join(', ')}` 
         });
       }
 
-      // Clear batch_id for claims being moved from failed batches
-      const claimsToUnassign = claimsResult.rows.filter(c => c.batch_id !== null);
-      if (claimsToUnassign.length > 0) {
-        await query(`
-          UPDATE claim_submissions 
-          SET batch_id = NULL, batch_number = NULL 
-          WHERE id = ANY($1::int[])
-        `, [claimsToUnassign.map(c => c.id)]);
-        console.log(`[BatchClaims] Unassigned ${claimsToUnassign.length} claims from previous failed batches`);
+      // Check all items are for the same insurer
+      const insurerIds = [...new Set(itemsResult.rows.map(c => c.insurer_id))];
+      if (insurerIds.length > 1) {
+        return res.status(400).json({ error: 'All items in a batch must be for the same insurer' });
       }
 
       // Calculate total amount
-      const totalAmount = claimsResult.rows.reduce((sum, c) => sum + parseFloat(c.total_amount || 0), 0);
+      const totalAmount = itemsResult.rows.reduce((sum, item) => 
+        sum + parseFloat(item.adjudication_amount || item.net_amount || 0), 0
+      );
 
-      // Get provider and insurer UUIDs (they're already UUIDs in claim_submissions)
-      const actualInsurerId = claimsResult.rows[0].insurer_id;
-      const actualProviderId = claimsResult.rows[0].provider_id;
+      // Get provider and insurer UUIDs
+      const actualInsurerId = itemsResult.rows[0].insurer_id;
+      const actualProviderId = itemsResult.rows[0].provider_id;
 
       // Create the batch
       const batchResult = await query(`
@@ -389,21 +470,33 @@ class ClaimBatchesController extends BaseController {
 
       const batchId = batchResult.rows[0].id;
 
-      // Update claims with batch_id and batch_number
-      for (let i = 0; i < claim_ids.length; i++) {
-        await query(`
-          UPDATE claim_submissions 
-          SET batch_id = $1, batch_number = $2, updated_at = CURRENT_TIMESTAMP
-          WHERE id = $3
-        `, [batchId, i + 1, claim_ids[i]]);
-      }
+      // Store batch items in a new linking table or update the batch with item references
+      // For now, we'll store the item IDs in the batch's request_bundle as metadata
+      const batchItems = itemsResult.rows.map((item, index) => ({
+        item_id: item.id,
+        prior_auth_id: item.prior_auth_id,
+        sequence: item.sequence,
+        batch_number: index + 1,
+        request_number: item.request_number,
+        product_code: item.product_or_service_code,
+        product_display: item.product_or_service_display,
+        amount: item.adjudication_amount || item.net_amount,
+        pre_auth_ref: item.pre_auth_ref
+      }));
 
-      // Get the complete batch with claims
+      // Update batch with items metadata
+      await query(`
+        UPDATE claim_batches 
+        SET request_bundle = $1
+        WHERE id = $2
+      `, [JSON.stringify({ items: batchItems, item_ids: claim_ids }), batchId]);
+
+      // Get the complete batch
       const completeBatch = await this.getByIdInternal(batchId);
 
       res.status(201).json({ 
         data: completeBatch,
-        message: `Batch created with ${claim_ids.length} claims`
+        message: `Batch created with ${claim_ids.length} approved items`
       });
     } catch (error) {
       console.error('Error creating batch:', error);
@@ -768,7 +861,7 @@ class ClaimBatchesController extends BaseController {
   // ============================================
 
   /**
-   * Prepare data for building batch bundle
+   * Prepare data for building batch bundle from approved prior authorization items
    */
   async prepareBatchBundleData(batch) {
     // Get provider details
@@ -783,10 +876,19 @@ class ClaimBatchesController extends BaseController {
     `, [batch.insurer_id]);
     const insurer = insurerResult.rows[0];
 
-    // Get full claim data for each claim in the batch
+    // Get item IDs from the batch's request_bundle metadata
+    let itemIds = [];
+    if (batch.request_bundle) {
+      const bundleData = typeof batch.request_bundle === 'string' 
+        ? JSON.parse(batch.request_bundle) 
+        : batch.request_bundle;
+      itemIds = bundleData.item_ids || [];
+    }
+
+    // Get full claim data for each prior authorization item in the batch
     const claims = [];
-    for (const claim of batch.claims) {
-      const claimData = await this.getClaimDataForBundle(claim.id);
+    for (const itemId of itemIds) {
+      const claimData = await this.getAuthItemDataForBundle(itemId);
       if (claimData) {
         claims.push(claimData);
       }
@@ -809,60 +911,131 @@ class ClaimBatchesController extends BaseController {
   }
 
   /**
-   * Get full claim data for building FHIR bundle
+   * Get full claim data from approved prior authorization item for building FHIR bundle
+   * This converts a prior authorization item into claim data format
    */
-  async getClaimDataForBundle(claimId) {
-    // Get claim with all related data
-    const claimResult = await query(`
-      SELECT cs.*, 
-        p.name as patient_name, p.identifier as patient_identifier, 
-        p.gender as patient_gender, p.birth_date as patient_birth_date,
-        pr.provider_name, pr.nphies_id as provider_nphies_id, pr.provider_type,
-        i.insurer_name, i.nphies_id as insurer_nphies_id
-      FROM claim_submissions cs
-      LEFT JOIN patients p ON cs.patient_id = p.patient_id
-      LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
-      LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
-      WHERE cs.id = $1
-    `, [claimId]);
+  async getAuthItemDataForBundle(itemId) {
+    // Get the prior authorization item with its parent authorization data
+    const itemResult = await query(`
+      SELECT 
+        pai.*,
+        pa.id as auth_id,
+        pa.request_number,
+        pa.auth_type,
+        pa.status as auth_status,
+        pa.pre_auth_ref,
+        pa.encounter_class,
+        pa.encounter_start,
+        pa.encounter_end,
+        pa.priority,
+        pa.diagnosis_codes,
+        pa.primary_diagnosis,
+        pa.patient_id,
+        pa.provider_id,
+        pa.insurer_id,
+        pa.request_bundle as auth_request_bundle,
+        p.name as patient_name, 
+        p.identifier as patient_identifier, 
+        p.gender as patient_gender, 
+        p.birth_date as patient_birth_date,
+        p.nphies_id as patient_nphies_id,
+        pr.provider_name, 
+        pr.nphies_id as provider_nphies_id, 
+        pr.provider_type,
+        i.insurer_name, 
+        i.nphies_id as insurer_nphies_id
+      FROM prior_authorization_items pai
+      INNER JOIN prior_authorizations pa ON pai.prior_auth_id = pa.id
+      LEFT JOIN patients p ON pa.patient_id = p.patient_id
+      LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
+      LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
+      WHERE pai.id = $1
+    `, [itemId]);
 
-    if (claimResult.rows.length === 0) return null;
+    if (itemResult.rows.length === 0) return null;
 
-    const claim = claimResult.rows[0];
+    const item = itemResult.rows[0];
 
-    // Get related data
-    const [itemsResult, supportingInfoResult, diagnosesResult, attachmentsResult] = await Promise.all([
-      query('SELECT * FROM claim_submission_items WHERE claim_id = $1 ORDER BY sequence ASC', [claimId]),
-      query('SELECT * FROM claim_submission_supporting_info WHERE claim_id = $1 ORDER BY sequence ASC', [claimId]),
-      query('SELECT * FROM claim_submission_diagnoses WHERE claim_id = $1 ORDER BY sequence ASC', [claimId]),
-      query('SELECT * FROM claim_submission_attachments WHERE claim_id = $1 ORDER BY created_at ASC', [claimId])
-    ]);
+    // Get related diagnoses from the prior authorization
+    const diagnosesResult = await query(`
+      SELECT * FROM prior_authorization_diagnoses 
+      WHERE prior_auth_id = $1 
+      ORDER BY sequence ASC
+    `, [item.auth_id]);
+
+    // Get supporting info from the prior authorization
+    const supportingInfoResult = await query(`
+      SELECT * FROM prior_authorization_supporting_info 
+      WHERE prior_auth_id = $1 
+      ORDER BY sequence ASC
+    `, [item.auth_id]);
 
     // Build the data structure expected by claim mappers
+    // Convert prior auth item to claim format
     return {
       claim: {
-        ...claim,
-        claim_type: claim.claim_type || 'institutional'
+        id: item.id,
+        claim_number: `${item.request_number}-${item.sequence}`,
+        claim_type: item.auth_type || 'institutional',
+        status: 'pending',
+        priority: item.priority || 'normal',
+        total_amount: item.adjudication_amount || item.net_amount,
+        service_date: item.serviced_date,
+        encounter_class: item.encounter_class,
+        encounter_start: item.encounter_start,
+        encounter_end: item.encounter_end,
+        pre_auth_ref: item.pre_auth_ref,
+        primary_diagnosis: item.primary_diagnosis
       },
       patient: {
-        name: claim.patient_name,
-        identifier: claim.patient_identifier,
-        gender: claim.patient_gender,
-        birth_date: claim.patient_birth_date
+        patient_id: item.patient_id,
+        name: item.patient_name,
+        identifier: item.patient_identifier,
+        gender: item.patient_gender,
+        birth_date: item.patient_birth_date,
+        nphies_id: item.patient_nphies_id
       },
       provider: {
-        name: claim.provider_name,
-        nphies_id: claim.provider_nphies_id,
-        type: claim.provider_type
+        provider_id: item.provider_id,
+        name: item.provider_name,
+        nphies_id: item.provider_nphies_id,
+        type: item.provider_type
       },
       insurer: {
-        name: claim.insurer_name,
-        nphies_id: claim.insurer_nphies_id
+        insurer_id: item.insurer_id,
+        name: item.insurer_name,
+        nphies_id: item.insurer_nphies_id
       },
-      items: itemsResult.rows,
+      items: [{
+        sequence: 1,
+        product_or_service_code: item.product_or_service_code,
+        product_or_service_system: item.product_or_service_system,
+        product_or_service_display: item.product_or_service_display,
+        quantity: item.quantity || 1,
+        unit_price: item.unit_price,
+        net_amount: item.adjudication_amount || item.net_amount,
+        serviced_date: item.serviced_date,
+        body_site_code: item.body_site_code,
+        body_site_system: item.body_site_system,
+        tooth_number: item.tooth_number,
+        tooth_surface: item.tooth_surface,
+        eye: item.eye,
+        medication_code: item.medication_code,
+        medication_system: item.medication_system,
+        days_supply: item.days_supply
+      }],
       supportingInfo: supportingInfoResult.rows,
-      diagnoses: diagnosesResult.rows,
-      attachments: attachmentsResult.rows
+      diagnoses: diagnosesResult.rows.map(d => ({
+        sequence: d.sequence,
+        diagnosis_code: d.diagnosis_code,
+        diagnosis_system: d.diagnosis_system,
+        diagnosis_display: d.diagnosis_display,
+        diagnosis_type: d.diagnosis_type,
+        on_admission: d.on_admission
+      })),
+      attachments: [],
+      // Include pre-auth reference for claim submission
+      preAuthRef: item.pre_auth_ref
     };
   }
 
