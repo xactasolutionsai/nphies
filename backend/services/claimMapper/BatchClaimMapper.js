@@ -185,6 +185,9 @@ class BatchClaimMapper {
     });
 
     // Build outer batch bundle
+    // NPHIES Batch structure: 
+    // - First entry: MessageHeader with fullUrl (focus references inner MessageHeaders)
+    // - Subsequent entries: Claim bundles WITHOUT fullUrl wrapper (direct bundle objects)
     const batchBundle = {
       resourceType: 'Bundle',
       id: bundleId,
@@ -194,7 +197,7 @@ class BatchClaimMapper {
       type: 'message',
       timestamp,
       entry: [
-        // MessageHeader for batch request
+        // MessageHeader for batch request (with fullUrl wrapper)
         {
           fullUrl: `urn:uuid:${messageHeaderId}`,
           resource: {
@@ -230,11 +233,9 @@ class BatchClaimMapper {
             focus: focusReferences
           }
         },
-        // Add all claim bundles as entries (not nested, but as separate entries)
-        ...claimBundles.map(bundle => ({
-          resourceType: 'Bundle',
-          ...bundle
-        }))
+        // Add all claim bundles as direct entries WITHOUT fullUrl wrapper
+        // This matches the NPHIES sample structure where nested bundles are direct objects
+        ...claimBundles
       ]
     };
 
@@ -271,6 +272,19 @@ class BatchClaimMapper {
     if (!claim.extension) {
       claim.extension = [];
     }
+
+    // Remove any existing batch extensions to avoid duplicates
+    // This is important because claims may already have batch extensions from individual submission
+    const batchExtensionUrls = [
+      'extension-batch-identifier',
+      'extension-batch-number', 
+      'extension-batch-period'
+    ];
+    
+    claim.extension = claim.extension.filter(ext => {
+      if (!ext.url) return true;
+      return !batchExtensionUrls.some(batchUrl => ext.url.includes(batchUrl));
+    });
 
     // Add batch-identifier extension
     claim.extension.push({
