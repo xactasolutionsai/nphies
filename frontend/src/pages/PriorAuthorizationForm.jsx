@@ -740,6 +740,8 @@ export default function PriorAuthorizationForm() {
         response_date: undefined, // Clear response
         request_bundle: undefined, // Clear previous bundle
         response_bundle: undefined, // Clear previous response
+        // Preserve sub_type from source data, or derive from encounter_class if missing
+        sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
         items: processedItems,
         diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
         supporting_info: remainingSupportingInfo,
@@ -905,6 +907,8 @@ export default function PriorAuthorizationForm() {
         response_date: undefined, // Clear response
         request_bundle: undefined, // Clear previous bundle
         response_bundle: undefined, // Clear previous response
+        // Preserve sub_type from source data, or derive from encounter_class if missing
+        sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
         items: processedItems,
         diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
         supporting_info: remainingSupportingInfo,
