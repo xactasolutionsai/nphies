@@ -1735,36 +1735,47 @@ export default function PriorAuthorizationForm() {
         ? new Date(formData.encounter_end) 
         : null;
       
+      // Helper function to extract date-only string (YYYY-MM-DD) from a Date object
+      const getDateOnly = (date) => {
+        return date.toISOString().split('T')[0];
+      };
+      
       const itemsOutsidePeriod = formData.items.filter((item, idx) => {
         if (!item.serviced_date) return false; // No date set, will use encounter_start by default
         
-        // Parse serviced_date - if it's date-only, use current time as default
-        let servicedDate;
         const servicedDateStr = item.serviced_date.trim();
         
-        // Check if serviced_date includes time (has 'T' or space with time)
-        const hasTime = servicedDateStr.includes('T') || 
+        // Check if serviced_date includes time (has 'T' with time component or space with time)
+        const hasTime = (servicedDateStr.includes('T') && servicedDateStr.match(/T\d{2}:\d{2}/)) || 
                        (servicedDateStr.includes(' ') && servicedDateStr.match(/\d{2}:\d{2}/));
         
         if (hasTime) {
-          // Has time component, parse as-is
-          servicedDate = new Date(servicedDateStr);
+          // Has time component - do full datetime comparison
+          const servicedDate = new Date(servicedDateStr);
+          
+          if (servicedDate < encounterStart) {
+            return true; // Serviced date is before encounter start
+          }
+          
+          if (encounterEnd && servicedDate > encounterEnd) {
+            return true; // Serviced date is after encounter end
+          }
         } else {
-          // Date-only: extract date part and add current time
-          const datePart = servicedDateStr.split('T')[0].split(' ')[0]; // Get YYYY-MM-DD part
-          const now = new Date();
-          // Use current time but set the date part from serviced_date
-          servicedDate = new Date(`${datePart}T${now.toTimeString().split(' ')[0]}`);
-        }
-        
-        // Validate: serviced_date should be >= encounter_start (with time)
-        if (servicedDate < encounterStart) {
-          return true; // Serviced date is before encounter start
-        }
-        
-        // Check if servicedDate is after encounter end (if end date exists)
-        if (encounterEnd && servicedDate > encounterEnd) {
-          return true; // Serviced date is after encounter end
+          // Date-only: compare at the date level only (ignore time component)
+          // This is the common case when user picks a date from the date picker
+          // The backend will auto-correct the time to be within encounter period
+          const servicedDateOnly = servicedDateStr.split('T')[0].split(' ')[0]; // Get YYYY-MM-DD part
+          const encounterStartDateOnly = getDateOnly(encounterStart);
+          const encounterEndDateOnly = encounterEnd ? getDateOnly(encounterEnd) : null;
+          
+          // Compare dates as strings (YYYY-MM-DD format sorts correctly)
+          if (servicedDateOnly < encounterStartDateOnly) {
+            return true; // Serviced date is before encounter start date
+          }
+          
+          if (encounterEndDateOnly && servicedDateOnly > encounterEndDateOnly) {
+            return true; // Serviced date is after encounter end date
+          }
         }
         
         return false;
