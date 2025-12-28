@@ -578,6 +578,8 @@ export default function PriorAuthorizationForm() {
       
       setFormData({
         ...data,
+        // Ensure sub_type is set - use database value or derive from encounter_class
+        sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
         items: processedItems,
         diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
         supporting_info: remainingSupportingInfo,
