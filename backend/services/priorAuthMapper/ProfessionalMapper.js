@@ -38,7 +38,8 @@ class ProfessionalMapper extends BaseMapper {
       encounter: this.generateId(),
       practitioner: practitioner?.practitioner_id || this.generateId(),
       policyHolder: policyHolder?.id || this.generateId(),
-      motherPatient: (priorAuth.is_newborn && motherPatient) ? (motherPatient.patient_id || this.generateId()) : null
+      motherPatient: (priorAuth.is_newborn && motherPatient) ? (motherPatient.patient_id || this.generateId()) : null,
+      location: this.generateId() // BV-00905: Location resource for facility reference
     };
 
     // Build all resources
@@ -68,6 +69,15 @@ class ProfessionalMapper extends BaseMapper {
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
     
+    // BV-00905: Build Location resource for facility reference (required for Ambulatory/Virtual encounters)
+    // RE-00005 Fix: Claim.facility must reference a Location resource (not Organization)
+    const encounterClassCode = encounterResource?.resource?.class?.code;
+    const encounterClass = priorAuth.encounter_class || 'ambulatory';
+    const needsFacility = encounterClassCode === 'AMB' || encounterClassCode === 'VR' || 
+                          encounterClass === 'ambulatory' || encounterClass === 'virtual' || encounterClass === 'telemedicine';
+    
+    const locationResource = needsFacility ? this.buildLocationResource(provider, bundleResourceIds) : null;
+    
     // NOTE: Observation resources for lab tests are NOT part of standard NPHIES Professional PA
     // Per official example at: https://portal.nphies.sa/ig/Claim-173086.json.html
     // The official example does NOT include lab-test supportingInfo or Observation resources.
@@ -90,7 +100,7 @@ class ProfessionalMapper extends BaseMapper {
 
     // Assemble bundle per NPHIES spec order
     // RE-00005 fix: Organization resources (Provider and Insurer) must come BEFORE Claim
-    // to ensure facility reference validation passes
+    // Location resource must come BEFORE Claim for facility reference validation
     // Observation resources are included after patient
     // For newborn cases, add both newborn and mother patient resources
     // Note: Attachments are now embedded in supportingInfo as valueAttachment, not as separate Binary resources
@@ -98,6 +108,7 @@ class ProfessionalMapper extends BaseMapper {
       messageHeader,
       providerResource,      // Must be before Claim for facility reference validation
       insurerResource,        // Must be before Claim for reference validation
+      ...(locationResource ? [locationResource] : []), // Location for facility reference (BV-00905)
       claimResource,
       encounterResource,
       coverageResource,
@@ -244,6 +255,69 @@ class ProfessionalMapper extends BaseMapper {
     });
 
     return observations;
+  }
+
+  /**
+   * Build FHIR Location resource for facility reference
+   * BV-00905: Claim.facility SHALL be provided when associated with 'Ambulatory' outpatient or 'Virtual' telemedicine encounters
+   * RE-00005: Claim.facility must reference a valid Location resource (not Organization)
+   * 
+   * @param {Object} provider - Provider organization data
+   * @param {Object} bundleResourceIds - Resource IDs for bundle references
+   * @returns {Object} FHIR Location resource entry
+   */
+  buildLocationResource(provider, bundleResourceIds) {
+    const locationId = bundleResourceIds.location;
+    
+    // Build Location resource per NPHIES location profile
+    // Reference: http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location
+    const location = {
+      resourceType: 'Location',
+      id: locationId,
+      meta: {
+        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0']
+      },
+      identifier: [
+        {
+          system: `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/location`,
+          value: locationId
+        }
+      ],
+      status: 'active',
+      name: provider.provider_name || 'Healthcare Facility',
+      mode: 'instance',
+      type: [
+        {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/v3-RoleCode',
+              code: 'HOSP', // Hospital - generic healthcare facility
+              display: 'Hospital'
+            }
+          ]
+        }
+      ],
+      // Link to the managing organization (the provider)
+      managingOrganization: {
+        reference: `Organization/${bundleResourceIds.provider}`
+      }
+    };
+
+    // Add address if available
+    if (provider.address || provider.city) {
+      location.address = {
+        use: 'work',
+        type: 'physical',
+        line: provider.address ? [provider.address] : undefined,
+        city: provider.city,
+        country: 'SA'
+      };
+    }
+
+    return {
+      fullUrl: `http://provider.com/Location/${locationId}`,
+      resource: location
+    };
   }
 
   /**
@@ -407,30 +481,18 @@ class ProfessionalMapper extends BaseMapper {
     // BV-00905: Claim.facility SHALL be provided when associated with 'Ambulatory' outpatient or 'Virtual' telemedicine encounters
     // Check encounter resource class code directly (AMB or VR), or fall back to priorAuth.encounter_class
     // 
-    // RE-00005 Analysis: The error "Claim facility is not referring to a valid resource" occurs because:
-    // 1. FHIR R4 Claim.facility expects a Reference(Location), not Reference(Organization)
-    // 2. NPHIES may have stricter validation on facility references
-    // 
-    // Per NPHIES official example at https://portal.nphies.sa/ig/Claim-173086.json.html,
-    // the facility field is NOT included in Professional PA requests.
-    // The NPHIES_Professional_Lab_Bundle_Example.json also omits facility.
-    // 
-    // Solution: Only include facility if a Location resource is available.
-    // For now, we omit facility as it's causing RE-00005 errors and the official examples don't include it.
-    // 
-    // TODO: If NPHIES requires facility for certain cases, implement a Location resource builder
-    // and reference it here instead of Organization.
+    // RE-00005 Fix: Claim.facility must reference a Location resource (not Organization)
+    // The Location resource is built separately and included in the bundle.
+    // The reference uses the fullUrl format to ensure proper resolution.
     const encounterClassCode = encounter?.class?.code;
     const encounterClass = priorAuth.encounter_class || 'ambulatory';
     const needsFacility = encounterClassCode === 'AMB' || encounterClassCode === 'VR' || 
                           encounterClass === 'ambulatory' || encounterClass === 'virtual' || encounterClass === 'telemedicine';
     
-    // NOTE: Facility is commented out to avoid RE-00005 error.
-    // NPHIES official examples do not include facility for Professional PA.
-    // If BV-00905 requires it, we need to create a proper Location resource.
-    // if (needsFacility && priorAuth.facility_location_id) {
-    //   claim.facility = { reference: `http://provider.com/Location/${priorAuth.facility_location_id}` };
-    // }
+    // Add facility reference to Location resource for Ambulatory/Virtual encounters
+    if (needsFacility && bundleResourceIds.location) {
+      claim.facility = { reference: `http://provider.com/Location/${bundleResourceIds.location}` };
+    }
     
     claim.priority = {
       coding: [
