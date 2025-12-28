@@ -1,5 +1,5 @@
 {
-  "id": "6df0725f-b30e-4687-b8fd-8813bc40d9e9",
+  "id": "211f7886-42fb-4d6d-8bf5-89fe36c60cd3",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "http://nphies.sa/MessageHeader/6a775e0f-50fc-4be8-8d8f-ce046d890ad3",
+      "fullUrl": "http://nphies.sa/MessageHeader/39d9317a-239a-4fe7-97bb-4a596add5b68",
       "resource": {
-        "id": "6a775e0f-50fc-4be8-8d8f-ce046d890ad3",
+        "id": "39d9317a-239a-4fe7-97bb-4a596add5b68",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -18,7 +18,7 @@
         },
         "focus": [
           {
-            "reference": "http://nphies.sa/ClaimResponse/229"
+            "reference": "http://nphies.sa/ClaimResponse/37"
           }
         ],
         "sender": {
@@ -33,7 +33,7 @@
         },
         "response": {
           "code": "ok",
-          "identifier": "1f868449-66bd-4537-bf6b-2fb7f4555a9f"
+          "identifier": "fb0eefcd-5f4a-4169-b98b-68f0e9c8d833"
         },
         "destination": [
           {
@@ -55,9 +55,9 @@
       }
     },
     {
-      "fullUrl": "http://nphies.sa/ClaimResponse/229",
+      "fullUrl": "http://nphies.sa/ClaimResponse/37",
       "resource": {
-        "id": "229",
+        "id": "37",
         "use": "preauthorization",
         "meta": {
           "tag": [
@@ -83,13 +83,13 @@
             "code": {
               "coding": [
                 {
-                  "code": "RE-00005",
+                  "code": "BV-00898",
                   "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                  "display": "Claim facility is not referring to a valid resource",
+                  "display": "Location type SHALL use a value from the specified Code System: http://nphies.sa/terminology/CodeSystem/clinic-specialty  when associated with 'Ambulatory' outpatient or 'Virtual' telemedicine encounters within professional authorization/claim",
                   "extension": [
                     {
                       "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                      "valueString": "Bundle.entry[3].resource.facility"
+                      "valueString": "bundle.entry[3].resource.type"
                     }
                   ]
                 }
@@ -98,7 +98,7 @@
           }
         ],
         "status": "active",
-        "created": "2025-12-28T15:03:06.401Z",
+        "created": "2025-12-28T15:16:21.217Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -109,7 +109,7 @@
         "request": {
           "type": "Claim",
           "identifier": {
-            "value": "DUP-1766934186385",
+            "value": "DUP-1766934981163",
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
           }
         },
@@ -127,7 +127,7 @@
         },
         "identifier": [
           {
-            "value": "DUP-1766934186385",
+            "value": "DUP-1766934981163",
             "system": "http://nphies.sa/ClaimResponse"
           }
         ],
@@ -402,6 +402,6 @@
       }
     }
   ],
-  "timestamp": "2025-12-28T18:03:51.158+03:00",
+  "timestamp": "2025-12-28T18:16:37.372+03:00",
   "resourceType": "Bundle"
 }

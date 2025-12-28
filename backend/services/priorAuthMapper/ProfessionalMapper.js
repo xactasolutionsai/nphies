@@ -76,7 +76,7 @@ class ProfessionalMapper extends BaseMapper {
     const needsFacility = encounterClassCode === 'AMB' || encounterClassCode === 'VR' || 
                           encounterClass === 'ambulatory' || encounterClass === 'virtual' || encounterClass === 'telemedicine';
     
-    const locationResource = needsFacility ? this.buildLocationResource(provider, bundleResourceIds) : null;
+    const locationResource = needsFacility ? this.buildLocationResource(provider, priorAuth, practitioner, bundleResourceIds) : null;
     
     // NOTE: Observation resources for lab tests are NOT part of standard NPHIES Professional PA
     // Per official example at: https://portal.nphies.sa/ig/Claim-173086.json.html
@@ -261,13 +261,25 @@ class ProfessionalMapper extends BaseMapper {
    * Build FHIR Location resource for facility reference
    * BV-00905: Claim.facility SHALL be provided when associated with 'Ambulatory' outpatient or 'Virtual' telemedicine encounters
    * RE-00005: Claim.facility must reference a valid Location resource (not Organization)
+   * BV-00898: Location type SHALL use clinic-specialty code system for Ambulatory/Virtual encounters
    * 
    * @param {Object} provider - Provider organization data
+   * @param {Object} priorAuth - Prior authorization data (for specialty code)
+   * @param {Object} practitioner - Practitioner data (for specialty code fallback)
    * @param {Object} bundleResourceIds - Resource IDs for bundle references
    * @returns {Object} FHIR Location resource entry
    */
-  buildLocationResource(provider, bundleResourceIds) {
+  buildLocationResource(provider, priorAuth, practitioner, bundleResourceIds) {
     const locationId = bundleResourceIds.location;
+    
+    // Get the clinic specialty code from priorAuth, practitioner, or use default
+    // BV-00898: Must use http://nphies.sa/terminology/CodeSystem/clinic-specialty
+    const specialtyCode = priorAuth?.practice_code || 
+                          practitioner?.practice_code || 
+                          practitioner?.specialty_code || 
+                          '08.00'; // Default to Internal Medicine
+    
+    const specialtyDisplay = this.getPracticeCodeDisplay(specialtyCode);
     
     // Build Location resource per NPHIES location profile
     // Reference: http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location
@@ -286,13 +298,14 @@ class ProfessionalMapper extends BaseMapper {
       status: 'active',
       name: provider.provider_name || 'Healthcare Facility',
       mode: 'instance',
+      // BV-00898: Location type must use clinic-specialty code system for Ambulatory/Virtual encounters
       type: [
         {
           coding: [
             {
-              system: 'http://terminology.hl7.org/CodeSystem/v3-RoleCode',
-              code: 'HOSP', // Hospital - generic healthcare facility
-              display: 'Hospital'
+              system: 'http://nphies.sa/terminology/CodeSystem/clinic-specialty',
+              code: specialtyCode,
+              display: specialtyDisplay
             }
           ]
         }
