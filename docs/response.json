@@ -1,392 +1,435 @@
 {
-    "resourceType": "OperationOutcome",
-    "id": "2f1eefa3-28e8-4e36-a047-8b4675c51fed",
+    "resourceType": "Bundle",
+    "id": "693b6f42-4cae-46bd-81f2-499c7bbbe32e",
     "meta": {
         "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/operationoutcome|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
-    "issue": [
+    "type": "message",
+    "timestamp": "2025-12-28T20:00:35.922+00:00",
+    "entry": [
         {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
+            "fullUrl": "http://nphies.sa/MessageHeader/66d37564-ff47-4d69-a235-e871259e0270",
+            "resource": {
+                "resourceType": "MessageHeader",
+                "id": "66d37564-ff47-4d69-a235-e871259e0270",
+                "eventCoding": {
+                    "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
+                    "code": "batch-response"
+                },
+                "destination": [
                     {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "BV-00167",
-                        "display": "The MessageHeader focus resource type does not match the MessageHeader eventCoding"
+                        "endpoint": "http://provider.com",
+                        "receiver": {
+                            "type": "Organization",
+                            "identifier": {
+                                "system": "http://nphies.sa/license/provider-license",
+                                "value": "1010613708"
+                            }
+                        }
                     }
-                ]
+                ],
+                "sender": {
+                    "type": "Organization",
+                    "identifier": {
+                        "system": "http://nphies.sa/license/nphies",
+                        "value": "NPHIES"
+                    }
+                },
+                "source": {
+                    "endpoint": "http://nphies.sa/"
+                },
+                "response": {
+                    "identifier": "256d6666-b01c-45cc-9163-793d3336cd43",
+                    "code": "fatal-error",
+                    "details": {
+                        "reference": "http://nphies.sa/OperationOutcome/aa066be6-a6db-448d-bc84-e59e2c3608b8"
+                    }
+                }
             }
         },
         {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
+            "fullUrl": "http://nphies.sa/OperationOutcome/aa066be6-a6db-448d-bc84-e59e2c3608b8",
+            "resource": {
+                "resourceType": "OperationOutcome",
+                "id": "aa066be6-a6db-448d-bc84-e59e2c3608b8",
+                "meta": {
+                    "profile": [
+                        "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/operationoutcome|1.0.0"
+                    ]
+                },
+                "issue": [
                     {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "DT-00001",
-                        "display": "Incorrect data type used for Bundle entry"
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[0].resource.focus[0]"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[0].resource.focus[1]"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[1].resource.extension[1].value"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[1].resource.patient"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[1].resource.insurer"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[1].resource.provider"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[1].resource.careTeam[0].provider"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[1].resource.insurance[0].coverage"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[2].resource.subject"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[2].resource.serviceProvider"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[3].resource.policyHolder"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[3].resource.subscriber"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[3].resource.beneficiary"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1].resource.entry[3].resource.payor[0]"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2].resource.entry[1].resource.patient"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2].resource.entry[1].resource.insurer"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2].resource.entry[1].resource.provider"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2].resource.entry[1].resource.careTeam[0].provider"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2].resource.entry[1].resource.insurance[0].coverage"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2].resource.entry[2].resource.policyHolder"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2].resource.entry[2].resource.subscriber"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2].resource.entry[2].resource.beneficiary"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00169",
+                                    "display": "Reference processing is not referring to a valid resource"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2].resource.entry[2].resource.payor[0]"
+                        ]
                     }
                 ]
-            },
-            "expression": [
-                "Bundle.entry[1]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].meta"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].type"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].timestamp"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[0]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[1]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[2]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[3]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[4]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[5]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[6]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[7]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "DT-00001",
-                        "display": "Incorrect data type used for Bundle entry"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].meta"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].type"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].timestamp"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[0]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[1]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[2]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[3]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[4]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[5]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[6]"
-            ]
+            }
         }
     ]
 }
