@@ -8,6 +8,7 @@ import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { NPHIES_CONFIG } from '../config/nphies.js';
 import CommunicationMapper from './communicationMapper.js';
+import batchClaimMapper from './claimMapper/BatchClaimMapper.js';
 
 class NphiesService {
   constructor() {
@@ -1464,6 +1465,288 @@ class NphiesService {
     }
     
     return communications;
+  }
+
+  // ============================================================================
+  // BATCH CLAIM METHODS
+  // ============================================================================
+
+  /**
+   * Submit Batch Claim Request to NPHIES
+   * 
+   * Reference: https://portal.nphies.sa/ig/usecase-claim-batch.html
+   * 
+   * Key points:
+   * - All claims in batch must be for the same insurer
+   * - Maximum 200 claims per batch
+   * - MessageHeader eventCoding = 'batch-request'
+   * - Processing is non-real-time - claims are queued for insurer
+   * - Responses retrieved via polling
+   * 
+   * @param {Object} batchRequestBundle - FHIR Bundle with batch-request message
+   * @returns {Object} Response with success status and parsed data
+   */
+  async submitBatchClaim(batchRequestBundle) {
+    let lastError = null;
+    
+    // Debug: Log the request bundle being sent
+    console.log('[NPHIES] ===== OUTGOING BATCH CLAIM REQUEST =====');
+    console.log('[NPHIES] Bundle ID:', batchRequestBundle?.id);
+    console.log('[NPHIES] Bundle Type:', batchRequestBundle?.type);
+    console.log('[NPHIES] Bundle Entries:', batchRequestBundle?.entry?.length);
+    
+    const msgHeader = batchRequestBundle?.entry?.find(
+      e => e.resource?.resourceType === 'MessageHeader'
+    )?.resource;
+    console.log('[NPHIES] MessageHeader event:', msgHeader?.eventCoding?.code);
+    console.log('[NPHIES] Focus references:', msgHeader?.focus?.length);
+    
+    // Count nested claim bundles
+    const nestedBundles = batchRequestBundle?.entry?.filter(
+      e => e.resourceType === 'Bundle' || e.resource?.resourceType === 'Bundle'
+    );
+    console.log('[NPHIES] Nested claim bundles:', nestedBundles?.length || 0);
+    console.log('[NPHIES] ==========================================');
+    
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      try {
+        console.log(`[NPHIES] Sending batch claim request (attempt ${attempt}/${this.retryAttempts})`);
+        
+        const response = await axios.post(
+          `${this.baseURL}/$process-message`,
+          batchRequestBundle,
+          {
+            headers: {
+              'Content-Type': 'application/fhir+json',
+              'Accept': 'application/fhir+json'
+            },
+            timeout: this.timeout * 2, // Double timeout for batch requests
+            validateStatus: (status) => status < 500
+          }
+        );
+
+        console.log(`[NPHIES] Batch claim response received: ${response.status}`);
+        
+        // Debug: Log the response
+        console.log('[NPHIES] ===== INCOMING BATCH CLAIM RESPONSE =====');
+        console.log('[NPHIES] Response Status:', response.status);
+        console.log('[NPHIES] Response Bundle ID:', response.data?.id);
+        console.log('[NPHIES] Response Bundle Type:', response.data?.type);
+        console.log('[NPHIES] Response Entries:', response.data?.entry?.length);
+        
+        // Check for MessageHeader event in response
+        const respMsgHeader = response.data?.entry?.find(
+          e => e.resource?.resourceType === 'MessageHeader'
+        )?.resource;
+        console.log('[NPHIES] Response event:', respMsgHeader?.eventCoding?.code);
+        console.log('[NPHIES] ============================================');
+        
+        // Handle empty response
+        if (!response.data) {
+          console.error('[NPHIES] Empty batch response received');
+          throw new Error('NPHIES returned an empty response');
+        }
+        
+        // Handle HTML error response
+        if (typeof response.data === 'string') {
+          console.error('[NPHIES] Received string response instead of JSON');
+          if (response.data.includes('<html') || response.data.includes('<!DOCTYPE')) {
+            throw new Error('NPHIES returned an HTML error page');
+          }
+          throw new Error(`NPHIES returned unexpected response: ${response.data.substring(0, 200)}`);
+        }
+        
+        // Handle direct OperationOutcome (validation error)
+        if (response.data?.resourceType === 'OperationOutcome') {
+          console.error('[NPHIES] Received direct OperationOutcome (validation error)');
+          const issues = response.data.issue || [];
+          const nphiesErrors = issues.map(i => {
+            const code = i.details?.coding?.[0]?.code || i.code || 'UNKNOWN';
+            const display = i.details?.coding?.[0]?.display || i.diagnostics || 'Unknown error';
+            return `${i.severity?.toUpperCase()}: ${code} - ${display}`;
+          }).join('; ');
+          throw new Error(`NPHIES Validation Error: ${nphiesErrors}`);
+        }
+        
+        // Validate batch response structure
+        const validationResult = this.validateBatchClaimResponse(response.data);
+        if (!validationResult.valid) {
+          console.error('[NPHIES] Invalid batch response structure:', validationResult.errors);
+          
+          // Check for OperationOutcome in bundle
+          const operationOutcome = response.data?.entry?.find(
+            e => e.resource?.resourceType === 'OperationOutcome'
+          )?.resource;
+          
+          if (operationOutcome?.issue) {
+            const nphiesErrors = operationOutcome.issue.map(i => {
+              const code = i.details?.coding?.[0]?.code || i.code || 'UNKNOWN';
+              const display = i.details?.coding?.[0]?.display || i.diagnostics || 'Unknown error';
+              return `${i.severity?.toUpperCase()}: ${code} - ${display}`;
+            }).join('; ');
+            throw new Error(`NPHIES Error: ${nphiesErrors}`);
+          }
+          
+          throw new Error(`Invalid batch response: ${validationResult.errors.join(', ')}`);
+        }
+        
+        // Parse the batch response
+        const parsedResponse = batchClaimMapper.parseBatchClaimResponse(response.data);
+        
+        return {
+          success: parsedResponse.success,
+          status: response.status,
+          data: response.data,
+          parsedResponse,
+          hasQueuedClaims: parsedResponse.hasQueuedClaims,
+          hasPendedClaims: parsedResponse.hasPendedClaims,
+          claimResponses: parsedResponse.claimResponses,
+          errors: parsedResponse.errors
+        };
+
+      } catch (error) {
+        lastError = error;
+        console.error(`[NPHIES] Batch claim attempt ${attempt} failed:`, error.message);
+
+        // Don't retry on 4xx errors
+        if (error.response && error.response.status >= 400 && error.response.status < 500) {
+          console.log('[NPHIES] Client error detected, not retrying');
+          break;
+        }
+
+        // Wait before retrying
+        if (attempt < this.retryAttempts) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
+          await this.sleep(waitTime);
+        }
+      }
+    }
+
+    // All attempts failed
+    return {
+      success: false,
+      error: this.formatError(lastError),
+      claimResponses: [],
+      errors: [{ code: 'SUBMIT_FAILED', message: lastError?.message || 'Batch submission failed' }]
+    };
+  }
+
+  /**
+   * Validate Batch Claim Response structure
+   * 
+   * Expected structure:
+   * - Bundle (type: message, eventCoding: batch-response)
+   *   - MessageHeader
+   *   - ClaimResponse bundles or OperationOutcome
+   * 
+   * @param {Object} response - NPHIES response bundle
+   * @returns {Object} Validation result with valid flag and errors
+   */
+  validateBatchClaimResponse(response) {
+    return batchClaimMapper.validateBatchClaimResponse(response);
+  }
+
+  /**
+   * Poll for deferred batch claim responses
+   * 
+   * After submitting a batch, claims are queued for insurer processing.
+   * Use this method to poll for the adjudicated responses.
+   * 
+   * @param {Object} provider - Provider organization with nphies_id
+   * @param {string} batchIdentifier - Optional: filter by batch identifier
+   * @returns {Object} Response with claim responses
+   */
+  async pollBatchClaimResponses(provider, batchIdentifier = null) {
+    console.log('[NPHIES] ===== POLLING FOR BATCH CLAIM RESPONSES =====');
+    console.log('[NPHIES] Provider ID:', provider?.nphies_id);
+    console.log('[NPHIES] Batch Identifier:', batchIdentifier || 'All');
+    console.log('[NPHIES] ================================================');
+    
+    // Build poll request bundle
+    const pollBundle = batchClaimMapper.buildBatchPollRequestBundle(provider, batchIdentifier);
+    
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/$process-message`,
+        pollBundle,
+        {
+          headers: {
+            'Content-Type': 'application/fhir+json',
+            'Accept': 'application/fhir+json'
+          },
+          timeout: this.timeout,
+          validateStatus: (status) => status < 500
+        }
+      );
+      
+      console.log(`[NPHIES] Poll response received: ${response.status}`);
+      
+      // Debug response
+      console.log('[NPHIES] Response Bundle ID:', response.data?.id);
+      console.log('[NPHIES] Response entries:', response.data?.entry?.length);
+      
+      // Extract ClaimResponses from poll response
+      const claimResponses = this.extractClaimResponsesFromPoll(response.data);
+      console.log('[NPHIES] ClaimResponses found:', claimResponses.length);
+      
+      // Parse each claim response
+      const parsedResponses = claimResponses.map(cr => 
+        batchClaimMapper.parseClaimResponseResource(cr)
+      );
+      
+      // Check for errors in response
+      let success = response.status >= 200 && response.status < 300;
+      let errors = [];
+      
+      // Check MessageHeader response code
+      const respMsgHeader = response.data?.entry?.find(
+        e => e.resource?.resourceType === 'MessageHeader'
+      )?.resource;
+      
+      if (respMsgHeader?.response?.code === 'fatal-error' || 
+          respMsgHeader?.response?.code === 'transient-error') {
+        success = false;
+        errors.push({ code: respMsgHeader.response.code, message: 'Poll request failed' });
+      }
+      
+      // Check for OperationOutcome errors
+      const operationOutcome = response.data?.entry?.find(
+        e => e.resource?.resourceType === 'OperationOutcome'
+      )?.resource;
+      
+      if (operationOutcome?.issue) {
+        const ooErrors = batchClaimMapper.parseOperationOutcome(operationOutcome);
+        const fatalErrors = ooErrors.filter(e => e.severity === 'error' || e.severity === 'fatal');
+        if (fatalErrors.length > 0) {
+          success = false;
+          errors.push(...fatalErrors);
+        }
+      }
+      
+      return {
+        success,
+        status: response.status,
+        data: response.data,
+        claimResponses: parsedResponses,
+        count: parsedResponses.length,
+        errors,
+        pollBundle,
+        message: parsedResponses.length > 0
+          ? `Found ${parsedResponses.length} claim response(s)`
+          : 'No pending claim responses found'
+      };
+      
+    } catch (error) {
+      console.error('[NPHIES] Poll error:', error.message);
+      return {
+        success: false,
+        error: this.formatError(error),
+        claimResponses: [],
+        count: 0,
+        pollBundle
+      };
+    }
   }
 }
 

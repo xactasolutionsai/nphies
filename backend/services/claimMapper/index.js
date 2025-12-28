@@ -22,6 +22,7 @@ import VisionClaimMapper from './VisionClaimMapper.js';
 import OralClaimMapper from './OralClaimMapper.js';
 import PharmacyClaimMapper from './PharmacyClaimMapper.js';
 import ProfessionalClaimMapper from './ProfessionalClaimMapper.js';
+import batchClaimMapper, { BatchClaimMapper } from './BatchClaimMapper.js';
 
 const mapperInstances = {
   institutional: null,
@@ -118,5 +119,5 @@ class ClaimMapperProxy {
 
 const claimMapperProxy = new ClaimMapperProxy();
 
-export { InstitutionalClaimMapper, VisionClaimMapper, OralClaimMapper, PharmacyClaimMapper, ProfessionalClaimMapper, detectClaimType };
+export { InstitutionalClaimMapper, VisionClaimMapper, OralClaimMapper, PharmacyClaimMapper, ProfessionalClaimMapper, BatchClaimMapper, batchClaimMapper, detectClaimType };
 export default claimMapperProxy;

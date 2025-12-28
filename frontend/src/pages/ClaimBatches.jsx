@@ -1,17 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import DataTable from '@/components/DataTable';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Package, TrendingUp, Users, DollarSign, Calendar, Building2, Shield, Receipt } from 'lucide-react';
+import { Package, TrendingUp, Users, DollarSign, Calendar, Building2, Shield, Receipt, Plus, Send, RefreshCw, Eye, Trash2, X, CheckCircle2, AlertCircle, Clock, Layers } from 'lucide-react';
 import api from '@/services/api';
 
 const COLORS = ['#553781', '#9658C4', '#8572CD', '#00DEFE', '#26A69A', '#E0E7FF'];
 
 export default function ClaimBatches() {
+  const navigate = useNavigate();
   const [claimBatches, setClaimBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedBatch, setSelectedBatch] = useState(null);
+  const [stats, setStats] = useState(null);
+  
+  // Batch creation state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [availableClaims, setAvailableClaims] = useState([]);
+  const [selectedClaims, setSelectedClaims] = useState([]);
+  const [batchForm, setBatchForm] = useState({
+    batch_identifier: '',
+    batch_period_start: new Date().toISOString().split('T')[0],
+    batch_period_end: new Date().toISOString().split('T')[0],
+    description: ''
+  });
+  const [createLoading, setCreateLoading] = useState(false);
+  const [filterInsurer, setFilterInsurer] = useState('');
+  
+  // Action states
+  const [actionLoading, setActionLoading] = useState(null);
+  const [showBundlePreview, setShowBundlePreview] = useState(false);
+  const [bundlePreview, setBundlePreview] = useState(null);
   
   // Chart data states
   const [batchesByStatus, setBatchesByStatus] = useState([]);
@@ -26,6 +51,7 @@ export default function ClaimBatches() {
 
   useEffect(() => {
     loadClaimBatches();
+    loadStats();
   }, []);
 
   const loadClaimBatches = async () => {
@@ -34,48 +60,33 @@ export default function ClaimBatches() {
       const response = await api.getClaimBatches({ limit: 1000 });
       const batchesData = response.data || response || [];
       setClaimBatches(batchesData);
-      
-      // Process chart data
       processChartData(batchesData);
     } catch (error) {
       console.error('Error loading claim batches:', error);
-      // Mock data for demonstration
-      const mockData = [
-        {
-          id: 1,
-          batch_identifier: 'BATCH001',
-          submission_date: '2024-01-15',
-          number_of_claims: 25,
-          status: 'Processed',
-          total_amount: 125000,
-          provider_name: 'مستشفى الملك فهد التخصصي',
-          insurer_name: 'التأمين الصحي السعودي'
-        },
-        {
-          id: 2,
-          batch_identifier: 'BATCH002',
-          submission_date: '2024-01-20',
-          number_of_claims: 15,
-          status: 'Pending',
-          total_amount: 75000,
-          provider_name: 'عيادة الدكتور أحمد محمد',
-          insurer_name: 'بوبا العربية للتأمين'
-        },
-        {
-          id: 3,
-          batch_identifier: 'BATCH003',
-          submission_date: '2024-01-18',
-          number_of_claims: 8,
-          status: 'Rejected',
-          total_amount: 40000,
-          provider_name: 'مركز الأسنان المتخصص',
-          insurer_name: 'تأمين مدجلف'
-        }
-      ];
-      setClaimBatches(mockData);
-      processChartData(mockData);
+      setClaimBatches([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const response = await api.getClaimBatchStats();
+      setStats(response.data || response);
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  };
+
+  const loadAvailableClaims = async (insurerId = null) => {
+    try {
+      const params = {};
+      if (insurerId) params.insurer_id = insurerId;
+      const response = await api.getAvailableClaimsForBatch(params);
+      setAvailableClaims(response.data || []);
+    } catch (error) {
+      console.error('Error loading available claims:', error);
+      setAvailableClaims([]);
     }
   };
 
@@ -83,7 +94,8 @@ export default function ClaimBatches() {
     // Process batches by status
     const statusCounts = {};
     data.forEach(item => {
-      statusCounts[item.status] = (statusCounts[item.status] || 0) + 1;
+      const status = item.status || 'Unknown';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
     setBatchesByStatus(Object.entries(statusCounts).map(([name, value]) => ({ name, value })));
 
@@ -114,7 +126,8 @@ export default function ClaimBatches() {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
     data.forEach(item => {
-      const date = new Date(item.submission_date);
+      const date = new Date(item.submission_date || item.created_at);
+      if (isNaN(date.getTime())) return;
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       if (!monthlyData[monthKey]) {
         monthlyData[monthKey] = {
@@ -129,51 +142,215 @@ export default function ClaimBatches() {
       monthlyData[monthKey].count += 1;
       monthlyData[monthKey].amount += parseFloat(item.total_amount || 0);
       
-      if (item.status === 'Processed') {
-        monthlyData[monthKey].processed += 1;
-      } else if (item.status === 'Pending') {
-        monthlyData[monthKey].pending += 1;
-      } else if (item.status === 'Rejected') {
-        monthlyData[monthKey].rejected += 1;
-      }
+      if (item.status === 'Processed') monthlyData[monthKey].processed += 1;
+      else if (['Pending', 'Submitted', 'Queued', 'Draft'].includes(item.status)) monthlyData[monthKey].pending += 1;
+      else if (['Rejected', 'Error'].includes(item.status)) monthlyData[monthKey].rejected += 1;
     });
 
-    // Convert to array and sort by date
-    const trendsArray = Object.values(monthlyData).sort((a, b) => {
-      const aDate = new Date(a.month + ' 1, 2024');
-      const bDate = new Date(b.month + ' 1, 2024');
-      return aDate - bDate;
-    });
-
-    setMonthlyTrends(trendsArray.slice(-6)); // Last 6 months
+    const trendsArray = Object.values(monthlyData);
+    setMonthlyTrends(trendsArray.slice(-6));
   };
 
   const getStatusBadge = (status) => {
     const variants = {
       'Processed': 'default',
+      'Partial': 'default',
       'Pending': 'secondary',
+      'Submitted': 'secondary',
+      'Queued': 'secondary',
+      'Draft': 'outline',
       'Rejected': 'destructive',
-      'Under Review': 'outline'
+      'Error': 'destructive'
     };
     return variants[status] || 'outline';
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'Processed': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      case 'Partial': return <CheckCircle2 className="h-4 w-4 text-yellow-500" />;
+      case 'Pending':
+      case 'Submitted':
+      case 'Queued': return <Clock className="h-4 w-4 text-blue-500" />;
+      case 'Draft': return <Layers className="h-4 w-4 text-gray-500" />;
+      case 'Rejected':
+      case 'Error': return <AlertCircle className="h-4 w-4 text-red-500" />;
+      default: return null;
+    }
+  };
+
+  // Batch creation handlers
+  const openCreateModal = () => {
+    setShowCreateModal(true);
+    setSelectedClaims([]);
+    setBatchForm({
+      batch_identifier: `BATCH-${Date.now()}`,
+      batch_period_start: new Date().toISOString().split('T')[0],
+      batch_period_end: new Date().toISOString().split('T')[0],
+      description: ''
+    });
+    loadAvailableClaims();
+  };
+
+  const handleClaimSelect = (claimId) => {
+    setSelectedClaims(prev => {
+      if (prev.includes(claimId)) {
+        return prev.filter(id => id !== claimId);
+      } else {
+        // Check if we're at 200 limit
+        if (prev.length >= 200) {
+          alert('Maximum 200 claims per batch');
+          return prev;
+        }
+        // Check insurer consistency
+        const claim = availableClaims.find(c => c.id === claimId);
+        if (prev.length > 0) {
+          const firstClaim = availableClaims.find(c => c.id === prev[0]);
+          if (claim.insurer_id !== firstClaim.insurer_id) {
+            alert('All claims in a batch must be for the same insurer');
+            return prev;
+          }
+        }
+        return [...prev, claimId];
+      }
+    });
+  };
+
+  const handleSelectAllClaims = () => {
+    if (selectedClaims.length === availableClaims.length) {
+      setSelectedClaims([]);
+    } else {
+      // Only select claims with same insurer as first one
+      if (availableClaims.length > 0) {
+        const firstInsurer = availableClaims[0].insurer_id;
+        const sameinsurerClaims = availableClaims
+          .filter(c => c.insurer_id === firstInsurer)
+          .slice(0, 200)
+          .map(c => c.id);
+        setSelectedClaims(sameinsurerClaims);
+      }
+    }
+  };
+
+  const handleCreateBatch = async () => {
+    if (selectedClaims.length < 2) {
+      alert('Please select at least 2 claims for the batch');
+      return;
+    }
+
+    try {
+      setCreateLoading(true);
+      const response = await api.createClaimBatch({
+        ...batchForm,
+        claim_ids: selectedClaims
+      });
+
+      if (response.data) {
+        setShowCreateModal(false);
+        loadClaimBatches();
+        loadStats();
+        // Navigate to the new batch details
+        setSelectedBatch(response.data);
+      }
+    } catch (error) {
+      console.error('Error creating batch:', error);
+      alert(error.response?.data?.error || 'Failed to create batch');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  // Batch action handlers
+  const handleSendToNphies = async (batchId) => {
+    if (!confirm('Are you sure you want to submit this batch to NPHIES?')) return;
+
+    try {
+      setActionLoading(batchId);
+      const response = await api.sendBatchToNphies(batchId);
+      
+      if (response.success) {
+        alert(response.message || 'Batch submitted successfully');
+        loadClaimBatches();
+        if (selectedBatch?.id === batchId) {
+          const updatedBatch = await api.getClaimBatch(batchId);
+          setSelectedBatch(updatedBatch.data);
+        }
+      } else {
+        alert(response.error || 'Failed to submit batch');
+      }
+    } catch (error) {
+      console.error('Error sending batch to NPHIES:', error);
+      alert(error.response?.data?.error || 'Failed to submit batch');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handlePollResponses = async (batchId) => {
+    try {
+      setActionLoading(batchId);
+      const response = await api.pollBatchResponses(batchId);
+      
+      if (response.success) {
+        alert(response.pollResult?.message || 'Poll completed');
+        loadClaimBatches();
+        if (selectedBatch?.id === batchId) {
+          const updatedBatch = await api.getClaimBatch(batchId);
+          setSelectedBatch(updatedBatch.data);
+        }
+      }
+    } catch (error) {
+      console.error('Error polling responses:', error);
+      alert(error.response?.data?.error || 'Failed to poll responses');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handlePreviewBundle = async (batchId) => {
+    try {
+      setActionLoading(batchId);
+      const response = await api.previewBatchBundle(batchId);
+      setBundlePreview(response.data);
+      setShowBundlePreview(true);
+    } catch (error) {
+      console.error('Error previewing bundle:', error);
+      alert(error.response?.data?.error || 'Failed to preview bundle');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteBatch = async (batchId) => {
+    if (!confirm('Are you sure you want to delete this batch? Claims will be removed from the batch but not deleted.')) return;
+
+    try {
+      setActionLoading(batchId);
+      await api.deleteClaimBatch(batchId);
+      loadClaimBatches();
+      loadStats();
+      if (selectedBatch?.id === batchId) {
+        setSelectedBatch(null);
+      }
+    } catch (error) {
+      console.error('Error deleting batch:', error);
+      alert(error.response?.data?.error || 'Failed to delete batch');
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const columns = [
     {
       key: 'batch_identifier',
       header: 'Batch ID',
-      accessor: 'batch_identifier'
-    },
-    {
-      key: 'submission_date',
-      header: 'Submission Date',
-      accessor: 'submission_date',
-      render: (row) => new Date(row.submission_date).toLocaleDateString()
-    },
-    {
-      key: 'number_of_claims',
-      header: 'Number of Claims',
-      accessor: 'number_of_claims'
+      accessor: 'batch_identifier',
+      render: (row) => (
+        <div className="flex items-center space-x-2">
+          {getStatusIcon(row.status)}
+          <span className="font-medium">{row.batch_identifier}</span>
+        </div>
+      )
     },
     {
       key: 'status',
@@ -186,10 +363,16 @@ export default function ClaimBatches() {
       )
     },
     {
+      key: 'total_claims',
+      header: 'Claims',
+      accessor: 'total_claims',
+      render: (row) => row.total_claims || row.claim_count || 0
+    },
+    {
       key: 'total_amount',
       header: 'Total Amount',
       accessor: 'total_amount',
-      render: (row) => `$${parseFloat(row.total_amount || 0).toLocaleString()}`
+      render: (row) => `SAR ${parseFloat(row.total_amount || 0).toLocaleString()}`
     },
     {
       key: 'provider_name',
@@ -200,70 +383,82 @@ export default function ClaimBatches() {
       key: 'insurer_name',
       header: 'Insurer',
       accessor: 'insurer_name'
+    },
+    {
+      key: 'created_at',
+      header: 'Created',
+      accessor: 'created_at',
+      render: (row) => new Date(row.created_at).toLocaleDateString()
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (row) => (
+        <div className="flex items-center space-x-2">
+          {row.status === 'Draft' && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => { e.stopPropagation(); handlePreviewBundle(row.id); }}
+                disabled={actionLoading === row.id}
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); handleSendToNphies(row.id); }}
+                disabled={actionLoading === row.id}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={(e) => { e.stopPropagation(); handleDeleteBatch(row.id); }}
+                disabled={actionLoading === row.id}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+          {['Submitted', 'Queued', 'Partial'].includes(row.status) && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => { e.stopPropagation(); handlePollResponses(row.id); }}
+              disabled={actionLoading === row.id}
+            >
+              <RefreshCw className={`h-4 w-4 ${actionLoading === row.id ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+        </div>
+      )
     }
   ];
 
-  // Drill-down functions
-  const handleStatusClick = async (data) => {
-    try {
-      setDrillDownTitle(`Claim Batches with Status: ${data.name}`);
-      const filteredBatches = claimBatches.filter(item => item.status === data.name);
-      setDrillDownData(filteredBatches);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading status drill-down data:', error);
-    }
+  // Drill-down handlers
+  const handleStatusClick = (data) => {
+    setDrillDownTitle(`Batches with Status: ${data.name}`);
+    setDrillDownData(claimBatches.filter(item => item.status === data.name));
+    setShowDrillDown(true);
   };
 
-  const handleInsurerClick = async (data) => {
-    try {
-      setDrillDownTitle(`Claim Batches for Insurer: ${data.name}`);
-      const filteredBatches = claimBatches.filter(item => item.insurer_name === data.name);
-      setDrillDownData(filteredBatches);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading insurer drill-down data:', error);
-    }
+  const handleInsurerClick = (data) => {
+    setDrillDownTitle(`Batches for Insurer: ${data.name}`);
+    setDrillDownData(claimBatches.filter(item => item.insurer_name === data.name));
+    setShowDrillDown(true);
   };
 
-  const handleProviderClick = async (data) => {
-    try {
-      setDrillDownTitle(`Claim Batches for Provider: ${data.name}`);
-      const filteredBatches = claimBatches.filter(item => item.provider_name === data.name);
-      setDrillDownData(filteredBatches);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading provider drill-down data:', error);
-    }
-  };
-
-  const handleMonthlyTrendClick = async (data) => {
-    try {
-      setDrillDownTitle(`Claim Batches for Month: ${data.month}`);
-      const monthDate = new Date(data.month + ' 1, 2024');
-      const startDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-      const endDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-      
-      const filteredBatches = claimBatches.filter(item => {
-        const submissionDate = new Date(item.submission_date);
-        return submissionDate >= startDate && submissionDate <= endDate;
-      });
-      
-      setDrillDownData(filteredBatches);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading monthly trend drill-down data:', error);
-    }
-  };
-
-  const closeDrillDown = () => {
-    setShowDrillDown(false);
-    setDrillDownData([]);
-    setDrillDownTitle('');
+  const handleProviderClick = (data) => {
+    setDrillDownTitle(`Batches for Provider: ${data.name}`);
+    setDrillDownData(claimBatches.filter(item => item.provider_name === data.name));
+    setShowDrillDown(true);
   };
 
   const handleRowClick = (batch) => {
-    setSelectedBatch(batch);
+    // Navigate to batch details page
+    navigate(`/claim-batches/${batch.id}`);
   };
 
   if (loading) {
@@ -279,555 +474,516 @@ export default function ClaimBatches() {
 
   return (
     <div className="space-y-8">
-      {/* Enhanced Header */}
-      <div className="relative">
-        <div className="relative bg-white rounded-2xl p-8 border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900">
-                Claim Batches
-              </h1>
-              <p className="text-gray-600 mt-2 text-lg">Manage batches of claims submitted to insurers</p>
-              <div className="flex items-center space-x-4 mt-4">
-                <div className="flex items-center space-x-2 text-sm text-gray-500">
-                  <div className="w-2 h-2 bg-accent-cyan rounded-full animate-pulse"></div>
-                  <span>System Active</span>
-                </div>
-                <div className="text-sm text-gray-500">
-                  Total Batches: {claimBatches.length}
-                </div>
-                <div className="text-sm text-gray-500">
-                  Last updated: {new Date().toLocaleTimeString()}
-                </div>
+      {/* Header */}
+      <div className="relative bg-white rounded-2xl p-8 border border-gray-100">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900">Batch Claims</h1>
+            <p className="text-gray-600 mt-2 text-lg">Create and manage NPHIES batch claim submissions</p>
+            <div className="flex items-center space-x-4 mt-4">
+              <div className="flex items-center space-x-2 text-sm text-gray-500">
+                <div className="w-2 h-2 bg-accent-cyan rounded-full animate-pulse"></div>
+                <span>System Active</span>
+              </div>
+              <div className="text-sm text-gray-500">
+                Total Batches: {claimBatches.length}
               </div>
             </div>
-            <div className="hidden md:flex items-center space-x-3">
-              <div className="relative">
- 
-                <div className="relative bg-white rounded-xl p-3 border border-gray-100">
-                  <Package className="h-8 w-8 text-primary-purple" />
-                </div>
-              </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <Button onClick={openCreateModal} className="bg-gradient-to-r from-primary-purple to-accent-purple">
+              <Plus className="h-5 w-5 mr-2" />
+              Create Batch
+            </Button>
+            <div className="bg-white rounded-xl p-3 border border-gray-100">
+              <Package className="h-8 w-8 text-primary-purple" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Enhanced Claim Batches by Status Donut Chart */}
-        <div className="relative group">
- 
-          <Card className="relative bg-white border-0 transition-all duration-300 hover:-translate-y-2">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center text-gray-900">
-                <div className="relative mr-3">
-                  <div className="absolute -inset-1 bg-primary-purple/20 rounded-lg"></div>
-                  <div className="relative from-primary-purple/10 to-accent-purple/10 rounded-lg p-2">
-                    <Package className="h-6 w-6 text-primary-purple" />
-                  </div>
-                </div>
+      {/* Stats Cards */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <Card className="bg-gradient-to-br from-blue-50 to-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-xl font-bold">Claim Batches by Status</h3>
-                  <p className="text-sm text-gray-600 font-medium">Distribution of batch statuses (Processed, Pending, Rejected, etc.)</p>
+                  <p className="text-sm text-gray-500">Total Batches</p>
+                  <p className="text-2xl font-bold">{stats.total_batches || 0}</p>
                 </div>
-              </CardTitle>
-            </CardHeader>
+                <Package className="h-8 w-8 text-blue-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-gray-50 to-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Draft</p>
+                  <p className="text-2xl font-bold">{stats.draft_batches || 0}</p>
+                </div>
+                <Layers className="h-8 w-8 text-gray-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-yellow-50 to-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Pending</p>
+                  <p className="text-2xl font-bold">{stats.pending_batches || 0}</p>
+                </div>
+                <Clock className="h-8 w-8 text-yellow-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-green-50 to-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Processed</p>
+                  <p className="text-2xl font-bold">{stats.processed_batches || 0}</p>
+                </div>
+                <CheckCircle2 className="h-8 w-8 text-green-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-red-50 to-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Rejected</p>
+                  <p className="text-2xl font-bold">{stats.rejected_batches || 0}</p>
+                </div>
+                <AlertCircle className="h-8 w-8 text-red-500" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Status Chart */}
+        <Card className="bg-white border-0">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Package className="h-6 w-6 text-primary-purple mr-2" />
+              Batches by Status
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="h-[400px]">
+            <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={batchesByStatus}
                     cx="50%"
                     cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                     innerRadius={60}
-                    outerRadius={120}
-                    fill="#2196F3"
+                    outerRadius={100}
                     dataKey="value"
                     onClick={handleStatusClick}
                     style={{ cursor: 'pointer' }}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   >
                     {batchesByStatus.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px',
-                      boxShadow: 'none'
-                    }}
-                  />
+                  <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
-          </Card>
-        </div>
+        </Card>
 
-        {/* Enhanced Claim Batches by Insurer Bar Chart */}
-        <div className="relative group">
- 
-          <Card className="relative bg-white border-0 transition-all duration-300 hover:-translate-y-2">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center text-gray-900">
-                <div className="relative mr-3">
-                  <div className="absolute -inset-1 bg-primary-purple/20 rounded-lg"></div>
-                  <div className="relative from-primary-purple/10 to-accent-purple/10 rounded-lg p-2">
-                    <DollarSign className="h-6 w-6 text-primary-purple" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold">Claim Batches by Insurer</h3>
-                  <p className="text-sm text-gray-600 font-medium">Number of claim batches by each insurer</p>
-                </div>
-              </CardTitle>
-            </CardHeader>
-          <CardContent>
-            <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={batchesByInsurer} onClick={handleInsurerClick}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={120} stroke="#6B7280" />
-                  <YAxis stroke="#6B7280" />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px',
-                      boxShadow: 'none'
-                    }}
-                    formatter={(value, name) => [
-                      name === 'amount' ? `$${value.toLocaleString()}` : value,
-                      name === 'amount' ? 'Total Amount' : 'Batches'
-                    ]} 
-                  />
-                  <Bar dataKey="value" fill="#059669" style={{ cursor: 'pointer' }} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-          </Card>
-        </div>
-
-        {/* Enhanced Daily Trends Line Chart */}
-        <div className="relative group">
- 
-          <Card className="relative bg-white border-0 transition-all duration-300 hover:-translate-y-2">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center text-gray-900">
-                <div className="relative mr-3">
-                  <div className="absolute -inset-1 bg-primary-purple/20 rounded-lg"></div>
-                  <div className="relative from-primary-purple/10 to-accent-purple/10 rounded-lg p-2">
-                    <TrendingUp className="h-6 w-6 text-primary-purple" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold">Daily Batch Trends</h3>
-                  <p className="text-sm text-gray-600 font-medium">Claim batch processing trends over the last 30 days</p>
-                </div>
-              </CardTitle>
-            </CardHeader>
-          <CardContent>
-            <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlyTrends} onClick={handleMonthlyTrendClick}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis 
-                    dataKey="day" 
-                    stroke="#6B7280" 
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                    fontSize={12}
-                  />
-                  <YAxis yAxisId="left" stroke="#6B7280" />
-                  <YAxis yAxisId="right" orientation="right" stroke="#6B7280" />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px',
-                      boxShadow: 'none'
-                    }}
-                    formatter={(value, name) => [
-                      name === 'amount' ? `$${value.toLocaleString()}` : value,
-                      name === 'amount' ? 'Total Amount' : 
-                      name === 'processed' ? 'Processed' :
-                      name === 'pending' ? 'Pending' :
-                      name === 'rejected' ? 'Rejected' : 'Total'
-                    ]}
-                  />
-                  <Line yAxisId="left" type="monotone" dataKey="processed" stroke="#059669" strokeWidth={2} name="processed" style={{ cursor: 'pointer' }} />
-                  <Line yAxisId="left" type="monotone" dataKey="pending" stroke="#10B981" strokeWidth={2} name="pending" style={{ cursor: 'pointer' }} />
-                  <Line yAxisId="left" type="monotone" dataKey="rejected" stroke="#34D399" strokeWidth={2} name="rejected" style={{ cursor: 'pointer' }} />
-                  <Line yAxisId="right" type="monotone" dataKey="amount" stroke="#6EE7B7" strokeWidth={2} name="amount" style={{ cursor: 'pointer' }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-          </Card>
-        </div>
-
-        {/* Enhanced Claim Batches by Provider Bar Chart */}
-        <div className="relative group">
- 
-          <Card className="relative bg-white border-0 transition-all duration-300 hover:-translate-y-2">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center text-gray-900">
-                <div className="relative mr-3">
-                  <div className="absolute -inset-1 bg-primary-purple/20 rounded-lg"></div>
-                  <div className="relative from-primary-purple/10 to-accent-purple/10 rounded-lg p-2">
-                    <Users className="h-6 w-6 text-primary-purple" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold">Claim Batches by Provider</h3>
-                  <p className="text-sm text-gray-600 font-medium">Number of claim batches submitted by each provider</p>
-                </div>
-              </CardTitle>
-            </CardHeader>
-          <CardContent>
-            <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={batchesByProvider} onClick={handleProviderClick}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={120} stroke="#6B7280" />
-                  <YAxis stroke="#6B7280" />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px',
-                      boxShadow: 'none'
-                    }}
-                    formatter={(value) => [value, 'Claim Batches']} 
-                  />
-                  <Bar dataKey="value" fill="#059669" style={{ cursor: 'pointer' }} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Enhanced Claim Batches Data Table */}
-      <div className="relative group">
- 
-        <Card className="relative bg-white border-0 transition-all duration-300 hover:-translate-y-2">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center text-gray-900">
-              <div className="relative mr-3">
-                <div className="absolute -inset-1 bg-primary-purple/20 rounded-lg"></div>
-                <div className="relative from-primary-purple/10 to-accent-purple/10 rounded-lg p-2">
-                  <Package className="h-6 w-6 text-primary-purple" />
-                </div>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold">Claim Batches</h3>
-                <p className="text-sm text-gray-600 font-medium">Track and manage batches of claims submitted to insurance providers</p>
-              </div>
+        {/* Insurer Chart */}
+        <Card className="bg-white border-0">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Shield className="h-6 w-6 text-primary-purple mr-2" />
+              Batches by Insurer
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <DataTable
-              data={claimBatches}
-              columns={columns}
-              onRowClick={handleRowClick}
-              searchable={true}
-              sortable={true}
-              pageSize={10}
-            />
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={batchesByInsurer} onClick={handleInsurerClick}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} fontSize={12} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#553781" style={{ cursor: 'pointer' }} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Enhanced Batch Detail Modal */}
-      {selectedBatch && (
+      {/* Data Table */}
+      <Card className="bg-white border-0">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Package className="h-6 w-6 text-primary-purple mr-2" />
+            All Batches
+          </CardTitle>
+          <CardDescription>Click on a batch to view details</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            data={claimBatches}
+            columns={columns}
+            onRowClick={handleRowClick}
+            searchable={true}
+            sortable={true}
+            pageSize={10}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Create Batch Modal */}
+      {showCreateModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="relative bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden ">
- 
-            <div className="relative bg-white rounded-3xl overflow-hidden">
-              {/* Enhanced Header */}
-              <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center space-x-3">
-                    <div className="relative">
- 
-                      <div className="relative bg-white/20 rounded-full p-2">
-                        <Package className="h-6 w-6" />
-                      </div>
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold">Batch Details</h2>
-                      <p className="text-white/80 mt-1">Comprehensive batch information</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setSelectedBatch(null)}
-                    className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all duration-200"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+          <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold">Create Batch</h2>
+                  <p className="text-white/80 mt-1">Select claims to include in the batch</p>
+                </div>
+                <button onClick={() => setShowCreateModal(false)} className="text-white/80 hover:text-white p-2">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {/* Batch Form */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div>
+                  <Label>Batch Identifier</Label>
+                  <Input
+                    value={batchForm.batch_identifier}
+                    onChange={(e) => setBatchForm(prev => ({ ...prev, batch_identifier: e.target.value }))}
+                    placeholder="Enter batch identifier"
+                  />
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Input
+                    value={batchForm.description}
+                    onChange={(e) => setBatchForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Optional description"
+                  />
+                </div>
+                <div>
+                  <Label>Period Start</Label>
+                  <Input
+                    type="date"
+                    value={batchForm.batch_period_start}
+                    onChange={(e) => setBatchForm(prev => ({ ...prev, batch_period_start: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>Period End</Label>
+                  <Input
+                    type="date"
+                    value={batchForm.batch_period_end}
+                    onChange={(e) => setBatchForm(prev => ({ ...prev, batch_period_end: e.target.value }))}
+                  />
                 </div>
               </div>
 
-              {/* Batch Information Grid */}
-              <div className="p-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-primary-purple/10 rounded-lg p-2">
-                          <Package className="h-5 w-5 text-primary-purple" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Batch Identifier</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedBatch.batch_identifier || 'N/A'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-accent-cyan/10 rounded-lg p-2">
-                          <Badge variant={getStatusBadge(selectedBatch.status)} className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Status</label>
-                          <div className="mt-1">
-                            <Badge variant={getStatusBadge(selectedBatch.status)} className="text-sm">
-                              {selectedBatch.status}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-primary-purple/10 rounded-lg p-2">
-                          <Receipt className="h-5 w-5 text-primary-purple" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Number of Claims</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedBatch.number_of_claims || 'N/A'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-accent-cyan/10 rounded-lg p-2">
-                          <DollarSign className="h-5 w-5 text-accent-cyan" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Amount</label>
-                          <p className="text-lg font-semibold text-gray-900">${parseFloat(selectedBatch.total_amount || 0).toLocaleString()}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-primary-purple/10 rounded-lg p-2">
-                          <Building2 className="h-5 w-5 text-primary-purple" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Provider</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedBatch.provider_name || 'N/A'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-accent-cyan/10 rounded-lg p-2">
-                          <Shield className="h-5 w-5 text-accent-cyan" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Insurer</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedBatch.insurer_name || 'N/A'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-primary-purple/10 rounded-lg p-2">
-                          <Calendar className="h-5 w-5 text-primary-purple" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Submission Date</label>
-                          <p className="text-lg font-semibold text-gray-900">{new Date(selectedBatch.submission_date).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              {/* Selection Info */}
+              <div className="flex items-center justify-between mb-4 p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-4">
+                  <span className="font-medium">Selected: {selectedClaims.length} / 200</span>
+                  {selectedClaims.length > 0 && (
+                    <span className="text-sm text-gray-500">
+                      Total: SAR {availableClaims
+                        .filter(c => selectedClaims.includes(c.id))
+                        .reduce((sum, c) => sum + parseFloat(c.total_amount || 0), 0)
+                        .toLocaleString()}
+                    </span>
+                  )}
                 </div>
+                <Button variant="outline" size="sm" onClick={handleSelectAllClaims}>
+                  {selectedClaims.length === availableClaims.length ? 'Deselect All' : 'Select All (Same Insurer)'}
+                </Button>
               </div>
 
-              {/* Enhanced Footer */}
-              <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-                <div className="flex justify-between items-center">
-                  <div className="text-sm text-gray-600">
-                    <span className="font-medium">Batch Identifier:</span> {selectedBatch.batch_identifier || 'N/A'}
-                  </div>
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={() => setSelectedBatch(null)}
-                      className="px-6 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
+              {/* Claims List */}
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Select</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Claim #</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Patient</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Insurer</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {availableClaims.map((claim) => (
+                      <tr 
+                        key={claim.id} 
+                        className={`hover:bg-gray-50 cursor-pointer ${selectedClaims.includes(claim.id) ? 'bg-purple-50' : ''}`}
+                        onClick={() => handleClaimSelect(claim.id)}
+                      >
+                        <td className="px-4 py-3">
+                          <Checkbox 
+                            checked={selectedClaims.includes(claim.id)}
+                            onCheckedChange={() => handleClaimSelect(claim.id)}
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium">{claim.claim_number}</td>
+                        <td className="px-4 py-3 text-sm">{claim.patient_name}</td>
+                        <td className="px-4 py-3 text-sm">{claim.insurer_name}</td>
+                        <td className="px-4 py-3 text-sm">SAR {parseFloat(claim.total_amount || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-sm">{new Date(claim.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                    {availableClaims.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                          No claims available for batching
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 px-6 py-4 border-t flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                {selectedClaims.length < 2 ? 'Select at least 2 claims' : `${selectedClaims.length} claims selected`}
+              </p>
+              <div className="flex space-x-3">
+                <Button variant="outline" onClick={() => setShowCreateModal(false)}>Cancel</Button>
+                <Button 
+                  onClick={handleCreateBatch} 
+                  disabled={selectedClaims.length < 2 || createLoading}
+                  className="bg-gradient-to-r from-primary-purple to-accent-purple"
+                >
+                  {createLoading ? 'Creating...' : 'Create Batch'}
+                </Button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Enhanced Drill-down Modal */}
-      {showDrillDown && (
+      {/* Batch Detail Modal */}
+      {selectedBatch && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="relative bg-white rounded-3xl max-w-7xl w-full max-h-[90vh] overflow-hidden ">
- 
-            <div className="relative bg-white rounded-3xl overflow-hidden">
-              {/* Header */}
-              <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h2 className="text-2xl font-bold">{drillDownTitle}</h2>
-                    <p className="text-white/80 mt-1">Detailed breakdown of selected data</p>
-                  </div>
-                  <button
-                    onClick={closeDrillDown}
-                    className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all duration-200"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+          <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold">Batch: {selectedBatch.batch_identifier}</h2>
+                  <p className="text-white/80 mt-1">
+                    <Badge variant="secondary" className="bg-white/20 text-white">
+                      {selectedBatch.status}
+                    </Badge>
+                  </p>
                 </div>
+                <button onClick={() => setSelectedBatch(null)} className="text-white/80 hover:text-white p-2">
+                  <X className="w-6 h-6" />
+                </button>
               </div>
-              
-              <div className="overflow-x-auto p-6">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="bg-gradient-to-r from-gray-50 to-gray-100">
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider rounded-tl-xl">
-                        Batch ID
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        Claims Count
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        Total Amount
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        Provider
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        Insurer
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider rounded-tr-xl">
-                        Date
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {drillDownData.map((item, index) => (
-                      <tr key={index} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {item.batch_identifier || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                            item.status === 'Processed' ? 'bg-accent-teal/10 text-accent-teal' :
-                            item.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                            item.status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {item.status || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {item.number_of_claims || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          ${parseFloat(item.total_amount || 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {item.provider_name || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {item.insurer_name || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {item.submission_date ? new Date(item.submission_date).toLocaleDateString() : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                
-                {drillDownData.length === 0 && (
-                  <div className="text-center text-gray-500 py-12">
-                    <div className="w-20 h-20 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center">
-                      <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </div>
-                    <p className="text-xl font-medium">No data found</p>
-                    <p className="text-gray-400 mt-2">No records match the selected criteria</p>
-                  </div>
-                )}
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {/* Batch Info */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">Total Claims</p>
+                  <p className="text-2xl font-bold">{selectedBatch.total_claims || selectedBatch.claims?.length || 0}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">Total Amount</p>
+                  <p className="text-2xl font-bold">SAR {parseFloat(selectedBatch.total_amount || 0).toLocaleString()}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">Approved</p>
+                  <p className="text-2xl font-bold text-green-600">{selectedBatch.approved_claims || selectedBatch.statistics?.approved_claims || 0}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">Rejected</p>
+                  <p className="text-2xl font-bold text-red-600">{selectedBatch.rejected_claims || selectedBatch.statistics?.rejected_claims || 0}</p>
+                </div>
               </div>
 
-              {/* Footer */}
-              <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-                <div className="flex justify-between items-center">
-                  <div className="text-sm text-gray-600">
-                    Showing {drillDownData.length} record{drillDownData.length !== 1 ? 's' : ''}
+              {/* Provider/Insurer Info */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="flex items-center space-x-3 bg-gray-50 rounded-lg p-4">
+                  <Building2 className="h-8 w-8 text-primary-purple" />
+                  <div>
+                    <p className="text-sm text-gray-500">Provider</p>
+                    <p className="font-semibold">{selectedBatch.provider_name}</p>
                   </div>
-                  <button
-                    onClick={closeDrillDown}
-                    className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-6 py-2 rounded-xl transition-all duration-200 font-medium"
-                  >
-                    Close
-                  </button>
+                </div>
+                <div className="flex items-center space-x-3 bg-gray-50 rounded-lg p-4">
+                  <Shield className="h-8 w-8 text-accent-purple" />
+                  <div>
+                    <p className="text-sm text-gray-500">Insurer</p>
+                    <p className="font-semibold">{selectedBatch.insurer_name}</p>
+                  </div>
                 </div>
               </div>
+
+              {/* Claims in Batch */}
+              {selectedBatch.claims && selectedBatch.claims.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Claims in Batch</h3>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">#</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Claim Number</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Patient</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Amount</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {selectedBatch.claims.map((claim, index) => (
+                          <tr key={claim.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm">{claim.batch_number || index + 1}</td>
+                            <td className="px-4 py-3 text-sm font-medium">{claim.claim_number}</td>
+                            <td className="px-4 py-3 text-sm">{claim.patient_name}</td>
+                            <td className="px-4 py-3 text-sm">SAR {parseFloat(claim.total_amount || 0).toLocaleString()}</td>
+                            <td className="px-4 py-3">
+                              <Badge variant={getStatusBadge(claim.status)}>{claim.status}</Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Errors */}
+              {selectedBatch.errors && selectedBatch.errors.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-3 text-red-600">Errors</h3>
+                  <div className="bg-red-50 rounded-lg p-4">
+                    {selectedBatch.errors.map((error, index) => (
+                      <div key={index} className="text-sm text-red-700 mb-2">
+                        {error.code && <span className="font-semibold">[{error.code}]</span>} {error.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-gray-50 px-6 py-4 border-t flex justify-between items-center">
+              <div className="text-sm text-gray-500">
+                Created: {new Date(selectedBatch.created_at).toLocaleString()}
+              </div>
+              <div className="flex space-x-3">
+                {selectedBatch.status === 'Draft' && (
+                  <>
+                    <Button variant="outline" onClick={() => handlePreviewBundle(selectedBatch.id)}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      Preview Bundle
+                    </Button>
+                    <Button onClick={() => handleSendToNphies(selectedBatch.id)} className="bg-gradient-to-r from-primary-purple to-accent-purple">
+                      <Send className="h-4 w-4 mr-2" />
+                      Send to NPHIES
+                    </Button>
+                  </>
+                )}
+                {['Submitted', 'Queued', 'Partial'].includes(selectedBatch.status) && (
+                  <Button onClick={() => handlePollResponses(selectedBatch.id)} variant="outline">
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Poll Responses
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setSelectedBatch(null)}>Close</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bundle Preview Modal */}
+      {showBundlePreview && bundlePreview && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold">FHIR Bundle Preview</h2>
+                  <p className="text-white/80 mt-1">This is what will be sent to NPHIES</p>
+                </div>
+                <button onClick={() => setShowBundlePreview(false)} className="text-white/80 hover:text-white p-2">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm">
+                {JSON.stringify(bundlePreview, null, 2)}
+              </pre>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 border-t flex justify-end">
+              <Button variant="outline" onClick={() => setShowBundlePreview(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drill-down Modal */}
+      {showDrillDown && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">{drillDownTitle}</h2>
+                <button onClick={() => setShowDrillDown(false)} className="text-white/80 hover:text-white p-2">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Batch ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Claims</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Amount</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Provider</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Insurer</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {drillDownData.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium">{item.batch_identifier}</td>
+                      <td className="px-4 py-3"><Badge variant={getStatusBadge(item.status)}>{item.status}</Badge></td>
+                      <td className="px-4 py-3 text-sm">{item.total_claims || item.claim_count || 0}</td>
+                      <td className="px-4 py-3 text-sm">SAR {parseFloat(item.total_amount || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-sm">{item.provider_name}</td>
+                      <td className="px-4 py-3 text-sm">{item.insurer_name}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 border-t flex justify-between items-center">
+              <span className="text-sm text-gray-500">{drillDownData.length} batches</span>
+              <Button variant="outline" onClick={() => setShowDrillDown(false)}>Close</Button>
             </div>
           </div>
         </div>

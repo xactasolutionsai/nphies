@@ -161,6 +161,65 @@ class ApiService {
     return this.request(`/claim-batches/${id}`);
   }
 
+  async getClaimBatchStats() {
+    return this.request('/claim-batches/stats');
+  }
+
+  async getAvailableClaimsForBatch(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/claim-batches/available-claims${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async createClaimBatch(data) {
+    return this.request('/claim-batches/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async addClaimsToBatch(batchId, claimIds) {
+    return this.request(`/claim-batches/${batchId}/add-claims`, {
+      method: 'POST',
+      body: JSON.stringify({ claim_ids: claimIds }),
+    });
+  }
+
+  async removeClaimsFromBatch(batchId, claimIds) {
+    return this.request(`/claim-batches/${batchId}/remove-claims`, {
+      method: 'POST',
+      body: JSON.stringify({ claim_ids: claimIds }),
+    });
+  }
+
+  async previewBatchBundle(batchId) {
+    return this.request(`/claim-batches/${batchId}/bundle`);
+  }
+
+  async sendBatchToNphies(batchId) {
+    return this.request(`/claim-batches/${batchId}/send`, {
+      method: 'POST',
+    });
+  }
+
+  async pollBatchResponses(batchId) {
+    return this.request(`/claim-batches/${batchId}/poll`, {
+      method: 'POST',
+    });
+  }
+
+  async updateClaimBatchStatus(batchId, status, description) {
+    return this.request(`/claim-batches/${batchId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, description }),
+    });
+  }
+
+  async deleteClaimBatch(batchId) {
+    return this.request(`/claim-batches/${batchId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Payments
   async getPayments(params = {}) {
     const queryString = new URLSearchParams(params).toString();
