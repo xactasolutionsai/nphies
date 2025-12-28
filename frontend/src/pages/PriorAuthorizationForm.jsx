@@ -1808,9 +1808,19 @@ export default function PriorAuthorizationForm() {
       if (itemsOutsidePeriod.length > 0) {
         const itemNumbers = itemsOutsidePeriod.map(item => item.sequence || formData.items.indexOf(item) + 1).join(', ');
         const endDateText = encounterEnd ? ' and end' : ' and today (ongoing encounter)';
+        
+        // Debug: show actual date values being compared
+        const encounterStartDateOnly = getLocalDateOnly(encounterStart);
+        const encounterEndDateOnly = encounterEnd ? getLocalDateOnly(encounterEnd) : todayDateOnly;
+        const itemDates = itemsOutsidePeriod.map(item => {
+          const servicedDateStr = item.serviced_date?.trim() || 'not set';
+          const servicedDateOnly = servicedDateStr.split('T')[0].split(' ')[0];
+          return `Item ${item.sequence || formData.items.indexOf(item) + 1}: servicedDate="${servicedDateStr}" (parsed as "${servicedDateOnly}")`;
+        }).join('; ');
+        
         validationErrors.push({ 
           field: 'items', 
-          message: `Item(s) ${itemNumbers} have serviced date outside the encounter period. NPHIES requires item servicedDate to be within encounter start${endDateText} dates (BV-00041).` 
+          message: `Item(s) ${itemNumbers} have serviced date outside the encounter period. Encounter: ${encounterStartDateOnly} to ${encounterEndDateOnly}. ${itemDates}. NPHIES requires item servicedDate to be within encounter start${endDateText} dates (BV-00041).` 
         });
       }
     }
