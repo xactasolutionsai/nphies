@@ -274,12 +274,13 @@ class ProfessionalMapper extends BaseMapper {
     
     // Get the clinic specialty code from priorAuth, practitioner, or use default
     // BV-00898: Must use http://nphies.sa/terminology/CodeSystem/clinic-specialty
+    // Note: clinic-specialty codes appear to be the same as practice-codes (e.g., '08.00', '08.26')
     const specialtyCode = priorAuth?.practice_code || 
                           practitioner?.practice_code || 
                           practitioner?.specialty_code || 
                           '08.00'; // Default to Internal Medicine
     
-    const specialtyDisplay = this.getPracticeCodeDisplay(specialtyCode);
+    const specialtyDisplay = this.getClinicSpecialtyDisplay(specialtyCode);
     
     // Build Location resource per NPHIES location profile
     // Reference: http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location
@@ -331,6 +332,82 @@ class ProfessionalMapper extends BaseMapper {
       fullUrl: `http://provider.com/Location/${locationId}`,
       resource: location
     };
+  }
+
+  /**
+   * Get clinic specialty display text
+   * Reference: http://nphies.sa/terminology/CodeSystem/clinic-specialty
+   * Note: These codes appear to match practice-codes but may have different display names
+   */
+  getClinicSpecialtyDisplay(code) {
+    // Clinic specialty codes - these are the same format as practice-codes
+    // but specifically for Location.type in Ambulatory/Virtual encounters
+    const displays = {
+      // Anesthesiology
+      '01.00': 'Anesthesiology',
+      '01.01': 'Ambulatory Anesthesia',
+      // Community Medicine
+      '02.00': 'Community Medicine',
+      // Dermatology
+      '03.00': 'Dermatology',
+      // Emergency Medicine
+      '04.00': 'Emergency Medicine',
+      // ENT
+      '05.00': 'Ear, Nose & Throat',
+      // Family Medicine
+      '06.00': 'Family Medicine',
+      '06.05': 'Primary Health Care',
+      // Forensic Medicine
+      '07.00': 'Forensic Medicine',
+      // Internal Medicine
+      '08.00': 'Internal Medicine',
+      '08.02': 'Cardiology',
+      '08.03': 'Diabetics Medicine',
+      '08.04': 'Endocrinology',
+      '08.05': 'Gastroenterology',
+      '08.06': 'Geriatrics',
+      '08.07': 'Hematology',
+      '08.08': 'Infectious Diseases',
+      '08.09': 'Nephrology',
+      '08.10': 'Nuclear Medicine',
+      '08.11': 'Oncology',
+      '08.13': 'Pulmonology',
+      '08.14': 'Rheumatology',
+      '08.18': 'Neurology',
+      '08.26': 'General Medicine',
+      // Obstetrics & Gynecology
+      '09.00': 'Obstetrics & Gynecology',
+      // Ophthalmology
+      '10.00': 'Ophthalmology',
+      // Pathology
+      '11.00': 'Pathology',
+      // Pediatrics
+      '12.00': 'Pediatrics',
+      // Psychiatry
+      '13.00': 'Psychiatry',
+      // Radiology
+      '14.00': 'Radiology',
+      // Surgery
+      '15.00': 'Surgery',
+      '15.01': 'General Surgery',
+      '15.02': 'Cardiac Surgery',
+      '15.03': 'Neurosurgery',
+      '15.04': 'Orthopedic Surgery',
+      '15.05': 'Plastic Surgery',
+      '15.06': 'Urology',
+      '15.07': 'Vascular Surgery',
+      // Dentistry
+      '16.00': 'Dentistry',
+      // Physical Medicine
+      '17.00': 'Physical Medicine',
+      // Laboratory
+      '18.00': 'Laboratory',
+      // Pharmacy
+      '19.00': 'Pharmacy',
+      // Nursing
+      '20.00': 'Nursing'
+    };
+    return displays[code] || this.getPracticeCodeDisplay(code) || code;
   }
 
   /**
@@ -912,7 +989,17 @@ class ProfessionalMapper extends BaseMapper {
     // BV-00733, BV-00734: Triage date and category are REQUIRED for emergency
     if (encounterClass === 'emergency') {
       // Triage Category - REQUIRED for EMER (BV-00734)
-      const triageCategory = priorAuth.triage_category || 'U'; // Default to Urgent if not provided
+      // IB-00415: Must use valid codes from triage-category ValueSet
+      // Valid codes: I (Immediate), VU (Very Urgent), U (Urgent), S (Standard), NS (Non-Standard)
+      const validTriageCodes = ['I', 'VU', 'U', 'S', 'NS'];
+      let triageCategory = priorAuth.triage_category || 'U'; // Default to Urgent if not provided
+      
+      // Validate and normalize triage category
+      if (!validTriageCodes.includes(triageCategory)) {
+        console.warn(`[ProfessionalMapper] Invalid triage category '${triageCategory}' corrected to 'U' (IB-00415)`);
+        triageCategory = 'U';
+      }
+      
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageCategory',
         valueCodeableConcept: {
@@ -933,7 +1020,16 @@ class ProfessionalMapper extends BaseMapper {
     }
 
     // Service Event Type - REQUIRED for professional encounters (BV-00736)
-    const serviceEventType = priorAuth.service_event_type || 'ICSE'; // Default to Initial if not provided
+    // Valid codes: ICSE (Initial), SCSE (Subsequent)
+    const validServiceEventTypes = ['ICSE', 'SCSE'];
+    let serviceEventType = priorAuth.service_event_type || 'ICSE'; // Default to Initial if not provided
+    
+    // Validate service event type
+    if (!validServiceEventTypes.includes(serviceEventType)) {
+      console.warn(`[ProfessionalMapper] Invalid service event type '${serviceEventType}' corrected to 'ICSE'`);
+      serviceEventType = 'ICSE';
+    }
+    
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceEventType',
       valueCodeableConcept: {
