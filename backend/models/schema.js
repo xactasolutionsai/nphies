@@ -401,7 +401,8 @@ export const validationSchemas = {
     admit_source: Joi.string().max(20).allow(null, '').optional(), // NPHIES: hospitalization.admitSource code
     
     // Emergency Encounter Fields (per NPHIES Encounter-10122)
-    triage_category: Joi.string().valid('I', 'VU', 'U', 'S', 'NS').allow(null, '').optional(),
+    // Triage Category codes per NPHIES ValueSet: https://portal.nphies.sa/ig/ValueSet-triage-category.html
+    triage_category: Joi.string().valid('IR', 'VU', 'U', 'NU', 'SER').allow(null, '').optional(),
     triage_date: Joi.date().allow(null, '').optional(),
     encounter_priority: Joi.string().valid('EM', 'UR', 'S', 'A', 'R', 'EL', 'CR', 'CS', 'CSP', 'CSR', 'P', 'PRN', 'RR', 'T', 'UD').allow(null, '').optional(),
     
