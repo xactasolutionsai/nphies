@@ -202,13 +202,23 @@ class ClaimBatchesController extends BaseController {
 
   /**
    * Get available claims for batch creation
-   * Returns claims that are not already in a batch and are for the specified insurer
+   * Returns claims that:
+   * - Are not in any batch, OR
+   * - Are in a batch with Error/Rejected status (can be reused for testing)
    */
   async getAvailableClaims(req, res) {
     try {
-      const { insurer_id, provider_id } = req.query;
+      const { insurer_id, provider_id, include_failed_batch } = req.query;
 
-      let whereConditions = ['cs.batch_id IS NULL', "cs.status IN ('draft', 'pending')"];
+      // Base condition: claims not in a batch OR in a failed/error batch
+      // This allows reusing claims from failed batches for testing
+      let whereConditions = [
+        `(
+          cs.batch_id IS NULL 
+          OR cb.status IN ('Error', 'Rejected', 'Draft')
+        )`,
+        "cs.status IN ('draft', 'pending', 'error')"
+      ];
       let queryParams = [];
       let paramIndex = 1;
 
@@ -233,17 +243,21 @@ class ClaimBatchesController extends BaseController {
           cs.total_amount,
           cs.service_date,
           cs.created_at,
+          cs.batch_id,
           p.name as patient_name,
           p.identifier as patient_identifier,
           pr.provider_name,
           pr.nphies_id as provider_nphies_id,
           i.insurer_name,
           i.nphies_id as insurer_nphies_id,
-          i.insurer_id
+          i.insurer_id,
+          cb.batch_identifier as current_batch_identifier,
+          cb.status as current_batch_status
         FROM claim_submissions cs
         LEFT JOIN patients p ON cs.patient_id = p.patient_id
         LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
         LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
+        LEFT JOIN claim_batches cb ON cs.batch_id = cb.id
         WHERE ${whereConditions.join(' AND ')}
         ORDER BY cs.created_at DESC
         LIMIT 500
@@ -294,11 +308,14 @@ class ClaimBatchesController extends BaseController {
       }
 
       // Verify all claims exist and are for the same insurer
+      // Also check if they're in a failed batch (which can be reused)
       const claimsResult = await query(`
         SELECT cs.id, cs.insurer_id, cs.provider_id, cs.batch_id, cs.status, cs.total_amount,
-               i.insurer_id as ins_uuid, i.nphies_id as insurer_nphies_id, i.insurer_name
+               i.insurer_id as ins_uuid, i.nphies_id as insurer_nphies_id, i.insurer_name,
+               cb.status as batch_status, cb.batch_identifier as current_batch_identifier
         FROM claim_submissions cs
         LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
+        LEFT JOIN claim_batches cb ON cs.batch_id = cb.id
         WHERE cs.id = ANY($1::int[])
       `, [claim_ids]);
 
@@ -314,12 +331,26 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: 'All claims in a batch must be for the same insurer' });
       }
 
-      // Check no claims are already in a batch
-      const claimsInBatch = claimsResult.rows.filter(c => c.batch_id !== null);
-      if (claimsInBatch.length > 0) {
+      // Check claims are not in an ACTIVE batch (allow reuse from Error/Rejected/Draft batches)
+      const claimsInActiveBatch = claimsResult.rows.filter(c => 
+        c.batch_id !== null && 
+        !['Error', 'Rejected', 'Draft'].includes(c.batch_status)
+      );
+      if (claimsInActiveBatch.length > 0) {
         return res.status(400).json({ 
-          error: `Claims already in a batch: ${claimsInBatch.map(c => c.id).join(', ')}` 
+          error: `Claims are in an active batch: ${claimsInActiveBatch.map(c => `${c.id} (${c.current_batch_identifier})`).join(', ')}` 
         });
+      }
+
+      // Clear batch_id for claims being moved from failed batches
+      const claimsToUnassign = claimsResult.rows.filter(c => c.batch_id !== null);
+      if (claimsToUnassign.length > 0) {
+        await query(`
+          UPDATE claim_submissions 
+          SET batch_id = NULL, batch_number = NULL 
+          WHERE id = ANY($1::int[])
+        `, [claimsToUnassign.map(c => c.id)]);
+        console.log(`[BatchClaims] Unassigned ${claimsToUnassign.length} claims from previous failed batches`);
       }
 
       // Calculate total amount

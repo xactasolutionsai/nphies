@@ -763,7 +763,7 @@ export default function ClaimBatches() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Patient</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Insurer</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Amount</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -783,13 +783,28 @@ export default function ClaimBatches() {
                         <td className="px-4 py-3 text-sm">{claim.patient_name}</td>
                         <td className="px-4 py-3 text-sm">{claim.insurer_name}</td>
                         <td className="px-4 py-3 text-sm">SAR {parseFloat(claim.total_amount || 0).toLocaleString()}</td>
-                        <td className="px-4 py-3 text-sm">{new Date(claim.created_at).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-sm">
+                          {claim.current_batch_identifier ? (
+                            <div className="flex flex-col">
+                              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                From: {claim.current_batch_identifier}
+                              </Badge>
+                              <span className="text-xs text-gray-400 mt-0.5">
+                                {claim.current_batch_status} - Can reuse
+                              </span>
+                            </div>
+                          ) : (
+                            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                              {claim.status || 'New'}
+                            </Badge>
+                          )}
+                        </td>
                       </tr>
                     ))}
                     {availableClaims.length === 0 && (
                       <tr>
                         <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                          No claims available for batching
+                          No claims available for batching. Create claims first or check if existing claims are in active batches.
                         </td>
                       </tr>
                     )}
