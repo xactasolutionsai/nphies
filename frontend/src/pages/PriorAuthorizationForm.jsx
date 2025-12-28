@@ -139,7 +139,7 @@ export default function PriorAuthorizationForm() {
     admit_source: 'WKIN', // NPHIES: hospitalization.admitSource (default: Walk-in)
     service_event_type: 'ICSE', // NPHIES: ICSE (Initial) or SCSE (Subsequent)
     // Emergency encounter fields (per NPHIES Encounter-10122.json)
-    triage_category: '', // Required for EMER: I, VU, U, S, NS
+    triage_category: '', // Required for EMER: IR, VU, U, NU, SER (per NPHIES ValueSet)
     triage_date: '', // Required for EMER: datetime of triage assessment
     service_type: '', // Service type: acute-care, sub-acute-care, etc.
     encounter_priority: '', // For EMER: EM, UR, S, etc.

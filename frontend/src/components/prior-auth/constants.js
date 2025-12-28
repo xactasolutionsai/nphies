@@ -665,13 +665,14 @@ export const SERVICE_EVENT_TYPE_OPTIONS = [
 
 // NPHIES Triage Category Options (for emergency encounters)
 // Reference: http://nphies.sa/terminology/CodeSystem/triage-category
-// Reference: https://portal.nphies.sa/ig/Encounter-10122.json.html
+// Reference: https://portal.nphies.sa/ig/ValueSet-triage-category.html
+// Valid codes per NPHIES ValueSet: IR, U, VU, NU, SER
 export const TRIAGE_CATEGORY_OPTIONS = [
-  { value: 'I', label: 'I - Immediate (Life threatening)' },
+  { value: 'IR', label: 'IR - Immediate resuscitation (Life threatening)' },
   { value: 'VU', label: 'VU - Very Urgent (Serious)' },
   { value: 'U', label: 'U - Urgent (Significant)' },
-  { value: 'S', label: 'S - Standard (Routine)' },
-  { value: 'NS', label: 'NS - Non-Standard (Minor)' }
+  { value: 'NU', label: 'NU - Non-Urgent (Minor)' },
+  { value: 'SER', label: 'SER - Standard ER (Routine)' }
 ];
 
 // NPHIES Service Type Options (for encounter)

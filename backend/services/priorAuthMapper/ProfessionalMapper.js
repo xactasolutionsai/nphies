@@ -931,14 +931,16 @@ class ProfessionalMapper extends BaseMapper {
   /**
    * Get triage category display text
    * Reference: http://nphies.sa/terminology/CodeSystem/triage-category
+   * Reference: https://portal.nphies.sa/ig/ValueSet-triage-category.html
+   * Valid codes: IR, U, VU, NU, SER
    */
   getTriageCategoryDisplay(code) {
     const displays = {
-      'I': 'Immediate',
+      'IR': 'Immediate resuscitation',
       'VU': 'Very Urgent',
       'U': 'Urgent',
-      'S': 'Standard',
-      'NS': 'Non-Standard'
+      'NU': 'Non-Urgent',
+      'SER': 'Standard ER'
     };
     return displays[code] || code;
   }
