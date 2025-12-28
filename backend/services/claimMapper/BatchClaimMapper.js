@@ -185,9 +185,24 @@ class BatchClaimMapper {
     });
 
     // Build outer batch bundle
-    // NPHIES Batch structure: 
+    // NPHIES Batch structure (from sample Batch Claim.json):
     // - First entry: MessageHeader with fullUrl (focus references inner MessageHeaders)
-    // - Subsequent entries: Claim bundles WITHOUT fullUrl wrapper (direct bundle objects)
+    // - Subsequent entries: Claim bundles as DIRECT objects (no fullUrl/resource wrapper)
+    //   IMPORTANT: resourceType must be FIRST property in nested bundles
+    
+    // Ensure nested bundles have resourceType as first property
+    const formattedClaimBundles = claimBundles.map(bundle => {
+      // Reconstruct bundle with resourceType first (JSON property order matters for NPHIES)
+      return {
+        resourceType: 'Bundle',
+        id: bundle.id,
+        meta: bundle.meta,
+        type: bundle.type,
+        timestamp: bundle.timestamp,
+        entry: bundle.entry
+      };
+    });
+    
     const batchBundle = {
       resourceType: 'Bundle',
       id: bundleId,
@@ -211,7 +226,7 @@ class BatchClaimMapper {
               code: 'batch-request'
             },
             destination: [{
-              endpoint: `http://nphies.sa/license/payer-license/${insurer.nphies_id || 'INS-FHIR'}`,
+              endpoint: 'http://nphies.sa/license/payer-license/destinationLicense',
               receiver: {
                 type: 'Organization',
                 identifier: {
@@ -233,9 +248,9 @@ class BatchClaimMapper {
             focus: focusReferences
           }
         },
-        // Add all claim bundles as direct entries WITHOUT fullUrl wrapper
-        // This matches the NPHIES sample structure where nested bundles are direct objects
-        ...claimBundles
+        // Add all claim bundles as DIRECT entries (no fullUrl/resource wrapper)
+        // This matches the NPHIES sample structure exactly
+        ...formattedClaimBundles
       ]
     };
 
@@ -243,12 +258,14 @@ class BatchClaimMapper {
   }
 
   /**
-   * Add batch-specific extensions to the Claim resource within a bundle
+   * Add batch-specific extensions and modifications to the Claim resource within a bundle
    * 
    * Required extensions:
    * - extension-batch-identifier: Provider-supplied unique batch ID
    * - extension-batch-number: Unique number for each claim within batch
    * - extension-batch-period: Creation period for claims in batch
+   * 
+   * IMPORTANT: Batch claims MUST have priority = "normal" (per NPHIES documentation)
    * 
    * @param {Object} claimBundle - The claim request bundle
    * @param {Object} batchInfo - Batch information
@@ -267,6 +284,15 @@ class BatchClaimMapper {
     }
 
     const claim = claimEntry.resource;
+
+    // CRITICAL: Force priority to "normal" for batch claims
+    // Per NPHIES documentation: Batch claims MUST have Claim.priority as "normal"
+    claim.priority = {
+      coding: [{
+        system: 'http://terminology.hl7.org/CodeSystem/processpriority',
+        code: 'normal'
+      }]
+    };
 
     // Initialize extension array if not present
     if (!claim.extension) {
