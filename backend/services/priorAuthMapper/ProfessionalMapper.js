@@ -412,7 +412,9 @@ class ProfessionalMapper extends BaseMapper {
                           encounterClass === 'ambulatory' || encounterClass === 'virtual' || encounterClass === 'telemedicine';
     
     if (needsFacility) {
-      claim.facility = { reference: `Organization/${providerRef}` };
+      // Use full URL format to match the fullUrl of the provider Organization entry in the bundle
+      // This fixes RE-00005: Claim facility is not referring to a valid resource
+      claim.facility = { reference: `http://provider.com/Organization/${providerRef}` };
     }
     
     claim.priority = {
