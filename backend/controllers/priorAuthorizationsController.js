@@ -201,7 +201,7 @@ class PriorAuthorizationsController extends BaseController {
         pa.total_amount, pa.approved_amount, pa.eligible_amount, pa.benefit_amount, pa.copay_amount,
         pa.currency, pa.request_bundle, pa.response_bundle, pa.request_date, pa.response_date,
         pa.pre_auth_period_start, pa.pre_auth_period_end, pa.created_at, pa.updated_at,
-        pa.encounter_identifier, pa.service_type, pa.sub_type, pa.vision_prescription,
+        pa.encounter_identifier, pa.service_type, pa.sub_type, pa.admit_source, pa.vision_prescription,
         pa.nphies_message_id, pa.nphies_response_code, pa.original_request_identifier,
         pa.insurance_sequence, pa.insurance_focal,
         pa.claim_response_status, pa.claim_response_use, pa.claim_response_created,
