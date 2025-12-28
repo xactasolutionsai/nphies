@@ -139,7 +139,8 @@ class DentalMapper extends BaseMapper {
       practitionerResource,
       providerResource,
       insurerResource,
-      patientResource,
+      newbornPatientResource, // Patient resource (named newbornPatientResource for consistency with other mappers)
+      ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present (for newborn cases)
       ...binaryResources
     ];
 
