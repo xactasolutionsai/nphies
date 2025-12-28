@@ -41,16 +41,16 @@ class ClaimBatchesController extends BaseController {
       let queryParams = [];
       let paramIndex = 1;
 
-      if (search) {
+        if (search) {
         whereConditions.push(`(cb.batch_identifier ILIKE $${paramIndex} OR pr.provider_name ILIKE $${paramIndex} OR i.insurer_name ILIKE $${paramIndex})`);
-        queryParams.push(`%${search}%`);
-        paramIndex++;
-      }
+          queryParams.push(`%${search}%`);
+          paramIndex++;
+        }
 
-      if (status) {
+        if (status) {
         whereConditions.push(`cb.status = $${paramIndex}`);
-        queryParams.push(status);
-        paramIndex++;
+          queryParams.push(status);
+          paramIndex++;
       }
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -122,22 +122,22 @@ class ClaimBatchesController extends BaseController {
    * Internal method to get batch with full details
    */
   async getByIdInternal(id) {
-    // Get batch details
-    const batchResult = await query(`
-      SELECT 
-        cb.*,
+      // Get batch details
+      const batchResult = await query(`
+        SELECT 
+          cb.*,
         pr.provider_name as provider_name,
-        pr.type as provider_type,
-        pr.nphies_id as provider_nphies_id,
+          pr.type as provider_type,
+          pr.nphies_id as provider_nphies_id,
         i.insurer_name as insurer_name,
-        i.nphies_id as insurer_nphies_id
-      FROM claim_batches cb
+          i.nphies_id as insurer_nphies_id
+        FROM claim_batches cb
       LEFT JOIN providers pr ON cb.provider_id = pr.provider_id
       LEFT JOIN insurers i ON cb.insurer_id = i.insurer_id
-      WHERE cb.id = $1
-    `, [id]);
+        WHERE cb.id = $1
+      `, [id]);
 
-    if (batchResult.rows.length === 0) {
+      if (batchResult.rows.length === 0) {
       return null;
     }
 
@@ -938,7 +938,7 @@ class ClaimBatchesController extends BaseController {
         p.identifier as patient_identifier, 
         p.gender as patient_gender, 
         p.birth_date as patient_birth_date,
-        p.nphies_id as patient_nphies_id,
+        p.nphies_patient_id as patient_nphies_id,
         pr.provider_name, 
         pr.nphies_id as provider_nphies_id, 
         pr.provider_type,
