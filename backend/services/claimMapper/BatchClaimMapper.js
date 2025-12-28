@@ -154,6 +154,7 @@ class BatchClaimMapper {
     // Build individual claim bundles with batch extensions
     const claimBundles = [];
     const focusReferences = [];
+    const nestedBundleIds = [];
 
     claims.forEach((claimData, index) => {
       const batchNumber = index + 1;
@@ -173,13 +174,14 @@ class BatchClaimMapper {
         batchPeriodEnd
       });
 
-      // Get the MessageHeader ID from the claim bundle for focus reference
-      const claimMsgHeader = claimBundle.entry?.find(
-        e => e.resource?.resourceType === 'MessageHeader'
-      );
-      if (claimMsgHeader) {
-        focusReferences.push({ reference: claimMsgHeader.fullUrl });
-      }
+      // Generate a unique ID for the nested bundle wrapper
+      // IMPORTANT: The outer MessageHeader.focus must reference the nested BUNDLE fullUrls,
+      // NOT the inner MessageHeader fullUrls. NPHIES cannot resolve references inside nested bundles.
+      const nestedBundleId = claimBundle.id || this.generateId();
+      nestedBundleIds.push(nestedBundleId);
+      
+      // Focus references point to the nested bundle fullUrls (not inner MessageHeaders)
+      focusReferences.push({ reference: `urn:uuid:${nestedBundleId}` });
 
       claimBundles.push(claimBundle);
     });
@@ -194,10 +196,14 @@ class BatchClaimMapper {
     // - FR-00027: The element does not exist in the base FHIR profile
     //
     // So we wrap nested bundles in standard { fullUrl, resource } format
+    // 
+    // CRITICAL FIX: The outer MessageHeader.focus must reference these nested bundle fullUrls,
+    // NOT the inner MessageHeaders. NPHIES error RE-00169 occurs when focus references
+    // resources inside nested bundles that NPHIES cannot resolve.
     
-    const formattedClaimBundleEntries = claimBundles.map(bundle => {
-      // Generate a unique fullUrl for each nested bundle
-      const nestedBundleId = bundle.id || this.generateId();
+    const formattedClaimBundleEntries = claimBundles.map((bundle, index) => {
+      // Use the pre-generated nestedBundleId that matches the focus references
+      const nestedBundleId = nestedBundleIds[index];
       return {
         fullUrl: `urn:uuid:${nestedBundleId}`,
         resource: {

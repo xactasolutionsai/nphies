@@ -756,20 +756,13 @@ class BaseMapper {
       }
     }
 
-    if (coverage?.network) {
-      coverageResource.class.push({
-        type: {
-          coding: [
-            {
-              system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
-              code: 'network'
-            }
-          ]
-        },
-        value: coverage.network,
-        name: coverage.network_name || 'Network'
-      });
-    }
+    // Note: The 'network' code from http://terminology.hl7.org/CodeSystem/coverage-class
+    // is NOT valid in the NPHIES ValueSet (IB-00242 error).
+    // NPHIES only accepts: 'group', 'subgroup', 'plan', 'subplan', 'class', 'subclass', 
+    // 'sequence', 'rxbin', 'rxpcn', 'rxid', 'rxgroup'.
+    // We store network info in a comment/extension instead, or skip it entirely.
+    // If network data is needed, consider using a NPHIES-specific extension.
+    // For now, we skip adding the network class to avoid validation errors.
 
     return {
       fullUrl: `http://provider.com/Coverage/${coverageId}`,
