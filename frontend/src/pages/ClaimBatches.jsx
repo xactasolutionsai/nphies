@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem } from '@/components/ui/select';
 import DataTable from '@/components/DataTable';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Package, TrendingUp, Users, DollarSign, Calendar, Building2, Shield, Receipt, Plus, Send, RefreshCw, Eye, Trash2, X, CheckCircle2, AlertCircle, Clock, Layers } from 'lucide-react';
@@ -179,12 +180,41 @@ export default function ClaimBatches() {
     }
   };
 
+  // Generate batch identifier options
+  const generateBatchIdentifierOptions = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const timestamp = Date.now();
+    const shortId = timestamp.toString().slice(-6);
+    
+    return [
+      { value: `BATCH-${year}${month}${day}-${shortId}`, label: `BATCH-${year}${month}${day}-${shortId} (Date + ID)` },
+      { value: `BATCH-${year}-${month}-${shortId}`, label: `BATCH-${year}-${month}-${shortId} (Year-Month + ID)` },
+      { value: `CLM-BATCH-${shortId}`, label: `CLM-BATCH-${shortId} (Simple)` },
+      { value: `MONTHLY-${year}${month}-${shortId}`, label: `MONTHLY-${year}${month}-${shortId} (Monthly)` },
+      { value: `WEEKLY-${year}W${getWeekNumber(now)}-${shortId}`, label: `WEEKLY-${year}W${getWeekNumber(now)}-${shortId} (Weekly)` },
+      { value: `DAILY-${year}${month}${day}-${shortId}`, label: `DAILY-${year}${month}${day}-${shortId} (Daily)` },
+    ];
+  };
+
+  const getWeekNumber = (date) => {
+    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+    const pastDaysOfYear = (date - firstDayOfYear) / 86400000;
+    return String(Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7)).padStart(2, '0');
+  };
+
+  const [batchIdentifierOptions, setBatchIdentifierOptions] = useState([]);
+
   // Batch creation handlers
   const openCreateModal = () => {
     setShowCreateModal(true);
     setSelectedClaims([]);
+    const options = generateBatchIdentifierOptions();
+    setBatchIdentifierOptions(options);
     setBatchForm({
-      batch_identifier: `BATCH-${Date.now()}`,
+      batch_identifier: options[0].value,
       batch_period_start: new Date().toISOString().split('T')[0],
       batch_period_end: new Date().toISOString().split('T')[0],
       description: ''
@@ -665,11 +695,19 @@ export default function ClaimBatches() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
                   <Label>Batch Identifier</Label>
-                  <Input
+                  <Select
                     value={batchForm.batch_identifier}
-                    onChange={(e) => setBatchForm(prev => ({ ...prev, batch_identifier: e.target.value }))}
-                    placeholder="Enter batch identifier"
-                  />
+                    onValueChange={(value) => setBatchForm(prev => ({ ...prev, batch_identifier: value }))}
+                    placeholder="Select batch identifier format"
+                  >
+                    <SelectContent>
+                      {batchIdentifierOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>Description</Label>
