@@ -384,13 +384,17 @@ class ProfessionalMapper extends BaseMapper {
         }
       ]
     };
-    // Use explicit sub_type if provided, otherwise derive from encounter_class
-    // This ensures the sub_type selected in the form is preserved in the FHIR bundle
+    // BV-00365, BV-00034: Professional claims MUST use OP or EMR subType only
+    let subTypeCode = priorAuth.sub_type || this.getClaimSubTypeCode(priorAuth.encounter_class || 'ambulatory', 'professional');
+    if (!['op', 'emr'].includes(subTypeCode)) {
+      console.warn(`[ProfessionalMapper] Invalid subType '${subTypeCode}' corrected to 'op' (BV-00365, BV-00034)`);
+      subTypeCode = 'op';
+    }
     claim.subType = {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-          code: priorAuth.sub_type || this.getClaimSubTypeCode(priorAuth.encounter_class || 'ambulatory', 'professional')
+          code: subTypeCode
         }
       ]
     };
@@ -797,7 +801,14 @@ class ProfessionalMapper extends BaseMapper {
     const patientId = bundleResourceIds.patient;
     const providerId = bundleResourceIds.provider;
     
-    const encounterClass = priorAuth.encounter_class || 'ambulatory';
+    let encounterClass = priorAuth.encounter_class || 'ambulatory';
+    
+    // BV-00755: If subType=EMR then Encounter.class MUST be EMER
+    const subTypeCode = priorAuth.sub_type || 'op';
+    if (subTypeCode === 'emr' && encounterClass !== 'emergency') {
+      console.warn(`[ProfessionalMapper] BV-00755 violation: subType=EMR requires encounter.class=EMER. Correcting encounter class from '${encounterClass}' to 'emergency'`);
+      encounterClass = 'emergency';
+    }
     const encounterIdentifier = priorAuth.encounter_identifier || 
                                 priorAuth.request_number || 
                                 `ENC-${encounterId.substring(0, 8)}`;

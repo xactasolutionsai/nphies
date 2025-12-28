@@ -236,10 +236,11 @@ class VisionClaimMapper extends VisionPAMapper {
           code: 'vision' 
         }] 
       },
+      // BV-00367: Vision claims MUST use OP subType only
       subType: { 
         coding: [{ 
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype', 
-          code: 'op'  // Vision is always outpatient
+          code: 'op'  // Force OP always - BV-00367: Vision must be OP only
         }] 
       },
       use: 'claim',  // Changed from 'preauthorization'

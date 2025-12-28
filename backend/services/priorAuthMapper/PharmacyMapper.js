@@ -277,12 +277,15 @@ class PharmacyMapper extends BaseMapper {
       ]
     };
 
-    // SubType (required) - must be 'op' (outpatient) for pharmacy claims
+    // BV-00368: Pharmacy claims MUST use OP subType only
+    if (priorAuth.sub_type && priorAuth.sub_type !== 'op') {
+      console.warn(`[PharmacyMapper] Invalid subType '${priorAuth.sub_type}' corrected to 'op' (BV-00368)`);
+    }
     claim.subType = {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-          code: priorAuth.sub_type || 'op' // Default to 'op' (OutPatient) for pharmacy
+          code: 'op' // Force OP always - BV-00368: Pharmacy must be OP only
         }
       ]
     };

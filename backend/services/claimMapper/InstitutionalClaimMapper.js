@@ -247,10 +247,11 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
           code: 'institutional' 
         }] 
       },
+      // BV-00364, BV-00032: Institutional claims MUST use IP subType only
       subType: { 
         coding: [{ 
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype', 
-          code: claim.sub_type || 'ip' 
+          code: 'ip' // Force IP always - BV-00364, BV-00032: Institutional must be IP only
         }] 
       },
       use: 'claim',  // Changed from 'preauthorization'
@@ -571,7 +572,12 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
    */
   buildClaimEncounterResource(claim, patient, provider, bundleResourceIds) {
     const encounterId = bundleResourceIds.encounter;
-    const encounterClass = claim.encounter_class || 'daycase';
+    // BV-00741, BV-00807: Institutional encounters MUST use IMP or SS only
+    let encounterClass = claim.encounter_class || 'daycase';
+    if (!['inpatient', 'daycase'].includes(encounterClass)) {
+      console.warn(`[InstitutionalClaimMapper] Invalid encounter class '${encounterClass}' corrected to 'daycase' (BV-00741, BV-00807)`);
+      encounterClass = 'daycase';
+    }
     const encounterIdentifier = claim.encounter_identifier || claim.claim_number || `ENC-${encounterId.substring(0, 8)}`;
     const providerNphiesId = NPHIES_CONFIG.PROVIDER_DOMAIN || 'provider';
 

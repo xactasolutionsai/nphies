@@ -240,12 +240,15 @@ class VisionMapper extends BaseMapper {
         }
       ]
     };
-    // BV-00367: Vision must use 'op' subType (default), but respect explicit sub_type if provided
+    // BV-00367: Vision claims MUST use OP subType only
+    if (priorAuth.sub_type && priorAuth.sub_type !== 'op') {
+      console.warn(`[VisionMapper] Invalid subType '${priorAuth.sub_type}' corrected to 'op' (BV-00367)`);
+    }
     claim.subType = {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-          code: priorAuth.sub_type || 'op'
+          code: 'op' // Force OP always - BV-00367: Vision must be OP only
         }
       ]
     };

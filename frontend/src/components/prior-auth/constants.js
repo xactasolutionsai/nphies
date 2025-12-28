@@ -25,8 +25,8 @@ export const CLAIM_SUBTYPE_OPTIONS = [
 // Allowed claim subtypes by auth type
 // Reference: NPHIES IG - claim type and subtype combinations
 export const ALLOWED_CLAIM_SUBTYPES = {
-  // Institutional: Can use IP (inpatient) or OP (outpatient)
-  institutional: ['ip', 'op'],
+  // Institutional: Must use IP (inpatient) only (BV-00364, BV-00032)
+  institutional: ['ip'],
   
   // Professional: Can use OP (outpatient) or EMR (emergency)
   professional: ['op', 'emr'],

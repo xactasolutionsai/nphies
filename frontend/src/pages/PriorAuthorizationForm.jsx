@@ -1574,6 +1574,82 @@ export default function PriorAuthorizationForm() {
 
   const validateForm = () => {
     const validationErrors = [];
+    
+    // NPHIES Validation: Claim.subType restrictions by auth type (BV-00364, BV-00365, BV-00366, BV-00367, BV-00368)
+    if (formData.auth_type === 'institutional') {
+      if (formData.sub_type !== 'ip') {
+        validationErrors.push({ 
+          field: 'sub_type', 
+          message: 'Institutional Prior Authorization must use IP (Inpatient) subType only. OP (Outpatient) is not allowed (BV-00364, BV-00032)' 
+        });
+      }
+    } else if (formData.auth_type === 'professional') {
+      if (!['op', 'emr'].includes(formData.sub_type)) {
+        validationErrors.push({ 
+          field: 'sub_type', 
+          message: 'Professional Prior Authorization must use OP (Outpatient) or EMR (Emergency) subType only (BV-00365, BV-00034)' 
+        });
+      }
+    } else if (formData.auth_type === 'dental') {
+      if (formData.sub_type !== 'op') {
+        validationErrors.push({ 
+          field: 'sub_type', 
+          message: 'Dental Prior Authorization must use OP (Outpatient) subType only (BV-00366)' 
+        });
+      }
+    } else if (formData.auth_type === 'pharmacy') {
+      if (formData.sub_type !== 'op') {
+        validationErrors.push({ 
+          field: 'sub_type', 
+          message: 'Pharmacy Prior Authorization must use OP (Outpatient) subType only (BV-00368)' 
+        });
+      }
+    } else if (formData.auth_type === 'vision') {
+      if (formData.sub_type !== 'op') {
+        validationErrors.push({ 
+          field: 'sub_type', 
+          message: 'Vision Prior Authorization must use OP (Outpatient) subType only (BV-00367)' 
+        });
+      }
+    }
+    
+    // BV-00755: If subType=EMR then Encounter.class MUST be EMER
+    if (formData.auth_type === 'professional' && formData.sub_type === 'emr' && formData.encounter_class !== 'emergency') {
+      validationErrors.push({ 
+        field: 'encounter_class', 
+        message: 'Professional Emergency (EMR) claims require Emergency (EMER) encounter class (BV-00755)' 
+      });
+    }
+    
+    // NPHIES Validation: Encounter.class restrictions by auth type (BV-00741, BV-00742, BV-00743, BV-00807, BV-00845)
+    if (formData.auth_type === 'institutional' && formData.encounter_class) {
+      if (!['inpatient', 'daycase'].includes(formData.encounter_class)) {
+        validationErrors.push({ 
+          field: 'encounter_class', 
+          message: 'Institutional encounters must use Inpatient (IMP) or Day Case (SS) class only. ' + 
+                   (formData.encounter_class === 'ambulatory' ? 'Ambulatory (AMB) is not allowed' : 
+                    formData.encounter_class === 'emergency' ? 'Emergency (EMER) is not allowed' : 
+                    'Invalid encounter class') + 
+                   ' (BV-00741, BV-00845)' 
+        });
+      }
+    } else if (formData.auth_type === 'professional' && formData.encounter_class) {
+      const allowedClasses = ['ambulatory', 'outpatient', 'emergency', 'home', 'telemedicine'];
+      if (!allowedClasses.includes(formData.encounter_class)) {
+        validationErrors.push({ 
+          field: 'encounter_class', 
+          message: `Professional encounters must use one of: ${allowedClasses.join(', ')} (BV-00742)` 
+        });
+      }
+    } else if (formData.auth_type === 'dental' && formData.encounter_class) {
+      if (formData.encounter_class !== 'ambulatory') {
+        validationErrors.push({ 
+          field: 'encounter_class', 
+          message: 'Dental encounters must use Ambulatory (AMB) class only (BV-00743, BV-00845)' 
+        });
+      }
+    }
+    
     if (!formData.patient_id) validationErrors.push({ field: 'patient_id', message: 'Patient is required' });
     if (!formData.provider_id) validationErrors.push({ field: 'provider_id', message: 'Provider is required' });
     if (!formData.insurer_id) validationErrors.push({ field: 'insurer_id', message: 'Insurer is required' });

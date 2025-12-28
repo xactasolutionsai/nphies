@@ -248,12 +248,15 @@ class DentalMapper extends BaseMapper {
         }
       ]
     };
-    // BV-00366: Dental must use 'op' subType (default), but respect explicit sub_type if provided
+    // BV-00366: Dental/Oral claims MUST use OP subType only
+    if (priorAuth.sub_type && priorAuth.sub_type !== 'op') {
+      console.warn(`[DentalMapper] Invalid subType '${priorAuth.sub_type}' corrected to 'op' (BV-00366)`);
+    }
     claim.subType = {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-          code: priorAuth.sub_type || 'op'
+          code: 'op' // Force OP always - BV-00366: Dental/Oral must be OP only
         }
       ]
     };

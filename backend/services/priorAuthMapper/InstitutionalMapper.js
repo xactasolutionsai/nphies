@@ -194,12 +194,15 @@ class InstitutionalMapper extends BaseMapper {
         }
       ]
     };
-    // Institutional uses 'ip' subType for inpatient/daycase (default), but respect explicit sub_type if provided
+    // BV-00364, BV-00032: Institutional claims MUST use IP subType only
+    if (priorAuth.sub_type !== 'ip') {
+      console.warn(`[InstitutionalMapper] Invalid subType '${priorAuth.sub_type}' corrected to 'ip' (BV-00364, BV-00032)`);
+    }
     claim.subType = {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-          code: priorAuth.sub_type || 'ip'
+          code: 'ip' // Force IP always - BV-00364, BV-00032: Institutional must be IP only
         }
       ]
     };
@@ -439,8 +442,12 @@ class InstitutionalMapper extends BaseMapper {
     const patientId = bundleResourceIds.patient;
     const providerId = bundleResourceIds.provider;
     
-    // Institutional defaults to daycase (SS) if not specified
-    const encounterClass = priorAuth.encounter_class || 'daycase';
+    // BV-00741, BV-00807: Institutional encounters MUST use IMP or SS only
+    let encounterClass = priorAuth.encounter_class || 'daycase';
+    if (!['inpatient', 'daycase'].includes(encounterClass)) {
+      console.warn(`[InstitutionalMapper] Invalid encounter class '${encounterClass}' corrected to 'daycase' (BV-00741, BV-00807)`);
+      encounterClass = 'daycase';
+    }
     const encounterIdentifier = priorAuth.encounter_identifier || 
                                 priorAuth.request_number || 
                                 `ENC-${encounterId.substring(0, 8)}`;

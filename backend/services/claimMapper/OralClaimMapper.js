@@ -261,10 +261,11 @@ class OralClaimMapper extends DentalMapper {
           code: 'oral' 
         }] 
       },
+      // BV-00366: Dental/Oral claims MUST use OP subType only
       subType: { 
         coding: [{ 
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype', 
-          code: 'op'  // Oral claims are always outpatient
+          code: 'op'  // Force OP always - BV-00366: Dental/Oral must be OP only
         }] 
       },
       use: 'claim',  // Changed from 'preauthorization'

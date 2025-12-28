@@ -317,12 +317,12 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       ]
     };
 
-    // SubType (required) - must be 'op' (outpatient) for pharmacy claims
+    // BV-00368: Pharmacy claims MUST use OP subType only
     claimResource.subType = {
       coding: [
         {
           system: 'http://nphies.sa/terminology/CodeSystem/claim-subtype',
-          code: claim.sub_type || 'op' // Default to 'op' (OutPatient) for pharmacy
+          code: 'op' // Force OP always - BV-00368: Pharmacy must be OP only
         }
       ]
     };

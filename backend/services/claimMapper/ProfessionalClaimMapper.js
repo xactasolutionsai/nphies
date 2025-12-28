@@ -322,8 +322,12 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       ]
     };
 
-    // SubType (required) - emr (Emergency), amb (Ambulatory), etc.
-    const subTypeCode = claim.sub_type || this.getClaimSubTypeCode(claim.encounter_class || 'ambulatory', 'professional');
+    // BV-00365, BV-00034: Professional claims MUST use OP or EMR subType only
+    let subTypeCode = claim.sub_type || this.getClaimSubTypeCode(claim.encounter_class || 'ambulatory', 'professional');
+    if (!['op', 'emr'].includes(subTypeCode)) {
+      console.warn(`[ProfessionalClaimMapper] Invalid subType '${subTypeCode}' corrected to 'op' (BV-00365, BV-00034)`);
+      subTypeCode = 'op';
+    }
     claimResource.subType = {
       coding: [
         {
@@ -1094,7 +1098,14 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     const patientId = bundleResourceIds.patient;
     const providerId = bundleResourceIds.provider;
     
-    const encounterClass = claim.encounter_class || 'ambulatory';
+    let encounterClass = claim.encounter_class || 'ambulatory';
+    
+    // BV-00755: If subType=EMR then Encounter.class MUST be EMER
+    const subTypeCode = claim.sub_type || 'op';
+    if (subTypeCode === 'emr' && encounterClass !== 'emergency') {
+      console.warn(`[ProfessionalClaimMapper] BV-00755 violation: subType=EMR requires encounter.class=EMER. Correcting encounter class from '${encounterClass}' to 'emergency'`);
+      encounterClass = 'emergency';
+    }
     const encounterIdentifier = claim.encounter_identifier || 
                                 claim.claim_number || 
                                 `ENC-${encounterId.substring(0, 8)}`;
