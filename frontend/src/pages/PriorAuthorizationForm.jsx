@@ -576,10 +576,27 @@ export default function PriorAuthorizationForm() {
         };
       });
       
+      // Auto-fix encounter_end if it's in the past (for editing/duplicating old records)
+      // This prevents BV-00041 validation errors when service dates are after a stale end date
+      let fixedEncounterEnd = data.encounter_end;
+      if (data.encounter_end) {
+        const encounterEndDate = new Date(data.encounter_end);
+        const today = new Date();
+        // Set today to end of day for comparison
+        today.setHours(23, 59, 59, 999);
+        if (encounterEndDate < today) {
+          // End date is in the past - clear it to make encounter "ongoing"
+          // This allows service dates up to today
+          fixedEncounterEnd = '';
+          console.log('Auto-cleared stale encounter_end date:', data.encounter_end, '-> ongoing (empty)');
+        }
+      }
+      
       setFormData({
         ...data,
         // Ensure sub_type is set - use database value or derive from encounter_class
         sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
+        encounter_end: fixedEncounterEnd,
         items: processedItems,
         diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
         supporting_info: remainingSupportingInfo,
@@ -730,6 +747,19 @@ export default function PriorAuthorizationForm() {
         };
       });
       
+      // Auto-fix encounter_end if it's in the past (for resubmission of old records)
+      // This prevents BV-00041 validation errors when service dates are after a stale end date
+      let fixedEncounterEnd = data.encounter_end;
+      if (data.encounter_end) {
+        const encounterEndDate = new Date(data.encounter_end);
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+        if (encounterEndDate < today) {
+          fixedEncounterEnd = '';
+          console.log('Auto-cleared stale encounter_end date for resubmission:', data.encounter_end, '-> ongoing (empty)');
+        }
+      }
+      
       // Pre-fill form with source data but reset status for new submission
       setFormData({
         ...data,
@@ -744,6 +774,7 @@ export default function PriorAuthorizationForm() {
         response_bundle: undefined, // Clear previous response
         // Preserve sub_type from source data, or derive from encounter_class if missing
         sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
+        encounter_end: fixedEncounterEnd,
         items: processedItems,
         diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
         supporting_info: remainingSupportingInfo,
@@ -897,6 +928,19 @@ export default function PriorAuthorizationForm() {
         };
       });
       
+      // Auto-fix encounter_end if it's in the past (for follow-up of old records)
+      // This prevents BV-00041 validation errors when service dates are after a stale end date
+      let fixedEncounterEnd = data.encounter_end;
+      if (data.encounter_end) {
+        const encounterEndDate = new Date(data.encounter_end);
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+        if (encounterEndDate < today) {
+          fixedEncounterEnd = '';
+          console.log('Auto-cleared stale encounter_end date for follow-up:', data.encounter_end, '-> ongoing (empty)');
+        }
+      }
+      
       // Pre-fill form with source data but reset status for new submission
       setFormData({
         ...data,
@@ -911,6 +955,7 @@ export default function PriorAuthorizationForm() {
         response_bundle: undefined, // Clear previous response
         // Preserve sub_type from source data, or derive from encounter_class if missing
         sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
+        encounter_end: fixedEncounterEnd,
         items: processedItems,
         diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
         supporting_info: remainingSupportingInfo,
