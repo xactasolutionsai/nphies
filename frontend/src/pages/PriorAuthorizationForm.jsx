@@ -1730,15 +1730,23 @@ export default function PriorAuthorizationForm() {
       // Parse encounter_start with full datetime (including time if provided)
       const encounterStart = new Date(formData.encounter_start);
       
-      // Parse encounter_end with full datetime (including time if provided)
+      // Parse encounter_end - if not provided, encounter is ongoing (open-ended until now)
+      // When no end date is set, servicedDate can be any date from encounter_start up to today
       const encounterEnd = formData.encounter_end 
         ? new Date(formData.encounter_end) 
-        : null;
+        : null; // null means open-ended (ongoing encounter)
       
-      // Helper function to extract date-only string (YYYY-MM-DD) from a Date object
-      const getDateOnly = (date) => {
-        return date.toISOString().split('T')[0];
+      // Helper function to extract date-only string (YYYY-MM-DD) from a Date object in LOCAL timezone
+      // Using local timezone to avoid date shifts when converting to UTC
+      const getLocalDateOnly = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
       };
+      
+      // Get today's date for open-ended encounter validation
+      const todayDateOnly = getLocalDateOnly(new Date());
       
       const itemsOutsidePeriod = formData.items.filter((item, idx) => {
         if (!item.serviced_date) return false; // No date set, will use encounter_start by default
@@ -1757,24 +1765,40 @@ export default function PriorAuthorizationForm() {
             return true; // Serviced date is before encounter start
           }
           
-          if (encounterEnd && servicedDate > encounterEnd) {
-            return true; // Serviced date is after encounter end
+          // If encounter has end date, check against it; otherwise check against now (ongoing encounter)
+          if (encounterEnd) {
+            if (servicedDate > encounterEnd) {
+              return true; // Serviced date is after encounter end
+            }
+          } else {
+            // Open-ended encounter: servicedDate should not be in the future
+            if (servicedDate > new Date()) {
+              return true; // Serviced date is in the future
+            }
           }
         } else {
           // Date-only: compare at the date level only (ignore time component)
           // This is the common case when user picks a date from the date picker
           // The backend will auto-correct the time to be within encounter period
           const servicedDateOnly = servicedDateStr.split('T')[0].split(' ')[0]; // Get YYYY-MM-DD part
-          const encounterStartDateOnly = getDateOnly(encounterStart);
-          const encounterEndDateOnly = encounterEnd ? getDateOnly(encounterEnd) : null;
+          const encounterStartDateOnly = getLocalDateOnly(encounterStart);
+          const encounterEndDateOnly = encounterEnd ? getLocalDateOnly(encounterEnd) : null;
           
           // Compare dates as strings (YYYY-MM-DD format sorts correctly)
           if (servicedDateOnly < encounterStartDateOnly) {
             return true; // Serviced date is before encounter start date
           }
           
-          if (encounterEndDateOnly && servicedDateOnly > encounterEndDateOnly) {
-            return true; // Serviced date is after encounter end date
+          // If encounter has end date, check against it; otherwise allow up to today (ongoing encounter)
+          if (encounterEndDateOnly) {
+            if (servicedDateOnly > encounterEndDateOnly) {
+              return true; // Serviced date is after encounter end date
+            }
+          } else {
+            // Open-ended encounter: servicedDate should not be in the future
+            if (servicedDateOnly > todayDateOnly) {
+              return true; // Serviced date is in the future
+            }
           }
         }
         
@@ -1783,9 +1807,10 @@ export default function PriorAuthorizationForm() {
       
       if (itemsOutsidePeriod.length > 0) {
         const itemNumbers = itemsOutsidePeriod.map(item => item.sequence || formData.items.indexOf(item) + 1).join(', ');
+        const endDateText = encounterEnd ? ' and end' : ' and today (ongoing encounter)';
         validationErrors.push({ 
           field: 'items', 
-          message: `Item(s) ${itemNumbers} have serviced date outside the encounter period. NPHIES requires item servicedDate to be within encounter start${encounterEnd ? ' and end' : ''} dates (BV-00041).` 
+          message: `Item(s) ${itemNumbers} have serviced date outside the encounter period. NPHIES requires item servicedDate to be within encounter start${endDateText} dates (BV-00041).` 
         });
       }
     }
