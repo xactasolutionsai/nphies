@@ -196,27 +196,33 @@ class BatchClaimMapper {
 
     // Build outer batch bundle
     // 
-    // CRITICAL: Per official NPHIES Batch Claim.json sample:
-    // - Nested claim bundles are placed DIRECTLY in entry array (NO fullUrl/resource wrapper)
-    // - Outer MessageHeader.focus references the INNER MessageHeader fullUrls (urn:uuid:...)
+    // IMPORTANT: Despite the official NPHIES Batch Claim.json sample showing direct Bundle objects,
+    // the actual NPHIES API validation REQUIRES the standard FHIR entry structure with 
+    // fullUrl/resource wrapper for ALL entries including nested bundles.
     // 
-    // Structure from NPHIES sample:
+    // However, the outer MessageHeader.focus MUST reference the INNER MessageHeader fullUrls
+    // (urn:uuid:...) NOT the nested bundle fullUrls.
+    // 
+    // Required structure:
     // entry: [
-    //   { fullUrl: "urn:uuid:...", resource: { resourceType: "MessageHeader", focus: [...inner msgHeader IDs...] } },
-    //   { resourceType: "Bundle", id: "...", meta: {...}, type: "message", entry: [...] },  // Direct bundle - NO wrapper!
-    //   { resourceType: "Bundle", id: "...", meta: {...}, type: "message", entry: [...] }   // Direct bundle - NO wrapper!
+    //   { fullUrl: "urn:uuid:...", resource: { resourceType: "MessageHeader", focus: [{reference: "urn:uuid:inner-msg-header-id"}] } },
+    //   { fullUrl: "urn:uuid:bundle-id", resource: { resourceType: "Bundle", ... } },  // WRAPPED bundle
+    //   { fullUrl: "urn:uuid:bundle-id", resource: { resourceType: "Bundle", ... } }   // WRAPPED bundle
     // ]
     //
     // The focus references point to inner MessageHeader fullUrls like "urn:uuid:54cf5884-..."
     
-    // Create direct bundle objects (no fullUrl/resource wrapper per NPHIES spec)
-    const directClaimBundles = claimBundles.map(bundle => ({
-      resourceType: 'Bundle',
-      id: bundle.id,
-      meta: bundle.meta,
-      type: bundle.type,
-      timestamp: bundle.timestamp,
-      entry: bundle.entry
+    // Wrap nested bundles in fullUrl/resource structure as required by NPHIES API validation
+    const wrappedClaimBundles = claimBundles.map(bundle => ({
+      fullUrl: `urn:uuid:${bundle.id}`,
+      resource: {
+        resourceType: 'Bundle',
+        id: bundle.id,
+        meta: bundle.meta,
+        type: bundle.type,
+        timestamp: bundle.timestamp,
+        entry: bundle.entry
+      }
     }));
     
     const batchBundle = {
@@ -264,8 +270,9 @@ class BatchClaimMapper {
             focus: focusReferences
           }
         },
-        // Add all claim bundles as DIRECT Bundle objects (NO fullUrl/resource wrapper per NPHIES spec)
-        ...directClaimBundles
+        // Add all claim bundles wrapped in fullUrl/resource structure (required by NPHIES API)
+        // Note: focus references still point to inner MessageHeader IDs, not these bundle fullUrls
+        ...wrappedClaimBundles
       ]
     };
 
