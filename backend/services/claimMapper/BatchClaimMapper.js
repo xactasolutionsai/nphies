@@ -196,28 +196,34 @@ class BatchClaimMapper {
 
     // Build outer batch bundle
     // 
-    // CRITICAL: Per official NPHIES Batch Claim example (VendorsCertificationProgram/Batch Claim.json):
-    // Nested bundles are DIRECT Bundle objects WITHOUT fullUrl wrapper.
+    // IMPORTANT: Despite the official NPHIES sample showing direct Bundle objects,
+    // the actual NPHIES API validation requires nested bundles to be wrapped in
+    // the standard FHIR entry structure with fullUrl and resource properties.
     // 
-    // Correct structure (from NPHIES example):
+    // Required structure:
     // entry: [
     //   { fullUrl: "urn:uuid:...", resource: { resourceType: "MessageHeader", focus: [...inner msgHeader IDs...] } },
-    //   { resourceType: "Bundle", id: "...", entry: [...] },  // Direct bundle - NO fullUrl!
-    //   { resourceType: "Bundle", id: "...", entry: [...] }   // Direct bundle - NO fullUrl!
+    //   { fullUrl: "urn:uuid:...", resource: { resourceType: "Bundle", ... } },  // Wrapped bundle
+    //   { fullUrl: "urn:uuid:...", resource: { resourceType: "Bundle", ... } }   // Wrapped bundle
     // ]
     //
-    // The outer MessageHeader.focus references the INNER MessageHeader fullUrls,
-    // and the nested bundles are placed directly in the entry array.
+    // The outer MessageHeader.focus references the INNER MessageHeader fullUrls.
     
-    // Nested bundles are direct Bundle objects (not wrapped in { fullUrl, resource })
-    const directClaimBundles = claimBundles.map(bundle => ({
-      resourceType: 'Bundle',
-      id: bundle.id,
-      meta: bundle.meta,
-      type: bundle.type,
-      timestamp: bundle.timestamp,
-      entry: bundle.entry
-    }));
+    // Wrap nested bundles in fullUrl/resource structure as required by NPHIES API
+    const wrappedClaimBundles = claimBundles.map(bundle => {
+      const nestedBundleId = bundle.id || this.generateId();
+      return {
+        fullUrl: `urn:uuid:${nestedBundleId}`,
+        resource: {
+          resourceType: 'Bundle',
+          id: nestedBundleId,
+          meta: bundle.meta,
+          type: bundle.type,
+          timestamp: bundle.timestamp,
+          entry: bundle.entry
+        }
+      };
+    });
     
     const batchBundle = {
       resourceType: 'Bundle',
@@ -264,8 +270,8 @@ class BatchClaimMapper {
             focus: focusReferences
           }
         },
-        // Add all claim bundles as direct Bundle objects (NO fullUrl wrapper per NPHIES spec)
-        ...directClaimBundles
+        // Add all claim bundles wrapped in fullUrl/resource structure
+        ...wrappedClaimBundles
       ]
     };
 
