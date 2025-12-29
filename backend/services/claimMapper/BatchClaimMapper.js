@@ -203,54 +203,63 @@ class BatchClaimMapper {
         batchPeriodEnd
       });
 
-      // CRITICAL: Per official NPHIES Batch Claim example:
-      // The outer MessageHeader.focus must reference the INNER MessageHeader IDs,
-      // NOT the nested bundle IDs. The nested bundles are direct Bundle objects
-      // without fullUrl wrappers.
-      // 
-      // Example from NPHIES:
-      // - Outer focus: "urn:uuid:54cf5884-662c-4f1d-85a2-a4a923a93094" (inner MessageHeader ID)
-      // - Inner bundle entry: { resourceType: "Bundle", ... } (NO fullUrl wrapper)
-      // - Inner MessageHeader fullUrl: "urn:uuid:54cf5884-662c-4f1d-85a2-a4a923a93094"
-      const innerMessageHeader = claimBundle.entry?.find(
-        e => e.resource?.resourceType === 'MessageHeader'
-      );
-      
-      if (innerMessageHeader) {
-        // Focus references the inner MessageHeader fullUrl
-        focusReferences.push({ reference: innerMessageHeader.fullUrl });
-      }
-
+      // Store the bundle for later wrapping
       claimBundles.push(claimBundle);
+    });
+
+    // CRITICAL FIX for BV-00167 error:
+    // "The MessageHeader focus resource type does not match the MessageHeader eventCoding"
+    // 
+    // When outer MessageHeader uses eventCoding = "batch-request":
+    // - focus MUST reference the nested Bundle fullUrls (urn:uuid:bundle-id)
+    // - NOT the inner MessageHeader fullUrls
+    // 
+    // This is because batch-request expects Bundle resources in focus,
+    // while claim-request expects Claim resources in focus.
+    // 
+    // Structure:
+    // - Outer MessageHeader (batch-request) -> focus -> [nested Bundle fullUrls]
+    // - Inner MessageHeader (claim-request) -> focus -> [Claim fullUrl]
+    claimBundles.forEach(bundle => {
+      focusReferences.push({ reference: `urn:uuid:${bundle.id}` });
     });
 
     // Build outer batch bundle
     // 
-    // CRITICAL FIX: Per official NPHIES Batch Claim example (docs/request.json):
-    // Nested claim bundles must be added DIRECTLY to the outer bundle's entry array
-    // WITHOUT the standard fullUrl/resource wrapper structure.
+    // CRITICAL FIX: Per NPHIES validation error responses:
     // 
-    // The outer MessageHeader.focus MUST reference the INNER MessageHeader fullUrls
-    // (urn:uuid:...) which are the IDs of the MessageHeaders inside each nested bundle.
+    // 1. DT-00001 & FR-00027: Nested claim bundles MUST be wrapped in fullUrl/resource structure.
+    //    Direct Bundle objects without wrapper cause validation errors.
     // 
-    // Required structure (per NPHIES):
+    // 2. BV-00167: "The MessageHeader focus resource type does not match the MessageHeader eventCoding"
+    //    When outer MessageHeader uses batch-request, focus MUST reference the nested Bundle fullUrls,
+    //    NOT the inner MessageHeader fullUrls.
+    // 
+    // Required structure (per NPHIES validation):
     // entry: [
-    //   { fullUrl: "urn:uuid:...", resource: { resourceType: "MessageHeader", focus: [{reference: "urn:uuid:inner-msg-header-id"}] } },
-    //   { resourceType: "Bundle", id: "...", entry: [...] },  // Direct bundle - NO wrapper
-    //   { resourceType: "Bundle", id: "...", entry: [...] }   // Direct bundle - NO wrapper
+    //   { fullUrl: "urn:uuid:msg-header-id", resource: { 
+    //       resourceType: "MessageHeader", 
+    //       eventCoding: { code: "batch-request" },
+    //       focus: [
+    //         { reference: "urn:uuid:bundle-1-id" },  // References nested Bundle, NOT inner MessageHeader
+    //         { reference: "urn:uuid:bundle-2-id" }
+    //       ]
+    //   }},
+    //   { fullUrl: "urn:uuid:bundle-1-id", resource: { resourceType: "Bundle", ... } },
+    //   { fullUrl: "urn:uuid:bundle-2-id", resource: { resourceType: "Bundle", ... } }
     // ]
-    //
-    // The focus references point to inner MessageHeader fullUrls like "urn:uuid:54cf5884-..."
-    // NOT to the nested bundle IDs.
     
-    // Add nested bundles directly without fullUrl/resource wrapper (per NPHIES spec)
-    const directClaimBundles = claimBundles.map(bundle => ({
-      resourceType: 'Bundle',
-      id: bundle.id,
-      meta: bundle.meta,
-      type: bundle.type,
-      timestamp: bundle.timestamp,
-      entry: bundle.entry
+    // Wrap nested bundles in fullUrl/resource structure (required by NPHIES validation)
+    const wrappedClaimBundles = claimBundles.map(bundle => ({
+      fullUrl: `urn:uuid:${bundle.id}`,
+      resource: {
+        resourceType: 'Bundle',
+        id: bundle.id,
+        meta: bundle.meta,
+        type: bundle.type,
+        timestamp: bundle.timestamp,
+        entry: bundle.entry
+      }
     }));
     
     const batchBundle = {
@@ -298,9 +307,9 @@ class BatchClaimMapper {
             focus: focusReferences
           }
         },
-        // Add all claim bundles directly without wrapper (per NPHIES Batch Claim spec)
-        // Note: focus references point to inner MessageHeader IDs within these bundles
-        ...directClaimBundles
+        // Add all claim bundles wrapped in fullUrl/resource structure (required by NPHIES)
+        // Note: focus references point to inner MessageHeader IDs, NOT these bundle fullUrls
+        ...wrappedClaimBundles
       ]
     };
 

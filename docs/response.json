@@ -1,6 +1,6 @@
 {
     "resourceType": "OperationOutcome",
-    "id": "aec38ed6-f550-4123-9452-6bdd25822ea5",
+    "id": "505df4e8-e6f5-4669-97e9-7a4e5346e2a6",
     "meta": {
         "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/operationoutcome|1.0.0"
@@ -194,6 +194,22 @@
             },
             "expression": [
                 "Bundle.entry[1].entry[6]"
+            ]
+        },
+        {
+            "severity": "error",
+            "code": "structure",
+            "details": {
+                "coding": [
+                    {
+                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                        "code": "FR-00027",
+                        "display": "The element does not exist in the base FHIR profile"
+                    }
+                ]
+            },
+            "expression": [
+                "Bundle.entry[1].entry[7]"
             ]
         },
         {
