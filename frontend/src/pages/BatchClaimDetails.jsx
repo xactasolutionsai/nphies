@@ -26,6 +26,7 @@ export default function BatchClaimDetails() {
   const [bundlesLoading, setBundlesLoading] = useState(false);
   const [bundlesError, setBundlesError] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
+  const [viewMode, setViewMode] = useState('individual'); // 'individual' or 'full'
 
   useEffect(() => {
     loadBatchDetails();
@@ -86,12 +87,46 @@ export default function BatchClaimDetails() {
     }
   };
 
-  // Copy all bundles to clipboard
-  const copyAllBundles = async (bundles) => {
+  // Copy all bundles as formatted text showing each HTTP request
+  const copyAllBundlesFormatted = async (bundles) => {
+    try {
+      const cleanBundles = bundles.map(cleanBundleForCopy);
+      
+      // Format as separate HTTP requests
+      let formattedOutput = `// ==========================================\n`;
+      formattedOutput += `// Batch Claim: ${batch?.batch_identifier}\n`;
+      formattedOutput += `// Total HTTP Requests: ${cleanBundles.length}\n`;
+      formattedOutput += `// Each bundle below is sent as a SEPARATE HTTP POST request\n`;
+      formattedOutput += `// ==========================================\n\n`;
+      
+      cleanBundles.forEach((bundle, index) => {
+        const batchNumber = bundle.entry?.find(e => e.resource?.resourceType === 'Claim')
+          ?.resource?.extension?.find(ext => ext.url?.includes('extension-batch-number'))
+          ?.valuePositiveInt || (index + 1);
+        
+        formattedOutput += `// ------------------------------------------\n`;
+        formattedOutput += `// HTTP Request #${index + 1} (batch-number: ${batchNumber})\n`;
+        formattedOutput += `// POST to NPHIES API\n`;
+        formattedOutput += `// ------------------------------------------\n`;
+        formattedOutput += JSON.stringify(bundle, null, 2);
+        formattedOutput += `\n\n`;
+      });
+      
+      await navigator.clipboard.writeText(formattedOutput);
+      setCopiedIndex('all');
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy to clipboard');
+    }
+  };
+
+  // Copy all bundles as JSON array (for reference)
+  const copyAllBundlesAsArray = async (bundles) => {
     try {
       const cleanBundles = bundles.map(cleanBundleForCopy);
       await navigator.clipboard.writeText(JSON.stringify(cleanBundles, null, 2));
-      setCopiedIndex('all');
+      setCopiedIndex('array');
       setTimeout(() => setCopiedIndex(null), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
@@ -666,37 +701,72 @@ export default function BatchClaimDetails() {
                   )}
                   {freshBundles && Array.isArray(freshBundles) && (
                     <>
-                      <Button 
-                        variant={copiedIndex === 'all' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => copyAllBundles(freshBundles)}
-                        className={copiedIndex === 'all' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
-                      >
-                        {copiedIndex === 'all' ? (
-                          <>
-                            <CheckCircle2 className="h-4 w-4 mr-2" />
-                            Copied!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copy All
-                          </>
-                        )}
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => downloadAllBundles(freshBundles)}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download All
-                      </Button>
+                      {/* View Mode Toggle */}
+                      <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                        <button
+                          onClick={() => setViewMode('individual')}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            viewMode === 'individual' 
+                              ? 'bg-white text-primary-purple shadow-sm' 
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Individual
+                        </button>
+                        <button
+                          onClick={() => setViewMode('full')}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            viewMode === 'full' 
+                              ? 'bg-white text-primary-purple shadow-sm' 
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Full View
+                        </button>
+                      </div>
+                      
+                      {viewMode === 'full' && (
+                        <>
+                          <Button 
+                            variant={copiedIndex === 'all' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => copyAllBundlesFormatted(freshBundles)}
+                            className={copiedIndex === 'all' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
+                          >
+                            {copiedIndex === 'all' ? (
+                              <>
+                                <CheckCircle2 className="h-4 w-4 mr-1" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-4 w-4 mr-1" />
+                                Copy All (Formatted)
+                              </>
+                            )}
+                          </Button>
+                          <Button 
+                            variant={copiedIndex === 'array' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => copyAllBundlesAsArray(freshBundles)}
+                            className={copiedIndex === 'array' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
+                            title="Copy as JSON Array"
+                          >
+                            {copiedIndex === 'array' ? (
+                              <CheckCircle2 className="h-4 w-4" />
+                            ) : (
+                              <>[ ]</>
+                            )}
+                          </Button>
+                        </>
+                      )}
+                      
                       <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={loadFreshBundles}
                         disabled={bundlesLoading}
+                        title="Refresh bundles"
                       >
                         <RefreshCw className={`h-4 w-4 ${bundlesLoading ? 'animate-spin' : ''}`} />
                       </Button>
@@ -750,45 +820,133 @@ export default function BatchClaimDetails() {
               {/* Bundles display */}
               {freshBundles && Array.isArray(freshBundles) && !bundlesLoading && (
                 <div className="space-y-4">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                    <p className="text-sm text-blue-700">
-                      <strong>Note:</strong> Each bundle below is sent as a separate POST request to NPHIES. 
-                      Copy individual bundles for Postman testing.
-                    </p>
+                  {/* Batch Info Summary */}
+                  <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <Badge className="bg-primary-purple text-white">
+                        {freshBundles.length} HTTP Requests
+                      </Badge>
+                      <span className="text-sm text-gray-600">
+                        Batch: <code className="bg-white px-2 py-0.5 rounded font-mono text-xs">{batch?.batch_identifier}</code>
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      كل Bundle = HTTP Request منفصل
+                    </span>
                   </div>
+
+                  {/* Full View Mode - Show all bundles in one view */}
+                  {viewMode === 'full' && (
+                    <div className="border-2 border-primary-purple/30 rounded-lg overflow-hidden">
+                      <div className="bg-gradient-to-r from-primary-purple to-accent-purple px-4 py-3 text-white">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-bold text-lg">Complete Batch Request</h3>
+                            <p className="text-white/80 text-sm">
+                              {freshBundles.length} HTTP Requests - Batch: {batch?.batch_identifier}
+                            </p>
+                          </div>
+                          <Badge className="bg-white/20 text-white">
+                            {(JSON.stringify(freshBundles.map(cleanBundleForCopy)).length / 1024).toFixed(1)} KB
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="bg-amber-50 border-b border-amber-200 px-4 py-2">
+                        <p className="text-sm text-amber-800">
+                          <strong>⚠️ ملاحظة:</strong> كل Bundle يُرسل في HTTP POST منفصل لـ NPHIES. الـ Comments تُظهر ترتيب الإرسال.
+                        </p>
+                      </div>
+                      <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
+{(() => {
+  const cleanBundles = freshBundles.map(cleanBundleForCopy);
+  let output = `// ==========================================\n`;
+  output += `// Batch Claim: ${batch?.batch_identifier}\n`;
+  output += `// Total HTTP Requests: ${cleanBundles.length}\n`;
+  output += `// Each bundle below is sent as a SEPARATE HTTP POST request\n`;
+  output += `// ==========================================\n\n`;
+  
+  cleanBundles.forEach((bundle, index) => {
+    const batchNumber = bundle.entry?.find(e => e.resource?.resourceType === 'Claim')
+      ?.resource?.extension?.find(ext => ext.url?.includes('extension-batch-number'))
+      ?.valuePositiveInt || (index + 1);
+    
+    output += `// ------------------------------------------\n`;
+    output += `// HTTP Request #${index + 1} (batch-number: ${batchNumber})\n`;
+    output += `// POST to NPHIES API\n`;
+    output += `// ------------------------------------------\n`;
+    output += JSON.stringify(bundle, null, 2);
+    output += `\n\n`;
+  });
+  
+  return output;
+})()}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* Individual View Mode - Show each bundle separately */}
+                  {viewMode === 'individual' && (
+                    <>
+                      {/* Important Warning */}
+                      <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold text-amber-800 text-base mb-2">
+                              ⚠️ هام جداً - كيفية إرسال Batch Claim لـ NPHIES
+                            </p>
+                            <ul className="text-sm text-amber-700 space-y-1 list-disc list-inside">
+                              <li><strong>كل Bundle يُرسل في HTTP Request منفصل</strong></li>
+                              <li>استخدم زر <strong>"Copy This Bundle"</strong> لكل Bundle</li>
+                              <li>الـ Bundles مرتبطة ببعض عبر <code className="bg-amber-200 px-1 rounded">batch-identifier</code></li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
                   
-                  {freshBundles.map((bundle, index) => {
+                      {freshBundles.map((bundle, index) => {
                     const cleanBundle = cleanBundleForCopy(bundle);
+                    const batchNumber = cleanBundle.entry?.find(e => e.resource?.resourceType === 'Claim')
+                      ?.resource?.extension?.find(ext => ext.url?.includes('extension-batch-number'))
+                      ?.valuePositiveInt || (index + 1);
+                    
                     return (
-                      <div key={index} className="border rounded-lg overflow-hidden">
-                        <div className="bg-gray-100 px-4 py-3 flex justify-between items-center">
+                      <div key={index} className="border-2 border-gray-200 rounded-lg overflow-hidden hover:border-primary-purple/50 transition-colors">
+                        <div className="bg-gradient-to-r from-gray-100 to-gray-50 px-4 py-3 flex justify-between items-center">
                           <div className="flex items-center gap-3">
-                            <Badge variant="outline" className="bg-primary-purple/10 text-primary-purple border-primary-purple/20">
-                              Bundle {index + 1}
-                            </Badge>
-                            <span className="font-medium">
-                              Claim #{bundle._batchMetadata?.batchNumber || index + 1}
-                            </span>
-                            <Badge variant="secondary">
-                              {cleanBundle.entry?.length || 0} entries
+                            <div className="bg-primary-purple text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
+                              {index + 1}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-gray-800">
+                                HTTP Request #{index + 1}
+                              </span>
+                              <span className="text-gray-500 text-sm ml-2">
+                                (batch-number: {batchNumber})
+                              </span>
+                            </div>
+                            <Badge variant="secondary" className="text-xs">
+                              {cleanBundle.entry?.length || 0} resources
                             </Badge>
                           </div>
                           <div className="flex items-center gap-2">
                             <Button 
-                              variant={copiedIndex === index ? 'default' : 'outline'}
+                              variant={copiedIndex === index ? 'default' : 'default'}
                               size="sm"
                               onClick={() => copySingleBundle(bundle, index)}
-                              className={copiedIndex === index ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
+                              className={copiedIndex === index 
+                                ? 'bg-green-600 hover:bg-green-700 text-white' 
+                                : 'bg-primary-purple hover:bg-primary-purple/90 text-white'}
                             >
                               {copiedIndex === index ? (
                                 <>
                                   <CheckCircle2 className="h-4 w-4 mr-1" />
-                                  Copied!
+                                  ✓ Copied!
                                 </>
                               ) : (
                                 <>
                                   <Copy className="h-4 w-4 mr-1" />
-                                  Copy
+                                  Copy This Bundle
                                 </>
                               )}
                             </Button>
@@ -797,17 +955,18 @@ export default function BatchClaimDetails() {
                               size="sm"
                               onClick={() => downloadSingleBundle(bundle, index)}
                             >
-                              <Download className="h-4 w-4 mr-1" />
-                              Download
+                              <Download className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
-                        <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[500px] overflow-y-auto whitespace-pre-wrap break-all select-all">
+                        <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap break-all select-all">
                           {JSON.stringify(cleanBundle, null, 2)}
                         </pre>
                       </div>
                     );
-                  })}
+                      })}
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -821,10 +980,10 @@ export default function BatchClaimDetails() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center">
-                      <Activity className="h-5 w-5 mr-2" />
+                <CardTitle className="flex items-center">
+                  <Activity className="h-5 w-5 mr-2" />
                       Response Bundle
-                    </CardTitle>
+                </CardTitle>
                     <CardDescription>FHIR Bundle received from NPHIES</CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
