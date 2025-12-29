@@ -63,6 +63,13 @@ class BatchClaimMapper {
 
   /**
    * Validate batch constraints before building
+   * 
+   * Per NPHIES Batch Claim requirements:
+   * - Minimum 2 claims, maximum 200 claims
+   * - All claims must be for the same insurer (payer)
+   * - All claims must be for the same provider
+   * - All claims must be of the same claim type
+   * 
    * @param {Array} claims - Array of claim data objects
    * @returns {Object} - { valid: boolean, errors: string[] }
    */
@@ -79,13 +86,36 @@ class BatchClaimMapper {
       errors.push(`Batch cannot exceed ${this.MAX_BATCH_SIZE} claims. Current: ${claims.length}`);
     }
 
-    // Check all claims are for the same insurer
     if (claims && claims.length > 0) {
+      // Check all claims are for the same insurer (NPHIES requirement)
       const insurerIds = new Set(claims.map(c => 
-        c.insurer?.insurer_id || c.insurer_id || c.claim?.insurer_id
-      ));
+        c.insurer?.insurer_id || c.insurer?.nphies_id || c.insurer_id || c.claim?.insurer_id
+      ).filter(Boolean));
       if (insurerIds.size > 1) {
-        errors.push('All claims in a batch must be for the same insurer');
+        errors.push('All claims in a batch must be for the same insurer (payer)');
+      }
+
+      // Check all claims are for the same provider (NPHIES requirement)
+      const providerIds = new Set(claims.map(c => 
+        c.provider?.provider_id || c.provider?.nphies_id || c.provider_id || c.claim?.provider_id
+      ).filter(Boolean));
+      if (providerIds.size > 1) {
+        errors.push('All claims in a batch must be for the same provider');
+      }
+
+      // Check all claims are of the same type (NPHIES requirement)
+      const claimTypes = new Set(claims.map(c => {
+        const type = c.claim?.claim_type || c.claim_type || c.type;
+        // Normalize claim types
+        if (!type) return null;
+        const normalized = type.toLowerCase();
+        // Map similar types
+        if (['institutional', 'inpatient', 'daycase'].includes(normalized)) return 'institutional';
+        if (['dental', 'oral'].includes(normalized)) return 'oral';
+        return normalized;
+      }).filter(Boolean));
+      if (claimTypes.size > 1) {
+        errors.push(`All claims in a batch must be of the same type. Found: ${[...claimTypes].join(', ')}`);
       }
     }
 
@@ -196,33 +226,31 @@ class BatchClaimMapper {
 
     // Build outer batch bundle
     // 
-    // IMPORTANT: Despite the official NPHIES Batch Claim.json sample showing direct Bundle objects,
-    // the actual NPHIES API validation REQUIRES the standard FHIR entry structure with 
-    // fullUrl/resource wrapper for ALL entries including nested bundles.
+    // CRITICAL FIX: Per official NPHIES Batch Claim example (docs/request.json):
+    // Nested claim bundles must be added DIRECTLY to the outer bundle's entry array
+    // WITHOUT the standard fullUrl/resource wrapper structure.
     // 
-    // However, the outer MessageHeader.focus MUST reference the INNER MessageHeader fullUrls
-    // (urn:uuid:...) NOT the nested bundle fullUrls.
+    // The outer MessageHeader.focus MUST reference the INNER MessageHeader fullUrls
+    // (urn:uuid:...) which are the IDs of the MessageHeaders inside each nested bundle.
     // 
-    // Required structure:
+    // Required structure (per NPHIES):
     // entry: [
     //   { fullUrl: "urn:uuid:...", resource: { resourceType: "MessageHeader", focus: [{reference: "urn:uuid:inner-msg-header-id"}] } },
-    //   { fullUrl: "urn:uuid:bundle-id", resource: { resourceType: "Bundle", ... } },  // WRAPPED bundle
-    //   { fullUrl: "urn:uuid:bundle-id", resource: { resourceType: "Bundle", ... } }   // WRAPPED bundle
+    //   { resourceType: "Bundle", id: "...", entry: [...] },  // Direct bundle - NO wrapper
+    //   { resourceType: "Bundle", id: "...", entry: [...] }   // Direct bundle - NO wrapper
     // ]
     //
     // The focus references point to inner MessageHeader fullUrls like "urn:uuid:54cf5884-..."
+    // NOT to the nested bundle IDs.
     
-    // Wrap nested bundles in fullUrl/resource structure as required by NPHIES API validation
-    const wrappedClaimBundles = claimBundles.map(bundle => ({
-      fullUrl: `urn:uuid:${bundle.id}`,
-      resource: {
-        resourceType: 'Bundle',
-        id: bundle.id,
-        meta: bundle.meta,
-        type: bundle.type,
-        timestamp: bundle.timestamp,
-        entry: bundle.entry
-      }
+    // Add nested bundles directly without fullUrl/resource wrapper (per NPHIES spec)
+    const directClaimBundles = claimBundles.map(bundle => ({
+      resourceType: 'Bundle',
+      id: bundle.id,
+      meta: bundle.meta,
+      type: bundle.type,
+      timestamp: bundle.timestamp,
+      entry: bundle.entry
     }));
     
     const batchBundle = {
@@ -270,9 +298,9 @@ class BatchClaimMapper {
             focus: focusReferences
           }
         },
-        // Add all claim bundles wrapped in fullUrl/resource structure (required by NPHIES API)
-        // Note: focus references still point to inner MessageHeader IDs, not these bundle fullUrls
-        ...wrappedClaimBundles
+        // Add all claim bundles directly without wrapper (per NPHIES Batch Claim spec)
+        // Note: focus references point to inner MessageHeader IDs within these bundles
+        ...directClaimBundles
       ]
     };
 

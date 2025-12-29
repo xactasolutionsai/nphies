@@ -33,6 +33,7 @@ export default function ClaimBatches() {
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [filterInsurer, setFilterInsurer] = useState('');
+  const [filterClaimType, setFilterClaimType] = useState('');
   
   // Action states
   const [actionLoading, setActionLoading] = useState(null);
@@ -211,6 +212,7 @@ export default function ClaimBatches() {
   const openCreateModal = () => {
     setShowCreateModal(true);
     setSelectedClaims([]);
+    setFilterClaimType(''); // Reset claim type filter
     const options = generateBatchIdentifierOptions();
     setBatchIdentifierOptions(options);
     setBatchForm({
@@ -222,7 +224,23 @@ export default function ClaimBatches() {
     loadAvailableClaims();
   };
 
+  // Get unique claim types from available claims
+  const getUniqueClaimTypes = () => {
+    const types = new Set();
+    availableClaims.forEach(c => {
+      if (c.auth_type) types.add(c.auth_type);
+    });
+    return Array.from(types);
+  };
+
+  // Get filtered claims based on selected claim type
+  const getFilteredClaims = () => {
+    if (!filterClaimType) return availableClaims;
+    return availableClaims.filter(c => c.auth_type === filterClaimType);
+  };
+
   const handleClaimSelect = (claimId) => {
+    const filteredClaims = getFilteredClaims();
     setSelectedClaims(prev => {
       if (prev.includes(claimId)) {
         return prev.filter(id => id !== claimId);
@@ -233,11 +251,16 @@ export default function ClaimBatches() {
           return prev;
         }
         // Check insurer consistency
-        const claim = availableClaims.find(c => c.id === claimId);
+        const claim = filteredClaims.find(c => c.id === claimId);
         if (prev.length > 0) {
-          const firstClaim = availableClaims.find(c => c.id === prev[0]);
+          const firstClaim = filteredClaims.find(c => c.id === prev[0]);
           if (claim.insurer_id !== firstClaim.insurer_id) {
             alert('All claims in a batch must be for the same insurer');
+            return prev;
+          }
+          // Check claim type consistency
+          if (claim.auth_type !== firstClaim.auth_type) {
+            alert('All claims in a batch must be of the same type');
             return prev;
           }
         }
@@ -247,17 +270,19 @@ export default function ClaimBatches() {
   };
 
   const handleSelectAllClaims = () => {
-    if (selectedClaims.length === availableClaims.length) {
+    const filteredClaims = getFilteredClaims();
+    if (selectedClaims.length === filteredClaims.length) {
       setSelectedClaims([]);
     } else {
-      // Only select claims with same insurer as first one
-      if (availableClaims.length > 0) {
-        const firstInsurer = availableClaims[0].insurer_id;
-        const sameinsurerClaims = availableClaims
-          .filter(c => c.insurer_id === firstInsurer)
+      // Only select claims with same insurer and type as first one
+      if (filteredClaims.length > 0) {
+        const firstInsurer = filteredClaims[0].insurer_id;
+        const firstType = filteredClaims[0].auth_type;
+        const compatibleClaims = filteredClaims
+          .filter(c => c.insurer_id === firstInsurer && c.auth_type === firstType)
           .slice(0, 200)
           .map(c => c.id);
-        setSelectedClaims(sameinsurerClaims);
+        setSelectedClaims(compatibleClaims);
       }
     }
   };
@@ -735,13 +760,46 @@ export default function ClaimBatches() {
                 </div>
               </div>
 
+              {/* Claim Type Filter */}
+              <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <Label className="text-blue-800 font-medium">Filter by Claim Type:</Label>
+                    <select
+                      value={filterClaimType}
+                      onChange={(e) => {
+                        setFilterClaimType(e.target.value);
+                        setSelectedClaims([]); // Reset selection when filter changes
+                      }}
+                      className="px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">All Types ({availableClaims.length} items)</option>
+                      {getUniqueClaimTypes().map(type => (
+                        <option key={type} value={type}>
+                          {type.charAt(0).toUpperCase() + type.slice(1)} ({availableClaims.filter(c => c.auth_type === type).length} items)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {filterClaimType && (
+                    <span className="text-sm text-blue-600">
+                      Showing {getFilteredClaims().length} {filterClaimType} claims
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-blue-600 mt-2">
+                  <AlertCircle className="w-3 h-3 inline mr-1" />
+                  NPHIES requires all claims in a batch to be of the same type (e.g., all oral, all vision, etc.)
+                </p>
+              </div>
+
               {/* Selection Info */}
               <div className="flex items-center justify-between mb-4 p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center space-x-4">
                   <span className="font-medium">Selected Items: {selectedClaims.length} / 200</span>
                   {selectedClaims.length > 0 && (
                     <span className="text-sm text-gray-500">
-                      Total Amount: SAR {availableClaims
+                      Total Amount: SAR {getFilteredClaims()
                         .filter(c => selectedClaims.includes(c.id))
                         .reduce((sum, c) => sum + parseFloat(c.total_amount || 0), 0)
                         .toLocaleString()}
@@ -749,7 +807,7 @@ export default function ClaimBatches() {
                   )}
                 </div>
                 <Button variant="outline" size="sm" onClick={handleSelectAllClaims}>
-                  {selectedClaims.length === availableClaims.length ? 'Deselect All' : 'Select All (Same Insurer)'}
+                  {selectedClaims.length === getFilteredClaims().length && getFilteredClaims().length > 0 ? 'Deselect All' : 'Select All (Same Insurer & Type)'}
                 </Button>
               </div>
 
@@ -760,6 +818,7 @@ export default function ClaimBatches() {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Select</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Auth Request #</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Type</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Service</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Patient</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Insurer</th>
@@ -768,7 +827,7 @@ export default function ClaimBatches() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {availableClaims.map((item) => (
+                    {getFilteredClaims().map((item) => (
                       <tr 
                         key={item.id} 
                         className={`hover:bg-gray-50 cursor-pointer ${selectedClaims.includes(item.id) ? 'bg-purple-50' : ''}`}
@@ -785,6 +844,21 @@ export default function ClaimBatches() {
                             <span className="font-medium">{item.auth_request_number}</span>
                             <span className="text-xs text-gray-400">Item #{item.sequence}</span>
                           </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <Badge 
+                            variant="outline" 
+                            className={`text-xs ${
+                              item.auth_type === 'oral' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              item.auth_type === 'vision' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                              item.auth_type === 'pharmacy' ? 'bg-green-50 text-green-700 border-green-200' :
+                              item.auth_type === 'professional' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                              item.auth_type === 'institutional' ? 'bg-red-50 text-red-700 border-red-200' :
+                              'bg-gray-50 text-gray-700 border-gray-200'
+                            }`}
+                          >
+                            {item.auth_type ? item.auth_type.charAt(0).toUpperCase() + item.auth_type.slice(1) : 'N/A'}
+                          </Badge>
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <div className="flex flex-col">
@@ -809,10 +883,13 @@ export default function ClaimBatches() {
                         </td>
                       </tr>
                     ))}
-                    {availableClaims.length === 0 && (
+                    {getFilteredClaims().length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                          No approved authorization items available for batching. Submit prior authorizations and get them approved first.
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                          {filterClaimType 
+                            ? `No approved ${filterClaimType} authorization items available. Try selecting a different claim type.`
+                            : 'No approved authorization items available for batching. Submit prior authorizations and get them approved first.'
+                          }
                         </td>
                       </tr>
                     )}

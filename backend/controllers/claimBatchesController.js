@@ -426,10 +426,32 @@ class ClaimBatchesController extends BaseController {
         });
       }
 
-      // Check all items are for the same insurer
+      // Check all items are for the same insurer (NPHIES requirement)
       const insurerIds = [...new Set(itemsResult.rows.map(c => c.insurer_id))];
       if (insurerIds.length > 1) {
-        return res.status(400).json({ error: 'All items in a batch must be for the same insurer' });
+        return res.status(400).json({ error: 'All items in a batch must be for the same insurer (payer)' });
+      }
+
+      // Check all items are for the same provider (NPHIES requirement)
+      const providerIds = [...new Set(itemsResult.rows.map(c => c.provider_id))];
+      if (providerIds.length > 1) {
+        return res.status(400).json({ error: 'All items in a batch must be for the same provider' });
+      }
+
+      // Check all items are of the same claim type (NPHIES requirement)
+      const claimTypes = [...new Set(itemsResult.rows.map(c => {
+        const type = c.auth_type;
+        if (!type) return null;
+        const normalized = type.toLowerCase();
+        // Normalize similar types
+        if (['institutional', 'inpatient', 'daycase'].includes(normalized)) return 'institutional';
+        if (['dental', 'oral'].includes(normalized)) return 'oral';
+        return normalized;
+      }).filter(Boolean))];
+      if (claimTypes.length > 1) {
+        return res.status(400).json({ 
+          error: `All items in a batch must be of the same claim type. Found: ${claimTypes.join(', ')}` 
+        });
       }
 
       // Calculate total amount
