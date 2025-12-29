@@ -31,6 +31,13 @@ export default function BatchClaimDetails() {
     loadBatchDetails();
   }, [id]);
 
+  // Auto-load bundles when Request Bundle tab is selected
+  useEffect(() => {
+    if (activeTab === 'request' && !freshBundles && !bundlesLoading && !bundlesError) {
+      loadFreshBundles();
+    }
+  }, [activeTab]);
+
   const loadBatchDetails = async () => {
     try {
       setLoading(true);
@@ -445,12 +452,6 @@ export default function BatchClaimDetails() {
           <TabsTrigger 
             value="request" 
             className="data-[state=active]:bg-primary-purple data-[state=active]:text-white"
-            onClick={() => {
-              // Load fresh bundles when tab is clicked (if not already loaded)
-              if (!freshBundles && !bundlesLoading) {
-                loadFreshBundles();
-              }
-            }}
           >
             <Send className="h-4 w-4 mr-2" />
             Request Bundle
