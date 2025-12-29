@@ -97,6 +97,26 @@ class ApiService {
     return this.request(`/patients/${id}`);
   }
 
+  async createPatient(data) {
+    return this.request('/patients', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updatePatient(id, data) {
+    return this.request(`/patients/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deletePatient(id) {
+    return this.request(`/patients/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Providers
   async getProviders(params = {}) {
     const queryString = new URLSearchParams(params).toString();
@@ -107,6 +127,26 @@ class ApiService {
     return this.request(`/providers/${id}`);
   }
 
+  async createProvider(data) {
+    return this.request('/providers', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateProvider(id, data) {
+    return this.request(`/providers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteProvider(id) {
+    return this.request(`/providers/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Insurers
   async getInsurers(params = {}) {
     const queryString = new URLSearchParams(params).toString();
@@ -115,6 +155,26 @@ class ApiService {
 
   async getInsurer(id) {
     return this.request(`/insurers/${id}`);
+  }
+
+  async createInsurer(data) {
+    return this.request('/insurers', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateInsurer(id, data) {
+    return this.request(`/insurers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteInsurer(id) {
+    return this.request(`/insurers/${id}`, {
+      method: 'DELETE'
+    });
   }
 
   // Authorizations

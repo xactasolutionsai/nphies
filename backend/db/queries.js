@@ -467,13 +467,17 @@ export const queries = {
         provider_id,
         provider_name,
         type,
-        nphies_id as nphiesId,
+        nphies_id,
         address,
         phone,
         email,
         doctor_name,
         department,
-        provider_name as name
+        provider_type,
+        location_license,
+        contact_person,
+        created_at,
+        updated_at
       FROM providers
     `,
 
@@ -488,13 +492,17 @@ export const queries = {
         provider_id,
         provider_name,
         type,
-        nphies_id as nphiesId,
+        nphies_id,
         address,
         phone,
         email,
         doctor_name,
         department,
-        provider_name as name
+        provider_type,
+        location_license,
+        contact_person,
+        created_at,
+        updated_at
       FROM providers 
       WHERE provider_id = $1
     `,

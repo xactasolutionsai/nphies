@@ -76,9 +76,9 @@ class InsurersController extends BaseController {
       const statsResult = await query(`
         SELECT 
           COUNT(*) as total_claims,
-          COUNT(CASE WHEN claim_status = 'approved' THEN 1 END) as approved_claims,
-          COUNT(CASE WHEN claim_status = 'submitted' THEN 1 END) as pending_claims,
-          COUNT(CASE WHEN claim_status = 'denied' THEN 1 END) as denied_claims
+          COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_claims,
+          COUNT(CASE WHEN status = 'submitted' THEN 1 END) as pending_claims,
+          COUNT(CASE WHEN status = 'denied' THEN 1 END) as denied_claims
         FROM claims 
         WHERE insurer_id = $1
       `, [id]);
@@ -87,7 +87,7 @@ class InsurersController extends BaseController {
       const paymentStatsResult = await query(`
         SELECT 
           COUNT(*) as total_payments,
-          COALESCE(SUM(total_paid_amount), 0) as total_paid_amount
+          COALESCE(SUM(amount), 0) as total_paid_amount
         FROM payments 
         WHERE insurer_id = $1
       `, [id]);

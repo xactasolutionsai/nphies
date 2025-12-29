@@ -209,13 +209,26 @@ export const TABLE_SCHEMAS = {
 // Joi validation schemas
 export const validationSchemas = {
   patient: Joi.object({
+    // Required fields
     name: Joi.string().min(2).max(255).required(),
     identifier: Joi.string().min(5).max(50).required(),
-    gender: Joi.string().valid('Male', 'Female', 'Other').required(),
+    gender: Joi.string().valid('male', 'female', 'other', 'Male', 'Female', 'Other').required(),
     birth_date: Joi.date().required(),
-    phone: Joi.string().min(10).max(20).optional(),
-    email: Joi.string().email().optional(),
-    address: Joi.string().optional()
+    // Optional fields
+    phone: Joi.string().max(50).allow('', null).optional(),
+    email: Joi.string().email().allow('', null).optional(),
+    identifier_type: Joi.string().max(50).allow('', null).optional(),
+    nationality: Joi.string().max(10).allow('', null).optional(),
+    marital_status: Joi.string().valid('single', 'married', 'divorced', 'widowed', 'Single', 'Married', 'Divorced', 'Widowed', null, '').optional(),
+    address: Joi.string().allow('', null).optional(),
+    city: Joi.string().max(100).allow('', null).optional(),
+    country: Joi.string().max(10).allow('', null).optional(),
+    occupation: Joi.string().max(255).allow('', null).optional(),
+    is_newborn: Joi.boolean().optional(),
+    nphies_patient_id: Joi.string().max(255).allow('', null).optional(),
+    identifier_system: Joi.string().max(255).allow('', null).optional(),
+    telecom: Joi.object().allow(null).optional(),
+    address_details: Joi.object().allow(null).optional()
   }),
   
   provider: Joi.object({

@@ -3,8 +3,14 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Patients from './pages/Patients';
+import PatientDetails from './pages/PatientDetails';
+import PatientForm from './pages/PatientForm';
 import Providers from './pages/Providers';
+import ProviderDetails from './pages/ProviderDetails';
+import ProviderForm from './pages/ProviderForm';
 import Insurers from './pages/Insurers';
+import InsurerDetails from './pages/InsurerDetails';
+import InsurerForm from './pages/InsurerForm';
 import Authorizations from './pages/Authorizations';
 import Eligibility from './pages/Eligibility';
 import Claims from './pages/Claims';
@@ -46,8 +52,17 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/patients" element={<Patients />} />
+          <Route path="/patients/new" element={<PatientForm />} />
+          <Route path="/patients/:id/edit" element={<PatientForm />} />
+          <Route path="/patients/:id" element={<PatientDetails />} />
           <Route path="/providers" element={<Providers />} />
+          <Route path="/providers/new" element={<ProviderForm />} />
+          <Route path="/providers/:id/edit" element={<ProviderForm />} />
+          <Route path="/providers/:id" element={<ProviderDetails />} />
           <Route path="/insurers" element={<Insurers />} />
+          <Route path="/insurers/new" element={<InsurerForm />} />
+          <Route path="/insurers/:id/edit" element={<InsurerForm />} />
+          <Route path="/insurers/:id" element={<InsurerDetails />} />
           <Route path="/authorizations" element={<Authorizations />} />
           <Route path="/eligibility" element={<Eligibility />} />
           <Route path="/nphies-eligibility" element={<NphiesEligibilityList />} />
