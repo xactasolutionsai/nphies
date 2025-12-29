@@ -144,17 +144,23 @@ class ClaimBatchesController extends BaseController {
     const batch = batchResult.rows[0];
 
     // Get item IDs from the batch's request_bundle metadata
+    // Check both direct item_ids and _metadata.item_ids (after submission the bundle structure changes)
     let itemIds = [];
     if (batch.request_bundle) {
       const bundleData = typeof batch.request_bundle === 'string' 
         ? JSON.parse(batch.request_bundle) 
         : batch.request_bundle;
-      itemIds = bundleData.item_ids || [];
+      // Try direct item_ids first (before submission), then _metadata.item_ids (after submission)
+      itemIds = bundleData.item_ids || bundleData._metadata?.item_ids || [];
+      console.log(`[BatchClaims] Batch ${id} - request_bundle item_ids:`, itemIds);
+    } else {
+      console.log(`[BatchClaims] Batch ${id} - NO request_bundle found`);
     }
 
     // Get prior authorization items in this batch
     let claims = [];
     if (itemIds.length > 0) {
+      console.log(`[BatchClaims] Fetching ${itemIds.length} items from prior_authorization_items`);
       const itemsResult = await query(`
         SELECT 
           pai.id,
@@ -180,12 +186,16 @@ class ClaimBatchesController extends BaseController {
         ORDER BY pai.id
       `, [itemIds]);
 
+      console.log(`[BatchClaims] Found ${itemsResult.rows.length} items in database`);
+
       // Add batch_number based on position in itemIds array
       claims = itemsResult.rows.map(item => ({
         ...item,
         batch_number: itemIds.indexOf(item.id) + 1,
         claim_number: `${item.claim_number}-${item.sequence}`
       }));
+    } else {
+      console.log(`[BatchClaims] Batch ${id} - itemIds is empty, no claims to fetch`);
     }
 
     // Calculate batch statistics from items
@@ -727,10 +737,30 @@ class ClaimBatchesController extends BaseController {
       const bundleData = await this.prepareBatchBundleData(batch);
       const batchBundle = batchClaimMapper.buildBatchClaimRequestBundle(bundleData);
 
-      // Store the request bundle
+      // Get original item_ids from current request_bundle to preserve them
+      let itemIds = [];
+      if (batch.request_bundle) {
+        const currentBundle = typeof batch.request_bundle === 'string' 
+          ? JSON.parse(batch.request_bundle) 
+          : batch.request_bundle;
+        itemIds = currentBundle.item_ids || [];
+      }
+
+      // Store the request bundle while preserving item_ids metadata
+      const bundleWithMetadata = {
+        ...batchBundle,
+        _metadata: {
+          item_ids: itemIds,
+          items: bundleData.claims?.map((c, i) => ({
+            item_id: c.itemId,
+            batch_number: i + 1
+          })) || []
+        }
+      };
+      
       await query(`
         UPDATE claim_batches SET request_bundle = $1 WHERE id = $2
-      `, [JSON.stringify(batchBundle), id]);
+      `, [JSON.stringify(bundleWithMetadata), id]);
 
       // Submit to NPHIES
       console.log(`[BatchClaims] Submitting batch ${batch.batch_identifier} with ${batch.claims.length} claims`);
