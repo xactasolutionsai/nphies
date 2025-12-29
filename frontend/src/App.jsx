@@ -17,6 +17,7 @@ import Claims from './pages/Claims';
 import ClaimBatches from './pages/ClaimBatches';
 import BatchClaimDetails from './pages/BatchClaimDetails';
 import BatchBundlePreview from './pages/BatchBundlePreview';
+import CreateBatchClaim from './pages/CreateBatchClaim';
 import Payments from './pages/Payments';
 import ResponseViewer from './pages/ResponseViewer';
 import GeneralForm from './pages/GeneralForm';
@@ -71,6 +72,7 @@ function App() {
           <Route path="/nphies-eligibility/:id" element={<NphiesEligibilityDetails />} />
           <Route path="/claims" element={<Claims />} />
           <Route path="/claim-batches" element={<ClaimBatches />} />
+          <Route path="/claim-batches/create" element={<CreateBatchClaim />} />
           <Route path="/claim-batches/:id" element={<BatchClaimDetails />} />
           <Route path="/claim-batches/:id/preview" element={<BatchBundlePreview />} />
           <Route path="/payments" element={<Payments />} />
