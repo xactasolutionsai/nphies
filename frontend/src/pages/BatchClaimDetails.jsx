@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Package, ArrowLeft, Send, RefreshCw, Eye, Trash2, CheckCircle2, 
   AlertCircle, Clock, Building2, Shield, Calendar, DollarSign,
-  FileText, Activity, Info, Copy, Download
+  FileText, Activity, Info, Copy, Download, Loader2
 } from 'lucide-react';
 import api from '@/services/api';
 
@@ -21,6 +21,11 @@ export default function BatchClaimDetails() {
   const [activeTab, setActiveTab] = useState('overview');
   const [pollingStatus, setPollingStatus] = useState(null);
   const [lastPollTime, setLastPollTime] = useState(null);
+  // State for fresh FHIR bundles (fetched from preview API)
+  const [freshBundles, setFreshBundles] = useState(null);
+  const [bundlesLoading, setBundlesLoading] = useState(false);
+  const [bundlesError, setBundlesError] = useState(null);
+  const [copiedIndex, setCopiedIndex] = useState(null);
 
   useEffect(() => {
     loadBatchDetails();
@@ -36,6 +41,79 @@ export default function BatchClaimDetails() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Load fresh FHIR bundles from preview API (the exact JSON sent to NPHIES)
+  const loadFreshBundles = async () => {
+    try {
+      setBundlesLoading(true);
+      setBundlesError(null);
+      const response = await api.previewBatchBundle(id);
+      // response.data contains the array of bundles
+      setFreshBundles(response.data || response);
+    } catch (error) {
+      console.error('Error loading fresh bundles:', error);
+      setBundlesError(error.response?.data?.error || error.message || 'Failed to load bundles');
+    } finally {
+      setBundlesLoading(false);
+    }
+  };
+
+  // Helper to clean bundle for copying (remove internal metadata)
+  const cleanBundleForCopy = (bundle) => {
+    if (!bundle) return bundle;
+    const { _batchMetadata, ...clean } = bundle;
+    return clean;
+  };
+
+  // Copy single bundle to clipboard
+  const copySingleBundle = async (bundle, index) => {
+    try {
+      const cleanBundle = cleanBundleForCopy(bundle);
+      await navigator.clipboard.writeText(JSON.stringify(cleanBundle, null, 2));
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy to clipboard');
+    }
+  };
+
+  // Copy all bundles to clipboard
+  const copyAllBundles = async (bundles) => {
+    try {
+      const cleanBundles = bundles.map(cleanBundleForCopy);
+      await navigator.clipboard.writeText(JSON.stringify(cleanBundles, null, 2));
+      setCopiedIndex('all');
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy to clipboard');
+    }
+  };
+
+  // Download single bundle
+  const downloadSingleBundle = (bundle, index) => {
+    const cleanBundle = cleanBundleForCopy(bundle);
+    const blob = new Blob([JSON.stringify(cleanBundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `batch-${batch?.batch_identifier}-bundle-${index + 1}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Download all bundles
+  const downloadAllBundles = (bundles) => {
+    const cleanBundles = bundles.map(cleanBundleForCopy);
+    const blob = new Blob([JSON.stringify(cleanBundles, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `batch-${batch?.batch_identifier}-all-bundles.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleSendToNphies = async () => {
@@ -364,12 +442,19 @@ export default function BatchClaimDetails() {
               Errors ({batch.errors.length})
             </TabsTrigger>
           )}
-          {batch.request_bundle && (
-            <TabsTrigger value="request" className="data-[state=active]:bg-primary-purple data-[state=active]:text-white">
-              <Send className="h-4 w-4 mr-2" />
-              Request Bundle
-            </TabsTrigger>
-          )}
+          <TabsTrigger 
+            value="request" 
+            className="data-[state=active]:bg-primary-purple data-[state=active]:text-white"
+            onClick={() => {
+              // Load fresh bundles when tab is clicked (if not already loaded)
+              if (!freshBundles && !bundlesLoading) {
+                loadFreshBundles();
+              }
+            }}
+          >
+            <Send className="h-4 w-4 mr-2" />
+            Request Bundle
+          </TabsTrigger>
           {batch.response_bundle && (
             <TabsTrigger value="response" className="data-[state=active]:bg-primary-purple data-[state=active]:text-white">
               <Activity className="h-4 w-4 mr-2" />
@@ -553,117 +638,180 @@ export default function BatchClaimDetails() {
           </TabsContent>
         )}
 
-        {/* Request Bundle Tab */}
-        {batch.request_bundle && (
-          <TabsContent value="request">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center">
-                      <Send className="h-5 w-5 mr-2" />
-                      Request Bundles
-                    </CardTitle>
-                    <CardDescription>
-                      Clean FHIR Bundles sent to NPHIES (ready for Postman)
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        // Extract clean bundles without _batchMetadata
-                        const bundleData = typeof batch.request_bundle === 'string' 
-                          ? JSON.parse(batch.request_bundle) 
-                          : batch.request_bundle;
-                        const bundles = bundleData.bundles || [bundleData];
-                        const cleanBundles = bundles.map(b => {
-                          const { _batchMetadata, ...clean } = b;
-                          return clean;
-                        });
-                        navigator.clipboard.writeText(JSON.stringify(cleanBundles, null, 2));
-                        alert('All request bundles copied to clipboard!');
-                      }}
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy All
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        const bundleData = typeof batch.request_bundle === 'string' 
-                          ? JSON.parse(batch.request_bundle) 
-                          : batch.request_bundle;
-                        const bundles = bundleData.bundles || [bundleData];
-                        const cleanBundles = bundles.map(b => {
-                          const { _batchMetadata, ...clean } = b;
-                          return clean;
-                        });
-                        const blob = new Blob([JSON.stringify(cleanBundles, null, 2)], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `batch-${batch.batch_identifier}-requests.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download All
-                    </Button>
-                  </div>
+        {/* Request Bundle Tab - Shows exact JSON sent to NPHIES */}
+        <TabsContent value="request">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center">
+                    <Send className="h-5 w-5 mr-2" />
+                    Request Bundles
+                  </CardTitle>
+                  <CardDescription>
+                    Exact FHIR Bundles sent to NPHIES - Copy for Postman testing
+                  </CardDescription>
                 </div>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const bundleData = typeof batch.request_bundle === 'string' 
-                    ? JSON.parse(batch.request_bundle) 
-                    : batch.request_bundle;
-                  const bundles = bundleData.bundles || [bundleData];
+                <div className="flex items-center gap-2">
+                  {!freshBundles && !bundlesLoading && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={loadFreshBundles}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Load Bundles
+                    </Button>
+                  )}
+                  {freshBundles && Array.isArray(freshBundles) && (
+                    <>
+                      <Button 
+                        variant={copiedIndex === 'all' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => copyAllBundles(freshBundles)}
+                        className={copiedIndex === 'all' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
+                      >
+                        {copiedIndex === 'all' ? (
+                          <>
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy All
+                          </>
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => downloadAllBundles(freshBundles)}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download All
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={loadFreshBundles}
+                        disabled={bundlesLoading}
+                      >
+                        <RefreshCw className={`h-4 w-4 ${bundlesLoading ? 'animate-spin' : ''}`} />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Loading state */}
+              {bundlesLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary-purple mr-3" />
+                  <span className="text-gray-600">Loading FHIR bundles...</span>
+                </div>
+              )}
+
+              {/* Error state */}
+              {bundlesError && !bundlesLoading && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
+                    <span className="text-red-700">{bundlesError}</span>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={loadFreshBundles}
+                    className="mt-3"
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              )}
+
+              {/* Initial state - prompt to load */}
+              {!freshBundles && !bundlesLoading && !bundlesError && (
+                <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                  <Send className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">Load Request Bundles</h3>
+                  <p className="text-gray-500 mb-4">
+                    Click below to generate the exact FHIR bundles that will be sent to NPHIES
+                  </p>
+                  <Button onClick={loadFreshBundles}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Generate Bundles
+                  </Button>
+                </div>
+              )}
+
+              {/* Bundles display */}
+              {freshBundles && Array.isArray(freshBundles) && !bundlesLoading && (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-blue-700">
+                      <strong>Note:</strong> Each bundle below is sent as a separate POST request to NPHIES. 
+                      Copy individual bundles for Postman testing.
+                    </p>
+                  </div>
                   
-                  return (
-                    <div className="space-y-4">
-                      {bundles.map((bundle, index) => {
-                        const { _batchMetadata, ...cleanBundle } = bundle;
-                        return (
-                          <div key={index} className="border rounded-lg overflow-hidden">
-                            <div className="bg-gray-100 px-4 py-2 flex justify-between items-center">
-                              <span className="font-medium">
-                                Bundle {index + 1} - Claim #{_batchMetadata?.batchNumber || index + 1}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">
-                                  {cleanBundle.entry?.length || 0} entries
-                                </span>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(JSON.stringify(cleanBundle, null, 2));
-                                    alert(`Bundle ${index + 1} copied to clipboard!`);
-                                  }}
-                                  className="h-7 px-2 text-xs"
-                                >
-                                  <Copy className="h-3 w-3 mr-1" />
-                                  Copy
-                                </Button>
-                              </div>
-                            </div>
-                            <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap break-all select-all">
-                              {JSON.stringify(cleanBundle, null, 2)}
-                            </pre>
+                  {freshBundles.map((bundle, index) => {
+                    const cleanBundle = cleanBundleForCopy(bundle);
+                    return (
+                      <div key={index} className="border rounded-lg overflow-hidden">
+                        <div className="bg-gray-100 px-4 py-3 flex justify-between items-center">
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline" className="bg-primary-purple/10 text-primary-purple border-primary-purple/20">
+                              Bundle {index + 1}
+                            </Badge>
+                            <span className="font-medium">
+                              Claim #{bundle._batchMetadata?.batchNumber || index + 1}
+                            </span>
+                            <Badge variant="secondary">
+                              {cleanBundle.entry?.length || 0} entries
+                            </Badge>
                           </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
+                          <div className="flex items-center gap-2">
+                            <Button 
+                              variant={copiedIndex === index ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => copySingleBundle(bundle, index)}
+                              className={copiedIndex === index ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
+                            >
+                              {copiedIndex === index ? (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                                  Copied!
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-4 w-4 mr-1" />
+                                  Copy
+                                </>
+                              )}
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => downloadSingleBundle(bundle, index)}
+                            >
+                              <Download className="h-4 w-4 mr-1" />
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                        <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[500px] overflow-y-auto whitespace-pre-wrap break-all select-all">
+                          {JSON.stringify(cleanBundle, null, 2)}
+                        </pre>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Response Bundle Tab */}
         {batch.response_bundle && (
