@@ -39,6 +39,7 @@ export default function ClaimBatches() {
   const [actionLoading, setActionLoading] = useState(null);
   const [showBundlePreview, setShowBundlePreview] = useState(false);
   const [bundlePreview, setBundlePreview] = useState(null);
+  const [copySuccess, setCopySuccess] = useState(false);
   
   // Chart data states
   const [batchesByStatus, setBatchesByStatus] = useState([]);
@@ -1109,18 +1110,40 @@ export default function ClaimBatches() {
                     <div key={index} className="border rounded-lg overflow-hidden">
                       <div className="bg-gray-100 px-4 py-2 flex justify-between items-center">
                         <span className="font-medium">Bundle {index + 1} - Claim #{bundle._batchMetadata?.batchNumber || index + 1}</span>
-                        <span className="text-xs text-gray-500">
-                          {bundle.entry?.length || 0} entries
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">
+                            {bundle.entry?.length || 0} entries
+                          </span>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const jsonString = JSON.stringify(bundle, null, 2);
+                                await navigator.clipboard.writeText(jsonString);
+                                alert(`Bundle ${index + 1} copied to clipboard!`);
+                              } catch (err) {
+                                console.error('Failed to copy:', err);
+                              }
+                            }}
+                            className="h-7 px-2 text-xs"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                              <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                            </svg>
+                            Copy
+                          </Button>
+                        </div>
                       </div>
-                      <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[300px] overflow-y-auto">
+                      <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all select-all">
                         {JSON.stringify(bundle, null, 2)}
                       </pre>
                     </div>
                   ))}
                 </div>
               ) : (
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm font-mono leading-relaxed">
+                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm font-mono leading-relaxed whitespace-pre-wrap break-all select-all">
                   {JSON.stringify(bundlePreview?.data || bundlePreview, null, 2)}
                 </pre>
               )}
@@ -1132,18 +1155,51 @@ export default function ClaimBatches() {
               </span>
               <div className="flex gap-3">
                 <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    navigator.clipboard.writeText(JSON.stringify(bundlePreview?.data || bundlePreview, null, 2));
-                    alert('JSON copied to clipboard!');
+                  variant={copySuccess ? "default" : "outline"}
+                  onClick={async () => {
+                    try {
+                      const dataToCopy = bundlePreview?.data || bundlePreview;
+                      const jsonString = JSON.stringify(dataToCopy, null, 2);
+                      
+                      if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(jsonString);
+                      } else {
+                        // Fallback for older browsers
+                        const textArea = document.createElement('textarea');
+                        textArea.value = jsonString;
+                        textArea.style.position = 'fixed';
+                        textArea.style.left = '-9999px';
+                        textArea.style.top = '-9999px';
+                        document.body.appendChild(textArea);
+                        textArea.focus();
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                      }
+                      
+                      setCopySuccess(true);
+                      setTimeout(() => setCopySuccess(false), 2000);
+                    } catch (err) {
+                      console.error('Failed to copy:', err);
+                      alert('Failed to copy to clipboard. Please try the Download option instead.');
+                    }
                   }}
-                  className="flex items-center gap-2"
+                  className={copySuccess ? "bg-green-600 hover:bg-green-700 text-white flex items-center gap-2" : "flex items-center gap-2"}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-                  </svg>
-                  Copy All JSON
+                  {copySuccess ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                      </svg>
+                      Copy All JSON
+                    </>
+                  )}
                 </Button>
                 <Button 
                   variant="outline"

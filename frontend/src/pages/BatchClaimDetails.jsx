@@ -23,6 +23,7 @@ export default function BatchClaimDetails() {
   const [activeTab, setActiveTab] = useState('overview');
   const [pollingStatus, setPollingStatus] = useState(null);
   const [lastPollTime, setLastPollTime] = useState(null);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
     loadBatchDetails();
@@ -113,10 +114,60 @@ export default function BatchClaimDetails() {
     }
   };
 
-  const copyBundleToClipboard = () => {
-    const dataToCopy = bundlePreview?.data || bundlePreview;
-    navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
-    alert('Bundles copied to clipboard');
+  const copyBundleToClipboard = async () => {
+    try {
+      const dataToCopy = bundlePreview?.data || bundlePreview;
+      const jsonString = JSON.stringify(dataToCopy, null, 2);
+      
+      // Try modern clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(jsonString);
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = jsonString;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy to clipboard. Please try the Download option instead.');
+    }
+  };
+
+  const copySingleBundleToClipboard = async (bundle, index) => {
+    try {
+      const jsonString = JSON.stringify(bundle, null, 2);
+      
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(jsonString);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = jsonString;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      
+      alert(`Bundle ${index + 1} copied to clipboard!`);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy to clipboard.');
+    }
   };
 
   const downloadBundle = () => {
@@ -652,18 +703,29 @@ export default function BatchClaimDetails() {
                     <div key={index} className="border rounded-lg overflow-hidden">
                       <div className="bg-gray-100 px-4 py-2 flex justify-between items-center">
                         <span className="font-medium">Bundle {index + 1} - Claim #{bundle._batchMetadata?.batchNumber || index + 1}</span>
-                        <span className="text-xs text-gray-500">
-                          {bundle.entry?.length || 0} entries
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">
+                            {bundle.entry?.length || 0} entries
+                          </span>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => copySingleBundleToClipboard(bundle, index)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            <Copy className="h-3 w-3 mr-1" />
+                            Copy
+                          </Button>
+                        </div>
                       </div>
-                      <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[300px] overflow-y-auto">
+                      <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all select-all">
                         {JSON.stringify(bundle, null, 2)}
                       </pre>
                     </div>
                   ))}
                 </div>
               ) : (
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm">
+                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap break-all select-all">
                   {JSON.stringify(bundlePreview?.data || bundlePreview, null, 2)}
                 </pre>
               )}
@@ -673,9 +735,22 @@ export default function BatchClaimDetails() {
                 Total Size: {(JSON.stringify(bundlePreview?.data || bundlePreview).length / 1024).toFixed(2)} KB
               </div>
               <div className="flex space-x-3">
-                <Button variant="outline" onClick={copyBundleToClipboard}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy All
+                <Button 
+                  variant={copySuccess ? "default" : "outline"} 
+                  onClick={copyBundleToClipboard}
+                  className={copySuccess ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                >
+                  {copySuccess ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy All JSON
+                    </>
+                  )}
                 </Button>
                 <Button variant="outline" onClick={downloadBundle}>
                   <Download className="h-4 w-4 mr-2" />
