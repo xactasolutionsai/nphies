@@ -228,7 +228,7 @@ export default function ClaimBatches() {
   const getUniqueClaimTypes = () => {
     const types = new Set();
     availableClaims.forEach(c => {
-      if (c.auth_type) types.add(c.auth_type);
+      if (c.claim_type) types.add(c.claim_type);
     });
     return Array.from(types);
   };
@@ -236,7 +236,7 @@ export default function ClaimBatches() {
   // Get filtered claims based on selected claim type
   const getFilteredClaims = () => {
     if (!filterClaimType) return availableClaims;
-    return availableClaims.filter(c => c.auth_type === filterClaimType);
+    return availableClaims.filter(c => c.claim_type === filterClaimType);
   };
 
   const handleClaimSelect = (claimId) => {
@@ -259,7 +259,7 @@ export default function ClaimBatches() {
             return prev;
           }
           // Check claim type consistency
-          if (claim.auth_type !== firstClaim.auth_type) {
+          if (claim.claim_type !== firstClaim.claim_type) {
             alert('All claims in a batch must be of the same type');
             return prev;
           }
@@ -277,9 +277,9 @@ export default function ClaimBatches() {
       // Only select claims with same insurer and type as first one
       if (filteredClaims.length > 0) {
         const firstInsurer = filteredClaims[0].insurer_id;
-        const firstType = filteredClaims[0].auth_type;
+        const firstType = filteredClaims[0].claim_type;
         const compatibleClaims = filteredClaims
-          .filter(c => c.insurer_id === firstInsurer && c.auth_type === firstType)
+          .filter(c => c.insurer_id === firstInsurer && c.claim_type === firstType)
           .slice(0, 200)
           .map(c => c.id);
         setSelectedClaims(compatibleClaims);
@@ -776,7 +776,7 @@ export default function ClaimBatches() {
                       <option value="">All Types ({availableClaims.length} items)</option>
                       {getUniqueClaimTypes().map(type => (
                         <option key={type} value={type}>
-                          {type.charAt(0).toUpperCase() + type.slice(1)} ({availableClaims.filter(c => c.auth_type === type).length} items)
+                          {type.charAt(0).toUpperCase() + type.slice(1)} ({availableClaims.filter(c => c.claim_type === type).length} items)
                         </option>
                       ))}
                     </select>
@@ -849,15 +849,16 @@ export default function ClaimBatches() {
                           <Badge 
                             variant="outline" 
                             className={`text-xs ${
-                              item.auth_type === 'oral' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                              item.auth_type === 'vision' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                              item.auth_type === 'pharmacy' ? 'bg-green-50 text-green-700 border-green-200' :
-                              item.auth_type === 'professional' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                              item.auth_type === 'institutional' ? 'bg-red-50 text-red-700 border-red-200' :
+                              item.claim_type === 'oral' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              item.claim_type === 'dental' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
+                              item.claim_type === 'vision' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                              item.claim_type === 'pharmacy' ? 'bg-green-50 text-green-700 border-green-200' :
+                              item.claim_type === 'professional' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                              item.claim_type === 'institutional' ? 'bg-red-50 text-red-700 border-red-200' :
                               'bg-gray-50 text-gray-700 border-gray-200'
                             }`}
                           >
-                            {item.auth_type ? item.auth_type.charAt(0).toUpperCase() + item.auth_type.slice(1) : 'N/A'}
+                            {item.claim_type ? item.claim_type.charAt(0).toUpperCase() + item.claim_type.slice(1) : 'N/A'}
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-sm">
