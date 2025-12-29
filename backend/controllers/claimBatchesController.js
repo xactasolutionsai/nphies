@@ -703,7 +703,7 @@ class ClaimBatchesController extends BaseController {
         bundleCount: claimBundles.length,
         claimCount: batch.claims.length,
         totalAmount: batch.total_amount,
-        note: 'Each claim will be sent in a separate bundle per NPHIES requirements. Claims are logically grouped by batch extensions.'
+        note: 'Each claim will be sent in a separate bundle per NPHIES requirements. Claims are logically grouped by batch extensions. Note: _batchMetadata shown here is for display only and will be removed before sending to NPHIES.'
       });
     } catch (error) {
       console.error('Error previewing batch bundles:', error);
@@ -790,10 +790,33 @@ class ClaimBatchesController extends BaseController {
         try {
           console.log(`[BatchClaims] Submitting claim ${claimNumber}/${claimBundles.length} for batch ${batch.batch_identifier}`);
           
-          // Submit individual claim bundle
-          const nphiesResponse = await nphiesService.submitClaim(bundle);
+          // Remove _batchMetadata before sending to NPHIES (internal use only)
+          // NPHIES rejects unknown elements with error FR-00027
+          const { _batchMetadata, ...cleanBundle } = bundle;
           
-          if (nphiesResponse.success) {
+          // Submit individual claim bundle (without internal metadata)
+          const nphiesResponse = await nphiesService.submitClaim(cleanBundle);
+          
+          // Check if response has error outcome (NPHIES returns HTTP 200 but with errors in ClaimResponse)
+          const claimResponse = nphiesResponse.claimResponse;
+          const hasErrorOutcome = claimResponse?.outcome === 'error';
+          const responseErrors = claimResponse?.error || [];
+          
+          // Extract error details from ClaimResponse.error array
+          const extractedErrors = responseErrors.map(err => {
+            const coding = err?.code?.coding?.[0] || {};
+            const expression = coding.extension?.find(e => 
+              e.url?.includes('extension-error-expression')
+            )?.valueString;
+            return {
+              code: coding.code,
+              display: coding.display,
+              expression: expression
+            };
+          });
+          
+          if (nphiesResponse.success && !hasErrorOutcome) {
+            // Actually successful - HTTP 200 AND outcome is not "error"
             successCount++;
             allResponses.push({
               claimNumber,
@@ -814,17 +837,25 @@ class ClaimBatchesController extends BaseController {
               await this.processSingleClaimResponse(id, claimNumber, nphiesResponse.claimResponse, bundle);
             }
           } else {
+            // Failed - either HTTP error OR outcome: "error" in ClaimResponse
             errorCount++;
+            const errorMessage = hasErrorOutcome 
+              ? `NPHIES Error: ${extractedErrors.map(e => e.display || e.code).join(', ')}`
+              : (nphiesResponse.error?.message || 'Submission failed');
+            
             allErrors.push({
               claimNumber,
-              error: nphiesResponse.error?.message || 'Submission failed',
-              errors: nphiesResponse.errors
+              error: errorMessage,
+              errors: hasErrorOutcome ? extractedErrors : nphiesResponse.errors,
+              outcome: claimResponse?.outcome
             });
             allResponses.push({
               claimNumber,
               success: false,
-              error: nphiesResponse.error?.message,
-              errors: nphiesResponse.errors
+              data: nphiesResponse.data, // Include response data for debugging
+              error: errorMessage,
+              errors: hasErrorOutcome ? extractedErrors : nphiesResponse.errors,
+              outcome: claimResponse?.outcome
             });
           }
         } catch (claimError) {

@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Package, ArrowLeft, Send, RefreshCw, Eye, Trash2, CheckCircle2, 
   AlertCircle, Clock, Building2, Shield, Calendar, DollarSign,
-  FileText, Activity, Info, X, Download, Copy
+  FileText, Activity, Info
 } from 'lucide-react';
 import api from '@/services/api';
 
@@ -18,12 +18,9 @@ export default function BatchClaimDetails() {
   const [batch, setBatch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [showBundlePreview, setShowBundlePreview] = useState(false);
-  const [bundlePreview, setBundlePreview] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [pollingStatus, setPollingStatus] = useState(null);
   const [lastPollTime, setLastPollTime] = useState(null);
-  const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
     loadBatchDetails();
@@ -84,19 +81,9 @@ export default function BatchClaimDetails() {
     }
   };
 
-  const handlePreviewBundle = async () => {
-    try {
-      setActionLoading(true);
-      const response = await api.previewBatchBundle(id);
-      // response now contains { data: [...bundles], bundleCount, claimCount, note }
-      setBundlePreview(response);
-      setShowBundlePreview(true);
-    } catch (error) {
-      console.error('Error previewing bundle:', error);
-      alert(error.response?.data?.error || 'Failed to preview bundle');
-    } finally {
-      setActionLoading(false);
-    }
+  const handlePreviewBundle = () => {
+    // Navigate to the dedicated preview page
+    navigate(`/claim-batches/${id}/preview`);
   };
 
   const handleDeleteBatch = async () => {
@@ -112,90 +99,6 @@ export default function BatchClaimDetails() {
     } finally {
       setActionLoading(false);
     }
-  };
-
-  // Helper function to clean bundle for NPHIES (remove internal metadata)
-  const cleanBundleForNphies = (bundle) => {
-    if (!bundle) return bundle;
-    const { _batchMetadata, ...cleanBundle } = bundle;
-    return cleanBundle;
-  };
-
-  const copyBundleToClipboard = async () => {
-    try {
-      const rawData = bundlePreview?.data || bundlePreview;
-      // Clean each bundle by removing _batchMetadata (internal use only)
-      const dataToCopy = Array.isArray(rawData) 
-        ? rawData.map(cleanBundleForNphies)
-        : cleanBundleForNphies(rawData);
-      const jsonString = JSON.stringify(dataToCopy, null, 2);
-      
-      // Try modern clipboard API first
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(jsonString);
-      } else {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = jsonString;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-9999px';
-        textArea.style.top = '-9999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-      }
-      
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-      alert('Failed to copy to clipboard. Please try the Download option instead.');
-    }
-  };
-
-  const copySingleBundleToClipboard = async (bundle, index) => {
-    try {
-      // Clean bundle by removing _batchMetadata
-      const cleanBundle = cleanBundleForNphies(bundle);
-      const jsonString = JSON.stringify(cleanBundle, null, 2);
-      
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(jsonString);
-      } else {
-        const textArea = document.createElement('textarea');
-        textArea.value = jsonString;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-9999px';
-        textArea.style.top = '-9999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-      }
-      
-      alert(`Bundle ${index + 1} copied to clipboard!`);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-      alert('Failed to copy to clipboard.');
-    }
-  };
-
-  const downloadBundle = () => {
-    const rawData = bundlePreview?.data || bundlePreview;
-    // Clean each bundle by removing _batchMetadata (internal use only)
-    const dataToDownload = Array.isArray(rawData) 
-      ? rawData.map(cleanBundleForNphies)
-      : cleanBundleForNphies(rawData);
-    const blob = new Blob([JSON.stringify(dataToDownload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `batch-${batch?.batch_identifier || id}-bundles.json`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const getStatusBadge = (status) => {
@@ -666,119 +569,6 @@ export default function BatchClaimDetails() {
           </TabsContent>
         )}
       </Tabs>
-
-      {/* Bundle Preview Modal */}
-      {showBundlePreview && bundlePreview && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
-            <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-2xl font-bold">FHIR Bundles Preview</h2>
-                  <p className="text-white/80 mt-1">
-                    {bundlePreview?.bundleCount || bundlePreview?.data?.length || 0} separate bundles will be sent to NPHIES
-                  </p>
-                </div>
-                <button onClick={() => setShowBundlePreview(false)} className="text-white/80 hover:text-white p-2">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-            
-            {/* Summary */}
-            <div className="px-6 py-4 bg-gray-50 border-b">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Total Bundles:</span>
-                  <span className="ml-2 font-medium">{bundlePreview?.bundleCount || bundlePreview?.data?.length || 0}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Claims Count:</span>
-                  <span className="ml-2 font-medium">{bundlePreview?.claimCount || 0}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Total Amount:</span>
-                  <span className="ml-2 font-medium">{bundlePreview?.totalAmount?.toLocaleString() || 0} SAR</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Structure:</span>
-                  <span className="ml-2 font-medium text-xs">1 Bundle per Claim</span>
-                </div>
-              </div>
-              {bundlePreview?.note && (
-                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-                  <strong>Note:</strong> {bundlePreview.note}
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 overflow-y-auto max-h-[50vh]">
-              {/* Show each bundle separately */}
-              {Array.isArray(bundlePreview?.data) ? (
-                <div className="space-y-4">
-                  {bundlePreview.data.map((bundle, index) => (
-                    <div key={index} className="border rounded-lg overflow-hidden">
-                      <div className="bg-gray-100 px-4 py-2 flex justify-between items-center">
-                        <span className="font-medium">Bundle {index + 1} - Claim #{bundle._batchMetadata?.batchNumber || index + 1}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">
-                            {bundle.entry?.length || 0} entries
-                          </span>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => copySingleBundleToClipboard(bundle, index)}
-                            className="h-7 px-2 text-xs"
-                          >
-                            <Copy className="h-3 w-3 mr-1" />
-                            Copy
-                          </Button>
-                        </div>
-                      </div>
-                      <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all select-all">
-                        {JSON.stringify(bundle, null, 2)}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap break-all select-all">
-                  {JSON.stringify(bundlePreview?.data || bundlePreview, null, 2)}
-                </pre>
-              )}
-            </div>
-            <div className="bg-gray-50 px-6 py-4 border-t flex justify-between items-center">
-              <div className="text-sm text-gray-500">
-                Total Size: {(JSON.stringify(bundlePreview?.data || bundlePreview).length / 1024).toFixed(2)} KB
-              </div>
-              <div className="flex space-x-3">
-                <Button 
-                  variant={copySuccess ? "default" : "outline"} 
-                  onClick={copyBundleToClipboard}
-                  className={copySuccess ? "bg-green-600 hover:bg-green-700 text-white" : ""}
-                >
-                  {copySuccess ? (
-                    <>
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy All JSON
-                    </>
-                  )}
-                </Button>
-                <Button variant="outline" onClick={downloadBundle}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download All
-                </Button>
-                <Button variant="outline" onClick={() => setShowBundlePreview(false)}>Close</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import Eligibility from './pages/Eligibility';
 import Claims from './pages/Claims';
 import ClaimBatches from './pages/ClaimBatches';
 import BatchClaimDetails from './pages/BatchClaimDetails';
+import BatchBundlePreview from './pages/BatchBundlePreview';
 import Payments from './pages/Payments';
 import ResponseViewer from './pages/ResponseViewer';
 import GeneralForm from './pages/GeneralForm';
@@ -71,6 +72,7 @@ function App() {
           <Route path="/claims" element={<Claims />} />
           <Route path="/claim-batches" element={<ClaimBatches />} />
           <Route path="/claim-batches/:id" element={<BatchClaimDetails />} />
+          <Route path="/claim-batches/:id/preview" element={<BatchBundlePreview />} />
           <Route path="/payments" element={<Payments />} />
           <Route path="/response-viewer" element={<ResponseViewer />} />
           <Route path="/general-requests" element={<GeneralRequests />} />
