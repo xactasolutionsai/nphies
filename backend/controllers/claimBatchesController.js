@@ -597,8 +597,8 @@ class ClaimBatchesController extends BaseController {
       const newTotalAmount = claimsResult.rows.reduce((sum, c) => sum + parseFloat(c.total_amount || 0), 0);
       await query(`
         UPDATE claim_batches 
-        SET total_claims = total_claims + $1, 
-            total_amount = total_amount + $2,
+        SET total_claims = COALESCE(total_claims, 0) + $1::int, 
+            total_amount = COALESCE(total_amount, 0) + $2::numeric,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $3
       `, [claim_ids.length, newTotalAmount, id]);
@@ -1256,14 +1256,14 @@ class ClaimBatchesController extends BaseController {
 
     await query(`
       UPDATE claim_batches 
-      SET processed_claims = $1 + $2,
-          approved_claims = $1,
-          rejected_claims = $2,
+      SET processed_claims = $1::int + $2::int,
+          approved_claims = $1::int,
+          rejected_claims = $2::int,
           status = $3,
           processed_date = CASE WHEN $3 IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = $4
-    `, [parseInt(stats.approved), parseInt(stats.rejected), batchStatus, batchId]);
+    `, [parseInt(stats.approved) || 0, parseInt(stats.rejected) || 0, batchStatus, batchId]);
   }
 
   /**
