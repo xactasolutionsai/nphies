@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Package, ArrowLeft, Send, RefreshCw, Eye, Trash2, CheckCircle2, 
   AlertCircle, Clock, Building2, Shield, Calendar, DollarSign,
-  FileText, Activity, Info
+  FileText, Activity, Info, Copy, Download
 } from 'lucide-react';
 import api from '@/services/api';
 
@@ -364,10 +364,16 @@ export default function BatchClaimDetails() {
               Errors ({batch.errors.length})
             </TabsTrigger>
           )}
-          {batch.nphies_response && (
+          {batch.request_bundle && (
+            <TabsTrigger value="request" className="data-[state=active]:bg-primary-purple data-[state=active]:text-white">
+              <Send className="h-4 w-4 mr-2" />
+              Request Bundle
+            </TabsTrigger>
+          )}
+          {batch.response_bundle && (
             <TabsTrigger value="response" className="data-[state=active]:bg-primary-purple data-[state=active]:text-white">
               <Activity className="h-4 w-4 mr-2" />
-              NPHIES Response
+              Response Bundle
             </TabsTrigger>
           )}
         </TabsList>
@@ -547,22 +553,122 @@ export default function BatchClaimDetails() {
           </TabsContent>
         )}
 
-        {/* NPHIES Response Tab */}
-        {batch.nphies_response && (
+        {/* Request Bundle Tab */}
+        {batch.request_bundle && (
+          <TabsContent value="request">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center">
+                      <Send className="h-5 w-5 mr-2" />
+                      Request Bundle
+                    </CardTitle>
+                    <CardDescription>FHIR Bundle sent to NPHIES</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        const data = typeof batch.request_bundle === 'string' 
+                          ? batch.request_bundle 
+                          : JSON.stringify(batch.request_bundle, null, 2);
+                        navigator.clipboard.writeText(data);
+                        alert('Request bundle copied to clipboard!');
+                      }}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        const data = typeof batch.request_bundle === 'string' 
+                          ? batch.request_bundle 
+                          : JSON.stringify(batch.request_bundle, null, 2);
+                        const blob = new Blob([data], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `batch-${batch.batch_identifier}-request.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
+                  {typeof batch.request_bundle === 'string' 
+                    ? batch.request_bundle 
+                    : JSON.stringify(batch.request_bundle, null, 2)}
+                </pre>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Response Bundle Tab */}
+        {batch.response_bundle && (
           <TabsContent value="response">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Activity className="h-5 w-5 mr-2" />
-                  NPHIES Response
-                </CardTitle>
-                <CardDescription>Raw response from NPHIES</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center">
+                      <Activity className="h-5 w-5 mr-2" />
+                      Response Bundle
+                    </CardTitle>
+                    <CardDescription>FHIR Bundle received from NPHIES</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        const data = typeof batch.response_bundle === 'string' 
+                          ? batch.response_bundle 
+                          : JSON.stringify(batch.response_bundle, null, 2);
+                        navigator.clipboard.writeText(data);
+                        alert('Response bundle copied to clipboard!');
+                      }}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        const data = typeof batch.response_bundle === 'string' 
+                          ? batch.response_bundle 
+                          : JSON.stringify(batch.response_bundle, null, 2);
+                        const blob = new Blob([data], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `batch-${batch.batch_identifier}-response.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm max-h-96">
-                  {typeof batch.nphies_response === 'string' 
-                    ? batch.nphies_response 
-                    : JSON.stringify(batch.nphies_response, null, 2)}
+                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
+                  {typeof batch.response_bundle === 'string' 
+                    ? batch.response_bundle 
+                    : JSON.stringify(batch.response_bundle, null, 2)}
                 </pre>
               </CardContent>
             </Card>
