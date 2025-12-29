@@ -1413,36 +1413,126 @@ class ClaimBatchesController extends BaseController {
    * Update batch statistics after processing responses
    */
   async updateBatchStatistics(batchId) {
-    const statsResult = await query(`
-      SELECT 
-        COUNT(*) as total,
-        COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
-        COUNT(CASE WHEN status IN ('denied', 'error') THEN 1 END) as rejected,
-        COUNT(CASE WHEN status NOT IN ('approved', 'denied', 'error') THEN 1 END) as pending
-      FROM claim_submissions WHERE batch_id = $1
+    // Get the batch to analyze response_bundle
+    const batchResult = await query(`
+      SELECT response_bundle, total_claims FROM claim_batches WHERE id = $1
     `, [batchId]);
 
-    const stats = statsResult.rows[0];
-    
-    // Determine batch status
-    let batchStatus = 'Submitted';
-    if (parseInt(stats.approved) + parseInt(stats.rejected) === parseInt(stats.total)) {
-      batchStatus = parseInt(stats.rejected) === parseInt(stats.total) ? 'Rejected' : 
-                    parseInt(stats.approved) === parseInt(stats.total) ? 'Processed' : 'Partial';
-    } else if (parseInt(stats.pending) > 0) {
-      batchStatus = 'Queued';
+    if (batchResult.rows.length === 0) {
+      console.warn(`[BatchClaims] Batch ${batchId} not found for statistics update`);
+      return;
     }
+
+    const batch = batchResult.rows[0];
+    const responseBundle = batch.response_bundle;
+    const totalClaims = batch.total_claims || 0;
+
+    // Calculate statistics from response_bundle
+    let approved = 0;
+    let rejected = 0;
+    let pending = 0;
+    let queued = 0;
+
+    if (responseBundle?.responses && Array.isArray(responseBundle.responses)) {
+      for (const response of responseBundle.responses) {
+        if (!response.success) {
+          rejected++;
+          continue;
+        }
+
+        // Extract outcome from ClaimResponse
+        const claimResponse = response.data?.entry?.find(
+          e => e.resource?.resourceType === 'ClaimResponse'
+        )?.resource;
+
+        if (!claimResponse) {
+          pending++;
+          continue;
+        }
+
+        const outcome = claimResponse.outcome;
+        const adjudicationOutcome = claimResponse.extension?.find(
+          ext => ext.url?.includes('extension-adjudication-outcome')
+        )?.valueCodeableConcept?.coding?.[0]?.code;
+
+        if (outcome === 'complete') {
+          if (adjudicationOutcome === 'approved') {
+            approved++;
+          } else if (adjudicationOutcome === 'rejected') {
+            rejected++;
+          } else if (adjudicationOutcome === 'partial') {
+            approved++; // Count partial as approved for statistics
+          } else {
+            pending++;
+          }
+        } else if (outcome === 'queued') {
+          queued++;
+        } else if (outcome === 'error') {
+          rejected++;
+        } else {
+          pending++;
+        }
+      }
+    }
+
+    // Determine batch status based on response outcomes
+    let batchStatus = 'Submitted';
+    const processedCount = approved + rejected;
+    
+    if (processedCount === totalClaims && totalClaims > 0) {
+      // All claims processed
+      if (rejected === totalClaims) {
+        batchStatus = 'Rejected';
+      } else if (approved === totalClaims) {
+        batchStatus = 'Processed';
+      } else {
+        batchStatus = 'Partial';
+      }
+    } else if (queued > 0) {
+      batchStatus = 'Queued';
+    } else if (processedCount > 0) {
+      batchStatus = 'Partial';
+    }
+
+    console.log(`[BatchClaims] Statistics for batch ${batchId}: total=${totalClaims}, approved=${approved}, rejected=${rejected}, queued=${queued}, status=${batchStatus}`);
 
     await query(`
       UPDATE claim_batches 
-      SET processed_claims = $1::int + $2::int,
-          approved_claims = $1::int,
-          rejected_claims = $2::int,
-          status = $3::text,
-          processed_date = CASE WHEN $3::text IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
+      SET processed_claims = $1::int,
+          approved_claims = $2::int,
+          rejected_claims = $3::int,
+          status = $4::text,
+          processed_date = CASE WHEN $4::text IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $4
-    `, [parseInt(stats.approved) || 0, parseInt(stats.rejected) || 0, batchStatus, batchId]);
+      WHERE id = $5
+    `, [processedCount, approved, rejected, batchStatus, batchId]);
+  }
+
+  /**
+   * Recalculate batch statistics from response_bundle
+   */
+  async recalculateStatistics(req, res) {
+    try {
+      const { id } = req.params;
+      
+      const batch = await this.getByIdInternal(id);
+      if (!batch) {
+        return res.status(404).json({ error: 'Batch not found' });
+      }
+
+      await this.updateBatchStatistics(id);
+      
+      const updatedBatch = await this.getByIdInternal(id);
+      
+      res.json({
+        success: true,
+        message: 'Statistics recalculated successfully',
+        data: updatedBatch
+      });
+    } catch (error) {
+      console.error('Error recalculating statistics:', error);
+      res.status(500).json({ error: error.message });
+    }
   }
 
   /**

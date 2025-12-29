@@ -267,6 +267,12 @@ class ApiService {
     });
   }
 
+  async recalculateBatchStatistics(batchId) {
+    return this.request(`/claim-batches/${batchId}/recalculate`, {
+      method: 'POST',
+    });
+  }
+
   async updateClaimBatchStatus(batchId, status, description) {
     return this.request(`/claim-batches/${batchId}/status`, {
       method: 'PATCH',

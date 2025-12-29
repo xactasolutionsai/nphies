@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Package, ArrowLeft, Send, RefreshCw, Eye, Trash2, CheckCircle2, 
   AlertCircle, Clock, Building2, Shield, Calendar, DollarSign,
-  FileText, Activity, Info, Copy, Download, Loader2
+  FileText, Activity, Info, Copy, Download, Loader2, Calculator
 } from 'lucide-react';
 import api from '@/services/api';
 
@@ -221,6 +221,24 @@ export default function BatchClaimDetails() {
     }
   };
 
+  const handleRecalculateStats = async () => {
+    try {
+      setActionLoading(true);
+      const response = await api.recalculateBatchStatistics(id);
+      if (response.success) {
+        setBatch(response.data);
+        alert('Statistics recalculated successfully!');
+      } else {
+        alert(response.error || 'Failed to recalculate statistics');
+      }
+    } catch (error) {
+      console.error('Error recalculating statistics:', error);
+      alert(error.response?.data?.error || 'Failed to recalculate statistics');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const variants = {
       'Processed': 'default',
@@ -358,6 +376,17 @@ export default function BatchClaimDetails() {
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${actionLoading ? 'animate-spin' : ''}`} />
                 Poll Responses
+              </Button>
+            )}
+            {batch.response_bundle && (
+              <Button 
+                onClick={handleRecalculateStats} 
+                disabled={actionLoading}
+                variant="outline"
+                title="Recalculate statistics from response data"
+              >
+                <Calculator className={`h-4 w-4 mr-2 ${actionLoading ? 'animate-spin' : ''}`} />
+                Recalculate Stats
               </Button>
             )}
           </div>

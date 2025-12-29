@@ -38,6 +38,9 @@ router.post('/:id/send', claimBatchesController.sendToNphies.bind(claimBatchesCo
 // POST /api/claim-batches/:id/poll - Poll for deferred responses
 router.post('/:id/poll', claimBatchesController.pollResponses.bind(claimBatchesController));
 
+// POST /api/claim-batches/:id/recalculate - Recalculate batch statistics from response_bundle
+router.post('/:id/recalculate', claimBatchesController.recalculateStatistics.bind(claimBatchesController));
+
 // POST /api/claim-batches/:id/add-claims - Add claims to existing batch
 router.post('/:id/add-claims', claimBatchesController.addClaimsToBatch.bind(claimBatchesController));
 
