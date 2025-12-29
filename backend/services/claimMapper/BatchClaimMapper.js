@@ -1,21 +1,25 @@
 /**
  * NPHIES Batch Claim Mapper
- * Builds batch claim bundles for submitting multiple claims in a single request
+ * Builds batch claim bundles for submitting multiple claims
  * 
  * Reference: https://portal.nphies.sa/ig/usecase-claim-batch.html
+ * 
+ * CRITICAL NPHIES RULE (discovered from BV-00221 error):
+ * - Batch Claim is a LOGICAL GROUPING mechanism only
+ * - Each Claim MUST be sent in a SEPARATE Bundle
+ * - MessageHeader.focus MUST contain EXACTLY ONE Claim reference
+ * - Claims are grouped by batch extensions inside each Claim (not by MessageHeader)
  * 
  * Key Requirements:
  * - All claims in batch MUST be for the same insurer
  * - Batch size MUST NOT exceed 200 claims
  * - Each claim MUST have batch extensions: batch-identifier, batch-number, batch-period
- * - MessageHeader eventCoding = 'claim-request' with focus pointing to multiple Claims
- * - Processing is non-real-time - claims are queued for insurer processing
- * - Responses are retrieved via Polling use case
+ * - Each Bundle has eventCoding = 'claim-request' with focus pointing to ONE Claim only
  * 
- * IMPORTANT: Batch Claim uses 'claim-request' (NOT 'batch-request')
- * - claim-request + focus → Claims = Batch Claim (correct)
- * - batch-request + focus → Bundles = Batch Request (different use case)
- * - batch-request + focus → Claims = ERROR BV-00167
+ * FORBIDDEN PATTERNS:
+ * - Sending multiple Claims in a single MessageHeader (causes BV-00221)
+ * - Using batch-request for Claims (causes BV-00167)
+ * - Using claim-request with multiple focus references (causes BV-00221)
  */
 
 import { randomUUID } from 'crypto';
@@ -148,33 +152,87 @@ class BatchClaimMapper {
   // ============================================
 
   /**
-   * Build a batch claim request bundle
+   * Build SEPARATE bundles for each claim in the batch
    * 
-   * CORRECT STRUCTURE for Batch Claim:
-   * - Single Bundle (type: message)
-   *   - MessageHeader (event = claim-request, focus → multiple Claims)
-   *   - Claim #1 (with batch extensions)
-   *   - Claim #2 (with batch extensions)
-   *   - Patient (shared)
-   *   - Coverage (shared)
-   *   - Provider Organization
-   *   - Insurer Organization
-   *   - Practitioner(s)
-   * 
-   * IMPORTANT: Batch Claim uses 'claim-request' NOT 'batch-request'!
-   * - batch-request expects focus → Bundles (causes BV-00167 if pointing to Claims)
-   * - claim-request expects focus → Claims (correct for Batch Claim)
+   * CORRECT STRUCTURE per NPHIES (fixes BV-00221):
+   * - Each Claim is sent in its OWN Bundle
+   * - MessageHeader.focus points to EXACTLY ONE Claim
+   * - Claims are logically grouped by batch extensions only
    * 
    * @param {Object} data - Batch data
    * @param {string} data.batchIdentifier - Unique batch identifier
    * @param {Date} data.batchPeriodStart - Batch period start date
    * @param {Date} data.batchPeriodEnd - Batch period end date
-   * @param {Array} data.claims - Array of claim data objects (each with claim, patient, provider, insurer, coverage)
+   * @param {Array} data.claims - Array of claim data objects
    * @param {Object} data.provider - Provider organization
    * @param {Object} data.insurer - Insurer organization
+   * @returns {Array} - Array of FHIR Bundles (one per claim)
+   */
+  buildBatchClaimBundles(data) {
+    const { 
+      batchIdentifier, 
+      batchPeriodStart, 
+      batchPeriodEnd, 
+      claims, 
+      provider, 
+      insurer 
+    } = data;
+
+    // Validate batch constraints
+    const validation = this.validateBatchConstraints(claims);
+    if (!validation.valid) {
+      throw new Error(`Batch validation failed: ${validation.errors.join('; ')}`);
+    }
+
+    const bundles = [];
+
+    // Build a separate bundle for each claim
+    claims.forEach((claimData, index) => {
+      const batchNumber = index + 1;
+      
+      // Get the appropriate claim mapper based on claim type
+      const claimType = claimData.claim?.claim_type || claimData.claim_type || 'institutional';
+      const claimMapper = getClaimMapper(claimType);
+
+      // Build the claim bundle using existing mapper
+      const claimBundle = claimMapper.buildClaimRequestBundle(claimData);
+
+      // Find and update the Claim resource with batch extensions
+      const claimEntry = claimBundle.entry?.find(e => e.resource?.resourceType === 'Claim');
+      if (claimEntry?.resource) {
+        this.addBatchExtensionsToClaimResource(claimEntry.resource, {
+          batchIdentifier,
+          batchNumber,
+          batchPeriodStart,
+          batchPeriodEnd
+        });
+      }
+
+      // Add batch metadata to the bundle for tracking
+      claimBundle._batchMetadata = {
+        batchIdentifier,
+        batchNumber,
+        totalInBatch: claims.length
+      };
+
+      bundles.push(claimBundle);
+    });
+
+    return bundles;
+  }
+
+  /**
+   * @deprecated Use buildBatchClaimBundles instead
+   * This method creates a single bundle with multiple claims which causes BV-00221 error
+   * 
+   * Build a batch claim request bundle (LEGACY - DO NOT USE)
+   * 
+   * @param {Object} data - Batch data
    * @returns {Object} - FHIR Bundle for batch claim request
    */
   buildBatchClaimRequestBundle(data) {
+    console.warn('[BatchClaimMapper] buildBatchClaimRequestBundle is DEPRECATED. Use buildBatchClaimBundles instead.');
+    console.warn('[BatchClaimMapper] Single bundle with multiple claims causes BV-00221 error in NPHIES.');
     const { 
       batchIdentifier, 
       batchPeriodStart, 

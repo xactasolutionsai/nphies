@@ -1,168 +1,178 @@
-# Batch Claim – NPHIES Structure Guide
+# Batch Claim – NPHIES Structure Guide (Final)
 
-## 🚨 تنبيهات مهمة قبل الإرسال
-المحتوى أدناه يوضح **الهيكل الصحيح** لـ Batch Claim حسب NPHIES API.
+## Definition
+
+**Batch Claim in NPHIES is a SUBMISSION GROUPING mechanism only, NOT a batch processing mechanism.**
+
+Each Claim is sent in a **separate Bundle** - they are grouped **logically** through batch extensions inside each Claim.
 
 ---
 
-## ✅ الهيكل الصحيح النهائي (Canonical Structure)
+## Core Rules
+
+| Rule | Description |
+|------|-------------|
+| Separate Bundles | Each Claim MUST be submitted in its own Bundle |
+| Single Focus | MessageHeader.focus MUST contain exactly ONE Claim reference |
+| Event Code | MessageHeader.eventCoding.code MUST be `claim-request` |
+| Logical Grouping | Claims are grouped by batch extensions only |
+
+---
+
+## Correct Structure (Per Claim)
 
 ```
 Bundle (type = message)
- ├─ MessageHeader
- │   ├─ eventCoding = claim-request  ← مهم جداً!
- │   └─ focus → [Claim #1, Claim #2, Claim #3]  ← متعددة
- ├─ Claim #1 (batch-number = 1, with batch extensions)
- ├─ Claim #2 (batch-number = 2, with batch extensions)
- ├─ Claim #3 (batch-number = 3, with batch extensions)
- ├─ Patient (shared)
- ├─ Coverage (shared)
- ├─ Provider Organization
- ├─ Insurer Organization
- └─ Practitioner(s)
+├── MessageHeader
+│   ├── eventCoding = claim-request
+│   └── focus → [ONE Claim only]
+├── Claim (with batch extensions)
+│   ├── extension-batch-identifier = "BATCH-123"
+│   ├── extension-batch-number = 1
+│   └── extension-batch-period
+├── Patient
+├── Coverage
+├── Provider Organization
+├── Insurer Organization
+└── Practitioner(s)
 ```
 
 ---
 
-## 📌 Event Codes - القاعدة الذهبية
-
-| Event Code | Focus يشير إلى | الاستخدام |
-|------------|----------------|-----------|
-| `claim-request` | **Claim** (واحد أو أكثر) | Batch Claim |
-| `batch-request` | **Bundle** | Batch Request (حالة مختلفة) |
-
-### ⚠️ خطأ BV-00167
+## Batch Submission Flow
 
 ```
-"The MessageHeader focus resource type does not match the MessageHeader eventCoding"
+Batch of 3 Claims:
+
+┌─────────────────────────────────────────────────────────────┐
+│ Batch Identifier: BATCH-123                                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Bundle 1 ──────────► NPHIES ──────────► ClaimResponse 1    │
+│  (Claim 1, batch-number: 1)                                  │
+│                                                              │
+│  Bundle 2 ──────────► NPHIES ──────────► ClaimResponse 2    │
+│  (Claim 2, batch-number: 2)                                  │
+│                                                              │
+│  Bundle 3 ──────────► NPHIES ──────────► ClaimResponse 3    │
+│  (Claim 3, batch-number: 3)                                  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+
+All Claims share the same batch-identifier but are sent separately.
 ```
-
-**السبب**: استخدام `batch-request` مع `focus` يشير إلى `Claim`
-
-**الحل**: استخدام `claim-request` مع `focus` يشير إلى `Claim`
 
 ---
 
-## ❌ أخطاء شائعة يجب تصحيحها
+## Required Batch Extensions (Per Claim)
 
-### 1️⃣ استخدام batch-request بدلاً من claim-request
+Each Claim in the batch MUST include these extensions:
 
-❌ خطأ (يسبب BV-00167):
+### 1. extension-batch-identifier
 ```json
-"eventCoding": {
-  "code": "batch-request"
-},
-"focus": [
-  { "reference": "Claim/123" }
-]
-```
-
-✅ الصحيح:
-```json
-"eventCoding": {
-  "code": "claim-request"
-},
-"focus": [
-  { "reference": "http://provider.com/Claim/claim-1" },
-  { "reference": "http://provider.com/Claim/claim-2" }
-]
-```
-
-### 2️⃣ عدم السماح بوجود Bundles داخل Batch
-
-❌ غير مسموح:
-```
-Bundle (Batch)
- ├─ Bundle (Claim 1)
- ├─ Bundle (Claim 2)
-```
-
-✅ الصحيح:
-```
-Bundle (type = message)
- ├─ MessageHeader
- ├─ Claim #1
- ├─ Claim #2
- ├─ Claim #3
-```
-
-> Batch Claim يجب أن يكون **Bundle واحد فقط** يحتوي Claims مباشرة.
-
-### 3️⃣ MessageHeader واحد فقط
-
-❌ خطأ:
-- MessageHeader لكل Claim
-
-✅ الصحيح:
-- **MessageHeader واحد فقط**
-- خاص بالـ Batch
-- لا يوجد MessageHeader داخل أي Claim
-
----
-
-## 📌 Batch Extensions (إلزامية لكل Claim)
-
-كل Claim داخل الـ Batch يجب أن يحتوي على:
-
-```json
-"extension": [
-  {
-    "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
-    "valueIdentifier": {
-      "system": "http://provider.com/batch",
-      "value": "BATCH-20251229-123456"
-    }
-  },
-  {
-    "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-number",
-    "valuePositiveInt": 1
-  },
-  {
-    "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period",
-    "valuePeriod": {
-      "start": "2025-12-29",
-      "end": "2025-12-29"
-    }
+{
+  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
+  "valueIdentifier": {
+    "system": "http://provider.com/batch",
+    "value": "BATCH-20251229-123456"
   }
-]
+}
+```
+**Same value for ALL Claims in the batch**
+
+### 2. extension-batch-number
+```json
+{
+  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-number",
+  "valuePositiveInt": 1
+}
+```
+**Unique sequence number per Claim (1, 2, 3, ...)**
+
+### 3. extension-batch-period
+```json
+{
+  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period",
+  "valuePeriod": {
+    "start": "2025-12-29",
+    "end": "2025-12-29"
+  }
+}
+```
+**Same period for all Claims in the batch**
+
+---
+
+## Forbidden Patterns (Cause Errors)
+
+| Pattern | Error Code | Description |
+|---------|------------|-------------|
+| Multiple Claims in single MessageHeader | BV-00221 | "Message Header Focus contains more than one main resource" |
+| Using `batch-request` for Claims | BV-00167 | "The MessageHeader focus resource type does not match the MessageHeader eventCoding" |
+| `claim-request` with multiple focus | BV-00221 | Focus must reference exactly ONE Claim |
+
+---
+
+## Event Codes Reference
+
+| Event Code | Focus Must Point To | Use Case |
+|------------|---------------------|----------|
+| `claim-request` | ONE Claim | Single Claim or Batch Claim (one per bundle) |
+| `batch-request` | Bundle(s) | Different use case (not for Claims) |
+| `claim-response` | ONE ClaimResponse | Response from NPHIES |
+
+---
+
+## Batch Constraints
+
+All Claims in a batch MUST:
+- Be Approved Prior Authorizations
+- Be from the same Provider
+- Be from the same Payer (Insurer)
+- Be of the same Claim Type (oral, vision, professional, etc.)
+- Have batch size between 2 and 200 claims
+
+---
+
+## Implementation Notes
+
+### Building Batch Bundles
+```javascript
+// Use buildBatchClaimBundles (returns array of bundles)
+const bundles = batchClaimMapper.buildBatchClaimBundles(data);
+
+// Each bundle is sent separately
+for (const bundle of bundles) {
+  await nphiesService.submitClaim(bundle);
+}
 ```
 
-| Extension | الوصف |
-|-----------|-------|
-| `batch-identifier` | نفس القيمة لكل Claims في الـ Batch |
-| `batch-number` | مختلف لكل Claim (1, 2, 3...) |
-| `batch-period` | نفس القيمة لكل Claims |
+### DO NOT USE (Deprecated)
+```javascript
+// This causes BV-00221 error!
+const singleBundle = batchClaimMapper.buildBatchClaimRequestBundle(data);
+```
 
 ---
 
-## 📌 قيود إلزامية للـ Batch
+## Response Handling
 
-- جميع Claims يجب أن تكون:
-  - لنفس Provider
-  - لنفس Payer
-  - من نفس Claim Type (oral, vision, professional, etc.)
-  - Approved Prior Authorization
+Each Bundle submission returns its own ClaimResponse:
+- Aggregate all responses for batch status
+- Track individual claim outcomes
+- Handle partial success (some claims succeed, some fail)
 
-- الحد الأدنى: **2 claims**
-- الحد الأقصى: **200 claims**
-
----
-
-## ✅ Checklist – تصحيح قبل الإرسال
-
-- [ ] `eventCoding.code = "claim-request"` (وليس batch-request)
-- [ ] `focus` يشير إلى Claims مباشرة
-- [ ] Bundle واحد فقط (لا Bundles داخل Bundle)
-- [ ] MessageHeader واحد فقط
-- [ ] Claims مباشرة داخل Bundle
-- [ ] Batch Extensions موجودة في كل Claim
-- [ ] Provider / Payer / Claim Type موحّد
-- [ ] عدد Claims بين 2 و 200
+### Batch Status Logic
+| Condition | Status |
+|-----------|--------|
+| All claims failed | Error |
+| Some claims failed | Partial |
+| All claims queued | Queued |
+| All claims succeeded | Submitted |
 
 ---
 
-## 🏁 الخلاصة
+## References
 
-أي Batch Claim لا يلتزم بالهيكل أعلاه **سيُرفض من NPHIES** حتى لو كانت البيانات الطبية صحيحة.
-
-**القاعدة الأساسية**: Batch Claim = `claim-request` + multiple Claims in focus
+- [NPHIES ValueSet - ksa-message-events](https://portal.nphies.sa/ig/ValueSet-ksa-message-events.html)
+- [NPHIES Batch Claim Use Case](https://portal.nphies.sa/ig/usecase-claim-batch.html)
