@@ -113,13 +113,20 @@ export default function PatientForm() {
       const response = await api.getPatient(id);
       const patient = response.data || response;
       
+      // Handle birth_date - it may come as ISO string or YYYY-MM-DD
+      let birthDate = patient.birth_date || '';
+      if (birthDate && birthDate.includes('T')) {
+        // If it's an ISO string, extract just the date part
+        birthDate = birthDate.split('T')[0];
+      }
+      
       setFormData({
         name: patient.name || '',
         identifier: patient.identifier || '',
         identifier_type: patient.identifier_type || 'national_id',
         identifier_system: patient.identifier_system || '',
         gender: patient.gender || '',
-        birth_date: patient.birth_date || '',
+        birth_date: birthDate,
         phone: patient.phone || '',
         email: patient.email || '',
         nationality: patient.nationality || 'SAU',
@@ -128,7 +135,7 @@ export default function PatientForm() {
         city: patient.city || '',
         country: patient.country || 'SAU',
         occupation: patient.occupation || '',
-        is_newborn: patient.is_newborn || false,
+        is_newborn: patient.is_newborn === true,
         nphies_patient_id: patient.nphies_patient_id || ''
       });
     } catch (err) {

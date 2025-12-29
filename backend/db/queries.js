@@ -413,8 +413,27 @@ export const queries = {
     // Get all patients with search
     GET_ALL: `
       SELECT 
-        *,
-        TO_CHAR(birth_date, 'YYYY-MM-DD') as birthDate
+        patient_id,
+        name,
+        identifier,
+        identifier_type,
+        identifier_system,
+        gender,
+        TO_CHAR(birth_date, 'YYYY-MM-DD') as birth_date,
+        phone,
+        email,
+        nationality,
+        marital_status,
+        address,
+        city,
+        country,
+        occupation,
+        is_newborn,
+        nphies_patient_id,
+        telecom,
+        address_details,
+        created_at,
+        updated_at
       FROM patients
     `,
 
@@ -426,8 +445,27 @@ export const queries = {
     // Get patient by ID
     GET_BY_ID: `
       SELECT 
-        *,
-        TO_CHAR(birth_date, 'YYYY-MM-DD') as birthDate
+        patient_id,
+        name,
+        identifier,
+        identifier_type,
+        identifier_system,
+        gender,
+        TO_CHAR(birth_date, 'YYYY-MM-DD') as birth_date,
+        phone,
+        email,
+        nationality,
+        marital_status,
+        address,
+        city,
+        country,
+        occupation,
+        is_newborn,
+        nphies_patient_id,
+        telecom,
+        address_details,
+        created_at,
+        updated_at
       FROM patients 
       WHERE patient_id = $1
     `,

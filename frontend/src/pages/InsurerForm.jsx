@@ -19,7 +19,7 @@ export default function InsurerForm() {
   const navigate = useNavigate();
   const isEditMode = Boolean(id);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(isEditMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
