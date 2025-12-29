@@ -562,53 +562,104 @@ export default function BatchClaimDetails() {
                   <div>
                     <CardTitle className="flex items-center">
                       <Send className="h-5 w-5 mr-2" />
-                      Request Bundle
+                      Request Bundles
                     </CardTitle>
-                    <CardDescription>FHIR Bundle sent to NPHIES</CardDescription>
+                    <CardDescription>
+                      Clean FHIR Bundles sent to NPHIES (ready for Postman)
+                    </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button 
                       variant="outline" 
                       size="sm"
                       onClick={() => {
-                        const data = typeof batch.request_bundle === 'string' 
-                          ? batch.request_bundle 
-                          : JSON.stringify(batch.request_bundle, null, 2);
-                        navigator.clipboard.writeText(data);
-                        alert('Request bundle copied to clipboard!');
+                        // Extract clean bundles without _batchMetadata
+                        const bundleData = typeof batch.request_bundle === 'string' 
+                          ? JSON.parse(batch.request_bundle) 
+                          : batch.request_bundle;
+                        const bundles = bundleData.bundles || [bundleData];
+                        const cleanBundles = bundles.map(b => {
+                          const { _batchMetadata, ...clean } = b;
+                          return clean;
+                        });
+                        navigator.clipboard.writeText(JSON.stringify(cleanBundles, null, 2));
+                        alert('All request bundles copied to clipboard!');
                       }}
                     >
                       <Copy className="h-4 w-4 mr-2" />
-                      Copy
+                      Copy All
                     </Button>
                     <Button 
                       variant="outline" 
                       size="sm"
                       onClick={() => {
-                        const data = typeof batch.request_bundle === 'string' 
-                          ? batch.request_bundle 
-                          : JSON.stringify(batch.request_bundle, null, 2);
-                        const blob = new Blob([data], { type: 'application/json' });
+                        const bundleData = typeof batch.request_bundle === 'string' 
+                          ? JSON.parse(batch.request_bundle) 
+                          : batch.request_bundle;
+                        const bundles = bundleData.bundles || [bundleData];
+                        const cleanBundles = bundles.map(b => {
+                          const { _batchMetadata, ...clean } = b;
+                          return clean;
+                        });
+                        const blob = new Blob([JSON.stringify(cleanBundles, null, 2)], { type: 'application/json' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `batch-${batch.batch_identifier}-request.json`;
+                        a.download = `batch-${batch.batch_identifier}-requests.json`;
                         a.click();
                         URL.revokeObjectURL(url);
                       }}
                     >
                       <Download className="h-4 w-4 mr-2" />
-                      Download
+                      Download All
                     </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
-                  {typeof batch.request_bundle === 'string' 
-                    ? batch.request_bundle 
-                    : JSON.stringify(batch.request_bundle, null, 2)}
-                </pre>
+                {(() => {
+                  const bundleData = typeof batch.request_bundle === 'string' 
+                    ? JSON.parse(batch.request_bundle) 
+                    : batch.request_bundle;
+                  const bundles = bundleData.bundles || [bundleData];
+                  
+                  return (
+                    <div className="space-y-4">
+                      {bundles.map((bundle, index) => {
+                        const { _batchMetadata, ...cleanBundle } = bundle;
+                        return (
+                          <div key={index} className="border rounded-lg overflow-hidden">
+                            <div className="bg-gray-100 px-4 py-2 flex justify-between items-center">
+                              <span className="font-medium">
+                                Bundle {index + 1} - Claim #{_batchMetadata?.batchNumber || index + 1}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500">
+                                  {cleanBundle.entry?.length || 0} entries
+                                </span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(JSON.stringify(cleanBundle, null, 2));
+                                    alert(`Bundle ${index + 1} copied to clipboard!`);
+                                  }}
+                                  className="h-7 px-2 text-xs"
+                                >
+                                  <Copy className="h-3 w-3 mr-1" />
+                                  Copy
+                                </Button>
+                              </div>
+                            </div>
+                            <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap break-all select-all">
+                              {JSON.stringify(cleanBundle, null, 2)}
+                            </pre>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
