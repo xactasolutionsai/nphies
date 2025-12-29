@@ -1,116 +1,121 @@
-# Batch Claim – nphies (FHIR KSA)
+# Batch Claim – Required Structural Corrections (nphies)
 
-## 📘 السياق العام
-أنا أعمل على نظام متوافق مع **nphies (FHIR KSA)**.  
-الـ Flow الحالي في النظام:
-
-1. إرسال Prior Authorization  
-2. استقبال Approved Prior Auth  
-3. تحويل Approved Prior Auth إلى Claim  
-
-المطلوب هو دعم **Batch Claim** حسب Use Case الرسمي في nphies.
+## 🚨 تنبيهات مهمة قبل الإرسال
+المحتوى أدناه يوضح **التعديلات الإلزامية** على تنفيذ Batch Claim حتى يكون **متوافق 100% مع nphies**.
 
 ---
 
-## 🎯 الهدف
-- أخذ **2 أو أكثر Approved Prior Auth**
-- تحويل كل واحد منهم إلى **Claim مستقل**
-- إرسال جميع الـ Claims مرة واحدة داخل **Batch Claim Bundle**
+## ❌ أخطاء شائعة يجب تصحيحها
 
----
-
-## 🧠 المفهوم الأساسي (مهم جدًا)
-- ❌ لا يتم دمج أكثر من Prior Authorization داخل Claim واحد  
-- ✅ كل Prior Authorization ينتج **Claim مستقل**
-- ✅ الفرق بين Claim عادي و Batch Claim هو **طريقة الإرسال فقط**
-
----
-
-## 📦 شكل الـ Batch Claim (High Level)
-
+### 1️⃣ عدم السماح بوجود Bundles داخل Batch
+❌ غير مسموح:
 ```
-Bundle (Batch Claim Request)
- ├─ MessageHeader (event = batch-claim)
- ├─ Claim #1 (based on Approved Prior Auth #1)
- ├─ Claim #2 (based on Approved Prior Auth #2)
- ├─ Claim #3 (based on Approved Prior Auth #3)
+Bundle (Batch)
+ ├─ Bundle (Claim 1)
+ ├─ Bundle (Claim 2)
 ```
 
----
+✅ الصحيح:
+```
+Bundle (type = message)
+ ├─ MessageHeader
+ ├─ Claim #1
+ ├─ Claim #2
+ ├─ Claim #3
+```
 
-## 📌 شو لازم تضيف زيادة عن Claim العادي؟
-
-### 1️⃣ Claim Batch Identifier
-- معرف واحد مشترك لكل الـ Claims داخل نفس الدفعة
-
-### 2️⃣ Claim Batch Number
-- رقم تسلسلي مختلف لكل Claim داخل نفس الدفعة
-
-### 3️⃣ Claim Batch Period
-- فترة زمنية واحدة مشتركة لكل الـ Claims داخل الدفعة
+> Batch Claim يجب أن يكون **Bundle واحد فقط** يحتوي Claims مباشرة.
 
 ---
 
-## ⚠️ قيود إلزامية (Must Follow)
+### 2️⃣ MessageHeader واحد فقط
+❌ خطأ:
+- MessageHeader لكل Claim
 
-- كل Claim داخل الـ Batch يجب أن يكون:
+✅ الصحيح:
+- **MessageHeader واحد فقط**
+- خاص بالـ Batch
+- لا يوجد MessageHeader داخل أي Claim
+
+---
+
+### 3️⃣ MessageHeader.focus يجب أن يشير إلى Claims مباشرة
+❌ خطأ:
+```json
+"focus": [
+  { "reference": "urn:uuid:Bundle1" },
+  { "reference": "urn:uuid:Bundle2" }
+]
+```
+
+✅ الصحيح:
+```json
+"focus": [
+  { "reference": "urn:uuid:claim-1" },
+  { "reference": "urn:uuid:claim-2" }
+]
+```
+
+---
+
+### 4️⃣ Event Code يجب أن يكون Batch Claim معتمد
+- يجب استخدام **Event Code خاص بالـ Batch Claim**
+- ويكون موجود ضمن:
+```
+ValueSet: ksa-message-events
+```
+- أي Event غير معتمد سيؤدي إلى رفض الطلب.
+
+---
+
+## ✅ الهيكل الصحيح النهائي (Canonical Structure)
+
+```
+Bundle (type = message)
+ ├─ MessageHeader
+ │   ├─ event = batch-request
+ │   └─ focus → Claim references (fullUrl of each Claim)
+ ├─ Claim (batch-number = 1, with batch extensions)
+ ├─ Claim (batch-number = 2, with batch extensions)
+ ├─ Claim (batch-number = 3, with batch extensions)
+ ├─ Patient (shared resources)
+ ├─ Coverage
+ ├─ Provider Organization
+ ├─ Insurer Organization
+ └─ Practitioner(s)
+```
+
+> **ملاحظة**: NPHIES يستخدم `batch-request` للإرسال و `batch-response` للرد
+
+---
+
+## 📌 تذكير بالقيود الإلزامية للـ Batch
+
+- جميع Claims يجب أن تكون:
   - لنفس Provider
   - لنفس Payer
-  - من نفس نوع الـ Claim
+  - من نفس Claim / Prior Auth Type
 
-- كل Claim:
-  - مبني على Approved Prior Auth خاص فيه
-  - يحتوي على نفس بيانات Claim العادي
-
-- Bundle الإرسال يجب أن يحتوي على:
-  - MessageHeader خاص بالـ batch-claim
-  - عدة Claim Resources
-
-- الالتزام التام بـ:
-  - FHIR Profiles الخاصة بـ nphies
-  - عدم إضافة أي Extensions غير معتمدة
+- كل Claim يجب أن يحتوي:
+  - Batch Identifier (مشترك)
+  - Batch Number (مختلف)
+  - Batch Period (مشترك)
 
 ---
 
-## 🔄 الاستجابة (Response Behavior)
+## ✅ Checklist – تصحيح قبل الإرسال
 
-- عند الإرسال:
-  - يتم استقبال Batch Response
-  - ClaimResponse لكل Claim
-  - الحالات: accepted / queued / error
-
-- الحكم النهائي (Adjudication):
-  - يتم لاحقًا
-  - عبر Polling
-  - كل Claim يُعالَج بشكل مستقل
-
----
-
-## 🧑‍💻 المطلوب من الكود
-- دالة تستقبل قائمة Approved Prior Auth IDs
-- إنشاء Claim لكل Prior Auth
-- إضافة Batch Extensions الإلزامية
-- بناء Batch Claim Bundle جاهز للإرسال
-
----
-
-## ✅ Checklist – قبل إرسال Batch Claim
-
-- [ ] جميع Prior Auths حالتها **Approved**
-- [ ] كل Prior Auth تم تحويله إلى **Claim مستقل**
-- [ ] لا يوجد أكثر من Prior Auth داخل Claim واحد
-- [ ] جميع Claims لنفس Provider
-- [ ] جميع Claims لنفس Payer
-- [ ] جميع Claims من نفس نوع Claim
-- [ ] Claim Batch Identifier مضاف ومشترك
-- [ ] Claim Batch Number مختلف لكل Claim
-- [ ] Claim Batch Period مضاف ومشترك
-- [ ] MessageHeader نوعه batch-claim
-- [ ] Bundle متوافق مع FHIR nphies Profiles
-- [ ] لا توجد Extensions غير معتمدة
-- [ ] جاهزية Polling لاستقبال Adjudication لاحقًا
+- [ ] Bundle واحد فقط
+- [ ] لا يوجد Bundles داخل Bundle
+- [ ] MessageHeader واحد فقط
+- [ ] MessageHeader.focus يشير إلى Claims
+- [ ] Claims مباشرة داخل Bundle
+- [ ] Batch Extensions موجودة في كل Claim
+- [ ] Provider / Payer / Claim Type موحّد
+- [ ] Event Code معتمد من nphies
+- [ ] لا يوجد MessageHeader داخل Claim
 
 ---
 
 ## 🏁 الخلاصة
-Batch Claim هو إرسال عدة Claims دفعة واحدة مع الحفاظ على استقلالية كل Claim في المعالجة والحكم النهائي.
+أي Batch Claim لا يلتزم بالهيكل أعلاه **سيُرفض من nphies** حتى لو كانت البيانات الطبية صحيحة.

@@ -1,408 +1,131 @@
 {
-    "resourceType": "OperationOutcome",
-    "id": "505df4e8-e6f5-4669-97e9-7a4e5346e2a6",
+    "resourceType": "Bundle",
+    "id": "31db7116-0a30-4b55-b67c-7385378bcc6a",
     "meta": {
         "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/operationoutcome|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
         ]
     },
-    "issue": [
+    "type": "message",
+    "timestamp": "2025-12-29T11:59:00.906+00:00",
+    "entry": [
         {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
+            "fullUrl": "http://nphies.sa/MessageHeader/92c5f782-5d19-43a9-8e38-e4766c5f8823",
+            "resource": {
+                "resourceType": "MessageHeader",
+                "id": "92c5f782-5d19-43a9-8e38-e4766c5f8823",
+                "eventCoding": {
+                    "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
+                    "code": "batch-response"
+                },
+                "destination": [
                     {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "BV-00167",
-                        "display": "The MessageHeader focus resource type does not match the MessageHeader eventCoding"
+                        "endpoint": "http://provider.com",
+                        "receiver": {
+                            "type": "Organization",
+                            "identifier": {
+                                "system": "http://nphies.sa/license/provider-license",
+                                "value": "1010613708"
+                            }
+                        }
                     }
-                ]
+                ],
+                "sender": {
+                    "type": "Organization",
+                    "identifier": {
+                        "system": "http://nphies.sa/license/nphies",
+                        "value": "NPHIES"
+                    }
+                },
+                "source": {
+                    "endpoint": "http://nphies.sa/"
+                },
+                "response": {
+                    "identifier": "959932eb-4551-40e3-a697-9c067a1041ad",
+                    "code": "fatal-error",
+                    "details": {
+                        "reference": "http://nphies.sa/OperationOutcome/e1f6c114-1bb5-478c-855c-91fbb1f82927"
+                    }
+                }
             }
         },
         {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
+            "fullUrl": "http://nphies.sa/OperationOutcome/e1f6c114-1bb5-478c-855c-91fbb1f82927",
+            "resource": {
+                "resourceType": "OperationOutcome",
+                "id": "e1f6c114-1bb5-478c-855c-91fbb1f82927",
+                "meta": {
+                    "profile": [
+                        "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/operationoutcome|1.0.0"
+                    ]
+                },
+                "issue": [
                     {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "DT-00001",
-                        "display": "Incorrect data type used for Bundle entry"
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "IB-00251",
+                                    "display": "Resource reference SHALL point to a valid resource reference"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[0].resource.focus[0]"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "IB-00251",
+                                    "display": "Resource reference SHALL point to a valid resource reference"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[0].resource.focus[1]"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00177",
+                                    "display": "The Resource is not referenced or used within the current message"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[1]"
+                        ]
+                    },
+                    {
+                        "severity": "error",
+                        "code": "business-rule",
+                        "details": {
+                            "coding": [
+                                {
+                                    "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                                    "code": "RE-00177",
+                                    "display": "The Resource is not referenced or used within the current message"
+                                }
+                            ]
+                        },
+                        "expression": [
+                            "Bundle.entry[2]"
+                        ]
                     }
                 ]
-            },
-            "expression": [
-                "Bundle.entry[1]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].meta"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].type"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].timestamp"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[0]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[1]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[2]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[3]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[4]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[5]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[6]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[1].entry[7]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "DT-00001",
-                        "display": "Incorrect data type used for Bundle entry"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].meta"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].type"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].timestamp"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[0]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[1]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[2]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[3]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[4]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[5]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[6]"
-            ]
-        },
-        {
-            "severity": "error",
-            "code": "structure",
-            "details": {
-                "coding": [
-                    {
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "code": "FR-00027",
-                        "display": "The element does not exist in the base FHIR profile"
-                    }
-                ]
-            },
-            "expression": [
-                "Bundle.entry[2].entry[7]"
-            ]
+            }
         }
     ]
 }
