@@ -87,7 +87,8 @@ export default function BatchClaimDetails() {
     try {
       setActionLoading(true);
       const response = await api.previewBatchBundle(id);
-      setBundlePreview(response.data);
+      // response now contains { data: [...bundles], bundleCount, claimCount, note }
+      setBundlePreview(response);
       setShowBundlePreview(true);
     } catch (error) {
       console.error('Error previewing bundle:', error);
@@ -113,16 +114,18 @@ export default function BatchClaimDetails() {
   };
 
   const copyBundleToClipboard = () => {
-    navigator.clipboard.writeText(JSON.stringify(bundlePreview, null, 2));
-    alert('Bundle copied to clipboard');
+    const dataToCopy = bundlePreview?.data || bundlePreview;
+    navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
+    alert('Bundles copied to clipboard');
   };
 
   const downloadBundle = () => {
-    const blob = new Blob([JSON.stringify(bundlePreview, null, 2)], { type: 'application/json' });
+    const dataToDownload = bundlePreview?.data || bundlePreview;
+    const blob = new Blob([JSON.stringify(dataToDownload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `batch-${batch?.batch_identifier || id}.json`;
+    a.download = `batch-${batch?.batch_identifier || id}-bundles.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -599,35 +602,84 @@ export default function BatchClaimDetails() {
       {/* Bundle Preview Modal */}
       {showBundlePreview && bundlePreview && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden">
+          <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
             <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-2xl font-bold">FHIR Bundle Preview</h2>
-                  <p className="text-white/80 mt-1">This is what will be sent to NPHIES</p>
+                  <h2 className="text-2xl font-bold">FHIR Bundles Preview</h2>
+                  <p className="text-white/80 mt-1">
+                    {bundlePreview?.bundleCount || bundlePreview?.data?.length || 0} separate bundles will be sent to NPHIES
+                  </p>
                 </div>
                 <button onClick={() => setShowBundlePreview(false)} className="text-white/80 hover:text-white p-2">
                   <X className="w-6 h-6" />
                 </button>
               </div>
             </div>
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm">
-                {JSON.stringify(bundlePreview, null, 2)}
-              </pre>
+            
+            {/* Summary */}
+            <div className="px-6 py-4 bg-gray-50 border-b">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Total Bundles:</span>
+                  <span className="ml-2 font-medium">{bundlePreview?.bundleCount || bundlePreview?.data?.length || 0}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Claims Count:</span>
+                  <span className="ml-2 font-medium">{bundlePreview?.claimCount || 0}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Total Amount:</span>
+                  <span className="ml-2 font-medium">{bundlePreview?.totalAmount?.toLocaleString() || 0} SAR</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Structure:</span>
+                  <span className="ml-2 font-medium text-xs">1 Bundle per Claim</span>
+                </div>
+              </div>
+              {bundlePreview?.note && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                  <strong>Note:</strong> {bundlePreview.note}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[50vh]">
+              {/* Show each bundle separately */}
+              {Array.isArray(bundlePreview?.data) ? (
+                <div className="space-y-4">
+                  {bundlePreview.data.map((bundle, index) => (
+                    <div key={index} className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-100 px-4 py-2 flex justify-between items-center">
+                        <span className="font-medium">Bundle {index + 1} - Claim #{bundle._batchMetadata?.batchNumber || index + 1}</span>
+                        <span className="text-xs text-gray-500">
+                          {bundle.entry?.length || 0} entries
+                        </span>
+                      </div>
+                      <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[300px] overflow-y-auto">
+                        {JSON.stringify(bundle, null, 2)}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm">
+                  {JSON.stringify(bundlePreview?.data || bundlePreview, null, 2)}
+                </pre>
+              )}
             </div>
             <div className="bg-gray-50 px-6 py-4 border-t flex justify-between items-center">
               <div className="text-sm text-gray-500">
-                Bundle Type: {bundlePreview.type} | Entries: {bundlePreview.entry?.length || 0}
+                Total Size: {(JSON.stringify(bundlePreview?.data || bundlePreview).length / 1024).toFixed(2)} KB
               </div>
               <div className="flex space-x-3">
                 <Button variant="outline" onClick={copyBundleToClipboard}>
                   <Copy className="h-4 w-4 mr-2" />
-                  Copy
+                  Copy All
                 </Button>
                 <Button variant="outline" onClick={downloadBundle}>
                   <Download className="h-4 w-4 mr-2" />
-                  Download
+                  Download All
                 </Button>
                 <Button variant="outline" onClick={() => setShowBundlePreview(false)}>Close</Button>
               </div>

@@ -366,7 +366,8 @@ export default function ClaimBatches() {
     try {
       setActionLoading(batchId);
       const response = await api.previewBatchBundle(batchId);
-      setBundlePreview(response.data);
+      // response.data is now an array of bundles (one per claim)
+      setBundlePreview(response);
       setShowBundlePreview(true);
     } catch (error) {
       console.error('Error previewing bundle:', error);
@@ -1058,12 +1059,14 @@ export default function ClaimBatches() {
       {/* Bundle Preview Modal */}
       {showBundlePreview && bundlePreview && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden">
+          <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
             <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-2xl font-bold">FHIR Bundle Preview</h2>
-                  <p className="text-white/80 mt-1">Complete NPHIES Batch Claim Request Bundle</p>
+                  <h2 className="text-2xl font-bold">FHIR Bundles Preview</h2>
+                  <p className="text-white/80 mt-1">
+                    {bundlePreview?.bundleCount || bundlePreview?.data?.length || 0} separate bundles will be sent to NPHIES
+                  </p>
                 </div>
                 <button onClick={() => setShowBundlePreview(false)} className="text-white/80 hover:text-white p-2">
                   <X className="w-6 h-6" />
@@ -1075,39 +1078,63 @@ export default function ClaimBatches() {
             <div className="px-6 py-4 bg-gray-50 border-b">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-500">Resource Type:</span>
-                  <span className="ml-2 font-medium">{bundlePreview?.resourceType || 'Bundle'}</span>
+                  <span className="text-gray-500">Total Bundles:</span>
+                  <span className="ml-2 font-medium">{bundlePreview?.bundleCount || bundlePreview?.data?.length || 0}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">Bundle Type:</span>
-                  <span className="ml-2 font-medium">{bundlePreview?.type || 'message'}</span>
+                  <span className="text-gray-500">Claims Count:</span>
+                  <span className="ml-2 font-medium">{bundlePreview?.claimCount || 0}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">Total Entries:</span>
-                  <span className="ml-2 font-medium">{bundlePreview?.entry?.length || 0}</span>
+                  <span className="text-gray-500">Total Amount:</span>
+                  <span className="ml-2 font-medium">{bundlePreview?.totalAmount?.toLocaleString() || 0} SAR</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">Bundle ID:</span>
-                  <span className="ml-2 font-medium text-xs">{bundlePreview?.id?.substring(0, 12)}...</span>
+                  <span className="text-gray-500">Structure:</span>
+                  <span className="ml-2 font-medium text-xs">1 Bundle per Claim</span>
                 </div>
               </div>
+              {bundlePreview?.note && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                  <strong>Note:</strong> {bundlePreview.note}
+                </div>
+              )}
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[55vh]">
-              <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm font-mono leading-relaxed">
-                {JSON.stringify(bundlePreview, null, 2)}
-              </pre>
+            <div className="p-6 overflow-y-auto max-h-[50vh]">
+              {/* Show each bundle separately */}
+              {Array.isArray(bundlePreview?.data) ? (
+                <div className="space-y-4">
+                  {bundlePreview.data.map((bundle, index) => (
+                    <div key={index} className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-100 px-4 py-2 flex justify-between items-center">
+                        <span className="font-medium">Bundle {index + 1} - Claim #{bundle._batchMetadata?.batchNumber || index + 1}</span>
+                        <span className="text-xs text-gray-500">
+                          {bundle.entry?.length || 0} entries
+                        </span>
+                      </div>
+                      <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[300px] overflow-y-auto">
+                        {JSON.stringify(bundle, null, 2)}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm font-mono leading-relaxed">
+                  {JSON.stringify(bundlePreview?.data || bundlePreview, null, 2)}
+                </pre>
+              )}
             </div>
             
             <div className="bg-gray-50 px-6 py-4 border-t flex justify-between items-center">
               <span className="text-sm text-gray-500">
-                Size: {(JSON.stringify(bundlePreview).length / 1024).toFixed(2)} KB
+                Total Size: {(JSON.stringify(bundlePreview?.data || bundlePreview).length / 1024).toFixed(2)} KB
               </span>
               <div className="flex gap-3">
                 <Button 
                   variant="outline" 
                   onClick={() => {
-                    navigator.clipboard.writeText(JSON.stringify(bundlePreview, null, 2));
+                    navigator.clipboard.writeText(JSON.stringify(bundlePreview?.data || bundlePreview, null, 2));
                     alert('JSON copied to clipboard!');
                   }}
                   className="flex items-center gap-2"
@@ -1116,16 +1143,16 @@ export default function ClaimBatches() {
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
                   </svg>
-                  Copy JSON
+                  Copy All JSON
                 </Button>
                 <Button 
                   variant="outline"
                   onClick={() => {
-                    const blob = new Blob([JSON.stringify(bundlePreview, null, 2)], { type: 'application/json' });
+                    const blob = new Blob([JSON.stringify(bundlePreview?.data || bundlePreview, null, 2)], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `batch-claim-bundle-${bundlePreview?.id || 'preview'}.json`;
+                    a.download = `batch-claim-bundles-preview.json`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -1138,7 +1165,7 @@ export default function ClaimBatches() {
                     <polyline points="7 10 12 15 17 10"/>
                     <line x1="12" x2="12" y1="15" y2="3"/>
                   </svg>
-                  Download
+                  Download All
                 </Button>
                 <Button variant="outline" onClick={() => setShowBundlePreview(false)}>Close</Button>
               </div>
