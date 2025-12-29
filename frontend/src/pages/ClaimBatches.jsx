@@ -40,6 +40,13 @@ export default function ClaimBatches() {
   const [showBundlePreview, setShowBundlePreview] = useState(false);
   const [bundlePreview, setBundlePreview] = useState(null);
   const [copySuccess, setCopySuccess] = useState(false);
+
+  // Helper function to clean bundle for NPHIES (remove internal metadata)
+  const cleanBundleForNphies = (bundle) => {
+    if (!bundle) return bundle;
+    const { _batchMetadata, ...cleanBundle } = bundle;
+    return cleanBundle;
+  };
   
   // Chart data states
   const [batchesByStatus, setBatchesByStatus] = useState([]);
@@ -1119,7 +1126,9 @@ export default function ClaimBatches() {
                             size="sm"
                             onClick={async () => {
                               try {
-                                const jsonString = JSON.stringify(bundle, null, 2);
+                                // Clean bundle by removing _batchMetadata
+                                const cleanBundle = cleanBundleForNphies(bundle);
+                                const jsonString = JSON.stringify(cleanBundle, null, 2);
                                 await navigator.clipboard.writeText(jsonString);
                                 alert(`Bundle ${index + 1} copied to clipboard!`);
                               } catch (err) {
@@ -1158,7 +1167,11 @@ export default function ClaimBatches() {
                   variant={copySuccess ? "default" : "outline"}
                   onClick={async () => {
                     try {
-                      const dataToCopy = bundlePreview?.data || bundlePreview;
+                      const rawData = bundlePreview?.data || bundlePreview;
+                      // Clean each bundle by removing _batchMetadata (internal use only)
+                      const dataToCopy = Array.isArray(rawData) 
+                        ? rawData.map(cleanBundleForNphies)
+                        : cleanBundleForNphies(rawData);
                       const jsonString = JSON.stringify(dataToCopy, null, 2);
                       
                       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1204,7 +1217,12 @@ export default function ClaimBatches() {
                 <Button 
                   variant="outline"
                   onClick={() => {
-                    const blob = new Blob([JSON.stringify(bundlePreview?.data || bundlePreview, null, 2)], { type: 'application/json' });
+                    const rawData = bundlePreview?.data || bundlePreview;
+                    // Clean each bundle by removing _batchMetadata (internal use only)
+                    const dataToDownload = Array.isArray(rawData) 
+                      ? rawData.map(cleanBundleForNphies)
+                      : cleanBundleForNphies(rawData);
+                    const blob = new Blob([JSON.stringify(dataToDownload, null, 2)], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
