@@ -30,13 +30,33 @@ export default function BatchBundlePreview() {
       setLoading(true);
       setError(null);
       
-      // Load both batch details and bundle preview
-      const [batchResponse, previewResponse] = await Promise.all([
-        api.getClaimBatch(id),
-        api.previewBatchBundle(id)
-      ]);
+      // First load batch details
+      const batchResponse = await api.getClaimBatch(id);
+      const batchData = batchResponse.data;
+      setBatch(batchData);
       
-      setBatch(batchResponse.data);
+      // If batch has been submitted and has stored request_bundle, use that
+      if (batchData && batchData.status !== 'Draft' && batchData.request_bundle) {
+        const storedBundle = typeof batchData.request_bundle === 'string' 
+          ? JSON.parse(batchData.request_bundle) 
+          : batchData.request_bundle;
+        
+        // Extract bundles array from stored data
+        let bundles = [];
+        if (storedBundle.bundles && Array.isArray(storedBundle.bundles)) {
+          bundles = storedBundle.bundles;
+        } else if (Array.isArray(storedBundle)) {
+          bundles = storedBundle;
+        } else if (storedBundle.resourceType === 'Bundle') {
+          bundles = [storedBundle];
+        }
+        
+        setBundlePreview({ data: bundles });
+        return;
+      }
+      
+      // For draft batches, generate preview from current data
+      const previewResponse = await api.previewBatchBundle(id);
       setBundlePreview(previewResponse);
     } catch (err) {
       console.error('Error loading bundle preview:', err);

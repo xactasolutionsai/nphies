@@ -32,12 +32,12 @@ export default function BatchClaimDetails() {
     loadBatchDetails();
   }, [id]);
 
-  // Auto-load bundles when Request Bundle tab is selected
+  // Auto-load bundles when Request Bundle tab is selected AND batch is loaded
   useEffect(() => {
-    if (activeTab === 'request' && !freshBundles && !bundlesLoading && !bundlesError) {
+    if (activeTab === 'request' && batch && !freshBundles && !bundlesLoading && !bundlesError) {
       loadFreshBundles();
     }
-  }, [activeTab]);
+  }, [activeTab, batch]);
 
   const loadBatchDetails = async () => {
     try {
@@ -51,11 +51,33 @@ export default function BatchClaimDetails() {
     }
   };
 
-  // Load fresh FHIR bundles from preview API (the exact JSON sent to NPHIES)
+  // Load FHIR bundles - use stored request_bundle if batch was submitted, otherwise preview
   const loadFreshBundles = async () => {
     try {
       setBundlesLoading(true);
       setBundlesError(null);
+      
+      // If batch has been submitted and has stored request_bundle, use that
+      if (batch && batch.status !== 'Draft' && batch.request_bundle) {
+        const storedBundle = typeof batch.request_bundle === 'string' 
+          ? JSON.parse(batch.request_bundle) 
+          : batch.request_bundle;
+        
+        // Extract bundles array from stored data
+        let bundles = [];
+        if (storedBundle.bundles && Array.isArray(storedBundle.bundles)) {
+          bundles = storedBundle.bundles;
+        } else if (Array.isArray(storedBundle)) {
+          bundles = storedBundle;
+        } else if (storedBundle.resourceType === 'Bundle') {
+          bundles = [storedBundle];
+        }
+        
+        setFreshBundles(bundles);
+        return;
+      }
+      
+      // For draft batches, generate preview from current data
       const response = await api.previewBatchBundle(id);
       // response.data contains the array of bundles
       setFreshBundles(response.data || response);
