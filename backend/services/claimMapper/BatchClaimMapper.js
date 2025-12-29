@@ -145,19 +145,17 @@ class BatchClaimMapper {
   /**
    * Build a batch claim request bundle
    * 
-   * CORRECT STRUCTURE per NPHIES batch-claim.md:
-   * - Single Bundle (type: message)
-   *   - MessageHeader (event = batch-request, focus → Claims directly)
-   *   - Claim #1 (with batch extensions)
-   *   - Claim #2 (with batch extensions)
-   *   - Patient (shared)
-   *   - Coverage (shared)
-   *   - Provider Organization
-   *   - Insurer Organization
-   *   - Practitioner(s)
+   * CORRECT STRUCTURE per NPHIES API (batch-request):
+   * - Outer Bundle (type: message)
+   *   - MessageHeader (event = batch-request, focus → inner Bundle references)
+   *   - Bundle #1 (type: message, claim-request with Claim + resources)
+   *   - Bundle #2 (type: message, claim-request with Claim + resources)
    * 
-   * ❌ WRONG: Bundles inside Bundle (causes IB-00251 and RE-00177 errors)
-   * ✅ CORRECT: Claims directly inside single Bundle with focus pointing to Claims
+   * Per NPHIES ValueSet ksa-message-events:
+   * - batch-request: Used for sending batch claims
+   * - batch-response: Used for receiving batch responses
+   * 
+   * BV-00167 Error Fix: focus MUST reference Bundles when using batch-request
    * 
    * @param {Object} data - Batch data
    * @param {string} data.batchIdentifier - Unique batch identifier
@@ -188,14 +186,10 @@ class BatchClaimMapper {
     const messageHeaderId = this.generateId();
     const timestamp = this.formatDateTimeWithTimezone(new Date());
 
-    // Collect all resources and focus references
-    const allEntries = [];
+    // Build individual claim bundles with batch extensions
+    const claimBundles = [];
     const focusReferences = [];
-    
-    // Track unique resources to avoid duplicates (Patient, Coverage, Organizations, etc.)
-    const addedResources = new Map(); // key: resourceType/id, value: fullUrl
 
-    // Process each claim
     claims.forEach((claimData, index) => {
       const batchNumber = index + 1;
       
@@ -203,47 +197,39 @@ class BatchClaimMapper {
       const claimType = claimData.claim?.claim_type || claimData.claim_type || 'institutional';
       const claimMapper = getClaimMapper(claimType);
 
-      // Build the claim bundle using existing mapper (to get all resources)
+      // Build the claim bundle using existing mapper
       const claimBundle = claimMapper.buildClaimRequestBundle(claimData);
 
-      // Extract resources from the claim bundle
-      if (claimBundle.entry) {
-        claimBundle.entry.forEach(entry => {
-          if (!entry.resource) return;
-          
-          const resourceType = entry.resource.resourceType;
-          const resourceId = entry.resource.id;
-          const resourceKey = `${resourceType}/${resourceId}`;
-          
-          // Skip MessageHeader - we'll create our own batch MessageHeader
-          if (resourceType === 'MessageHeader') return;
-          
-          // For Claim resources, add batch extensions and always include
-          if (resourceType === 'Claim') {
-            // Add batch extensions
-            this.addBatchExtensionsToClaimResource(entry.resource, {
-              batchIdentifier,
-              batchNumber,
-              batchPeriodStart,
-              batchPeriodEnd
-            });
-            
-            // Add focus reference to this claim
-            focusReferences.push({ reference: entry.fullUrl });
-            
-            // Add to entries
-            allEntries.push(entry);
-          } 
-          // For other resources, only add if not already added (avoid duplicates)
-          else if (!addedResources.has(resourceKey)) {
-            addedResources.set(resourceKey, entry.fullUrl);
-            allEntries.push(entry);
-          }
-        });
-      }
+      // Add batch extensions to the Claim resource within the bundle
+      this.addBatchExtensionsToClaim(claimBundle, {
+        batchIdentifier,
+        batchNumber,
+        batchPeriodStart,
+        batchPeriodEnd
+      });
+
+      // Store the bundle
+      claimBundles.push(claimBundle);
+      
+      // Add focus reference to this inner Bundle (NOT the claim, NOT the inner MessageHeader)
+      // BV-00167 Fix: batch-request expects Bundle resources in focus
+      focusReferences.push({ reference: `urn:uuid:${claimBundle.id}` });
     });
 
-    // Build the single batch bundle with all resources directly inside
+    // Wrap nested bundles in fullUrl/resource structure
+    const wrappedClaimBundles = claimBundles.map(bundle => ({
+      fullUrl: `urn:uuid:${bundle.id}`,
+      resource: {
+        resourceType: 'Bundle',
+        id: bundle.id,
+        meta: bundle.meta,
+        type: bundle.type,
+        timestamp: bundle.timestamp,
+        entry: bundle.entry
+      }
+    }));
+
+    // Build outer batch bundle
     const batchBundle = {
       resourceType: 'Bundle',
       id: bundleId,
@@ -253,7 +239,7 @@ class BatchClaimMapper {
       type: 'message',
       timestamp,
       entry: [
-        // Single MessageHeader for the batch (event = batch-claim)
+        // MessageHeader for batch request
         {
           fullUrl: `urn:uuid:${messageHeaderId}`,
           resource: {
@@ -264,10 +250,10 @@ class BatchClaimMapper {
             },
             eventCoding: {
               system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
-              code: 'batch-request' // NPHIES uses batch-request for sending, batch-response for receiving
+              code: 'batch-request'
             },
             destination: [{
-              endpoint: `http://nphies.sa/license/payer-license/${insurer.nphies_id || 'INS-FHIR'}`,
+              endpoint: 'http://nphies.sa/license/payer-license/destinationLicense',
               receiver: {
                 type: 'Organization',
                 identifier: {
@@ -286,12 +272,12 @@ class BatchClaimMapper {
             source: {
               endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com'
             },
-            // Focus references point directly to Claims
+            // BV-00167 Fix: focus references point to inner Bundles (NOT Claims, NOT inner MessageHeaders)
             focus: focusReferences
           }
         },
-        // All Claims and supporting resources directly in the bundle
-        ...allEntries
+        // Add all claim bundles wrapped in fullUrl/resource structure
+        ...wrappedClaimBundles
       ]
     };
 
@@ -299,22 +285,37 @@ class BatchClaimMapper {
   }
 
   /**
-   * Add batch-specific extensions directly to a Claim resource
+   * Add batch-specific extensions and modifications to the Claim resource within a bundle
    * 
-   * @param {Object} claim - The Claim resource object
+   * Required extensions:
+   * - extension-batch-identifier: Provider-supplied unique batch ID
+   * - extension-batch-number: Unique number for each claim within batch
+   * - extension-batch-period: Creation period for claims in batch
+   * 
+   * @param {Object} claimBundle - The claim request bundle
    * @param {Object} batchInfo - Batch information
    */
-  addBatchExtensionsToClaimResource(claim, batchInfo) {
+  addBatchExtensionsToClaim(claimBundle, batchInfo) {
     const { batchIdentifier, batchNumber, batchPeriodStart, batchPeriodEnd } = batchInfo;
 
-    if (!claim) return;
+    // Find the Claim resource in the bundle
+    const claimEntry = claimBundle.entry?.find(
+      e => e.resource?.resourceType === 'Claim'
+    );
+
+    if (!claimEntry?.resource) {
+      console.warn('[BatchClaimMapper] No Claim resource found in bundle');
+      return;
+    }
+
+    const claim = claimEntry.resource;
 
     // Initialize extensions array if not present
     if (!claim.extension) {
       claim.extension = [];
     }
 
-    // Remove any existing batch extensions
+    // Remove any existing batch extensions to avoid duplicates
     claim.extension = claim.extension.filter(ext => 
       !ext.url?.includes('extension-batch-')
     );
@@ -339,41 +340,9 @@ class BatchClaimMapper {
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period',
       valuePeriod: {
         start: this.formatDate(batchPeriodStart),
-        end: this.formatDate(batchPeriodEnd)
+        end: this.formatDate(batchPeriodEnd || batchPeriodStart)
       }
     });
-
-    // Ensure priority is normal for batch claims
-    if (!claim.priority) {
-      claim.priority = {
-        coding: [{
-          system: 'http://terminology.hl7.org/CodeSystem/processpriority',
-          code: 'normal'
-        }]
-      };
-    }
-  }
-
-  /**
-   * Add batch-specific extensions and modifications to the Claim resource within a bundle
-   * (Legacy method - delegates to addBatchExtensionsToClaimResource)
-   * 
-   * @param {Object} claimBundle - The claim request bundle
-   * @param {Object} batchInfo - Batch information
-   */
-  addBatchExtensionsToClaim(claimBundle, batchInfo) {
-    // Find the Claim resource in the bundle
-    const claimEntry = claimBundle.entry?.find(
-      e => e.resource?.resourceType === 'Claim'
-    );
-
-    if (!claimEntry?.resource) {
-      console.warn('[BatchClaimMapper] No Claim resource found in bundle');
-      return;
-    }
-
-    // Use the new method
-    this.addBatchExtensionsToClaimResource(claimEntry.resource, batchInfo);
   }
 
   // ============================================
