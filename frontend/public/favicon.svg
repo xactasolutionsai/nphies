@@ -1,0 +1,31 @@
+<svg width="32" height="32" viewBox="0 0 66 66" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simplified icon from the logo - focusing on the circular medical symbol -->
+  <circle cx="33" cy="33" r="30" fill="url(#gradient1)"/>
+  <path d="M9.31982 12.3887C21.0198 -0.491321 40.5998 -1.26132 53.4798 10.4387" stroke="url(#gradient2)" stroke-width="2" stroke-miterlimit="10"/>
+  <path d="M53.46 10.4487C66.21 22.2887 66.96 42.2287 55.12 54.9787" stroke="url(#gradient2)" stroke-width="2" stroke-miterlimit="10"/>
+  <path d="M56.2 53.8486C44.5 66.7286 24.62 67.6286 11.75 55.9186" stroke="url(#gradient2)" stroke-width="2" stroke-miterlimit="10"/>
+  <path d="M11.7599 55.9186C-0.990094 44.0786 -1.75009 24.2686 10.0899 11.5186" stroke="url(#gradient2)" stroke-width="2" stroke-miterlimit="10"/>
+  
+  <!-- Central medical symbol -->
+  <path d="M33.1899 16.1189C33.2499 16.0589 33.3199 15.9989 33.4799 15.8489C37.5199 12.1389 46.7299 5.50889 55.6999 6.45889C56.4099 6.53889 58.0699 6.75889 58.7199 6.92889L59.3599 7.08889L58.2799 6.50889L57.9999 6.36889C55.0999 4.86889 52.4799 4.60889 52.3199 4.60889C43.6899 4.68889 35.5599 9.59889 30.7999 13.7389L33.1899 16.1289V16.1189Z" fill="url(#gradient3)"/>
+  <path d="M33.1899 50.2488C33.2499 50.3088 33.3199 50.3688 33.4799 50.5188C37.5199 54.2288 46.7299 60.8588 55.6999 59.9088C56.4099 59.8288 58.0699 59.6088 58.7199 59.4388L59.3599 59.2788L58.2799 59.8588L57.9999 59.9988C55.0999 61.4988 52.4799 61.7588 52.3199 61.7588C43.6899 61.6788 35.5599 56.7688 30.7999 52.6288L33.1899 50.2388V50.2488Z" fill="url(#gradient3)"/>
+  
+  <defs>
+    <linearGradient id="gradient1" x1="33" y1="3" x2="33" y2="63" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1AA9E9"/>
+      <stop offset="0.5" stop-color="#7B8AE1"/>
+      <stop offset="1" stop-color="#9782DF"/>
+    </linearGradient>
+    <linearGradient id="gradient2" x1="33" y1="0" x2="33" y2="66" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00DEFE"/>
+      <stop offset="0.5" stop-color="#5EA8EC"/>
+      <stop offset="1" stop-color="#B279DD"/>
+    </linearGradient>
+    <linearGradient id="gradient3" x1="33.1899" y1="16.1189" x2="33.1899" y2="4.59889" gradientUnits="userSpaceOnUse">
+      <stop offset="0.23" stop-color="#1AA9E9"/>
+      <stop offset="0.8" stop-color="#7B8AE1"/>
+      <stop offset="1" stop-color="#9782DF"/>
+    </linearGradient>
+  </defs>
+</svg>
+

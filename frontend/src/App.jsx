@@ -1,6 +1,9 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
+import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Patients from './pages/Patients';
 import PatientDetails from './pages/PatientDetails';
@@ -45,13 +48,48 @@ import ClaimSubmissionsList from './pages/ClaimSubmissionsList';
 import ClaimDetails from './pages/ClaimDetails';
 import PaymentReconciliations from './pages/PaymentReconciliations';
 import PaymentReconciliationDetails from './pages/PaymentReconciliationDetails';
+import Users from './pages/Users';
 import ChatAssistant from './components/chat/ChatAssistant';
 
-function App() {
+// Protected Route Component
+function ProtectedRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="relative inline-flex">
+            <div className="w-12 h-12 border-4 border-indigo-200 rounded-full"></div>
+            <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin absolute top-0"></div>
+          </div>
+          <p className="mt-4 text-gray-500 font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
+
+function AppRoutes() {
   return (
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Layout>
-        <Routes>
+    <Routes>
+      {/* Public routes */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+
+      {/* Protected routes */}
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/patients" element={<Patients />} />
           <Route path="/patients/new" element={<PatientForm />} />
@@ -65,6 +103,7 @@ function App() {
           <Route path="/insurers/new" element={<InsurerForm />} />
           <Route path="/insurers/:id/edit" element={<InsurerForm />} />
           <Route path="/insurers/:id" element={<InsurerDetails />} />
+          <Route path="/users" element={<Users />} />
           <Route path="/authorizations" element={<Authorizations />} />
           <Route path="/eligibility" element={<Eligibility />} />
           <Route path="/nphies-eligibility" element={<NphiesEligibilityList />} />
@@ -103,10 +142,23 @@ function App() {
           <Route path="/claim-submissions" element={<ClaimSubmissionsList />} />
           <Route path="/claim-submissions/:id" element={<ClaimDetails />} />
           <Route path="/payment-reconciliations" element={<PaymentReconciliations />} />
-          <Route path="/payment-reconciliations/:id" element={<PaymentReconciliationDetails />} />
-        </Routes>
-      </Layout>
-      <ChatAssistant />
+                <Route path="/payment-reconciliations/:id" element={<PaymentReconciliationDetails />} />
+              </Routes>
+            </Layout>
+            <ChatAssistant />
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </Router>
   );
 }

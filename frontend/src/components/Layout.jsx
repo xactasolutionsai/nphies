@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import {
   LayoutDashboard,
   Users,
@@ -25,7 +26,9 @@ import {
   Layers,
   BellRing,
   Scale,
-  FileSearch
+  FileSearch,
+  LogOut,
+  User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -45,6 +48,11 @@ const masterDataItems = [
   { name: 'Patients', href: '/patients', icon: Users },
   { name: 'Providers', href: '/providers', icon: Building2 },
   { name: 'Insurers', href: '/insurers', icon: Shield },
+];
+
+// Admin-only items
+const adminItems = [
+  { name: 'Users', href: '/users', icon: Users },
 ];
 
 // Merged Requests & Claims section
@@ -81,6 +89,8 @@ const toolsItems = [
 ];
 
 export default function Layout({ children }) {
+  const navigate = useNavigate();
+  const { user, logout, isAuthenticated } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [masterDataOpen, setMasterDataOpen] = useState(true);
   const [requestsAndClaimsOpen, setRequestsAndClaimsOpen] = useState(true);
@@ -88,6 +98,13 @@ export default function Layout({ children }) {
   const [claimsPaymentsOpen, setClaimsPaymentsOpen] = useState(true);
   const [toolsOpen, setToolsOpen] = useState(true);
   const location = useLocation();
+
+  const isSuperAdmin = user?.email === 'eng.anasshamia@gmail.com';
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const renderNavigationItem = (item, isActive, onClick) => (
     <Link
@@ -115,7 +132,8 @@ export default function Layout({ children }) {
   );
 
   const renderMasterDataSection = (isMobile = false) => {
-    const isMasterDataActive = masterDataItems.some(item => location.pathname === item.href);
+    const isMasterDataActive = masterDataItems.some(item => location.pathname === item.href) ||
+      (isSuperAdmin && adminItems.some(item => location.pathname === item.href));
 
     return (
       <div className="mb-6">
@@ -152,6 +170,15 @@ export default function Layout({ children }) {
         )}>
           <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-100 pl-4">
             {masterDataItems.map((item) => {
+              const isActive = location.pathname === item.href;
+              return renderNavigationItem(
+                item,
+                isActive,
+                isMobile ? () => setSidebarOpen(false) : undefined
+              );
+            })}
+            {/* Admin-only items */}
+            {isSuperAdmin && adminItems.map((item) => {
               const isActive = location.pathname === item.href;
               return renderNavigationItem(
                 item,
@@ -554,9 +581,21 @@ export default function Layout({ children }) {
                 </div>
               </div>
               <div className="h-6 w-px bg-gray-200"></div>
-              <div className="bg-white rounded-lg p-2 border border-gray-100">
-                <Stethoscope className="h-5 w-5 text-primary-purple" />
-              </div>
+              {user && (
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <User className="h-4 w-4" />
+                  <span className="font-medium">{user.email}</span>
+                </div>
+              )}
+              <div className="h-6 w-px bg-gray-200"></div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors font-medium"
+                title="Logout"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden md:inline">Logout</span>
+              </button>
             </div>
           </div>
         </div>

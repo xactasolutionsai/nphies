@@ -31,6 +31,8 @@ import priorAuthorizationsRoutes from './routes/priorAuthorizations.js';
 import claimSubmissionsRoutes from './routes/claimSubmissions.js';
 import paymentReconciliationRoutes from './routes/paymentReconciliation.js';
 import coveragesRoutes from './routes/coverages.js';
+import authRoutes from './routes/auth.js';
+import usersRoutes from './routes/users.js';
 
 // Load environment variables
 dotenv.config();
@@ -112,6 +114,8 @@ app.get('/health', async (req, res) => {
 });
 
 // API routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
 app.use('/api/patients', patientsRoutes);
 app.use('/api/providers', providersRoutes);
 app.use('/api/insurers', insurersRoutes);

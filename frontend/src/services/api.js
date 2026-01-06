@@ -29,9 +29,13 @@ class ApiService {
       }
     }
 
+    // Get auth token from localStorage
+    const token = localStorage.getItem('auth_token');
+    
     const config = {
       headers: {
         'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
       ...options,
@@ -1260,6 +1264,56 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ query, limit, category })
     });
+  }
+
+  // ============================================================================
+  // AUTHENTICATION METHODS
+  // ============================================================================
+
+  /**
+   * Register a new user
+   * @param {string} email - User email
+   * @param {string} password - User password
+   * @param {string} confirmPassword - Password confirmation
+   */
+  async register(email, password, confirmPassword) {
+    return this.request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, confirmPassword })
+    });
+  }
+
+  /**
+   * Login user
+   * @param {string} email - User email
+   * @param {string} password - User password
+   */
+  async login(email, password) {
+    return this.request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+  }
+
+  // ============================================================================
+  // USERS MANAGEMENT (Admin Only)
+  // ============================================================================
+
+  /**
+   * Get all users (admin only)
+   * @param {Object} params - Query parameters (page, limit, search)
+   */
+  async getUsers(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/users${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Get user by ID (admin only)
+   * @param {number} id - User ID
+   */
+  async getUser(id) {
+    return this.request(`/users/${id}`);
   }
 }
 
