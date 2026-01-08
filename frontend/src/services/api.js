@@ -1315,6 +1315,50 @@ class ApiService {
   async getUser(id) {
     return this.request(`/users/${id}`);
   }
+
+  // ============================================================================
+  // CONTACTS MANAGEMENT (Admin Only)
+  // ============================================================================
+
+  /**
+   * Get all contacts (admin only)
+   * @param {Object} params - Query parameters (page, limit, search, status)
+   */
+  async getContacts(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/contacts${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Get contact by ID (admin only)
+   * @param {number} id - Contact ID
+   */
+  async getContact(id) {
+    return this.request(`/contacts/${id}`);
+  }
+
+  /**
+   * Update contact status (admin only)
+   * @param {number} id - Contact ID
+   * @param {string} status - New status (new, read, replied, archived)
+   */
+  async updateContactStatus(id, status) {
+    return this.request(`/contacts/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    });
+  }
+
+  /**
+   * Submit contact form (public - no auth required)
+   * @param {Object} data - Contact form data (name, email, company, message)
+   */
+  async submitContactForm(data) {
+    return this.request('/contacts', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
 }
 
 /**

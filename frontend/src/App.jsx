@@ -49,6 +49,7 @@ import ClaimDetails from './pages/ClaimDetails';
 import PaymentReconciliations from './pages/PaymentReconciliations';
 import PaymentReconciliationDetails from './pages/PaymentReconciliationDetails';
 import Users from './pages/Users';
+import Contacts from './pages/Contacts';
 import ChatAssistant from './components/chat/ChatAssistant';
 
 // Protected Route Component
@@ -104,6 +105,7 @@ function AppRoutes() {
           <Route path="/insurers/:id/edit" element={<InsurerForm />} />
           <Route path="/insurers/:id" element={<InsurerDetails />} />
           <Route path="/users" element={<Users />} />
+          <Route path="/contacts" element={<Contacts />} />
           <Route path="/authorizations" element={<Authorizations />} />
           <Route path="/eligibility" element={<Eligibility />} />
           <Route path="/nphies-eligibility" element={<NphiesEligibilityList />} />

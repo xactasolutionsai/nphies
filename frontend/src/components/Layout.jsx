@@ -28,7 +28,8 @@ import {
   Scale,
   FileSearch,
   LogOut,
-  User
+  User,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -53,6 +54,7 @@ const masterDataItems = [
 // Admin-only items
 const adminItems = [
   { name: 'Users', href: '/users', icon: Users },
+  { name: 'Contacts', href: '/contacts', icon: MessageSquare },
 ];
 
 // Merged Requests & Claims section
