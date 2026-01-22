@@ -69,8 +69,12 @@ class NphiesMapper {
    * - Iqama (PRC): 10 digits starting with 2, system: http://nphies.sa/identifier/iqama
    * - Passport (PPN): varies, system: http://nphies.sa/identifier/passportnumber
    * - MRN (MR): provider-specific, system: http://provider.com/identifier/mrn
+   * 
+   * @param {Object} patient - Patient data
+   * @param {boolean} partialMode - If true, only include fields that have values
    */
-  buildPatientResource(patient) {
+  buildPatientResource(patient, partialMode = false) {
+    if (!patient) return null;
     const nameInfo = this.splitName(patient.name);
     // Support both formats: patient_id (DB) or patientId (raw)
     const patientId = `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}`;
@@ -271,8 +275,11 @@ class NphiesMapper {
    * Build FHIR Organization resource for Provider
    * Following NPHIES specification: https://portal.nphies.sa/ig/StructureDefinition-provider-organization.html
    * Supports both DB format (snake_case) and raw format (camelCase)
+   * @param {Object} provider - Provider data
+   * @param {boolean} partialMode - If true, only include fields that have values
    */
-  buildProviderOrganization(provider) {
+  buildProviderOrganization(provider, partialMode = false) {
+    if (!provider) return null;
     const providerId = (provider.provider_id || provider.providerId)?.toString() || this.generateId();
     // Use centralized NPHIES Provider ID from config
     const nphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
@@ -377,8 +384,11 @@ class NphiesMapper {
    * Build FHIR Organization resource for Payer/Insurer
    * Following NPHIES specification: https://portal.nphies.sa/ig/StructureDefinition-insurer-organization.html
    * Supports both DB format (snake_case) and raw format (camelCase)
+   * @param {Object} insurer - Insurer data
+   * @param {boolean} partialMode - If true, only include fields that have values
    */
-  buildPayerOrganization(insurer) {
+  buildPayerOrganization(insurer, partialMode = false) {
+    if (!insurer) return null;
     const insurerId = (insurer.insurer_id || insurer.insurerId)?.toString() || this.generateId();
     // Static NPHIES test ID for now (TODO: use database value in production)
     const nphiesId = 'INS-FHIR';
@@ -437,8 +447,11 @@ class NphiesMapper {
    * Build FHIR PolicyHolder Organization resource
    * Following NPHIES specification: https://portal.nphies.sa/ig/StructureDefinition-policyholder-organization.html
    * Example: Organization/13 in NPHIES eligibility example
+   * @param {Object} policyHolder - PolicyHolder data
+   * @param {boolean} partialMode - If true, only include fields that have values
    */
-  buildPolicyHolderOrganization(policyHolder) {
+  buildPolicyHolderOrganization(policyHolder, partialMode = false) {
+    if (!policyHolder) return null;
     // Support both DB format (snake_case) and raw format (camelCase)
     const policyHolderId = policyHolder?.policy_holder_id || policyHolder?.policyHolderId || this.generateId();
     const name = policyHolder?.name || 'Policy Holder Organization';
@@ -475,12 +488,17 @@ class NphiesMapper {
    * @param {Object} insurer - Insurer data  
    * @param {Object} policyHolder - Optional PolicyHolder Organization data
    * @param {Object} motherPatient - Optional mother patient data (for newborn requests)
+   * @param {string} newbornPatientId - Optional newborn patient resource ID
+   * @param {string} motherPatientResourceId - Optional mother patient resource ID
+   * @param {boolean} partialMode - If true, only include fields that have values
    */
-  buildCoverageResource(coverage, patient, insurer, policyHolder = null, motherPatient = null, newbornPatientId = null, motherPatientResourceId = null) {
+  buildCoverageResource(coverage, patient, insurer, policyHolder = null, motherPatient = null, newbornPatientId = null, motherPatientResourceId = null, partialMode = false) {
+    if (!coverage) return null;
     const coverageId = `coverage-${(coverage.coverage_id || coverage.coverageId)?.toString() || this.generateId()}`;
     // Use the provided patient resource IDs if available (from built Patient resources), otherwise generate/derive from patient object
-    const patientId = newbornPatientId || `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}`;
-    const insurerId = (insurer.insurer_id || insurer.insurerId)?.toString();
+    // In partial mode, patient might be null
+    const patientId = newbornPatientId || (patient ? `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}` : this.generateId());
+    const insurerId = insurer ? (insurer.insurer_id || insurer.insurerId)?.toString() : null;
     
     // Support both formats
     const policyNumber = coverage.policy_number || coverage.policyNumber;
@@ -576,11 +594,14 @@ class NphiesMapper {
             }
           ]
         },
-        payor: [
-          {
-            reference: `Organization/${insurerId}`
-          }
-        ],
+        // Only include payor if insurerId exists
+        ...(insurerId && {
+          payor: [
+            {
+              reference: `Organization/${insurerId}`
+            }
+          ]
+        }),
         class: [
           {
             type: {
@@ -606,19 +627,22 @@ class NphiesMapper {
    * Build FHIR CoverageEligibilityRequest resource
    * Following NPHIES specification: https://portal.nphies.sa/ig/StructureDefinition-eligibility-request.html
    * Supports discovery mode (no coverage) per NPHIES specification
-   * @param {Object} data - Request data including purpose, servicedDate, isNewborn, isTransfer, locationId
+   * @param {Object} data - Request data including purpose, servicedDate, isNewborn, isTransfer, locationId, partialMode
    * @param {Object} patient - Patient data
    * @param {Object} provider - Provider data
    * @param {Object} insurer - Insurer data
    * @param {Object|null} coverage - Coverage data (optional for discovery mode)
+   * @param {string} patientResourceId - Optional patient resource ID
+   * @param {boolean} partialMode - If true, only include fields that have values
    */
-  buildCoverageEligibilityRequest(data, patient, provider, insurer, coverage, patientResourceId = null) {
+  buildCoverageEligibilityRequest(data, patient, provider, insurer, coverage, patientResourceId = null, partialMode = false) {
     // Generate simple request ID like NPHIES example: "req_161959"
     const requestId = `req_${Date.now().toString().slice(-6)}`;
     // Use the provided patient resource ID if available (from built Patient resource), otherwise generate/derive from patient object
-    const patientId = patientResourceId || `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}`;
-    const providerId = (provider.provider_id || provider.providerId)?.toString() || this.generateId();
-    const insurerId = (insurer.insurer_id || insurer.insurerId)?.toString() || this.generateId();
+    // In partial mode, patient/provider/insurer might be null
+    const patientId = patientResourceId || (patient ? `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}` : null);
+    const providerId = provider ? ((provider.provider_id || provider.providerId)?.toString() || this.generateId()) : null;
+    const insurerId = insurer ? ((insurer.insurer_id || insurer.insurerId)?.toString() || this.generateId()) : null;
 
     // Build extensions array for Newborn and Transfer flags
     const extensions = [];
@@ -640,7 +664,10 @@ class NphiesMapper {
     }
 
     // Format serviced date - use servicedPeriod per NPHIES spec
-    const servicedDate = this.formatDate(data.servicedDate || new Date());
+    // In partial mode, only include if explicitly provided
+    const servicedDate = data.servicedDate 
+      ? this.formatDate(data.servicedDate) 
+      : (partialMode ? null : this.formatDate(new Date()));
 
     // Simple numeric ID for the resource (like NPHIES example: "19596")
     const resourceId = Date.now().toString().slice(-5);
@@ -668,22 +695,36 @@ class NphiesMapper {
           }
         ]
       },
-      purpose: data.purpose || ['benefits', 'validation'],
-      patient: {
-        reference: `Patient/${patientId}`
-      },
+      // Only include purpose if provided (in partial mode it might be undefined)
+      ...(data.purpose && { purpose: data.purpose }),
+      ...(!data.purpose && !partialMode && { purpose: ['benefits', 'validation'] }),
+      // Only include patient reference if patientId exists
+      ...(patientId && {
+        patient: {
+          reference: `Patient/${patientId}`
+        }
+      }),
       // Use servicedPeriod instead of servicedDate per NPHIES example
-      servicedPeriod: {
-        start: servicedDate,
-        end: servicedDate
-      },
-      created: servicedDate,
-      provider: {
-        reference: `Organization/${providerId}`
-      },
-      insurer: {
-        reference: `Organization/${insurerId}`
-      },
+      // Only include if servicedDate is provided
+      ...(servicedDate && {
+        servicedPeriod: {
+          start: servicedDate,
+          end: servicedDate
+        },
+        created: servicedDate
+      }),
+      // Only include provider reference if providerId exists
+      ...(providerId && {
+        provider: {
+          reference: `Organization/${providerId}`
+        }
+      }),
+      // Only include insurer reference if insurerId exists
+      ...(insurerId && {
+        insurer: {
+          reference: `Organization/${insurerId}`
+        }
+      }),
       // Add facility reference to Location per NPHIES spec
       ...(data.locationId && {
         facility: {
@@ -715,8 +756,13 @@ class NphiesMapper {
    * Build FHIR MessageHeader resource
    * Following NPHIES specification: https://portal.nphies.sa/ig/StructureDefinition-message-header.html
    * Uses identifier format for sender/receiver as required by NPHIES (NOT reference format)
+   * @param {string} eventCode - Event code for the message
+   * @param {Object} sender - Sender organization data
+   * @param {Object} destination - Destination organization data
+   * @param {string} focusFullUrl - Full URL of the focus resource
+   * @param {boolean} partialMode - If true, only include fields that have values
    */
-  buildMessageHeader(eventCode, sender, destination, focusFullUrl) {
+  buildMessageHeader(eventCode, sender, destination, focusFullUrl, partialMode = false) {
     const messageHeaderId = this.generateId();
     // Use centralized NPHIES Provider ID from config
     const senderNphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
@@ -770,8 +816,11 @@ class NphiesMapper {
   /**
    * Build FHIR Location resource for the provider facility
    * Following NPHIES specification: https://portal.nphies.sa/ig/StructureDefinition-location.html
+   * @param {Object} provider - Provider data
+   * @param {boolean} partialMode - If true, only include fields that have values
    */
-  buildLocationResource(provider) {
+  buildLocationResource(provider, partialMode = false) {
+    if (!provider) return null;
     const locationId = this.generateId();
     const locationLicense = provider.location_license || provider.locationLicense || 'GACH';
     const providerName = provider.provider_name || provider.providerName || provider.name || 'Healthcare Facility';
@@ -815,31 +864,34 @@ class NphiesMapper {
    * Following NPHIES specification: https://portal.nphies.sa/ig/usecase-eligibility.html
    * Example: https://portal.nphies.sa/ig/Bundle-4350490e-98f0-4c23-9e7d-4cd2c7011959.html
    * Supports discovery mode where coverage is optional
-   * @param {Object} data - Contains patient, provider, insurer, coverage (optional), policyHolder (optional), purpose, servicedDate, isNewborn, isTransfer
+   * @param {Object} data - Contains patient, provider, insurer, coverage (optional), policyHolder (optional), purpose, servicedDate, isNewborn, isTransfer, partialMode
    */
   buildEligibilityRequestBundle(data) {
-    const { patient, provider, insurer, coverage, policyHolder, purpose, servicedDate, isNewborn, isTransfer, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, purpose, servicedDate, isNewborn, isTransfer, motherPatient, partialMode } = data;
 
+    // In partial mode, we only include resources that have actual data
+    // This is used for preview to show only what the user has filled in
+    
     // Build individual resources first to get their fullUrls and IDs
     // For newborn cases, patient is the newborn, and we also need mother patient resource
-    const newbornPatientResource = this.buildPatientResource(patient);
-    const newbornPatientId = newbornPatientResource.resource.id; // Extract the generated ID
+    const newbornPatientResource = patient ? this.buildPatientResource(patient, partialMode) : null;
+    const newbornPatientId = newbornPatientResource ? newbornPatientResource.resource.id : null;
     
-    const providerResource = this.buildProviderOrganization(provider);
-    const insurerResource = this.buildPayerOrganization(insurer);
-    const locationResource = this.buildLocationResource(provider);
+    const providerResource = provider ? this.buildProviderOrganization(provider, partialMode) : null;
+    const insurerResource = insurer ? this.buildPayerOrganization(insurer, partialMode) : null;
+    const locationResource = provider ? this.buildLocationResource(provider, partialMode) : null;
     
     // Build mother patient resource if provided (for newborn requests)
-    const motherPatientResource = (isNewborn && motherPatient) ? this.buildPatientResource(motherPatient) : null;
+    const motherPatientResource = (isNewborn && motherPatient) ? this.buildPatientResource(motherPatient, partialMode) : null;
     const motherPatientId = motherPatientResource ? motherPatientResource.resource.id : null;
     
     // Build PolicyHolder Organization if provided (employer/company that holds the policy)
-    const policyHolderResource = policyHolder ? this.buildPolicyHolderOrganization(policyHolder) : null;
+    const policyHolderResource = policyHolder ? this.buildPolicyHolderOrganization(policyHolder, partialMode) : null;
     
     // Coverage is optional for discovery mode
     // For newborn cases, pass motherPatient and the generated patient IDs to buildCoverageResource
     const coverageResource = coverage 
-      ? this.buildCoverageResource(coverage, patient, insurer, policyHolder, motherPatient, newbornPatientId, motherPatientId) 
+      ? this.buildCoverageResource(coverage, patient, insurer, policyHolder, motherPatient, newbornPatientId, motherPatientId, partialMode) 
       : null;
     
     // Pass locationId and patient ID to eligibility request for facility reference
@@ -849,13 +901,15 @@ class NphiesMapper {
         servicedDate, 
         isNewborn, 
         isTransfer,
-        locationId: locationResource.resource.id  // Pass location ID for facility reference
+        locationId: locationResource ? locationResource.resource.id : null,
+        partialMode
       },
       patient,
       provider,
       insurer,
       coverage,
-      newbornPatientId  // Pass the generated patient resource ID
+      newbornPatientId,
+      partialMode
     );
 
     // Build message header (must be first entry in bundle)
@@ -864,7 +918,8 @@ class NphiesMapper {
       'eligibility-request',
       provider,
       insurer,
-      eligibilityRequest.fullUrl  // Use full URL, not relative reference
+      eligibilityRequest ? eligibilityRequest.fullUrl : null,
+      partialMode
     );
 
     // Assemble bundle with MessageHeader first per NPHIES specification
@@ -877,10 +932,11 @@ class NphiesMapper {
     // 6. Patient
     // 7. Insurer Organization
     // 8. Location
-    const entries = [
-      messageHeader,
-      eligibilityRequest
-    ];
+    const entries = [];
+    
+    // In partial mode, only add resources that exist
+    if (messageHeader) entries.push(messageHeader);
+    if (eligibilityRequest) entries.push(eligibilityRequest);
     
     // Add coverage only if provided (not in discovery mode)
     if (coverageResource) {
@@ -894,18 +950,16 @@ class NphiesMapper {
     
     // Add remaining resources in NPHIES order
     // For newborn cases, add both newborn and mother patient resources
-    entries.push(providerResource);
+    if (providerResource) entries.push(providerResource);
     
     // Add patient resources (newborn first, then mother if present)
-    entries.push(newbornPatientResource);
+    if (newbornPatientResource) entries.push(newbornPatientResource);
     if (motherPatientResource) {
       entries.push(motherPatientResource);
     }
     
-    entries.push(
-      insurerResource,
-      locationResource
-    );
+    if (insurerResource) entries.push(insurerResource);
+    if (locationResource) entries.push(locationResource);
 
     const bundle = {
       resourceType: 'Bundle',
@@ -918,7 +972,46 @@ class NphiesMapper {
       entry: entries
     };
 
+    // In partial mode, clean up the bundle to remove empty fields
+    if (partialMode) {
+      return this.removeEmptyFields(bundle);
+    }
+
     return bundle;
+  }
+
+  /**
+   * Remove empty/null/undefined fields from an object recursively
+   * Used in partial mode to clean up the FHIR bundle
+   * @param {any} obj - Object to clean
+   * @returns {any} Cleaned object
+   */
+  removeEmptyFields(obj) {
+    if (obj === null || obj === undefined) return undefined;
+    if (typeof obj !== 'object') return obj;
+    
+    if (Array.isArray(obj)) {
+      const filtered = obj
+        .map(item => this.removeEmptyFields(item))
+        .filter(item => item !== undefined && item !== null && item !== '');
+      return filtered.length > 0 ? filtered : undefined;
+    }
+    
+    const cleaned = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value === null || value === undefined || value === '') continue;
+      
+      if (typeof value === 'object') {
+        const cleanedValue = this.removeEmptyFields(value);
+        if (cleanedValue !== undefined && 
+            (Array.isArray(cleanedValue) ? cleanedValue.length > 0 : Object.keys(cleanedValue).length > 0)) {
+          cleaned[key] = cleanedValue;
+        }
+      } else {
+        cleaned[key] = value;
+      }
+    }
+    return Object.keys(cleaned).length > 0 ? cleaned : undefined;
   }
 
   /**

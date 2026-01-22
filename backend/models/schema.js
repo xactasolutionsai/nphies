@@ -232,23 +232,28 @@ export const validationSchemas = {
   }),
   
   provider: Joi.object({
-    name: Joi.string().min(2).max(255).required(),
-    type: Joi.string().min(2).max(100).required(),
-    nphies_id: Joi.string().min(3).max(50).required(),
-    address: Joi.string().optional(),
-    phone: Joi.string().min(10).max(20).optional(),
-    email: Joi.string().email().optional(),
-    contact_person: Joi.string().optional()
+    provider_name: Joi.string().min(2).max(255).required(),
+    type: Joi.string().max(100).optional().allow('', null),
+    nphies_id: Joi.string().max(50).optional().allow('', null),
+    address: Joi.string().optional().allow('', null),
+    phone: Joi.string().max(20).optional().allow('', null),
+    email: Joi.string().email().optional().allow('', null),
+    doctor_name: Joi.string().max(255).optional().allow('', null),
+    department: Joi.string().max(255).optional().allow('', null),
+    provider_type: Joi.string().max(100).optional().allow('', null),
+    location_license: Joi.string().max(100).optional().allow('', null),
+    contact_person: Joi.string().optional().allow('', null)
   }),
   
   insurer: Joi.object({
-    name: Joi.string().min(2).max(255).required(),
-    nphies_id: Joi.string().min(3).max(50).required(),
-    status: Joi.string().valid('Active', 'Inactive', 'Suspended').optional(),
-    contact_person: Joi.string().optional(),
-    phone: Joi.string().min(10).max(20).optional(),
-    email: Joi.string().email().optional(),
-    address: Joi.string().optional()
+    insurer_name: Joi.string().min(2).max(255).required(),
+    nphies_id: Joi.string().max(50).optional().allow('', null),
+    status: Joi.string().valid('Active', 'Inactive', 'Suspended', 'Pending').optional().allow('', null),
+    contact_person: Joi.string().optional().allow('', null),
+    phone: Joi.string().max(20).optional().allow('', null),
+    email: Joi.string().email().optional().allow('', null),
+    address: Joi.string().optional().allow('', null),
+    plan_type: Joi.string().max(100).optional().allow('', null)
   }),
   
   authorization: Joi.object({

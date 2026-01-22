@@ -415,43 +415,94 @@ export default function NphiesEligibilityForm() {
     });
   };
 
+  // Helper function to remove empty/null/undefined values from an object
+  const removeEmptyFields = (obj) => {
+    if (obj === null || obj === undefined) return undefined;
+    if (typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) {
+      const filtered = obj.filter(item => item !== null && item !== undefined && item !== '');
+      return filtered.length > 0 ? filtered : undefined;
+    }
+    
+    const cleaned = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value === null || value === undefined || value === '') continue;
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        const cleanedValue = removeEmptyFields(value);
+        if (cleanedValue !== undefined && Object.keys(cleanedValue).length > 0) {
+          cleaned[key] = cleanedValue;
+        }
+      } else if (Array.isArray(value)) {
+        const cleanedArray = removeEmptyFields(value);
+        if (cleanedArray !== undefined) {
+          cleaned[key] = cleanedArray;
+        }
+      } else {
+        cleaned[key] = value;
+      }
+    }
+    return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+  };
+
   // Preview the FHIR bundle without sending to NPHIES (no validation)
+  // Only includes fields that are actually filled - no placeholders, no empty fields
   const handlePreview = async () => {
     setPreviewLoading(true);
     setError(null);
 
     try {
+      // Build request data, only including non-empty fields
       const requestData = {
-        ...(patientMode === 'existing' 
-          ? { patientId: selectedPatient || undefined }
-          : { patientData: { ...patientData, birthDate: patientData.birthDate } }
-        ),
-        ...(isNewborn && (motherPatientMode === 'existing'
-          ? { motherPatientId: selectedMotherPatient || undefined }
-          : { motherPatientData: { ...motherPatientData, birthDate: motherPatientData.birthDate, identifierType: 'iqama' } }
-        )),
-        ...(providerMode === 'existing'
-          ? { providerId: selectedProvider || undefined }
-          : { providerData }
-        ),
-        ...(insurerMode === 'existing'
-          ? { insurerId: selectedInsurer || undefined }
-          : { insurerData }
-        ),
-        ...(coverageMode === 'existing' && selectedCoverage
-          ? { coverageId: selectedCoverage }
-          : coverageMode === 'manual'
-          ? { coverageData }
+        // Patient - only include if there's actual data
+        ...(patientMode === 'existing' && selectedPatient
+          ? { patientId: selectedPatient }
+          : patientMode === 'manual' 
+          ? { patientData: removeEmptyFields(patientData) }
           : {}
         ),
-        purpose: selectedPurpose.length > 0 ? selectedPurpose : ['validation'],
-        servicedDate: formatDate(servicedDate),
-        isNewborn,
-        isTransfer,
-        skipValidation: true // Tell backend to skip validation
+        // Mother Patient (for newborn) - only include if newborn is checked and there's data
+        ...(isNewborn && (motherPatientMode === 'existing' && selectedMotherPatient
+          ? { motherPatientId: selectedMotherPatient }
+          : motherPatientMode === 'manual' && motherPatientData.identifier
+          ? { motherPatientData: removeEmptyFields({ ...motherPatientData, identifierType: 'iqama' }) }
+          : {}
+        )),
+        // Provider - only include if there's actual data
+        ...(providerMode === 'existing' && selectedProvider
+          ? { providerId: selectedProvider }
+          : providerMode === 'manual' && providerData.nphiesId
+          ? { providerData: removeEmptyFields(providerData) }
+          : {}
+        ),
+        // Insurer - only include if there's actual data
+        ...(insurerMode === 'existing' && selectedInsurer
+          ? { insurerId: selectedInsurer }
+          : insurerMode === 'manual' && insurerData.nphiesId
+          ? { insurerData: removeEmptyFields(insurerData) }
+          : {}
+        ),
+        // Coverage - only include if there's actual data (not in discovery mode)
+        ...(coverageMode === 'existing' && selectedCoverage
+          ? { coverageId: selectedCoverage }
+          : coverageMode === 'manual' && (coverageData.memberId || coverageData.policyNumber)
+          ? { coverageData: removeEmptyFields(coverageData) }
+          : {}
+        ),
+        // Purpose - only include if selected
+        ...(selectedPurpose.length > 0 ? { purpose: selectedPurpose } : {}),
+        // Service date - only include if set
+        ...(servicedDate ? { servicedDate: formatDate(servicedDate) } : {}),
+        // Extensions - only include if true
+        ...(isNewborn ? { isNewborn: true } : {}),
+        ...(isTransfer ? { isTransfer: true } : {}),
+        // Tell backend this is preview mode - skip validation, only include filled fields
+        partialMode: true
       };
 
-      const response = await api.previewEligibilityRequest(requestData);
+      // Remove any undefined values at the top level
+      const cleanedRequestData = removeEmptyFields(requestData) || {};
+
+      const response = await api.previewEligibilityRequest(cleanedRequestData);
       setPreviewData(response);
       setShowPreview(true);
     } catch (err) {

@@ -917,6 +917,11 @@ class EligibilityController extends BaseController {
   /**
    * Preview the FHIR bundle that would be sent to NPHIES
    * This does NOT send the request, only builds and returns the bundle
+   * 
+   * When partialMode is true:
+   * - No validation errors for missing fields
+   * - Only includes fields that are actually provided
+   * - Skips resources that have no data
    */
   async previewEligibilityRequest(req, res) {
     try {
@@ -931,37 +936,47 @@ class EligibilityController extends BaseController {
         insurerData,
         coverageId,
         coverageData,
-        purpose = ['benefits', 'validation'],
+        purpose,
         servicedDate,
         isNewborn = false,
-        isTransfer = false
+        isTransfer = false,
+        partialMode = false // When true, skip validation and only include filled fields
       } = req.body;
 
-      console.log('[NPHIES Preview] Building preview request bundle...');
+      console.log('[NPHIES Preview] Building preview request bundle...', partialMode ? '(partial mode)' : '');
 
       // --- 1. Resolve Patient (without UPSERT for preview) ---
-      let patient;
+      let patient = null;
       if (patientId) {
         const patientResult = await query(
           'SELECT * FROM patients WHERE patient_id = $1',
           [patientId]
         );
         if (patientResult.rows.length === 0) {
-          return res.status(404).json({ success: false, error: 'Patient not found' });
+          if (!partialMode) {
+            return res.status(404).json({ success: false, error: 'Patient not found' });
+          }
+          // In partial mode, skip if not found
+        } else {
+          patient = patientResult.rows[0];
         }
-        patient = patientResult.rows[0];
-      } else if (patientData) {
+      } else if (patientData && Object.keys(patientData).length > 0) {
         // For preview, just use the data as-is without saving
+        // Only include fields that are actually provided
         patient = {
           patient_id: 'preview-patient-id',
-          name: patientData.name || 'Preview Patient',
-          identifier: patientData.identifier,
-          identifier_type: patientData.identifierType || 'national_id',
-          gender: patientData.gender,
-          birth_date: patientData.birthDate, // Use birth_date (with underscore) to match mapper expectations
-          phone: patientData.phone
+          ...(patientData.name && { name: patientData.name }),
+          ...(patientData.identifier && { identifier: patientData.identifier }),
+          ...(patientData.identifierType && { identifier_type: patientData.identifierType }),
+          ...(patientData.gender && { gender: patientData.gender }),
+          ...(patientData.birthDate && { birth_date: patientData.birthDate }),
+          ...(patientData.phone && { phone: patientData.phone }),
+          ...(patientData.email && { email: patientData.email })
         };
-      } else {
+      }
+      
+      // In non-partial mode, patient is required
+      if (!partialMode && !patient) {
         return res.status(400).json({
           success: false,
           error: 'Either patientId or patientData must be provided'
@@ -969,24 +984,29 @@ class EligibilityController extends BaseController {
       }
 
       // --- 2. Resolve Insurer (without UPSERT for preview) ---
-      let insurer;
+      let insurer = null;
       if (insurerId) {
         const insurerResult = await query(
           'SELECT * FROM insurers WHERE insurer_id = $1',
           [insurerId]
         );
         if (insurerResult.rows.length === 0) {
-          return res.status(404).json({ success: false, error: 'Insurer not found' });
+          if (!partialMode) {
+            return res.status(404).json({ success: false, error: 'Insurer not found' });
+          }
+        } else {
+          insurer = insurerResult.rows[0];
         }
-        insurer = insurerResult.rows[0];
-      } else if (insurerData) {
+      } else if (insurerData && Object.keys(insurerData).length > 0) {
         // For preview, just use the data as-is without saving
         insurer = {
           insurer_id: 'preview-insurer-id',
-          insurer_name: insurerData.name || 'Preview Insurer',
-          nphies_id: insurerData.nphiesId
+          ...(insurerData.name && { insurer_name: insurerData.name }),
+          ...(insurerData.nphiesId && { nphies_id: insurerData.nphiesId })
         };
-      } else {
+      }
+      
+      if (!partialMode && !insurer) {
         return res.status(400).json({
           success: false,
           error: 'Either insurerId or insurerData must be provided'
@@ -994,25 +1014,30 @@ class EligibilityController extends BaseController {
       }
 
       // --- 3. Resolve Provider ---
-      let provider;
+      let provider = null;
       if (providerId) {
         const providerResult = await query(
           'SELECT * FROM providers WHERE provider_id = $1',
           [providerId]
         );
         if (providerResult.rows.length === 0) {
-          return res.status(404).json({ success: false, error: 'Provider not found' });
+          if (!partialMode) {
+            return res.status(404).json({ success: false, error: 'Provider not found' });
+          }
+        } else {
+          provider = providerResult.rows[0];
         }
-        provider = providerResult.rows[0];
-      } else if (providerData) {
+      } else if (providerData && Object.keys(providerData).length > 0) {
         // For preview, just use the data as-is without saving
         provider = {
           provider_id: 'preview-provider-id',
-          provider_name: providerData.name || 'Preview Provider',
-          nphies_id: providerData.nphiesId,
-          location_license: providerData.locationLicense || 'GACH'
+          ...(providerData.name && { provider_name: providerData.name }),
+          ...(providerData.nphiesId && { nphies_id: providerData.nphiesId }),
+          ...(providerData.locationLicense && { location_license: providerData.locationLicense })
         };
-      } else {
+      }
+      
+      if (!partialMode && !provider) {
         return res.status(400).json({
           success: false,
           error: 'Either providerId or providerData must be provided'
@@ -1029,20 +1054,24 @@ class EligibilityController extends BaseController {
           [coverageId]
         );
         if (coverageResult.rows.length === 0) {
-          return res.status(404).json({ success: false, error: 'Coverage not found' });
+          if (!partialMode) {
+            return res.status(404).json({ success: false, error: 'Coverage not found' });
+          }
+        } else {
+          coverage = coverageResult.rows[0];
         }
-        coverage = coverageResult.rows[0];
-      } else if (coverageData) {
+      } else if (coverageData && Object.keys(coverageData).length > 0) {
         // For preview, just use the data as-is without saving
         coverage = {
           coverage_id: 'preview-coverage-id',
-          policy_number: coverageData.policyNumber,
-          member_id: coverageData.memberId,
-          coverage_type: coverageData.coverageType || 'EHCPOL',
-          plan_name: coverageData.planName,
-          relationship: coverageData.relationship || 'self',
-          patient_id: patient.patient_id,
-          insurer_id: insurer.insurer_id
+          ...(coverageData.policyNumber && { policy_number: coverageData.policyNumber }),
+          ...(coverageData.memberId && { member_id: coverageData.memberId }),
+          ...(coverageData.coverageType && { coverage_type: coverageData.coverageType }),
+          ...(coverageData.planName && { plan_name: coverageData.planName }),
+          ...(coverageData.relationship && { relationship: coverageData.relationship }),
+          ...(coverageData.network && { network: coverageData.network }),
+          ...(patient && { patient_id: patient.patient_id }),
+          ...(insurer && { insurer_id: insurer.insurer_id })
         };
       }
 
@@ -1056,37 +1085,76 @@ class EligibilityController extends BaseController {
             [motherPatientId]
           );
           if (motherResult.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Mother patient not found' });
+            if (!partialMode) {
+              return res.status(404).json({ success: false, error: 'Mother patient not found' });
+            }
+          } else {
+            motherPatient = motherResult.rows[0];
           }
-          motherPatient = motherResult.rows[0];
-        } else if (motherPatientData) {
+        } else if (motherPatientData && Object.keys(motherPatientData).length > 0) {
           // For preview, just use the data as-is without saving
           motherPatient = {
             patient_id: 'preview-mother-patient-id',
-            name: motherPatientData.name || 'Preview Mother Patient',
-            identifier: motherPatientData.identifier,
-            identifier_type: motherPatientData.identifierType || 'iqama',
-            gender: motherPatientData.gender,
-            birth_date: motherPatientData.birthDate, // Use birth_date (with underscore) to match mapper expectations
-            phone: motherPatientData.phone
+            ...(motherPatientData.name && { name: motherPatientData.name }),
+            ...(motherPatientData.identifier && { identifier: motherPatientData.identifier }),
+            ...(motherPatientData.identifierType && { identifier_type: motherPatientData.identifierType }),
+            ...(motherPatientData.gender && { gender: motherPatientData.gender }),
+            ...(motherPatientData.birthDate && { birth_date: motherPatientData.birthDate }),
+            ...(motherPatientData.phone && { phone: motherPatientData.phone })
           };
         }
       }
 
       // --- 6. Build FHIR Bundle (without sending) ---
+      // Pass partialMode to the mapper so it can skip empty fields
       const requestBundle = nphiesMapper.buildEligibilityRequestBundle({
         patient,
         provider,
         insurer,
         coverage,
-        purpose: purpose || ['benefits', 'validation'],
-        servicedDate: servicedDate || new Date(),
+        purpose: purpose || (partialMode ? undefined : ['benefits', 'validation']),
+        servicedDate: servicedDate || (partialMode ? undefined : new Date()),
         isNewborn: Boolean(isNewborn),
         isTransfer: Boolean(isTransfer),
-        motherPatient: motherPatient
+        motherPatient: motherPatient,
+        partialMode: partialMode
       });
 
       console.log('[NPHIES Preview] Bundle built successfully');
+
+      // Build entities summary - only include what's actually provided
+      const entities = {};
+      if (patient) {
+        entities.patient = {};
+        if (patient.name) entities.patient.name = patient.name;
+        if (patient.identifier) entities.patient.identifier = patient.identifier;
+        if (patient.identifier_type) entities.patient.identifierType = patient.identifier_type;
+        if (patient.gender) entities.patient.gender = patient.gender;
+        if (patient.birth_date || patient.birthDate) entities.patient.birthDate = patient.birth_date || patient.birthDate;
+      }
+      if (provider) {
+        entities.provider = {};
+        if (provider.provider_name || provider.name) entities.provider.name = provider.provider_name || provider.name;
+        if (provider.nphies_id) entities.provider.nphiesId = provider.nphies_id;
+      }
+      if (insurer) {
+        entities.insurer = {};
+        if (insurer.insurer_name || insurer.name) entities.insurer.name = insurer.insurer_name || insurer.name;
+        if (insurer.nphies_id) entities.insurer.nphiesId = insurer.nphies_id;
+      }
+      if (coverage) {
+        entities.coverage = {};
+        if (coverage.policy_number) entities.coverage.policyNumber = coverage.policy_number;
+        if (coverage.member_id) entities.coverage.memberId = coverage.member_id;
+        if (coverage.coverage_type) entities.coverage.type = coverage.coverage_type;
+      }
+
+      // Build options summary - only include what's actually provided
+      const options = {};
+      if (purpose && purpose.length > 0) options.purpose = purpose;
+      if (servicedDate) options.servicedDate = servicedDate;
+      if (isNewborn) options.isNewborn = isNewborn;
+      if (isTransfer) options.isTransfer = isTransfer;
 
       // Return the preview bundle
       res.json({
@@ -1094,34 +1162,8 @@ class EligibilityController extends BaseController {
         preview: true,
         message: 'This is a preview of the FHIR bundle. No request was sent to NPHIES.',
         isDiscoveryMode,
-        entities: {
-          patient: {
-            name: patient.name,
-            identifier: patient.identifier,
-            identifierType: patient.identifier_type,
-            gender: patient.gender,
-            birthDate: patient.birth_date || patient.birthDate || patient.birthdate
-          },
-          provider: {
-            name: provider.provider_name || provider.name,
-            nphiesId: provider.nphies_id
-          },
-          insurer: {
-            name: insurer.insurer_name || insurer.name,
-            nphiesId: insurer.nphies_id
-          },
-          coverage: coverage ? {
-            policyNumber: coverage.policy_number,
-            memberId: coverage.member_id,
-            type: coverage.coverage_type
-          } : null
-        },
-        options: {
-          purpose,
-          servicedDate: servicedDate || new Date().toISOString().split('T')[0],
-          isNewborn,
-          isTransfer
-        },
+        ...(Object.keys(entities).length > 0 && { entities }),
+        ...(Object.keys(options).length > 0 && { options }),
         fhirBundle: requestBundle
       });
 

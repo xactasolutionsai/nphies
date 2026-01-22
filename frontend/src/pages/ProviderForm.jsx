@@ -128,13 +128,25 @@ export default function ProviderForm() {
       setSaving(true);
       setError(null);
 
-      // Prepare data for submission
-      const submitData = { ...formData };
+      // Prepare data for submission - use actual database column names
+      const submitData = {
+        provider_name: formData.provider_name,
+        type: formData.type,
+        nphies_id: formData.nphies_id,
+        provider_type: formData.provider_type,
+        address: formData.address,
+        phone: formData.phone,
+        email: formData.email,
+        doctor_name: formData.doctor_name,
+        department: formData.department,
+        location_license: formData.location_license,
+        contact_person: formData.contact_person
+      };
       
-      // Remove empty strings
+      // Remove empty strings and null values for optional fields (keep provider_name as required)
       Object.keys(submitData).forEach(key => {
-        if (submitData[key] === '') {
-          submitData[key] = null;
+        if (key !== 'provider_name' && (submitData[key] === '' || submitData[key] === null || submitData[key] === undefined)) {
+          delete submitData[key];
         }
       });
 
