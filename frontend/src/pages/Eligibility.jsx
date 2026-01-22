@@ -1,12 +1,465 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import DataTable from '@/components/DataTable';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Shield, TrendingUp, Users, DollarSign, Calendar, UserCheck } from 'lucide-react';
+import { Shield, TrendingUp, Users, DollarSign, Calendar, UserCheck, ChevronDown, ChevronUp, FileText, CheckCircle, XCircle, Clock } from 'lucide-react';
 import api from '@/services/api';
 
 const COLORS = ['#553781', '#9658C4', '#8572CD', '#00DEFE', '#26A69A', '#E0E7FF'];
+
+/**
+ * Parse policies from raw NPHIES response
+ * Extracts all insurance entries with their benefits
+ */
+function parsePoliciesFromResponse(rawResponse) {
+  if (!rawResponse) return [];
+  
+  try {
+    // Find CoverageEligibilityResponse in the bundle
+    const eligibilityResponse = rawResponse.entry?.find(
+      e => e.resource?.resourceType === 'CoverageEligibilityResponse'
+    )?.resource;
+    
+    if (!eligibilityResponse?.insurance?.length) return [];
+    
+    return eligibilityResponse.insurance.map((insurance, index) => {
+      // Extract site eligibility for this insurance entry
+      const siteEligibility = insurance.extension?.find(
+        ext => ext.url === 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-siteEligibility'
+      )?.valueCodeableConcept?.coding?.[0];
+      
+      // Extract benefits from items
+      const benefits = (insurance.item || []).map(item => ({
+        name: item.name || item.category?.coding?.[0]?.code || 'Unknown',
+        description: item.description || '',
+        category: item.category?.coding?.[0]?.code,
+        network: item.network?.coding?.[0]?.code,
+        term: item.term?.coding?.[0]?.code,
+        excluded: item.excluded || false,
+        benefits: (item.benefit || []).map(b => ({
+          type: b.type?.coding?.[0]?.code,
+          allowedValue: b.allowedMoney?.value ?? b.allowedUnsignedInt ?? b.allowedString,
+          allowedCurrency: b.allowedMoney?.currency,
+          usedValue: b.usedMoney?.value ?? b.usedUnsignedInt,
+          usedCurrency: b.usedMoney?.currency
+        }))
+      }));
+      
+      return {
+        policyIndex: index,
+        coverageReference: insurance.coverage?.reference,
+        inforce: insurance.inforce,
+        siteEligibility: siteEligibility ? {
+          code: siteEligibility.code,
+          display: siteEligibility.code === 'eligible' ? 'Eligible' : 
+                   siteEligibility.code === 'not-eligible' ? 'Not Eligible' : siteEligibility.code
+        } : null,
+        benefitPeriod: insurance.benefitPeriod,
+        benefits
+      };
+    });
+  } catch (error) {
+    console.error('Error parsing policies from response:', error);
+    return [];
+  }
+}
+
+/**
+ * Eligibility Detail Modal Component
+ * Displays comprehensive eligibility information including multiple policies
+ */
+function EligibilityDetailModal({ eligibility, onClose, getStatusBadge }) {
+  const [expandedPolicies, setExpandedPolicies] = useState({});
+  const [activeTab, setActiveTab] = useState('overview');
+  
+  // Parse policies from raw_response
+  const policies = useMemo(() => {
+    return parsePoliciesFromResponse(eligibility.raw_response);
+  }, [eligibility.raw_response]);
+  
+  const togglePolicy = (index) => {
+    setExpandedPolicies(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
+  
+  const getSiteEligibilityBadge = (siteEligibility) => {
+    if (!siteEligibility) return null;
+    const variants = {
+      'eligible': 'default',
+      'not-eligible': 'destructive',
+      'ineligible': 'destructive',
+      'pending': 'secondary'
+    };
+    return (
+      <Badge variant={variants[siteEligibility.code] || 'outline'} className="text-xs">
+        {siteEligibility.display || siteEligibility.code}
+      </Badge>
+    );
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="relative bg-white rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white flex-shrink-0">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-3">
+              <div className="relative bg-white/20 rounded-full p-2">
+                <UserCheck className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold">Eligibility Details</h2>
+                <p className="text-white/80 mt-1">
+                  {policies.length > 0 
+                    ? `${policies.length} ${policies.length === 1 ? 'Policy' : 'Policies'} Found`
+                    : 'Eligibility Information'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all duration-200"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          {/* Tabs */}
+          <div className="flex space-x-4 mt-4">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                activeTab === 'overview' 
+                  ? 'bg-white/20 text-white' 
+                  : 'text-white/70 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('policies')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                activeTab === 'policies' 
+                  ? 'bg-white/20 text-white' 
+                  : 'text-white/70 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              Policies & Benefits ({policies.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {activeTab === 'overview' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-primary-purple/10 rounded-lg p-2">
+                    <UserCheck className="h-5 w-5 text-primary-purple" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Eligibility ID</label>
+                    <p className="text-lg font-semibold text-gray-900">{eligibility.id || eligibility.eligibility_id}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-accent-cyan/10 rounded-lg p-2">
+                    {eligibility.status === 'eligible' || eligibility.status === 'Eligible' 
+                      ? <CheckCircle className="h-5 w-5 text-green-600" />
+                      : eligibility.status === 'not_eligible' || eligibility.status === 'Not Eligible'
+                      ? <XCircle className="h-5 w-5 text-red-600" />
+                      : <Clock className="h-5 w-5 text-yellow-600" />
+                    }
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Status</label>
+                    <div className="mt-1">
+                      <Badge variant={getStatusBadge(eligibility.status)} className="text-sm">
+                        {eligibility.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-primary-purple/10 rounded-lg p-2">
+                    <Shield className="h-5 w-5 text-primary-purple" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Purpose</label>
+                    <p className="text-lg font-semibold text-gray-900">{eligibility.purpose || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-accent-cyan/10 rounded-lg p-2">
+                    <FileText className="h-5 w-5 text-accent-cyan" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Outcome</label>
+                    <p className="text-lg font-semibold text-gray-900">{eligibility.outcome || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-primary-purple/10 rounded-lg p-2">
+                    <Users className="h-5 w-5 text-primary-purple" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Patient</label>
+                    <p className="text-lg font-semibold text-gray-900">{eligibility.patient_name || eligibility.patient || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-accent-cyan/10 rounded-lg p-2">
+                    <Shield className="h-5 w-5 text-accent-cyan" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Provider</label>
+                    <p className="text-lg font-semibold text-gray-900">{eligibility.provider_name || eligibility.provider || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-primary-purple/10 rounded-lg p-2">
+                    <DollarSign className="h-5 w-5 text-primary-purple" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Insurer</label>
+                    <p className="text-lg font-semibold text-gray-900">{eligibility.insurer_name || eligibility.insurer || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-accent-cyan/10 rounded-lg p-2">
+                    <Calendar className="h-5 w-5 text-accent-cyan" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Request Date</label>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {eligibility.request_date 
+                        ? new Date(eligibility.request_date).toLocaleDateString() 
+                        : eligibility.requestDate 
+                        ? new Date(eligibility.requestDate).toLocaleDateString()
+                        : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {eligibility.site_eligibility && (
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="bg-green-100 rounded-lg p-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Site Eligibility</label>
+                      <p className="text-lg font-semibold text-gray-900">{eligibility.site_eligibility}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {eligibility.inforce !== undefined && (
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex items-center space-x-3">
+                    <div className={`rounded-lg p-2 ${eligibility.inforce ? 'bg-green-100' : 'bg-red-100'}`}>
+                      {eligibility.inforce 
+                        ? <CheckCircle className="h-5 w-5 text-green-600" />
+                        : <XCircle className="h-5 w-5 text-red-600" />
+                      }
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Coverage In Force</label>
+                      <p className="text-lg font-semibold text-gray-900">{eligibility.inforce ? 'Yes' : 'No'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'policies' && (
+            <div className="space-y-4">
+              {policies.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center">
+                    <FileText className="w-10 h-10 text-gray-400" />
+                  </div>
+                  <p className="text-xl font-medium text-gray-600">No Policies Found</p>
+                  <p className="text-gray-400 mt-2">No insurance policies are available in the response data</p>
+                </div>
+              ) : (
+                policies.map((policy, index) => (
+                  <div key={index} className="border border-gray-200 rounded-xl overflow-hidden">
+                    {/* Policy Header */}
+                    <div 
+                      className="bg-gray-50 p-4 cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => togglePolicy(index)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className={`rounded-lg p-2 ${policy.inforce ? 'bg-green-100' : 'bg-red-100'}`}>
+                            {policy.inforce 
+                              ? <CheckCircle className="h-5 w-5 text-green-600" />
+                              : <XCircle className="h-5 w-5 text-red-600" />
+                            }
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-900">Policy {index + 1}</h3>
+                            <p className="text-sm text-gray-500">
+                              {policy.coverageReference?.split('/').pop() || 'Coverage Reference'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          {policy.siteEligibility && getSiteEligibilityBadge(policy.siteEligibility)}
+                          <Badge variant={policy.inforce ? 'default' : 'destructive'}>
+                            {policy.inforce ? 'In Force' : 'Not In Force'}
+                          </Badge>
+                          <span className="text-sm text-gray-500">
+                            {policy.benefits.length} benefit{policy.benefits.length !== 1 ? 's' : ''}
+                          </span>
+                          {expandedPolicies[index] 
+                            ? <ChevronUp className="h-5 w-5 text-gray-400" />
+                            : <ChevronDown className="h-5 w-5 text-gray-400" />
+                          }
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Policy Benefits */}
+                    {expandedPolicies[index] && (
+                      <div className="p-4 border-t border-gray-200">
+                        {policy.benefitPeriod && (
+                          <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                            <p className="text-sm text-blue-800">
+                              <span className="font-medium">Benefit Period:</span>{' '}
+                              {policy.benefitPeriod.start} to {policy.benefitPeriod.end}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {policy.benefits.length === 0 ? (
+                          <p className="text-gray-500 text-center py-4">No benefits listed for this policy</p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full">
+                              <thead>
+                                <tr className="bg-gray-50">
+                                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Benefit</th>
+                                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Category</th>
+                                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Network</th>
+                                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Term</th>
+                                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Allowed</th>
+                                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Used</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200">
+                                {policy.benefits.map((benefit, bIndex) => (
+                                  <tr key={bIndex} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3">
+                                      <div>
+                                        <p className="font-medium text-gray-900">{benefit.name}</p>
+                                        {benefit.description && (
+                                          <p className="text-sm text-gray-500">{benefit.description}</p>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{benefit.category || '-'}</td>
+                                    <td className="px-4 py-3">
+                                      <Badge variant={benefit.network === 'in' ? 'default' : 'secondary'} className="text-xs">
+                                        {benefit.network === 'in' ? 'In-Network' : benefit.network === 'out' ? 'Out-of-Network' : benefit.network || '-'}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-600 capitalize">{benefit.term || '-'}</td>
+                                    <td className="px-4 py-3 text-right">
+                                      {benefit.benefits.map((b, i) => (
+                                        <div key={i} className="text-sm">
+                                          {b.allowedValue !== undefined && (
+                                            <span className="font-medium text-green-600">
+                                              {typeof b.allowedValue === 'number' 
+                                                ? `${b.allowedValue.toLocaleString()} ${b.allowedCurrency || ''}`
+                                                : b.allowedValue}
+                                            </span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                      {benefit.benefits.map((b, i) => (
+                                        <div key={i} className="text-sm">
+                                          {b.usedValue !== undefined && (
+                                            <span className="font-medium text-orange-600">
+                                              {typeof b.usedValue === 'number' 
+                                                ? `${b.usedValue.toLocaleString()} ${b.usedCurrency || ''}`
+                                                : b.usedValue}
+                                            </span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex-shrink-0">
+          <div className="flex justify-between items-center">
+            <div className="text-sm text-gray-600">
+              <span className="font-medium">Eligibility ID:</span> {eligibility.id || eligibility.eligibility_id}
+              {policies.length > 0 && (
+                <span className="ml-4">
+                  <span className="font-medium">Policies:</span> {policies.length}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-6 py-2 rounded-xl transition-all duration-200 font-medium hover:opacity-90"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Eligibility() {
   const [eligibility, setEligibility] = useState([]);
@@ -643,184 +1096,11 @@ export default function Eligibility() {
 
       {/* Enhanced Eligibility Detail Modal */}
       {selectedEligibility && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="relative bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden ">
- 
-            <div className="relative bg-white rounded-3xl overflow-hidden">
-              {/* Enhanced Header */}
-              <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center space-x-3">
-                    <div className="relative">
- 
-                      <div className="relative bg-white/20 rounded-full p-2">
-                        <UserCheck className="h-6 w-6" />
-                      </div>
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold">Eligibility Details</h2>
-                      <p className="text-white/80 mt-1">Comprehensive eligibility information</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setSelectedEligibility(null)}
-                    className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all duration-200"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Eligibility Information Grid */}
-              <div className="p-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-primary-purple/10 rounded-lg p-2">
-                          <UserCheck className="h-5 w-5 text-primary-purple" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Eligibility ID</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedEligibility.id}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-accent-cyan/10 rounded-lg p-2">
-                          <Badge variant={getStatusBadge(selectedEligibility.status)} className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Status</label>
-                          <div className="mt-1">
-                            <Badge variant={getStatusBadge(selectedEligibility.status)} className="text-sm">
-                              {selectedEligibility.status}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-primary-purple/10 rounded-lg p-2">
-                          <Shield className="h-5 w-5 text-primary-purple" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Purpose</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedEligibility.purpose}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-accent-cyan/10 rounded-lg p-2">
-                          <Shield className="h-5 w-5 text-accent-cyan" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Coverage</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedEligibility.coverage}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-primary-purple/10 rounded-lg p-2">
-                          <Users className="h-5 w-5 text-primary-purple" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Patient</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedEligibility.patient}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-accent-cyan/10 rounded-lg p-2">
-                          <Shield className="h-5 w-5 text-accent-cyan" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Provider</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedEligibility.provider}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-primary-purple/10 rounded-lg p-2">
-                          <Shield className="h-5 w-5 text-primary-purple" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Insurer</label>
-                          <p className="text-lg font-semibold text-gray-900">{selectedEligibility.insurer}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
- 
-                    <div className="relative bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-accent-cyan/10 rounded-lg p-2">
-                          <Calendar className="h-5 w-5 text-accent-cyan" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Request Date</label>
-                          <p className="text-lg font-semibold text-gray-900">{new Date(selectedEligibility.requestDate).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Enhanced Footer */}
-              <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-                <div className="flex justify-between items-center">
-                  <div className="text-sm text-gray-600">
-                    <span className="font-medium">Eligibility ID:</span> {selectedEligibility.id}
-                  </div>
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={() => setSelectedEligibility(null)}
-                      className="px-6 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <EligibilityDetailModal 
+          eligibility={selectedEligibility} 
+          onClose={() => setSelectedEligibility(null)}
+          getStatusBadge={getStatusBadge}
+        />
       )}
 
       {/* Enhanced Drill-down Modal */}

@@ -1069,8 +1069,11 @@ class NphiesMapper {
       // Extract errors from CoverageEligibilityResponse.error array
       const responseErrors = this.extractResponseErrors(eligibilityResponse);
 
-      // Parse benefits from insurance items
+      // Parse benefits from insurance items (backward compatible - first policy)
       const benefits = this.extractBenefits(eligibilityResponse);
+      
+      // Parse all policies (multiple insurance entries)
+      const policies = this.extractPolicies(eligibilityResponse);
 
       // Determine success based on outcome and errors
       const outcome = eligibilityResponse.outcome || 'complete';
@@ -1088,6 +1091,8 @@ class NphiesMapper {
         purpose: eligibilityResponse.purpose,
         responseStatus: eligibilityResponse.status,
         benefits,
+        policies, // All insurance entries with their benefits
+        policyCount: policies.length, // Number of policies found
         patient: patient ? {
           name: patient.name?.[0]?.text,
           identifier: patient.identifier?.[0]?.value,
@@ -1279,18 +1284,67 @@ class NphiesMapper {
   }
 
   /**
-   * Extract benefits from eligibility response insurance items
+   * Extract all policies (insurance entries) from eligibility response
+   * Each policy contains coverage info, inforce status, site eligibility, and benefits
    * @param {Object} eligibilityResponse - The CoverageEligibilityResponse resource
+   * @returns {Array} Array of policy objects with their benefits
+   */
+  extractPolicies(eligibilityResponse) {
+    const policies = [];
+    
+    if (!eligibilityResponse?.insurance?.length) return policies;
+
+    eligibilityResponse.insurance.forEach((insurance, index) => {
+      // Extract site eligibility for this specific insurance entry
+      const siteEligibility = insurance.extension?.find(
+        ext => ext.url === 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-siteEligibility'
+      )?.valueCodeableConcept?.coding?.[0];
+
+      const policy = {
+        policyIndex: index,
+        coverageReference: insurance.coverage?.reference,
+        inforce: insurance.inforce,
+        siteEligibility: siteEligibility ? {
+          code: siteEligibility.code,
+          display: this.getSiteEligibilityDisplay(siteEligibility.code)
+        } : null,
+        benefitPeriod: insurance.benefitPeriod ? {
+          start: insurance.benefitPeriod.start,
+          end: insurance.benefitPeriod.end
+        } : null,
+        benefits: this.extractBenefitsFromInsurance(insurance)
+      };
+
+      policies.push(policy);
+    });
+
+    return policies;
+  }
+
+  /**
+   * Get display text for site eligibility code
+   * @param {string} code - The site eligibility code
+   * @returns {string} Human-readable display text
+   */
+  getSiteEligibilityDisplay(code) {
+    const displays = {
+      'eligible': 'Eligible',
+      'not-eligible': 'Not Eligible',
+      'ineligible': 'Ineligible',
+      'pending': 'Pending'
+    };
+    return displays[code] || code;
+  }
+
+  /**
+   * Extract benefits from a single insurance entry
+   * @param {Object} insurance - A single insurance entry from the response
    * @returns {Array} Array of benefit objects
    */
-  extractBenefits(eligibilityResponse) {
+  extractBenefitsFromInsurance(insurance) {
     const benefits = [];
     
-    if (!eligibilityResponse?.insurance?.length) return benefits;
-
-    const insurance = eligibilityResponse.insurance[0];
-    
-    if (!insurance.item) return benefits;
+    if (!insurance?.item) return benefits;
 
     // Use code service for lookups (falls back to code if not found)
     const getCategoryName = (code) => nphiesCodeService.getBenefitCategoryDisplaySync(code);
@@ -1370,6 +1424,16 @@ class NphiesMapper {
     });
 
     return benefits;
+  }
+
+  /**
+   * Extract benefits from eligibility response (backward compatible - returns first policy's benefits)
+   * @param {Object} eligibilityResponse - The CoverageEligibilityResponse resource
+   * @returns {Array} Array of benefit objects from the first insurance entry
+   */
+  extractBenefits(eligibilityResponse) {
+    if (!eligibilityResponse?.insurance?.length) return [];
+    return this.extractBenefitsFromInsurance(eligibilityResponse.insurance[0]);
   }
 
   /**
