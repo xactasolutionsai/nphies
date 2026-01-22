@@ -158,7 +158,8 @@ const extractFromFhirBundle = (bundle) => {
     patient: null, // Primary patient (newborn for newborn cases)
     motherPatient: null, // Mother patient (for newborn cases)
     patients: [], // All patient resources
-    coverage: null,
+    coverage: null, // Primary coverage (first one for backward compatibility)
+    coverages: [], // All coverage resources (policies)
     insurer: null,
     eligibilityResponse: null,
     eligibilityResponseFullUrl: null,
@@ -177,7 +178,12 @@ const extractFromFhirBundle = (bundle) => {
         result.patient = resource;
         break;
       case 'Coverage':
-        result.coverage = resource;
+        // Store all coverages/policies
+        result.coverages.push(resource);
+        // Keep first coverage as primary for backward compatibility
+        if (!result.coverage) {
+          result.coverage = resource;
+        }
         break;
       case 'Organization':
         // Check if it's an insurer
@@ -310,7 +316,8 @@ export default function NphiesEligibilityDetails() {
   const patientIdentifierValue = patientIdentifier.value || record?.patient_identifier || record?.patient?.identifier;
   const patientIdentifierCountry = patientIdentifier.extension?.find(e => e.url?.includes('country'))?.valueCodeableConcept?.coding?.[0]?.display;
   
-  // Coverage details from FHIR
+  // Coverage details from FHIR - All coverages/policies
+  const allCoverages = fhirData.coverages || [];
   const coverageData = fhirData.coverage || {};
   const coverageType = coverageData.type?.coding?.[0]?.code || record?.coverage_type || record?.coverage?.type;
   const coverageTypeDisplay = coverageData.type?.coding?.[0]?.display || getCoverageTypeDisplay(coverageType);
@@ -324,7 +331,7 @@ export default function NphiesEligibilityDetails() {
   const coverageClasses = coverageData.class || [];
   const coverageStatus = coverageData.status || record?.coverage?.status;
   
-  // Cost to Beneficiary (Copays) from FHIR
+  // Cost to Beneficiary (Copays) from FHIR - combine from all coverages
   const costToBeneficiary = coverageData.costToBeneficiary || [];
   
   // Insurer details from FHIR
@@ -1025,13 +1032,18 @@ export default function NphiesEligibilityDetails() {
         </Card>
       </div>
 
-      {/* Coverage Information - Enhanced */}
+      {/* Coverage Information - Enhanced with Multiple Policies Support */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span className="flex items-center">
               <CreditCard className="h-5 w-5 text-green-600 mr-2" />
               Coverage Information
+              {allCoverages.length > 1 && (
+                <Badge className="ml-2 bg-blue-100 text-blue-800">
+                  {allCoverages.length} Policies
+                </Badge>
+              )}
             </span>
             {coverageStatus && (
               <Badge className={coverageStatus === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
@@ -1039,57 +1051,352 @@ export default function NphiesEligibilityDetails() {
               </Badge>
             )}
           </CardTitle>
+          {allCoverages.length > 1 && (
+            <CardDescription>
+              This patient has {allCoverages.length} active insurance policies
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Main Coverage Details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600 flex items-center">
-                <Hash className="h-3 w-3 mr-1" /> Member ID
-              </p>
-              <p className="font-mono font-semibold text-lg">{coverageMemberId || record.policy_number || 'N/A'}</p>
-            </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Coverage Type</p>
-              <p className="font-semibold">{coverageTypeDisplay}</p>
-              {coverageType && coverageType !== coverageTypeDisplay && (
-                <p className="text-xs text-gray-500 font-mono">{coverageType}</p>
-              )}
-            </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600 flex items-center">
-                <Users className="h-3 w-3 mr-1" /> Relationship
-              </p>
-              <p className="font-semibold">{getRelationshipDisplay(coverageRelationship)}</p>
-            </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600 flex items-center">
-                <Network className="h-3 w-3 mr-1" /> Network
-              </p>
-              <p className="font-semibold">{coverageNetwork || 'N/A'}</p>
-            </div>
-          </div>
+          {/* Display all coverages/policies */}
+          {allCoverages.length > 0 ? (
+            <div className="space-y-6">
+              {allCoverages.map((coverage, policyIndex) => {
+                const polCoverageType = coverage.type?.coding?.[0]?.code;
+                const polCoverageTypeDisplay = coverage.type?.coding?.[0]?.display || getCoverageTypeDisplay(polCoverageType);
+                const polMemberId = coverage.identifier?.find(i => i.system?.includes('memberid'))?.value || 
+                  coverage.identifier?.[0]?.value;
+                const polPeriod = coverage.period;
+                const polNetwork = coverage.network;
+                const polRelationship = coverage.relationship?.coding?.[0]?.code;
+                const polStatus = coverage.status;
+                const polClasses = coverage.class || [];
+                const polCostToBeneficiary = coverage.costToBeneficiary || [];
+                const polSubscriber = coverage.subscriber?.reference;
+                const polBeneficiary = coverage.beneficiary?.reference;
+                const polPolicyHolder = coverage.policyHolder?.reference;
+                const polDependent = coverage.dependent;
+                const polSubrogation = coverage.subrogation;
+                
+                // Generate unique colors for each policy card
+                const policyColors = [
+                  { bg: 'bg-gradient-to-r from-green-50 to-emerald-50', border: 'border-green-200', accent: 'text-green-700' },
+                  { bg: 'bg-gradient-to-r from-blue-50 to-indigo-50', border: 'border-blue-200', accent: 'text-blue-700' },
+                  { bg: 'bg-gradient-to-r from-purple-50 to-violet-50', border: 'border-purple-200', accent: 'text-purple-700' },
+                  { bg: 'bg-gradient-to-r from-amber-50 to-orange-50', border: 'border-amber-200', accent: 'text-amber-700' },
+                  { bg: 'bg-gradient-to-r from-rose-50 to-pink-50', border: 'border-rose-200', accent: 'text-rose-700' },
+                ];
+                const colorScheme = policyColors[policyIndex % policyColors.length];
+                
+                return (
+                  <div 
+                    key={coverage.id || policyIndex} 
+                    className={`${colorScheme.bg} ${colorScheme.border} border-2 rounded-xl p-5`}
+                  >
+                    {/* Policy Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full bg-white flex items-center justify-center ${colorScheme.accent} font-bold text-sm border`}>
+                          {policyIndex + 1}
+                        </div>
+                        <div>
+                          <h4 className={`font-semibold ${colorScheme.accent}`}>
+                            Policy #{policyIndex + 1}
+                          </h4>
+                          <p className="text-sm text-gray-600">{polCoverageTypeDisplay}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {polStatus && (
+                          <Badge className={polStatus === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                            {polStatus.toUpperCase()}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Main Policy Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                      <div className="bg-white/70 p-3 rounded-lg">
+                        <p className="text-sm text-gray-600 flex items-center">
+                          <Hash className="h-3 w-3 mr-1" /> Member ID
+                        </p>
+                        <p className="font-mono font-semibold text-lg">{polMemberId || 'N/A'}</p>
+                      </div>
+                      <div className="bg-white/70 p-3 rounded-lg">
+                        <p className="text-sm text-gray-600">Coverage Type</p>
+                        <p className="font-semibold">{polCoverageTypeDisplay}</p>
+                        {polCoverageType && polCoverageType !== polCoverageTypeDisplay && (
+                          <p className="text-xs text-gray-500 font-mono">{polCoverageType}</p>
+                        )}
+                      </div>
+                      <div className="bg-white/70 p-3 rounded-lg">
+                        <p className="text-sm text-gray-600 flex items-center">
+                          <Users className="h-3 w-3 mr-1" /> Relationship
+                        </p>
+                        <p className="font-semibold">{getRelationshipDisplay(polRelationship)}</p>
+                      </div>
+                      <div className="bg-white/70 p-3 rounded-lg">
+                        <p className="text-sm text-gray-600 flex items-center">
+                          <Network className="h-3 w-3 mr-1" /> Network
+                        </p>
+                        <p className="font-semibold">{polNetwork || 'N/A'}</p>
+                      </div>
+                    </div>
 
-          {/* Coverage Period */}
-          {coveragePeriod && (
-            <div className="border-t pt-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                <Calendar className="h-4 w-4 mr-2" /> Coverage Period
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <p className="text-xs text-blue-600">Start Date</p>
-                  <p className="font-semibold">{formatDate(coveragePeriod.start)}</p>
+                    {/* Coverage Period */}
+                    {polPeriod && (
+                      <div className="mb-4">
+                        <h5 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                          <Calendar className="h-4 w-4 mr-2" /> Coverage Period
+                        </h5>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-white/70 p-2 rounded-lg">
+                            <p className="text-xs text-gray-600">Start Date</p>
+                            <p className="font-semibold">{formatDate(polPeriod.start)}</p>
+                          </div>
+                          <div className="bg-white/70 p-2 rounded-lg">
+                            <p className="text-xs text-gray-600">End Date</p>
+                            <p className="font-semibold">{formatDate(polPeriod.end)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Group/Plan Classes */}
+                    {polClasses.length > 0 && (
+                      <div className="mb-4">
+                        <h5 className="text-sm font-semibold text-gray-700 mb-2">Plan & Group Details</h5>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {polClasses.map((cls, idx) => {
+                            const classType = cls.type?.coding?.[0]?.code || 'unknown';
+                            return (
+                              <div key={idx} className="bg-white/70 p-2 rounded-lg border">
+                                <p className="text-xs text-gray-600 font-medium uppercase">{classType}</p>
+                                <p className="font-semibold text-sm">{cls.name || cls.value}</p>
+                                {cls.name && cls.value && (
+                                  <p className="text-xs text-gray-500 font-mono">{cls.value}</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Cost to Beneficiary for this policy */}
+                    {polCostToBeneficiary.length > 0 && (
+                      <div className="mb-4">
+                        <h5 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                          <DollarSign className="h-4 w-4 mr-2" /> Cost to Beneficiary
+                        </h5>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {polCostToBeneficiary.map((cost, idx) => {
+                            const costType = cost.type?.coding?.[0]?.code;
+                            const costTypeDisplay = getCopayTypeDisplay(costType);
+                            const hasMoney = cost.valueMoney;
+                            const hasQuantity = cost.valueQuantity;
+                            
+                            return (
+                              <div key={idx} className="bg-white/70 p-2 rounded-lg border">
+                                <p className="text-xs text-gray-600">{costTypeDisplay}</p>
+                                <p className="font-semibold">
+                                  {hasMoney && `${cost.valueMoney.value} ${cost.valueMoney.currency || 'SAR'}`}
+                                  {hasQuantity && `${cost.valueQuantity.value}${cost.valueQuantity.code || '%'}`}
+                                  {!hasMoney && !hasQuantity && 'N/A'}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Additional Details */}
+                    {(polDependent || polSubrogation !== undefined) && (
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        {polDependent && (
+                          <div className="bg-white/70 p-2 rounded-lg">
+                            <p className="text-xs text-gray-600">Dependent</p>
+                            <p className="font-medium">{polDependent}</p>
+                          </div>
+                        )}
+                        {polSubrogation !== undefined && (
+                          <div className="bg-white/70 p-2 rounded-lg">
+                            <p className="text-xs text-gray-600">Subrogation</p>
+                            <Badge variant={polSubrogation ? 'default' : 'secondary'} className="mt-1">
+                              {polSubrogation ? 'Yes' : 'No'}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Coverage References - Collapsible */}
+                    {(polSubscriber || polBeneficiary || polPolicyHolder) && (
+                      <div className="border-t border-gray-200/50 pt-3 mt-3">
+                        <details className="group">
+                          <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-800 flex items-center">
+                            <ChevronDown className="h-3 w-3 mr-1 group-open:rotate-180 transition-transform" />
+                            Coverage References
+                          </summary>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2 text-xs">
+                            {polSubscriber && (
+                              <div className="bg-white/50 p-2 rounded">
+                                <p className="text-gray-500">Subscriber</p>
+                                <p className="font-mono break-all">{polSubscriber}</p>
+                              </div>
+                            )}
+                            {polBeneficiary && (
+                              <div className="bg-white/50 p-2 rounded">
+                                <p className="text-gray-500">Beneficiary</p>
+                                <p className="font-mono break-all">{polBeneficiary}</p>
+                              </div>
+                            )}
+                            {polPolicyHolder && (
+                              <div className="bg-white/50 p-2 rounded">
+                                <p className="text-gray-500">Policy Holder</p>
+                                <p className="font-mono break-all">{polPolicyHolder}</p>
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Fallback to single coverage display if no coverages array */
+            <>
+              {/* Main Coverage Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <Hash className="h-3 w-3 mr-1" /> Member ID
+                  </p>
+                  <p className="font-mono font-semibold text-lg">{coverageMemberId || record.policy_number || 'N/A'}</p>
                 </div>
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <p className="text-xs text-blue-600">End Date</p>
-                  <p className="font-semibold">{formatDate(coveragePeriod.end)}</p>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">Coverage Type</p>
+                  <p className="font-semibold">{coverageTypeDisplay}</p>
+                  {coverageType && coverageType !== coverageTypeDisplay && (
+                    <p className="text-xs text-gray-500 font-mono">{coverageType}</p>
+                  )}
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <Users className="h-3 w-3 mr-1" /> Relationship
+                  </p>
+                  <p className="font-semibold">{getRelationshipDisplay(coverageRelationship)}</p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <Network className="h-3 w-3 mr-1" /> Network
+                  </p>
+                  <p className="font-semibold">{coverageNetwork || 'N/A'}</p>
                 </div>
               </div>
-            </div>
+
+              {/* Coverage Period */}
+              {coveragePeriod && (
+                <div className="border-t pt-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                    <Calendar className="h-4 w-4 mr-2" /> Coverage Period
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="text-xs text-blue-600">Start Date</p>
+                      <p className="font-semibold">{formatDate(coveragePeriod.start)}</p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="text-xs text-blue-600">End Date</p>
+                      <p className="font-semibold">{formatDate(coveragePeriod.end)}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Group/Plan Classes */}
+              {coverageClasses.length > 0 && (
+                <div className="border-t pt-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Plan & Group Details</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {coverageClasses.map((cls, idx) => {
+                      const classType = cls.type?.coding?.[0]?.code || 'unknown';
+                      const bgColor = classType === 'group' ? 'bg-amber-50' : 
+                                      classType === 'plan' ? 'bg-emerald-50' : 'bg-gray-50';
+                      const textColor = classType === 'group' ? 'text-amber-700' : 
+                                        classType === 'plan' ? 'text-emerald-700' : 'text-gray-700';
+                      return (
+                        <div key={idx} className={`${bgColor} p-3 rounded-lg border`}>
+                          <p className={`text-xs ${textColor} font-medium uppercase`}>{classType}</p>
+                          <p className="font-semibold">{cls.name || 'N/A'}</p>
+                          <p className="text-sm text-gray-600 font-mono">{cls.value}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Additional Coverage Details */}
+              <div className="border-t pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {coverageDependent && (
+                    <div>
+                      <p className="text-sm text-gray-600">Dependent</p>
+                      <p className="font-medium">{coverageDependent}</p>
+                    </div>
+                  )}
+                  {coverageSubrogation !== undefined && (
+                    <div>
+                      <p className="text-sm text-gray-600">Subrogation</p>
+                      <Badge variant={coverageSubrogation ? 'default' : 'secondary'}>
+                        {coverageSubrogation ? 'Yes' : 'No'}
+                      </Badge>
+                    </div>
+                  )}
+                  {disposition && (
+                    <div className="col-span-full">
+                      <p className="text-sm text-gray-600">Disposition</p>
+                      <p className={`font-medium ${record?.outcome === 'error' ? 'text-red-700' : 'text-green-700'}`}>{disposition}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Coverage References */}
+              {(coverageSubscriber || coverageBeneficiary || coveragePolicyHolder) && (
+                <div className="border-t pt-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Coverage References</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    {coverageSubscriber && (
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-600 mb-1">Subscriber</p>
+                        <p className="font-mono text-xs break-all">{coverageSubscriber}</p>
+                      </div>
+                    )}
+                    {coverageBeneficiary && (
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-600 mb-1">Beneficiary</p>
+                        <p className="font-mono text-xs break-all">{coverageBeneficiary}</p>
+                      </div>
+                    )}
+                    {coveragePolicyHolder && (
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-600 mb-1">Policy Holder</p>
+                        <p className="font-mono text-xs break-all">{coveragePolicyHolder}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
-          {/* Serviced Period (Eligibility Check Period) */}
+          {/* Serviced Period (Eligibility Check Period) - Common for all policies */}
           {servicedPeriod && (
             <div className="border-t pt-4">
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
@@ -1108,142 +1415,15 @@ export default function NphiesEligibilityDetails() {
             </div>
           )}
 
-          {/* Group/Plan Classes */}
-          {coverageClasses.length > 0 && (
+          {/* Disposition - Common */}
+          {disposition && allCoverages.length > 0 && (
             <div className="border-t pt-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">Plan & Group Details</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {coverageClasses.map((cls, idx) => {
-                  const classType = cls.type?.coding?.[0]?.code || 'unknown';
-                  const bgColor = classType === 'group' ? 'bg-amber-50' : 
-                                  classType === 'plan' ? 'bg-emerald-50' : 'bg-gray-50';
-                  const textColor = classType === 'group' ? 'text-amber-700' : 
-                                    classType === 'plan' ? 'text-emerald-700' : 'text-gray-700';
-                  return (
-                    <div key={idx} className={`${bgColor} p-3 rounded-lg border`}>
-                      <p className={`text-xs ${textColor} font-medium uppercase`}>{classType}</p>
-                      <p className="font-semibold">{cls.name || 'N/A'}</p>
-                      <p className="text-sm text-gray-600 font-mono">{cls.value}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Additional Coverage Details */}
-          <div className="border-t pt-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {coverageDependent && (
-                <div>
-                  <p className="text-sm text-gray-600">Dependent</p>
-                  <p className="font-medium">{coverageDependent}</p>
-                </div>
-              )}
-              {coverageSubrogation !== undefined && (
-                <div>
-                  <p className="text-sm text-gray-600">Subrogation</p>
-                  <Badge variant={coverageSubrogation ? 'default' : 'secondary'}>
-                    {coverageSubrogation ? 'Yes' : 'No'}
-                  </Badge>
-                </div>
-              )}
-              {disposition && (
-                <div className="col-span-full">
-                  <p className="text-sm text-gray-600">Disposition</p>
-                  <p className={`font-medium ${record?.outcome === 'error' ? 'text-red-700' : 'text-green-700'}`}>{disposition}</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Coverage References */}
-          {(coverageSubscriber || coverageBeneficiary || coveragePolicyHolder) && (
-            <div className="border-t pt-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">Coverage References</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                {coverageSubscriber && (
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-xs text-gray-600 mb-1">Subscriber</p>
-                    <p className="font-mono text-xs break-all">{coverageSubscriber}</p>
-                  </div>
-                )}
-                {coverageBeneficiary && (
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-xs text-gray-600 mb-1">Beneficiary</p>
-                    <p className="font-mono text-xs break-all">{coverageBeneficiary}</p>
-                  </div>
-                )}
-                {coveragePolicyHolder && (
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-xs text-gray-600 mb-1">Policy Holder</p>
-                    <p className="font-mono text-xs break-all">{coveragePolicyHolder}</p>
-                  </div>
-                )}
-              </div>
+              <p className="text-sm text-gray-600">Disposition</p>
+              <p className={`font-medium ${record?.outcome === 'error' ? 'text-red-700' : 'text-green-700'}`}>{disposition}</p>
             </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Cost to Beneficiary (Copays) */}
-      {costToBeneficiary.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <DollarSign className="h-5 w-5 text-emerald-600 mr-2" />
-              Cost to Beneficiary (Copays & Deductibles)
-            </CardTitle>
-            <CardDescription>
-              Patient cost sharing amounts for different service types
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {costToBeneficiary.map((cost, idx) => {
-                const costType = cost.type?.coding?.[0]?.code;
-                const costTypeDisplay = getCopayTypeDisplay(costType);
-                const hasMoney = cost.valueMoney;
-                const hasQuantity = cost.valueQuantity;
-                
-                return (
-                  <div key={idx} className="bg-gradient-to-br from-emerald-50 to-teal-50 p-4 rounded-lg border border-emerald-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium text-emerald-800">{costTypeDisplay}</p>
-                      <Badge variant="outline" className="text-xs font-mono">{costType}</Badge>
-                    </div>
-                    <div className="flex items-baseline">
-                      {hasMoney && (
-                        <>
-                          <span className="text-2xl font-bold text-emerald-700">
-                            {cost.valueMoney.value}
-                          </span>
-                          <span className="ml-1 text-sm text-emerald-600">
-                            {cost.valueMoney.currency || 'SAR'}
-                          </span>
-                        </>
-                      )}
-                      {hasQuantity && (
-                        <>
-                          <span className="text-2xl font-bold text-emerald-700">
-                            {cost.valueQuantity.value}
-                          </span>
-                          <span className="ml-1 text-sm text-emerald-600">
-                            {cost.valueQuantity.unit || '%'}
-                          </span>
-                        </>
-                      )}
-                      {!hasMoney && !hasQuantity && (
-                        <span className="text-gray-500">N/A</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Benefits */}
       {benefits && benefits.length > 0 && (
