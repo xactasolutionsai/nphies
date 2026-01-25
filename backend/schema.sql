@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS patients (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     identifier VARCHAR(50) UNIQUE NOT NULL,
-    gender VARCHAR(10) NOT NULL CHECK (gender IN ('Male', 'Female', 'Other', 'Unknown')),
+    gender VARCHAR(10) NOT NULL CHECK (gender IN ('female', 'male', 'C', 'A', 'U', 'unknown', 'N', 'B')),
     birth_date DATE NOT NULL,
     phone VARCHAR(20),
     email VARCHAR(255),

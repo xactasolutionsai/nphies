@@ -68,7 +68,7 @@ class NphiesDataService {
       const result = await query(updateQuery, [
         name,
         identifierType,
-        gender?.toLowerCase(),
+        gender,
         birthDate,
         phone,
         email,
@@ -96,7 +96,7 @@ class NphiesDataService {
         name || 'Unknown',
         identifier,
         identifierType,
-        gender?.toLowerCase(),
+        gender,
         birthDate,
         phone,
         email,
