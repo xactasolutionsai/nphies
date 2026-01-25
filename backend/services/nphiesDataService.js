@@ -21,7 +21,7 @@ class NphiesDataService {
       identifierType = 'national_id',
       identifierSystem,
       gender,
-      birthDate,
+      birthDate: rawBirthDate,
       phone,
       email,
       address,
@@ -31,6 +31,9 @@ class NphiesDataService {
       nphiesPatientId,
       isNewborn = false
     } = patientData;
+
+    // Convert empty strings to null for date fields
+    const birthDate = rawBirthDate && rawBirthDate !== '' ? rawBirthDate : null;
 
     if (!identifier) {
       throw new Error('Patient identifier is required');

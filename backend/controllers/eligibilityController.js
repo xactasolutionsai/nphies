@@ -6,6 +6,9 @@ import nphiesMapper from '../services/nphiesMapper.js';
 import nphiesService from '../services/nphiesService.js';
 import nphiesDataService from '../services/nphiesDataService.js';
 
+// Helper function to convert empty strings to null (for database compatibility)
+const emptyToNull = (value) => (value === '' || value === undefined) ? null : value;
+
 class EligibilityController extends BaseController {
   constructor() {
     super('eligibility', validationSchemas.eligibility);
@@ -599,10 +602,10 @@ class EligibilityController extends BaseController {
           name: patientData.name,
           identifier: patientData.identifier,
           identifierType: patientData.identifierType || 'national_id',
-          gender: patientData.gender,
-          birthDate: patientData.birthDate,
-          phone: patientData.phone,
-          email: patientData.email,
+          gender: emptyToNull(patientData.gender),
+          birthDate: emptyToNull(patientData.birthDate),
+          phone: emptyToNull(patientData.phone),
+          email: emptyToNull(patientData.email),
           isNewborn: isNewborn
         };
         // Create temporary patient object for bundle building (without patient_id)
@@ -610,10 +613,10 @@ class EligibilityController extends BaseController {
           name: patientData.name,
           identifier: patientData.identifier,
           identifier_type: patientData.identifierType || 'national_id',
-          gender: patientData.gender,
-          birth_date: patientData.birthDate,
-          phone: patientData.phone,
-          email: patientData.email
+          gender: emptyToNull(patientData.gender),
+          birth_date: emptyToNull(patientData.birthDate),
+          phone: emptyToNull(patientData.phone),
+          email: emptyToNull(patientData.email)
         };
         shouldUpsertPatient = true;
         console.log(`[NPHIES Dynamic] Created temporary patient object (will upsert after successful API call): ${patient.name}`);
@@ -764,10 +767,10 @@ class EligibilityController extends BaseController {
             name: motherPatientData.name,
             identifier: motherPatientData.identifier,
             identifierType: motherPatientData.identifierType || 'iqama',
-            gender: motherPatientData.gender,
-            birthDate: motherPatientData.birthDate,
-            phone: motherPatientData.phone,
-            email: motherPatientData.email,
+            gender: emptyToNull(motherPatientData.gender),
+            birthDate: emptyToNull(motherPatientData.birthDate),
+            phone: emptyToNull(motherPatientData.phone),
+            email: emptyToNull(motherPatientData.email),
             isNewborn: false // Mother is not a newborn
           };
           // Create temporary mother patient object for bundle building (without patient_id)
@@ -775,10 +778,10 @@ class EligibilityController extends BaseController {
             name: motherPatientData.name,
             identifier: motherPatientData.identifier,
             identifier_type: motherPatientData.identifierType || 'iqama',
-            gender: motherPatientData.gender,
-            birth_date: motherPatientData.birthDate,
-            phone: motherPatientData.phone,
-            email: motherPatientData.email
+            gender: emptyToNull(motherPatientData.gender),
+            birth_date: emptyToNull(motherPatientData.birthDate),
+            phone: emptyToNull(motherPatientData.phone),
+            email: emptyToNull(motherPatientData.email)
           };
           shouldUpsertMotherPatient = true;
         } else {
