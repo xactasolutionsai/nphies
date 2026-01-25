@@ -212,7 +212,7 @@ export const validationSchemas = {
     // Required fields
     name: Joi.string().min(2).max(255).required(),
     identifier: Joi.string().min(5).max(50).required(),
-    gender: Joi.string().valid('male', 'female', 'other', 'unknown').insensitive().required(),
+    gender: Joi.string().valid('female', 'male', 'C', 'A', 'U', 'unknown', 'N', 'B').required(),
     birth_date: Joi.date().required(),
     // Optional fields
     phone: Joi.string().max(50).allow('', null).optional(),

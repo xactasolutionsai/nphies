@@ -82,7 +82,7 @@ class NphiesMapper {
     // Support both formats for identifier_type
     let identifierType = patient.identifier_type || patient.identifierType || 'national_id';
     const birthDate = patient.birth_date || patient.birthDate;
-    const gender = patient.gender ? patient.gender.toLowerCase() : 'unknown';
+    const gender = patient.gender || 'unknown';
     const identifierValue = (patient.identifier || patient.patient_id || patient.patientId)?.toString() || '';
 
     // Auto-detect and correct identifier type based on value pattern for Saudi IDs

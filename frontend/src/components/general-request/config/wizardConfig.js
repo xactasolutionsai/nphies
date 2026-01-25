@@ -115,12 +115,16 @@ export const URGENCY_OPTIONS = [
   { value: 'asap', label: 'ASAP' }
 ];
 
-// Gender options
+// Gender options (NPHIES ksa-administrative-gender CodeSystem)
 export const GENDER_OPTIONS = [
-  { value: 'male', label: 'Male' },
   { value: 'female', label: 'Female' },
-  { value: 'other', label: 'Other' },
-  { value: 'unknown', label: 'Unknown' }
+  { value: 'male', label: 'Male' },
+  { value: 'C', label: 'C - Not Completed' },
+  { value: 'A', label: 'A - Sex changed to Male' },
+  { value: 'U', label: 'U - Undetermined' },
+  { value: 'unknown', label: 'unknown' },
+  { value: 'N', label: 'N - Undifferentiated' },
+  { value: 'B', label: 'B - Sex changed to female' }
 ];
 
 // Marital status options (HL7 v3-MaritalStatus codes)
