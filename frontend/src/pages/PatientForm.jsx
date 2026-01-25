@@ -52,15 +52,22 @@ export default function PatientForm() {
   const genderOptions = [
     { value: 'male', label: 'Male' },
     { value: 'female', label: 'Female' },
-    { value: 'other', label: 'Other' }
+    { value: 'other', label: 'Other' },
+    { value: 'unknown', label: 'Unknown' }
   ];
 
   const maritalStatusOptions = [
     { value: '', label: 'Not specified' },
-    { value: 'single', label: 'Single' },
-    { value: 'married', label: 'Married' },
-    { value: 'divorced', label: 'Divorced' },
-    { value: 'widowed', label: 'Widowed' }
+    { value: 'S', label: 'S - Never Married (Single)' },
+    { value: 'M', label: 'M - Married' },
+    { value: 'D', label: 'D - Divorced' },
+    { value: 'W', label: 'W - Widowed' },
+    { value: 'A', label: 'A - Annulled' },
+    { value: 'I', label: 'I - Interlocutory' },
+    { value: 'L', label: 'L - Legally Separated' },
+    { value: 'P', label: 'P - Polygamous' },
+    { value: 'T', label: 'T - Domestic Partner' },
+    { value: 'U', label: 'U - Unknown' }
   ];
 
   const nationalityOptions = [
@@ -83,11 +90,13 @@ export default function PatientForm() {
   ];
 
   const identifierTypeOptions = [
-    { value: 'national_id', label: 'National ID' },
-    { value: 'iqama', label: 'Iqama' },
-    { value: 'passport', label: 'Passport' },
-    { value: 'border_number', label: 'Border Number' },
-    { value: 'gcc_id', label: 'GCC ID' }
+    { value: 'national_id', label: 'NI - National Identifier' },
+    { value: 'iqama', label: 'PRC - Permanent Resident Card (Iqama)' },
+    { value: 'passport', label: 'PPN - Passport Number' },
+    { value: 'mrn', label: 'MR - Medical Record Number' },
+    { value: 'border_number', label: 'BN - Border Number' },
+    { value: 'displaced_person', label: 'DP - Displaced Person' },
+    { value: 'visitor_permit', label: 'VP - Visitor Permit' }
   ];
 
   const countryOptions = [

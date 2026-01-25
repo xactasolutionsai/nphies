@@ -748,11 +748,10 @@ export default function ClaimDetails() {
       'L': 'Legally Separated',
       'M': 'Married',
       'P': 'Polygamous',
-      'S': 'Never Married',
+      'S': 'Never Married (Single)',
       'T': 'Domestic Partner',
-      'U': 'Unmarried',
-      'W': 'Widowed',
-      'UNK': 'Unknown'
+      'U': 'Unknown',
+      'W': 'Widowed'
     };
 
     return {

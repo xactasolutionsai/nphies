@@ -46,11 +46,16 @@ class CommunicationMapper {
    */
   getMaritalStatusCode(status) {
     if (!status) return 'U'; // Unknown as default
+    // HL7 v3-MaritalStatus codes
     const statusMap = {
+      // Legacy text values (for backward compatibility)
       'married': 'M', 'single': 'S', 'divorced': 'D', 'widowed': 'W', 'unknown': 'U',
-      'M': 'M', 'S': 'S', 'D': 'D', 'W': 'W', 'U': 'U'
+      'annulled': 'A', 'interlocutory': 'I', 'legally separated': 'L', 'separated': 'L',
+      'polygamous': 'P', 'domestic partner': 'T', 'never married': 'S',
+      // Direct HL7 codes (A, D, I, L, M, P, S, T, W, U)
+      'A': 'A', 'D': 'D', 'I': 'I', 'L': 'L', 'M': 'M', 'P': 'P', 'S': 'S', 'T': 'T', 'W': 'W', 'U': 'U'
     };
-    return statusMap[status.toLowerCase?.()] || 'U';
+    return statusMap[status.toLowerCase?.()] || statusMap[status] || 'U';
   }
 
   /**
@@ -63,7 +68,13 @@ class CommunicationMapper {
       case 'iqama':
         return { code: 'PRC', display: 'Permanent Resident Card', system: 'http://nphies.sa/identifier/iqama' };
       case 'mrn':
-        return { code: 'MR', display: 'Medical Record Number', system: 'http://provider.com/identifier/mrn' };
+        return { code: 'MR', display: 'Medical Record Number', system: 'http://nphies.sa/identifier/mrn' };
+      case 'border_number':
+        return { code: 'BN', display: 'Border Number', system: 'http://nphies.sa/identifier/bordernumber' };
+      case 'displaced_person':
+        return { code: 'DP', display: 'Displaced Person', system: 'http://nphies.sa/identifier/displacedperson' };
+      case 'visitor_permit':
+        return { code: 'VP', display: 'Visitor Permit', system: 'http://nphies.sa/identifier/visitorpermit' };
       case 'national_id':
       default:
         return { code: 'NI', display: 'National Identifier', system: 'http://nphies.sa/identifier/nationalid' };

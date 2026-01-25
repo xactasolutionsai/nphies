@@ -87,14 +87,19 @@ const selectStyles = {
 // Options for dropdowns
 const GENDER_OPTIONS = [
   { value: 'male', label: 'Male' },
-  { value: 'female', label: 'Female' }
+  { value: 'female', label: 'Female' },
+  { value: 'other', label: 'Other' },
+  { value: 'unknown', label: 'Unknown' }
 ];
 
 const IDENTIFIER_TYPE_OPTIONS = [
-  { value: 'national_id', label: 'National ID' },
-  { value: 'iqama', label: 'Iqama' },
-  { value: 'passport', label: 'Passport' },
-  { value: 'mrn', label: 'Medical Record Number (MRN)' }
+  { value: 'national_id', label: 'NI - National Identifier' },
+  { value: 'iqama', label: 'PRC - Permanent Resident Card (Iqama)' },
+  { value: 'passport', label: 'PPN - Passport Number' },
+  { value: 'mrn', label: 'MR - Medical Record Number' },
+  { value: 'border_number', label: 'BN - Border Number' },
+  { value: 'displaced_person', label: 'DP - Displaced Person' },
+  { value: 'visitor_permit', label: 'VP - Visitor Permit' }
 ];
 
 const COVERAGE_TYPE_OPTIONS = [

@@ -308,11 +308,16 @@ export default function GeneralFormSection() {
   ];
 
   const maritalStatusOptions = [
-    { value: 'single', label: 'Single' },
-    { value: 'married', label: 'Married' },
-    { value: 'divorced', label: 'Divorced' },
-    { value: 'widowed', label: 'Widowed' },
-    { value: 'separated', label: 'Separated' }
+    { value: 'S', label: 'S - Never Married (Single)' },
+    { value: 'M', label: 'M - Married' },
+    { value: 'D', label: 'D - Divorced' },
+    { value: 'W', label: 'W - Widowed' },
+    { value: 'A', label: 'A - Annulled' },
+    { value: 'I', label: 'I - Interlocutory' },
+    { value: 'L', label: 'L - Legally Separated' },
+    { value: 'P', label: 'P - Polygamous' },
+    { value: 'T', label: 'T - Domestic Partner' },
+    { value: 'U', label: 'U - Unknown' }
   ];
 
   const planTypeOptions = [

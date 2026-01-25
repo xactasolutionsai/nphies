@@ -448,23 +448,56 @@ class NphiesDataService {
     // - PRC: Permanent Resident Card (Iqama)
     // - PPN: Passport Number
     // - MR: Medical Record Number
+    // - BN: Border Number
+    // - DP: Displaced Person
+    // - VP: Visitor Permit
     let identifierType = 'national_id';
     const typeCode = identifier?.type?.coding?.[0]?.code;
     const identifierValue = identifier?.value;
     
-    if (typeCode === 'MR' || identifier?.system?.includes('mrn')) {
-      identifierType = 'mrn';
-    } else if (typeCode === 'PPN' || identifier?.system?.includes('passport')) {
-      identifierType = 'passport';
-    } else if (typeCode === 'PRC' || identifier?.system?.includes('iqama')) {
-      identifierType = 'iqama';
-    } else if (typeCode === 'NI') {
-      // NI can be either national_id or iqama based on system/value
-      if (identifier?.system?.includes('iqama') || (identifierValue && identifierValue.startsWith('2'))) {
+    switch (typeCode) {
+      case 'MR':
+        identifierType = 'mrn';
+        break;
+      case 'PPN':
+        identifierType = 'passport';
+        break;
+      case 'PRC':
         identifierType = 'iqama';
-      } else {
-        identifierType = 'national_id';
-      }
+        break;
+      case 'BN':
+        identifierType = 'border_number';
+        break;
+      case 'DP':
+        identifierType = 'displaced_person';
+        break;
+      case 'VP':
+        identifierType = 'visitor_permit';
+        break;
+      case 'NI':
+        // NI can be either national_id or iqama based on system/value
+        if (identifier?.system?.includes('iqama') || (identifierValue && identifierValue.startsWith('2'))) {
+          identifierType = 'iqama';
+        } else {
+          identifierType = 'national_id';
+        }
+        break;
+      default:
+        // Fallback: check system URL for identifier type
+        if (identifier?.system?.includes('mrn')) {
+          identifierType = 'mrn';
+        } else if (identifier?.system?.includes('passport')) {
+          identifierType = 'passport';
+        } else if (identifier?.system?.includes('iqama')) {
+          identifierType = 'iqama';
+        } else if (identifier?.system?.includes('bordernumber')) {
+          identifierType = 'border_number';
+        } else if (identifier?.system?.includes('displacedperson')) {
+          identifierType = 'displaced_person';
+        } else if (identifier?.system?.includes('visitorpermit')) {
+          identifierType = 'visitor_permit';
+        }
+        break;
     }
 
     return {

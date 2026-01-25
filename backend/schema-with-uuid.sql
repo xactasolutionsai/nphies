@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS patients (
     nphies_id VARCHAR(20) UNIQUE NOT NULL,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
-    gender VARCHAR(10) NOT NULL CHECK (gender IN ('Male', 'Female', 'Other')),
+    gender VARCHAR(10) NOT NULL CHECK (gender IN ('Male', 'Female', 'Other', 'Unknown')),
     date_of_birth DATE NOT NULL,
     newborn_flag BOOLEAN DEFAULT FALSE,
     transfer_flag BOOLEAN DEFAULT FALSE,

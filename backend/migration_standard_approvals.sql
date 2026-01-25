@@ -31,7 +31,7 @@ BEGIN
             tpa_company_name VARCHAR(255),
             patient_file_number VARCHAR(50),
             department VARCHAR(100),
-            marital_status VARCHAR(20) CHECK (marital_status IN ('Single', 'Married')),
+            marital_status VARCHAR(20) CHECK (marital_status IN ('A', 'D', 'I', 'L', 'M', 'P', 'S', 'T', 'W', 'U')),
             plan_type VARCHAR(100),
             date_of_visit DATE,
             visit_type VARCHAR(50) CHECK (visit_type IN ('New visit', 'Follow Up', 'Refill', 'walk in', 'Referral')),

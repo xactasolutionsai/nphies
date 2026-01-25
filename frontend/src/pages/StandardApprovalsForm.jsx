@@ -173,10 +173,18 @@ export default function StandardApprovalsForm() {
     setFormData(prev => ({ ...prev, [field]: !prev[field] }));
   };
 
-  // Options for select dropdowns
+  // Options for select dropdowns (HL7 v3-MaritalStatus codes)
   const maritalStatusOptions = [
-    { value: 'Single', label: 'Single' },
-    { value: 'Married', label: 'Married' }
+    { value: 'S', label: 'S - Never Married (Single)' },
+    { value: 'M', label: 'M - Married' },
+    { value: 'D', label: 'D - Divorced' },
+    { value: 'W', label: 'W - Widowed' },
+    { value: 'A', label: 'A - Annulled' },
+    { value: 'I', label: 'I - Interlocutory' },
+    { value: 'L', label: 'L - Legally Separated' },
+    { value: 'P', label: 'P - Polygamous' },
+    { value: 'T', label: 'T - Domestic Partner' },
+    { value: 'U', label: 'U - Unknown' }
   ];
 
   const visitTypeOptions = [

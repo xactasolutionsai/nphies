@@ -119,15 +119,22 @@ export const URGENCY_OPTIONS = [
 export const GENDER_OPTIONS = [
   { value: 'male', label: 'Male' },
   { value: 'female', label: 'Female' },
-  { value: 'other', label: 'Other' }
+  { value: 'other', label: 'Other' },
+  { value: 'unknown', label: 'Unknown' }
 ];
 
-// Marital status options
+// Marital status options (HL7 v3-MaritalStatus codes)
 export const MARITAL_STATUS_OPTIONS = [
-  { value: 'single', label: 'Single' },
-  { value: 'married', label: 'Married' },
-  { value: 'divorced', label: 'Divorced' },
-  { value: 'widowed', label: 'Widowed' }
+  { value: 'S', label: 'S - Never Married (Single)' },
+  { value: 'M', label: 'M - Married' },
+  { value: 'D', label: 'D - Divorced' },
+  { value: 'W', label: 'W - Widowed' },
+  { value: 'A', label: 'A - Annulled' },
+  { value: 'I', label: 'I - Interlocutory' },
+  { value: 'L', label: 'L - Legally Separated' },
+  { value: 'P', label: 'P - Polygamous' },
+  { value: 'T', label: 'T - Domestic Partner' },
+  { value: 'U', label: 'U - Unknown' }
 ];
 
 // Encounter class options

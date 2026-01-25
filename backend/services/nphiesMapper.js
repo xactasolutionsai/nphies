@@ -116,7 +116,25 @@ class NphiesMapper {
           return {
             code: 'MR',
             display: 'Medical Record Number',
-            system: 'http://provider.com/identifier/mrn'
+            system: 'http://nphies.sa/identifier/mrn'
+          };
+        case 'border_number':
+          return {
+            code: 'BN',
+            display: 'Border Number',
+            system: 'http://nphies.sa/identifier/bordernumber'
+          };
+        case 'displaced_person':
+          return {
+            code: 'DP',
+            display: 'Displaced Person',
+            system: 'http://nphies.sa/identifier/displacedperson'
+          };
+        case 'visitor_permit':
+          return {
+            code: 'VP',
+            display: 'Visitor Permit',
+            system: 'http://nphies.sa/identifier/visitorpermit'
           };
         case 'national_id':
         default:
@@ -254,21 +272,35 @@ class NphiesMapper {
   getMaritalStatusCode(status) {
     if (!status) return 'U'; // Unknown as default
     
+    // HL7 v3-MaritalStatus codes
     const statusMap = {
+      // Legacy text values (for backward compatibility)
       'married': 'M',
       'single': 'S',
       'divorced': 'D',
       'widowed': 'W',
       'unknown': 'U',
-      // Direct codes
-      'M': 'M',
-      'S': 'S', 
-      'D': 'D',
-      'W': 'W',
-      'U': 'U'
+      'annulled': 'A',
+      'interlocutory': 'I',
+      'legally separated': 'L',
+      'separated': 'L',
+      'polygamous': 'P',
+      'domestic partner': 'T',
+      'never married': 'S',
+      // Direct HL7 codes (A, D, I, L, M, P, S, T, W, U)
+      'A': 'A',  // Annulled
+      'D': 'D',  // Divorced
+      'I': 'I',  // Interlocutory
+      'L': 'L',  // Legally Separated
+      'M': 'M',  // Married
+      'P': 'P',  // Polygamous
+      'S': 'S',  // Never Married (Single)
+      'T': 'T',  // Domestic Partner
+      'W': 'W',  // Widowed
+      'U': 'U'   // Unknown
     };
     
-    return statusMap[status.toLowerCase()] || 'U';
+    return statusMap[status.toLowerCase?.()] || statusMap[status] || 'U';
   }
 
   /**
