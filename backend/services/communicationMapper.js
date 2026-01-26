@@ -68,7 +68,7 @@ class CommunicationMapper {
       case 'passport':
         return { code: 'PPN', display: 'Passport Number', system: 'http://terminology.hl7.org/CodeSystem/v2-0203' };
       case 'iqama':
-        return { code: 'PRC', display: 'Permanent Resident Card', system: 'http://terminology.hl7.org/CodeSystem/v2-0203' };
+        return { code: 'PRC', display: 'Permanent Resident Card', system: 'http://terminology.hl7.org/CodeSystem/v2-0203', identifierSystem: 'http://nphies.sa/identifier/iqama' };
       case 'mrn':
         return { code: 'MR', display: 'Medical Record Number', system: 'http://terminology.hl7.org/CodeSystem/v2-0203' };
       case 'visa':

@@ -112,7 +112,8 @@ class NphiesMapper {
           return {
             code: 'PRC',
             display: 'Permanent Resident Card',
-            system: 'http://terminology.hl7.org/CodeSystem/v2-0203'
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+            identifierSystem: 'http://nphies.sa/identifier/iqama'
           };
         case 'mrn':
           return {
