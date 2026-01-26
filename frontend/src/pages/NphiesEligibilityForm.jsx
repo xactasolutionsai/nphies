@@ -86,14 +86,10 @@ const selectStyles = {
 
 // Options for dropdowns
 const GENDER_OPTIONS = [
-  { value: 'female', label: 'Female' },
   { value: 'male', label: 'Male' },
-  { value: 'C', label: 'C - Not Completed' },
-  { value: 'A', label: 'A - Sex changed to Male' },
-  { value: 'U', label: 'U - Undetermined' },
-  { value: 'unknown', label: 'unknown' },
-  { value: 'N', label: 'N - Undifferentiated' },
-  { value: 'B', label: 'B - Sex changed to female' }
+  { value: 'female', label: 'Female' },
+  { value: 'other', label: 'Other' },
+  { value: 'unknown', label: 'Unknown' }
 ];
 
 const IDENTIFIER_TYPE_OPTIONS = [

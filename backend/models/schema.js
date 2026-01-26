@@ -7,7 +7,7 @@ export const TABLE_SCHEMAS = {
     id: 'SERIAL PRIMARY KEY',
     name: 'VARCHAR(255) NOT NULL',
     identifier: 'VARCHAR(50) UNIQUE NOT NULL',
-    gender: 'VARCHAR(10) NOT NULL CHECK (gender IN (\'female\', \'male\', \'C\', \'A\', \'U\', \'unknown\', \'N\', \'B\'))',
+    gender: 'VARCHAR(10) NOT NULL CHECK (gender IN (\'male\', \'female\', \'other\', \'unknown\'))',
     birth_date: 'DATE NOT NULL',
     phone: 'VARCHAR(20)',
     email: 'VARCHAR(255)',
@@ -212,7 +212,7 @@ export const validationSchemas = {
     // Required fields
     name: Joi.string().min(2).max(255).required(),
     identifier: Joi.string().min(5).max(50).required(),
-    gender: Joi.string().valid('female', 'male', 'C', 'A', 'U', 'unknown', 'N', 'B').required(),
+    gender: Joi.string().valid('male', 'female', 'other', 'unknown').required(),
     birth_date: Joi.date().required(),
     // Optional fields
     phone: Joi.string().max(50).allow('', null).optional(),

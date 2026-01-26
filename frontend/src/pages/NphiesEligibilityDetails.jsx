@@ -68,17 +68,13 @@ const formatDateTime = (dateString) => {
   return new Date(dateString).toLocaleString();
 };
 
-// Get gender display text (NPHIES ksa-administrative-gender CodeSystem)
+// Get gender display text
 const getGenderDisplay = (gender) => {
   const genders = {
-    'female': 'Female',
     'male': 'Male',
-    'C': 'Not Completed',
-    'A': 'Sex changed to Male',
-    'U': 'Undetermined',
-    'unknown': 'unknown',
-    'N': 'Undifferentiated',
-    'B': 'Sex changed to female'
+    'female': 'Female',
+    'other': 'Other',
+    'unknown': 'Unknown'
   };
   return genders[gender] || genders[gender?.toLowerCase()] || gender || 'N/A';
 };
