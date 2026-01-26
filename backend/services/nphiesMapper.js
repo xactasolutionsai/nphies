@@ -143,7 +143,8 @@ class NphiesMapper {
           return {
             code: 'NI',
             display: 'National Identifier',
-            system: 'http://terminology.hl7.org/CodeSystem/v2-0203'
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+            identifierSystem: 'http://nphies.sa/identifier/nationalid'
           };
       }
     };
@@ -194,13 +195,13 @@ class NphiesMapper {
             type: {
               coding: [
                 {
-                  system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                  system: identifierConfig.system,
                   code: identifierConfig.code,
                   display: identifierConfig.display
                 }
               ]
             },
-            system: identifierConfig.system,
+            system: identifierConfig.identifierSystem || identifierConfig.system,
             value: (patient.identifier || patient.patient_id || patient.patientId)?.toString() || 'UNKNOWN'
           }
         ],

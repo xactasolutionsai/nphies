@@ -79,7 +79,7 @@ class CommunicationMapper {
         return { code: 'DP', display: 'Displaced Person', system: 'http://nphies.sa/terminology/CodeSystem/patient-identifier-type' };
       case 'national_id':
       default:
-        return { code: 'NI', display: 'National Identifier', system: 'http://terminology.hl7.org/CodeSystem/v2-0203' };
+        return { code: 'NI', display: 'National Identifier', system: 'http://terminology.hl7.org/CodeSystem/v2-0203', identifierSystem: 'http://nphies.sa/identifier/nationalid' };
     }
   }
 
@@ -128,12 +128,12 @@ class CommunicationMapper {
           ],
           type: {
             coding: [{
-              system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+              system: identifierConfig.system,
               code: identifierConfig.code,
               display: identifierConfig.display
             }]
           },
-          system: identifierConfig.system,
+          system: identifierConfig.identifierSystem || identifierConfig.system,
           value: (patient.identifier || patient.patient_id)?.toString() || 'UNKNOWN'
         }
       ],
