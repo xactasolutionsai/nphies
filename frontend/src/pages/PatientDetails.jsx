@@ -127,7 +127,10 @@ export default function PatientDetails() {
       'national_id': 'National ID',
       'iqama': 'Iqama',
       'passport': 'Passport',
+      'mrn': 'Medical Record Number',
+      'visa': 'Visa',
       'border_number': 'Border Number',
+      'displaced_person': 'Displaced Person',
       'gcc_id': 'GCC ID'
     };
     return types[type] || type || 'N/A';

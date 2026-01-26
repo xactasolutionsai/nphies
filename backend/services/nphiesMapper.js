@@ -98,50 +98,52 @@ class NphiesMapper {
     }
 
     // Determine identifier system and code based on type
+    // HL7 v2-0203 types: NI, PRC, PPN, VS, MR
+    // NPHIES-specific types: BN, DP
     const getIdentifierConfig = (type) => {
       switch (type) {
         case 'passport':
           return {
             code: 'PPN',
             display: 'Passport Number',
-            system: 'http://nphies.sa/identifier/passportnumber'
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203'
           };
         case 'iqama':
           return {
             code: 'PRC',
             display: 'Permanent Resident Card',
-            system: 'http://nphies.sa/identifier/iqama'
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203'
           };
         case 'mrn':
           return {
             code: 'MR',
             display: 'Medical Record Number',
-            system: 'http://nphies.sa/identifier/mrn'
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203'
+          };
+        case 'visa':
+          return {
+            code: 'VS',
+            display: 'Visa',
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203'
           };
         case 'border_number':
           return {
             code: 'BN',
             display: 'Border Number',
-            system: 'http://nphies.sa/identifier/bordernumber'
+            system: 'http://nphies.sa/terminology/CodeSystem/patient-identifier-type'
           };
         case 'displaced_person':
           return {
             code: 'DP',
             display: 'Displaced Person',
-            system: 'http://nphies.sa/identifier/displacedperson'
-          };
-        case 'visitor_permit':
-          return {
-            code: 'VP',
-            display: 'Visitor Permit',
-            system: 'http://nphies.sa/identifier/visitorpermit'
+            system: 'http://nphies.sa/terminology/CodeSystem/patient-identifier-type'
           };
         case 'national_id':
         default:
           return {
             code: 'NI',
             display: 'National Identifier',
-            system: 'http://nphies.sa/identifier/nationalid'
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203'
           };
       }
     };

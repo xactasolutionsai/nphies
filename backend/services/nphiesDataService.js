@@ -453,7 +453,7 @@ class NphiesDataService {
     // - MR: Medical Record Number
     // - BN: Border Number
     // - DP: Displaced Person
-    // - VP: Visitor Permit
+    // - VS: Visa
     let identifierType = 'national_id';
     const typeCode = identifier?.type?.coding?.[0]?.code;
     const identifierValue = identifier?.value;
@@ -474,8 +474,8 @@ class NphiesDataService {
       case 'DP':
         identifierType = 'displaced_person';
         break;
-      case 'VP':
-        identifierType = 'visitor_permit';
+      case 'VS':
+        identifierType = 'visa';
         break;
       case 'NI':
         // NI can be either national_id or iqama based on system/value
@@ -497,8 +497,8 @@ class NphiesDataService {
           identifierType = 'border_number';
         } else if (identifier?.system?.includes('displacedperson')) {
           identifierType = 'displaced_person';
-        } else if (identifier?.system?.includes('visitorpermit')) {
-          identifierType = 'visitor_permit';
+        } else if (identifier?.system?.includes('visa')) {
+          identifierType = 'visa';
         }
         break;
     }
