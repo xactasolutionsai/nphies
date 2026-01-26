@@ -66,17 +66,15 @@ class CommunicationMapper {
   getIdentifierConfig(type) {
     switch (type) {
       case 'passport':
-        return { code: 'PPN', display: 'Passport Number', system: 'http://terminology.hl7.org/CodeSystem/v2-0203' };
+        return { code: 'PPN', display: 'Passport Number', system: 'http://terminology.hl7.org/CodeSystem/v2-0203', identifierSystem: 'http://nphies.sa/identifier/passportnumber' };
       case 'iqama':
         return { code: 'PRC', display: 'Permanent Resident Card', system: 'http://terminology.hl7.org/CodeSystem/v2-0203', identifierSystem: 'http://nphies.sa/identifier/iqama' };
       case 'mrn':
         return { code: 'MR', display: 'Medical Record Number', system: 'http://terminology.hl7.org/CodeSystem/v2-0203' };
-      case 'visa':
-        return { code: 'VS', display: 'Visa', system: 'http://terminology.hl7.org/CodeSystem/v2-0203' };
       case 'border_number':
-        return { code: 'BN', display: 'Border Number', system: 'http://nphies.sa/terminology/CodeSystem/patient-identifier-type' };
+        return { code: 'BN', display: 'Border Number', system: 'http://nphies.sa/terminology/CodeSystem/patient-identifier-type', identifierSystem: 'http://nphies.sa/identifier/bordernumber' };
       case 'displaced_person':
-        return { code: 'DP', display: 'Displaced Person', system: 'http://nphies.sa/terminology/CodeSystem/patient-identifier-type' };
+        return { code: 'DP', display: 'Displaced Person', system: 'http://nphies.sa/terminology/CodeSystem/patient-identifier-type', identifierSystem: 'http://nphies.sa/identifier/displacedperson' };
       case 'national_id':
       default:
         return { code: 'NI', display: 'National Identifier', system: 'http://terminology.hl7.org/CodeSystem/v2-0203', identifierSystem: 'http://nphies.sa/identifier/nationalid' };

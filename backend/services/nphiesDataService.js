@@ -474,9 +474,6 @@ class NphiesDataService {
       case 'DP':
         identifierType = 'displaced_person';
         break;
-      case 'VS':
-        identifierType = 'visa';
-        break;
       case 'NI':
         // NI can be either national_id or iqama based on system/value
         if (identifier?.system?.includes('iqama') || (identifierValue && identifierValue.startsWith('2'))) {
@@ -497,8 +494,6 @@ class NphiesDataService {
           identifierType = 'border_number';
         } else if (identifier?.system?.includes('displacedperson')) {
           identifierType = 'displaced_person';
-        } else if (identifier?.system?.includes('visa')) {
-          identifierType = 'visa';
         }
         break;
     }

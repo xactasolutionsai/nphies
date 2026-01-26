@@ -128,7 +128,6 @@ export default function PatientDetails() {
       'iqama': 'Iqama',
       'passport': 'Passport',
       'mrn': 'Medical Record Number',
-      'visa': 'Visa',
       'border_number': 'Border Number',
       'displaced_person': 'Displaced Person',
       'gcc_id': 'GCC ID'

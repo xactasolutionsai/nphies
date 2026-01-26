@@ -217,7 +217,7 @@ export const validationSchemas = {
     // Optional fields
     phone: Joi.string().max(50).allow('', null).optional(),
     email: Joi.string().email().allow('', null).optional(),
-    identifier_type: Joi.string().valid('national_id', 'iqama', 'passport', 'mrn', 'visa', 'border_number', 'displaced_person').allow('', null).optional(),
+    identifier_type: Joi.string().valid('national_id', 'iqama', 'passport', 'mrn', 'border_number', 'displaced_person').allow('', null).optional(),
     nationality: Joi.string().max(10).allow('', null).optional(),
     marital_status: Joi.string().valid('A', 'D', 'I', 'L', 'M', 'P', 'S', 'T', 'W', 'U', 'single', 'married', 'divorced', 'widowed', 'annulled', 'separated', 'unknown').insensitive().allow(null, '').optional(),
     address: Joi.string().allow('', null).optional(),

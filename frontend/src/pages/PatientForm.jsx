@@ -94,7 +94,6 @@ export default function PatientForm() {
     { value: 'iqama', label: 'PRC - Permanent Resident Card (Iqama)' },
     { value: 'passport', label: 'PPN - Passport Number' },
     { value: 'mrn', label: 'MR - Medical Record Number' },
-    { value: 'visa', label: 'VS - Visa' },
     { value: 'border_number', label: 'BN - Border Number' },
     { value: 'displaced_person', label: 'DP - Displaced Person' }
   ];

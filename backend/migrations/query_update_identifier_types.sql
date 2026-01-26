@@ -27,17 +27,17 @@ FROM patients
 WHERE identifier_type = 'visitor_permit';
 
 -- =====================================================
--- STEP 3: Update visitor_permit to visa in patients table
+-- STEP 3: Remove visitor_permit from patients table (set to NULL)
 -- =====================================================
 UPDATE patients 
-SET identifier_type = 'visa' 
+SET identifier_type = NULL 
 WHERE identifier_type = 'visitor_permit';
 
 -- =====================================================
--- STEP 4: Update visitor_permit to visa in policy_holders table
+-- STEP 4: Remove visitor_permit from policy_holders table
 -- =====================================================
 UPDATE policy_holders 
-SET identifier_type = 'visa' 
+SET identifier_type = NULL 
 WHERE identifier_type = 'visitor_permit';
 
 -- =====================================================
@@ -52,7 +52,7 @@ ORDER BY count DESC;
 
 -- =====================================================
 -- STEP 6: Check for any invalid identifier types
--- Valid types: national_id, iqama, passport, mrn, visa, border_number, displaced_person
+-- Valid types: national_id, iqama, passport, mrn, border_number, displaced_person
 -- =====================================================
 SELECT 
     patient_id, 
@@ -60,7 +60,7 @@ SELECT
     identifier, 
     identifier_type 
 FROM patients 
-WHERE identifier_type NOT IN ('national_id', 'iqama', 'passport', 'mrn', 'visa', 'border_number', 'displaced_person')
+WHERE identifier_type NOT IN ('national_id', 'iqama', 'passport', 'mrn', 'border_number', 'displaced_person')
 AND identifier_type IS NOT NULL 
 AND identifier_type != '';
 
