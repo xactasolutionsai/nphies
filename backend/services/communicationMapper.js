@@ -841,7 +841,7 @@ class CommunicationMapper {
       // See: https://terminology.hl7.org/CodeSystem-communication-category.html
       category: [{
         coding: [{
-          system: 'http://terminology.hl7.org/CodeSystem/communication-category',
+          system: 'http://nphies.sa/terminology/CodeSystem/communication-category',
           code: payloads?.[0]?.category || 'instruction'
         }]
       }],
