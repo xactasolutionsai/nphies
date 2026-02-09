@@ -1,5 +1,5 @@
 {
-  "id": "15b593ad-91b3-41fd-b91a-ad476f37088e",
+  "id": "7162b2f5-2154-48da-ac04-eafe52db0a91",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,36 +8,31 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "http://nphies.sa/MessageHeader/dc5cdc7d-c7f9-46b9-8dab-80725059bb93",
+      "fullUrl": "http://pseudo-payer.com.sa/MessageHeader/e0a9a4bb-79ea-4675-b2fa-6fd3c133c497",
       "resource": {
-        "id": "dc5cdc7d-c7f9-46b9-8dab-80725059bb93",
+        "id": "e0a9a4bb-79ea-4675-b2fa-6fd3c133c497",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
           ]
         },
-        "focus": [
-          {
-            "reference": "http://nphies.sa/ClaimResponse/143"
-          }
-        ],
         "sender": {
           "type": "Organization",
           "identifier": {
-            "value": "NPHIES",
-            "system": "http://nphies.sa/license/nphies"
+            "value": "INS-FHIR",
+            "system": "http://nphies.sa/license/payer-license"
           }
         },
         "source": {
-          "endpoint": "http://nphies.sa/"
+          "endpoint": "http://payer.com"
         },
         "response": {
           "code": "ok",
-          "identifier": "fc454218-4673-4af8-9fec-bade9f9ae9fd"
+          "identifier": "2991575a-d19f-43cc-b7f0-7d87c44de771"
         },
         "destination": [
           {
-            "endpoint": "http://provider.com",
+            "endpoint": "http://10.73.91.79/",
             "receiver": {
               "type": "Organization",
               "identifier": {
@@ -48,376 +43,13 @@
           }
         ],
         "eventCoding": {
-          "code": "priorauth-response",
+          "code": "acknowledgement",
           "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events"
         },
         "resourceType": "MessageHeader"
       }
-    },
-    {
-      "fullUrl": "http://nphies.sa/ClaimResponse/143",
-      "resource": {
-        "id": "143",
-        "use": "preauthorization",
-        "meta": {
-          "tag": [
-            {
-              "code": "NPHIES generated",
-              "display": "NPHIES generated"
-            }
-          ],
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
-          ]
-        },
-        "type": {
-          "coding": [
-            {
-              "code": "institutional",
-              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
-            }
-          ]
-        },
-        "error": [
-          {
-            "code": {
-              "coding": [
-                {
-                  "code": "RE-00169",
-                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                  "display": "Reference processing is not referring to a valid resource",
-                  "extension": [
-                    {
-                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                      "valueString": "Bundle.entry[1].resource.extension[1].value"
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "code": {
-              "coding": [
-                {
-                  "code": "IC-01428",
-                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                  "display": "The element SHALL follow the cardinality specified in the NPHIES profile",
-                  "extension": [
-                    {
-                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                      "valueString": "Bundle.entry[1].resource.extension[1].value.identifier"
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        ],
-        "status": "active",
-        "created": "2026-02-09T11:39:57.556Z",
-        "insurer": {
-          "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
-        },
-        "outcome": "error",
-        "patient": {
-          "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
-        },
-        "request": {
-          "type": "Claim",
-          "identifier": {
-            "value": "DUP-1770637196968",
-            "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
-          }
-        },
-        "insurance": [
-          {
-            "focal": true,
-            "coverage": {
-              "reference": "Coverage/e0f35a28-2e32-436c-915b-85ef1721ece7"
-            },
-            "sequence": 1
-          }
-        ],
-        "requestor": {
-          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
-        },
-        "identifier": [
-          {
-            "value": "DUP-1770637196968",
-            "system": "http://nphies.sa/ClaimResponse"
-          }
-        ],
-        "resourceType": "ClaimResponse"
-      }
-    },
-    {
-      "fullUrl": "http://nphies.sa/Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de",
-      "resource": {
-        "id": "2fbeed60-9a40-4e49-b326-8d800b13f2de",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
-          ]
-        },
-        "name": [
-          {
-            "use": "official",
-            "text": "Sarah Abbas",
-            "given": [
-              "Sarah"
-            ],
-            "family": "Abbas"
-          }
-        ],
-        "active": true,
-        "gender": "female",
-        "_gender": {
-          "extension": [
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
-              "valueCodeableConcept": {
-                "coding": [
-                  {
-                    "code": "female",
-                    "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "birthDate": "1997-02-08",
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
-            "valueCodeableConcept": {
-              "coding": [
-                {
-                  "code": "business",
-                  "system": "http://nphies.sa/terminology/CodeSystem/occupation"
-                }
-              ]
-            }
-          }
-        ],
-        "identifier": [
-          {
-            "type": {
-              "coding": [
-                {
-                  "code": "PRC",
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                  "display": "Permanent Resident Card"
-                }
-              ]
-            },
-            "value": "2000000007",
-            "system": "http://nphies.sa/identifier/iqama",
-            "extension": [
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "code": "SAU",
-                      "system": "urn:iso:std:iso:3166",
-                      "display": "Saudi Arabia"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ],
-        "resourceType": "Patient",
-        "maritalStatus": {
-          "coding": [
-            {
-              "code": "U",
-              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus"
-            }
-          ]
-        },
-        "deceasedBoolean": false
-      }
-    },
-    {
-      "fullUrl": "http://nphies.sa/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
-      "resource": {
-        "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
-          ]
-        },
-        "name": "Saudi General Hospital",
-        "type": [
-          {
-            "coding": [
-              {
-                "code": "prov",
-                "system": "http://nphies.sa/terminology/CodeSystem/organization-type"
-              }
-            ]
-          }
-        ],
-        "active": true,
-        "address": [
-          {
-            "use": "work",
-            "city": "Riyadh",
-            "line": [
-              "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
-            ],
-            "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
-            "country": "Saudi Arabia"
-          }
-        ],
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
-            "valueCodeableConcept": {
-              "coding": [
-                {
-                  "code": "1",
-                  "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                  "display": "Hospital"
-                }
-              ]
-            }
-          }
-        ],
-        "identifier": [
-          {
-            "value": "1010613708",
-            "system": "http://nphies.sa/license/provider-license"
-          }
-        ],
-        "resourceType": "Organization"
-      }
-    },
-    {
-      "fullUrl": "http://nphies.sa/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
-      "resource": {
-        "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"
-          ]
-        },
-        "name": "Saudi National Insurance",
-        "type": [
-          {
-            "coding": [
-              {
-                "code": "ins",
-                "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-                "display": "Insurance Company"
-              }
-            ]
-          }
-        ],
-        "active": true,
-        "address": [
-          {
-            "use": "work",
-            "city": "Riyadh",
-            "line": [
-              "Business Tower, Riyadh"
-            ],
-            "text": "Business Tower, Riyadh",
-            "country": "Saudi Arabia"
-          }
-        ],
-        "identifier": [
-          {
-            "use": "official",
-            "type": {
-              "coding": [
-                {
-                  "code": "NII",
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
-                }
-              ]
-            },
-            "value": "INS-FHIR",
-            "system": "http://nphies.sa/license/payer-license"
-          }
-        ],
-        "resourceType": "Organization"
-      }
-    },
-    {
-      "fullUrl": "http://nphies.sa/Coverage/e0f35a28-2e32-436c-915b-85ef1721ece7",
-      "resource": {
-        "id": "e0f35a28-2e32-436c-915b-85ef1721ece7",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
-          ]
-        },
-        "type": {
-          "coding": [
-            {
-              "code": "EHCPOL",
-              "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
-              "display": "Extended healthcare"
-            }
-          ]
-        },
-        "class": [
-          {
-            "name": "Insurance Plan",
-            "type": {
-              "coding": [
-                {
-                  "code": "plan",
-                  "system": "http://terminology.hl7.org/CodeSystem/coverage-class"
-                }
-              ]
-            },
-            "value": "default-plan"
-          }
-        ],
-        "payor": [
-          {
-            "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
-          }
-        ],
-        "period": {
-          "end": "2028-03-16",
-          "start": "2021-03-16"
-        },
-        "status": "active",
-        "identifier": [
-          {
-            "value": "93802565",
-            "system": "http://payer.com/memberid"
-          }
-        ],
-        "subscriber": {
-          "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
-        },
-        "beneficiary": {
-          "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
-        },
-        "policyHolder": {
-          "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
-        },
-        "relationship": {
-          "coding": [
-            {
-              "code": "self",
-              "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
-              "display": "Self"
-            }
-          ]
-        },
-        "resourceType": "Coverage"
-      }
     }
   ],
-  "timestamp": "2026-02-09T14:40:44.469+03:00",
+  "timestamp": "2026-02-09T13:17:01.656+00:00",
   "resourceType": "Bundle"
 }

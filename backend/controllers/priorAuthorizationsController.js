@@ -1305,20 +1305,6 @@ class PriorAuthorizationsController extends BaseController {
         return res.status(404).json({ error: 'Prior authorization not found' });
       }
 
-      // Only poll for queued/pended status
-      const canPoll = existing.status === 'queued' || 
-                      existing.outcome === 'queued' || 
-                      existing.adjudication_outcome === 'pended';
-      
-      if (!canPoll) {
-        return res.status(400).json({ 
-          error: 'Can only poll for queued/pended prior authorizations',
-          currentStatus: existing.status,
-          outcome: existing.outcome,
-          adjudicationOutcome: existing.adjudication_outcome
-        });
-      }
-
       // Poll NPHIES for messages
       const pollResult = await communicationService.pollForMessages(id, schemaName);
 
