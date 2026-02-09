@@ -232,14 +232,52 @@ class PharmacyMapper extends BaseMapper {
       });
     }
 
-    // Eligibility reference (optional - must be valid FHIR reference format)
-    if (priorAuth.eligibility_ref && priorAuth.eligibility_ref.includes('/')) {
+    // NPHIES supports two formats:
+    // 1. Identifier-based (preferred per NPHIES profile): { identifier: { system, value } }
+    // 2. Reference-based: { reference: "CoverageEligibilityResponse/uuid" }
+    // IC-01428: valueReference must include identifier per NPHIES cardinality rules
+    if (priorAuth.eligibility_response_id) {
+      const identifierSystem = priorAuth.eligibility_response_system || 
+        `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+      
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
         valueReference: {
-          reference: priorAuth.eligibility_ref
+          identifier: {
+            system: identifierSystem,
+            value: priorAuth.eligibility_response_id
+          }
         }
       });
+    } else if (priorAuth.eligibility_ref) {
+      if (priorAuth.eligibility_ref.includes('/')) {
+        const refParts = priorAuth.eligibility_ref.split('/');
+        const refId = refParts[refParts.length - 1];
+        const identifierSystem = priorAuth.eligibility_response_system || 
+          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+        
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+          valueReference: {
+            identifier: {
+              system: identifierSystem,
+              value: refId
+            }
+          }
+        });
+      } else {
+        const identifierSystem = priorAuth.eligibility_response_system || 
+          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+          valueReference: {
+            identifier: {
+              system: identifierSystem,
+              value: priorAuth.eligibility_ref
+            }
+          }
+        });
+      }
     }
 
     // Build claim resource following NPHIES pharmacy-priorauth profile

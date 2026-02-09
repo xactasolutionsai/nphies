@@ -335,15 +335,25 @@ class ProfessionalMapper extends BaseMapper {
       // 1. Full reference: "CoverageEligibilityResponse/uuid"
       // 2. Just the ID: "uuid" (we'll treat as identifier value)
       if (priorAuth.eligibility_ref.includes('/')) {
+        // Extract identifier from full reference URL
+        const refParts = priorAuth.eligibility_ref.split('/');
+        const refId = refParts[refParts.length - 1];
+        const identifierSystem = priorAuth.eligibility_response_system || 
+          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+        
         extensions.push({
           url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
           valueReference: {
-            reference: priorAuth.eligibility_ref
+            identifier: {
+              system: identifierSystem,
+              value: refId
+            }
           }
         });
       } else {
         // Treat as identifier value
-        const identifierSystem = `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+        const identifierSystem = priorAuth.eligibility_response_system || 
+          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
         extensions.push({
           url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
           valueReference: {
