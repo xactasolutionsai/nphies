@@ -14,7 +14,7 @@ import {
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
   Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
-  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle, Package
+  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle, Package, RotateCcw
 } from 'lucide-react';
 
 // Import AI Medication Safety components
