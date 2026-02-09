@@ -243,15 +243,6 @@ class CommunicationService {
 
       const priorAuth = paResult.rows[0];
 
-      // 2. Validate PA is in queued/pended status
-      const canCommunicate = priorAuth.status === 'queued' || 
-                             priorAuth.outcome === 'queued' || 
-                             priorAuth.adjudication_outcome === 'pended';
-      
-      if (!canCommunicate) {
-        throw new Error(`Cannot send communication for PA with status '${priorAuth.status}'. Expected 'queued' or 'pended'.`);
-      }
-
       // 3. Build Communication bundle with coverage data
       const communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
         priorAuth: {
