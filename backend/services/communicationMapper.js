@@ -960,6 +960,12 @@ class CommunicationMapper {
         if (payload.attachment.hash) {
           fhirPayload.contentAttachment.hash = payload.attachment.hash;
         }
+        if (payload.attachment.creation) {
+          fhirPayload.contentAttachment.creation = payload.attachment.creation;
+        } else {
+          // NPHIES requires creation date - default to today
+          fhirPayload.contentAttachment.creation = new Date().toISOString().split('T')[0];
+        }
       } else if (payload.contentType === 'reference' && payload.reference) {
         fhirPayload.contentReference = {
           reference: payload.reference.value,

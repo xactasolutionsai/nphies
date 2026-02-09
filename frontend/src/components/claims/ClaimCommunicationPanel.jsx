@@ -340,7 +340,8 @@ const ClaimCommunicationPanel = ({
           contentType: file.type,
           data: base64,
           title: file.name,
-          size: file.size
+          size: file.size,
+          creation: new Date().toISOString().split('T')[0]
         }]);
       };
       reader.readAsDataURL(file);
@@ -351,6 +352,11 @@ const ClaimCommunicationPanel = ({
   
   const removeAttachment = (attachmentId) => {
     setAttachments(prev => prev.filter(a => a.id !== attachmentId));
+  };
+
+  // Update a field on a specific attachment
+  const updateAttachment = (attachmentId, field, value) => {
+    setAttachments(prev => prev.map(a => a.id === attachmentId ? { ...a, [field]: value } : a));
   };
 
   // Build payloads for API
@@ -374,7 +380,8 @@ const ClaimCommunicationPanel = ({
           contentType: attachment.contentType,
           title: attachment.title,
           size: attachment.size,
-          data: attachment.data
+          data: attachment.data,
+          creation: attachment.creation || new Date().toISOString().split('T')[0]
         },
         category: communicationCategory,
         priority: communicationPriority
@@ -1396,20 +1403,29 @@ const ClaimCommunicationPanel = ({
                     <div className="space-y-2 mb-3">
                       {attachments.map((att) => (
                         <div key={att.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-2">
-                          <div className="flex items-center">
-                            <Paperclip className="w-4 h-4 text-gray-500 mr-2" />
+                          <div className="flex items-center flex-1 min-w-0">
+                            <Paperclip className="w-4 h-4 text-gray-500 mr-2 flex-shrink-0" />
                             <span className="text-sm truncate max-w-xs">{att.title}</span>
-                            <span className="text-xs text-gray-500 ml-2">
+                            <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
                               ({Math.round(att.size / 1024)} KB)
                             </span>
                           </div>
-                          <button
-                            onClick={() => removeAttachment(att.id)}
-                            className="text-red-500 hover:text-red-700 p-1"
-                            title="Remove attachment"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                            <input
+                              type="date"
+                              value={att.creation || ''}
+                              onChange={(e) => updateAttachment(att.id, 'creation', e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-1.5 py-1 w-[130px] focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              title="Attachment creation date"
+                            />
+                            <button
+                              onClick={() => removeAttachment(att.id)}
+                              className="text-red-500 hover:text-red-700 p-1"
+                              title="Remove attachment"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

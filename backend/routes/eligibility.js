@@ -36,6 +36,9 @@ router.post('/preview', eligibilityController.previewEligibilityRequest.bind(eli
 // GET /api/eligibility/:id/nphies-details - Get full NPHIES details with FHIR data
 router.get('/:id/nphies-details', eligibilityController.getNphiesDetails.bind(eligibilityController));
 
+// GET /api/eligibility/patient/:patientId/eligibilities - Get patient eligibility responses (for prior auth dropdown)
+router.get('/patient/:patientId/eligibilities', eligibilityController.getPatientEligibilities.bind(eligibilityController));
+
 // GET /api/eligibility/patient/:patientId/coverages - Get patient coverages
 router.get('/patient/:patientId/coverages', eligibilityController.getPatientCoverages.bind(eligibilityController));
 

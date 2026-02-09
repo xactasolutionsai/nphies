@@ -205,6 +205,10 @@ class ApiService {
     return this.request(`/eligibility/patient/${patientId}/mother-patient`);
   }
 
+  async getPatientEligibilities(patientId) {
+    return this.request(`/eligibility/patient/${patientId}/eligibilities`);
+  }
+
   // Claims
   async getClaims(params = {}) {
     const queryString = new URLSearchParams(params).toString();

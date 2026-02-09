@@ -813,6 +813,21 @@ export const queries = {
       RETURNING *
     `,
 
+    // Get eligibility records by patient ID (for prior auth dropdown)
+    GET_BY_PATIENT: `
+      SELECT
+        e.eligibility_id, e.nphies_response_id, e.status, e.outcome, e.inforce,
+        e.response_date, e.created_at, e.serviced_date, e.coverage_id,
+        e.raw_response,
+        i.insurer_name, i.nphies_id as insurer_nphies_id
+      FROM eligibility e
+      LEFT JOIN insurers i ON e.insurer_id = i.insurer_id
+      WHERE e.patient_id = $1
+        AND e.nphies_response_id IS NOT NULL
+        AND e.status = 'eligible'
+      ORDER BY e.response_date DESC
+    `,
+
     // Search eligibility
     SEARCH_WHERE: `WHERE (p.name ILIKE $3 OR pr.provider_name ILIKE $3 OR i.insurer_name ILIKE $3 OR e.purpose ILIKE $3)`,
     STATUS_WHERE: `AND e.status = $4`

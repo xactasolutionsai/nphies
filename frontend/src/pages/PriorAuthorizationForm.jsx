@@ -96,6 +96,9 @@ export default function PriorAuthorizationForm() {
   const [insurers, setInsurers] = useState([]);
   const [coverages, setCoverages] = useState([]);
   const [loadingCoverages, setLoadingCoverages] = useState(false);
+  const [eligibilities, setEligibilities] = useState([]);
+  const [loadingEligibilities, setLoadingEligibilities] = useState(false);
+  const [manualEligibilityEntry, setManualEligibilityEntry] = useState(false);
   
   // AI Medication Safety Analysis (for pharmacy auth type)
   const [medicationSafetyAnalysis, setMedicationSafetyAnalysis] = useState(null);
@@ -613,7 +616,7 @@ export default function PriorAuthorizationForm() {
         }
       });
       
-      // Load coverages for the patient (if patient exists)
+      // Load coverages and eligibilities for the patient (if patient exists)
       if (data.patient_id) {
         try {
           const coveragesRes = await api.getPatientCoverages(data.patient_id);
@@ -621,6 +624,7 @@ export default function PriorAuthorizationForm() {
         } catch (coverageError) {
           console.error('Error loading patient coverages:', coverageError);
         }
+        loadPatientEligibilities(data.patient_id);
       }
     } catch (error) {
       console.error('Error loading prior authorization:', error);
@@ -791,7 +795,7 @@ export default function PriorAuthorizationForm() {
         }
       });
       
-      // Load coverages for the patient
+      // Load coverages and eligibilities for the patient
       if (data.patient_id) {
         try {
           const coveragesRes = await api.getPatientCoverages(data.patient_id);
@@ -799,6 +803,7 @@ export default function PriorAuthorizationForm() {
         } catch (coverageError) {
           console.error('Error loading patient coverages:', coverageError);
         }
+        loadPatientEligibilities(data.patient_id);
       }
     } catch (error) {
       console.error('Error loading source PA for resubmission:', error);
@@ -972,7 +977,7 @@ export default function PriorAuthorizationForm() {
         }
       });
       
-      // Load coverages for the patient
+      // Load coverages and eligibilities for the patient
       if (data.patient_id) {
         try {
           const coveragesRes = await api.getPatientCoverages(data.patient_id);
@@ -980,6 +985,7 @@ export default function PriorAuthorizationForm() {
         } catch (coverageError) {
           console.error('Error loading patient coverages:', coverageError);
         }
+        loadPatientEligibilities(data.patient_id);
       }
     } catch (error) {
       console.error('Error loading source PA for follow-up:', error);
@@ -1024,6 +1030,52 @@ export default function PriorAuthorizationForm() {
       setCoverages([]);
     } finally {
       setLoadingCoverages(false);
+    }
+  };
+
+  // Load eligibility responses when patient is selected (for eligibility reference dropdown)
+  const loadPatientEligibilities = async (patientId) => {
+    if (!patientId) {
+      setEligibilities([]);
+      return;
+    }
+    
+    try {
+      setLoadingEligibilities(true);
+      const response = await api.getPatientEligibilities(patientId);
+      setEligibilities(response?.data || []);
+    } catch (error) {
+      console.error('Error loading patient eligibilities:', error);
+      setEligibilities([]);
+    } finally {
+      setLoadingEligibilities(false);
+    }
+  };
+
+  // Handle eligibility selection from dropdown
+  const handleEligibilityChange = (option) => {
+    if (!option) {
+      // Cleared selection
+      setFormData(prev => ({
+        ...prev,
+        eligibility_response_id: '',
+        eligibility_response_system: '',
+        eligibility_ref: ''
+      }));
+      return;
+    }
+    
+    const selected = eligibilities.find(e => e.eligibility_id === option.value);
+    if (selected) {
+      setFormData(prev => ({
+        ...prev,
+        eligibility_response_id: selected.eligibility_response_id || '',
+        eligibility_response_system: selected.eligibility_response_system || '',
+        // For backward compatibility with non-professional mappers: set eligibility_ref
+        // Use the full URL if available, otherwise construct a reference
+        eligibility_ref: selected.eligibility_response_url || 
+          (selected.eligibility_response_id ? `CoverageEligibilityResponse/${selected.eligibility_response_id}` : '')
+      }));
     }
   };
 
@@ -1094,9 +1146,10 @@ export default function PriorAuthorizationForm() {
       return { ...prev, ...updates };
     });
     
-    // If patient changed, load their coverages
+    // If patient changed, load their coverages and eligibilities
     if (field === 'patient_id') {
       loadPatientCoverages(value);
+      loadPatientEligibilities(value);
     }
   };
 
@@ -2673,8 +2726,8 @@ export default function PriorAuthorizationForm() {
                   // BV-00811: Always require datetime with seconds for claims (even for ambulatory)
                   // Per NPHIES: Date time format up to seconds SHALL be mandatory for encounter.period.start
                   const needsDateTime = !isDentalClaim && ['inpatient', 'daycase'].includes(formData.encounter_class);
-                  // Per NPHIES Encounter-10123 example: AMB encounters don't need end date (ongoing)
-                  const showEndDate = needsDateTime;
+                  // Show end date for all non-dental encounter types (optional field)
+                  const showEndDate = !isDentalClaim;
                   
                   return (
                     <div className={`grid grid-cols-1 ${showEndDate ? 'md:grid-cols-2' : ''} gap-4`}>
@@ -2706,17 +2759,17 @@ export default function PriorAuthorizationForm() {
                       {showEndDate && (
                         <div className="space-y-2">
                           <Label>
-                            Encounter End Date & Time (Optional)
+                            Encounter End Date{needsDateTime ? ' & Time' : ''} (Optional)
                           </Label>
                           <div className="datepicker-wrapper">
                             <DatePicker
                               selected={formData.encounter_end ? new Date(formData.encounter_end) : null}
                               onChange={(date) => handleChange('encounter_end', date ? date.toISOString() : '')}
-                              showTimeSelect
-                              dateFormat="yyyy-MM-dd HH:mm"
+                              showTimeSelect={needsDateTime}
+                              dateFormat={needsDateTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"}
                               isClearable
                               className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                              placeholderText="Select date & time (optional)"
+                              placeholderText={needsDateTime ? "Select date & time (optional)" : "Select date (optional)"}
                             />
                             <Calendar className="datepicker-icon h-4 w-4" />
                           </div>
@@ -2757,56 +2810,7 @@ export default function PriorAuthorizationForm() {
                   menuPortalTarget={document.body}
                 />
               </div>
-              {/* Eligibility Reference - Show legacy format for non-professional types */}
-              {formData.auth_type !== 'professional' && (
-                <div className="space-y-2">
-                  <Label htmlFor="eligibility_ref">Eligibility Reference</Label>
-                  <Input
-                    id="eligibility_ref"
-                    value={formData.eligibility_ref || ''}
-                    onChange={(e) => handleChange('eligibility_ref', e.target.value)}
-                    placeholder="CoverageEligibilityResponse/uuid"
-                  />
-                  <p className="text-xs text-gray-500">
-                    Direct reference format (e.g., CoverageEligibilityResponse/12345)
-                  </p>
-                </div>
-              )}
             </div>
-
-            {/* Eligibility Response Identifier - Only for Professional claims per NPHIES Claim-173086 */}
-            {formData.auth_type === 'professional' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
-                <div className="col-span-2 flex items-center gap-2 text-blue-700 font-medium text-sm">
-                  <CheckCircle className="h-4 w-4" />
-                  Eligibility Response Identifier
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="eligibility_response_id">Eligibility Response ID</Label>
-                  <Input
-                    id="eligibility_response_id"
-                    value={formData.eligibility_response_id || ''}
-                    onChange={(e) => handleChange('eligibility_response_id', e.target.value)}
-                    placeholder="e.g., Elig_199719982262"
-                  />
-                  <p className="text-xs text-gray-500">
-                    The eligibility response identifier value from the payer
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="eligibility_response_system">Identifier System (Optional)</Label>
-                  <Input
-                    id="eligibility_response_system"
-                    value={formData.eligibility_response_system || ''}
-                    onChange={(e) => handleChange('eligibility_response_system', e.target.value)}
-                    placeholder="http://payer.com/identifiers/coverageeligibilityresponse"
-                  />
-                  <p className="text-xs text-gray-500">
-                    Leave empty to use payer's default system
-                  </p>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
@@ -2994,6 +2998,95 @@ export default function PriorAuthorizationForm() {
                   <p className="text-xs text-gray-500">Clear coverage selection to manually choose insurer</p>
                 )}
               </div>
+            </div>
+
+            {/* Eligibility Reference - Unified dropdown populated from patient eligibility responses */}
+            <div className="mt-6 p-4 bg-green-50/50 border border-green-200 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 text-green-700 font-medium text-sm">
+                  <CheckCircle className="h-4 w-4" />
+                  Eligibility Reference
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualEligibilityEntry(!manualEligibilityEntry)}
+                  className="text-xs text-green-600 hover:text-green-800 underline"
+                >
+                  {manualEligibilityEntry ? 'Use dropdown' : 'Manual entry'}
+                </button>
+              </div>
+
+              {manualEligibilityEntry ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="eligibility_response_id">Eligibility Response ID</Label>
+                    <Input
+                      id="eligibility_response_id"
+                      value={formData.eligibility_response_id || ''}
+                      onChange={(e) => handleChange('eligibility_response_id', e.target.value)}
+                      placeholder="e.g., 51434 or Elig_199719982262"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="eligibility_response_system">Identifier System</Label>
+                    <Input
+                      id="eligibility_response_system"
+                      value={formData.eligibility_response_system || ''}
+                      onChange={(e) => handleChange('eligibility_response_system', e.target.value)}
+                      placeholder="http://payer.com/identifiers/coverageeligibilityresponse"
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="eligibility_ref">Eligibility Reference URL</Label>
+                    <Input
+                      id="eligibility_ref"
+                      value={formData.eligibility_ref || ''}
+                      onChange={(e) => handleChange('eligibility_ref', e.target.value)}
+                      placeholder="CoverageEligibilityResponse/uuid or full URL"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {!formData.patient_id ? (
+                    <div className="text-sm text-gray-500 p-3 bg-gray-50 rounded-md">
+                      Select a patient first to see their eligibility responses
+                    </div>
+                  ) : eligibilities.length === 0 && !loadingEligibilities ? (
+                    <div className="text-sm text-amber-600 p-3 bg-amber-50 rounded-md">
+                      No eligible responses found for this patient. Use manual entry to enter values directly.
+                    </div>
+                  ) : (
+                    <Select
+                      value={eligibilities.map(e => ({
+                        value: e.eligibility_id,
+                        label: `${e.eligibility_response_id || 'N/A'} — ${e.insurer_name || 'Unknown Insurer'} — ${e.response_date ? new Date(e.response_date).toLocaleDateString() : e.created_at ? new Date(e.created_at).toLocaleDateString() : 'No date'}`
+                      })).find(opt => {
+                        // Match by eligibility_id or by response_id if already set
+                        const selected = eligibilities.find(el => el.eligibility_id === opt.value);
+                        return selected && selected.eligibility_response_id === formData.eligibility_response_id;
+                      })}
+                      onChange={(option) => handleEligibilityChange(option)}
+                      options={eligibilities.map(e => ({
+                        value: e.eligibility_id,
+                        label: `${e.eligibility_response_id || 'N/A'} — ${e.insurer_name || 'Unknown Insurer'} — ${e.response_date ? new Date(e.response_date).toLocaleDateString() : e.created_at ? new Date(e.created_at).toLocaleDateString() : 'No date'}`
+                      }))}
+                      styles={selectStyles}
+                      placeholder="Select an eligibility response..."
+                      isClearable
+                      isSearchable
+                      isLoading={loadingEligibilities}
+                      menuPortalTarget={document.body}
+                    />
+                  )}
+                  {formData.eligibility_response_id && (
+                    <p className="text-xs text-green-600 mt-1">
+                      Selected: {formData.eligibility_response_id}
+                      {formData.eligibility_response_system && ` (${formData.eligibility_response_system})`}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Mother Patient Information (for newborn requests) - Full Width */}
@@ -4043,7 +4136,16 @@ export default function PriorAuthorizationForm() {
                     <div className="datepicker-wrapper">
                       <DatePicker
                         selected={item.serviced_date ? new Date(item.serviced_date) : null}
-                        onChange={(date) => handleItemChange(index, 'serviced_date', date ? date.toISOString().split('T')[0] : '')}
+                        onChange={(date) => {
+                          if (date) {
+                            const year = date.getFullYear();
+                            const month = String(date.getMonth() + 1).padStart(2, '0');
+                            const day = String(date.getDate()).padStart(2, '0');
+                            handleItemChange(index, 'serviced_date', `${year}-${month}-${day}`);
+                          } else {
+                            handleItemChange(index, 'serviced_date', '');
+                          }
+                        }}
                         dateFormat="yyyy-MM-dd"
                         className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
                         placeholderText="Select date"

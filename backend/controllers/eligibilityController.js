@@ -450,6 +450,89 @@ class EligibilityController extends BaseController {
     }
   }
 
+  // Get patient eligibility responses (for prior auth dropdown)
+  async getPatientEligibilities(req, res) {
+    try {
+      const { patientId } = req.params;
+
+      if (!patientId) {
+        return res.status(400).json({ error: 'Patient ID is required' });
+      }
+
+      const result = await query(`
+        SELECT
+          e.eligibility_id, e.nphies_response_id, e.status, e.outcome, e.inforce,
+          e.response_date, e.created_at, e.serviced_date, e.coverage_id,
+          e.raw_response,
+          i.insurer_name, i.nphies_id as insurer_nphies_id
+        FROM eligibility e
+        LEFT JOIN insurers i ON e.insurer_id = i.insurer_id
+        WHERE e.patient_id = $1
+          AND e.nphies_response_id IS NOT NULL
+          AND e.status = 'eligible'
+        ORDER BY e.response_date DESC
+      `, [patientId]);
+
+      // Extract eligibility reference details from raw_response FHIR bundle
+      const eligibilities = result.rows.map(row => {
+        let eligibilityResponseId = row.nphies_response_id;
+        let eligibilityResponseSystem = '';
+        let eligibilityResponseUrl = '';
+
+        // Parse raw_response to extract CoverageEligibilityResponse details
+        if (row.raw_response) {
+          try {
+            const rawResponse = typeof row.raw_response === 'string' 
+              ? JSON.parse(row.raw_response) 
+              : row.raw_response;
+            
+            // Find CoverageEligibilityResponse entry in bundle
+            const eligEntry = rawResponse.entry?.find(
+              e => e.resource?.resourceType === 'CoverageEligibilityResponse'
+            );
+
+            if (eligEntry) {
+              // Get the resource ID (e.g., "51434")
+              eligibilityResponseId = eligEntry.resource.id || eligibilityResponseId;
+              // Get the full URL (e.g., "http://pseudo-payer.com.sa/CoverageEligibilityResponse/51434")
+              eligibilityResponseUrl = eligEntry.fullUrl || '';
+              // Get identifier system (e.g., "http://pseudo-payer.com.sa/coverageeligibilityresponse")
+              const identifier = eligEntry.resource.identifier?.[0];
+              if (identifier) {
+                eligibilityResponseSystem = identifier.system || '';
+                // Prefer identifier value if available (it may differ from resource ID)
+                if (identifier.value) {
+                  eligibilityResponseId = identifier.value;
+                }
+              }
+            }
+          } catch (parseErr) {
+            console.error('Error parsing eligibility raw_response:', parseErr);
+          }
+        }
+
+        return {
+          eligibility_id: row.eligibility_id,
+          eligibility_response_id: eligibilityResponseId,
+          eligibility_response_system: eligibilityResponseSystem,
+          eligibility_response_url: eligibilityResponseUrl,
+          response_date: row.response_date,
+          created_at: row.created_at,
+          serviced_date: row.serviced_date,
+          insurer_name: row.insurer_name,
+          insurer_nphies_id: row.insurer_nphies_id,
+          inforce: row.inforce,
+          coverage_id: row.coverage_id
+        };
+      });
+
+      res.json({ data: eligibilities });
+    } catch (error) {
+      console.error('Error getting patient eligibilities:', error);
+      res.status(500).json({ error: 'Failed to fetch patient eligibilities' });
+    }
+  }
+
   // Get patient coverages
   async getPatientCoverages(req, res) {
     try {
