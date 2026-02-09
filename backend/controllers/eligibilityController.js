@@ -475,9 +475,12 @@ class EligibilityController extends BaseController {
 
       // Extract eligibility reference details from raw_response FHIR bundle
       const eligibilities = result.rows.map(row => {
-        let eligibilityResponseId = row.nphies_response_id;
-        let eligibilityResponseSystem = '';
-        let eligibilityResponseUrl = '';
+        // resource.id = human-readable payer ID (e.g., "51434")
+        let resourceId = '';
+        // identifier.value = UUID used in FHIR identifier (e.g., "b4d2618f-...")
+        let identifierValue = row.nphies_response_id || '';
+        let identifierSystem = '';
+        let fullUrl = '';
 
         // Parse raw_response to extract CoverageEligibilityResponse details
         if (row.raw_response) {
@@ -492,17 +495,16 @@ class EligibilityController extends BaseController {
             );
 
             if (eligEntry) {
-              // Get the resource ID (e.g., "51434")
-              eligibilityResponseId = eligEntry.resource.id || eligibilityResponseId;
+              // Get the resource ID (e.g., "51434") - human-readable payer-assigned ID
+              resourceId = eligEntry.resource.id || '';
               // Get the full URL (e.g., "http://pseudo-payer.com.sa/CoverageEligibilityResponse/51434")
-              eligibilityResponseUrl = eligEntry.fullUrl || '';
-              // Get identifier system (e.g., "http://pseudo-payer.com.sa/coverageeligibilityresponse")
+              fullUrl = eligEntry.fullUrl || '';
+              // Get identifier (UUID + system)
               const identifier = eligEntry.resource.identifier?.[0];
               if (identifier) {
-                eligibilityResponseSystem = identifier.system || '';
-                // Prefer identifier value if available (it may differ from resource ID)
+                identifierSystem = identifier.system || '';
                 if (identifier.value) {
-                  eligibilityResponseId = identifier.value;
+                  identifierValue = identifier.value;
                 }
               }
             }
@@ -513,9 +515,12 @@ class EligibilityController extends BaseController {
 
         return {
           eligibility_id: row.eligibility_id,
-          eligibility_response_id: eligibilityResponseId,
-          eligibility_response_system: eligibilityResponseSystem,
-          eligibility_response_url: eligibilityResponseUrl,
+          // The identifier value (UUID) - used for FHIR eligibility_response_id field
+          eligibility_response_id: identifierValue,
+          eligibility_response_system: identifierSystem,
+          eligibility_response_url: fullUrl,
+          // The human-readable payer-assigned resource ID (e.g., "51434")
+          resource_id: resourceId,
           response_date: row.response_date,
           created_at: row.created_at,
           serviced_date: row.serviced_date,

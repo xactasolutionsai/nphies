@@ -3060,18 +3060,55 @@ export default function PriorAuthorizationForm() {
                     <Select
                       value={eligibilities.map(e => ({
                         value: e.eligibility_id,
-                        label: `${e.eligibility_response_id || 'N/A'} — ${e.insurer_name || 'Unknown Insurer'} — ${e.response_date ? new Date(e.response_date).toLocaleDateString() : e.created_at ? new Date(e.created_at).toLocaleDateString() : 'No date'}`
-                      })).find(opt => {
-                        // Match by eligibility_id or by response_id if already set
-                        const selected = eligibilities.find(el => el.eligibility_id === opt.value);
-                        return selected && selected.eligibility_response_id === formData.eligibility_response_id;
-                      })}
+                        label: e.resource_id || e.eligibility_response_id || e.eligibility_id,
+                        data: e
+                      })).find(opt => opt.data.eligibility_response_id === formData.eligibility_response_id)}
                       onChange={(option) => handleEligibilityChange(option)}
                       options={eligibilities.map(e => ({
                         value: e.eligibility_id,
-                        label: `${e.eligibility_response_id || 'N/A'} — ${e.insurer_name || 'Unknown Insurer'} — ${e.response_date ? new Date(e.response_date).toLocaleDateString() : e.created_at ? new Date(e.created_at).toLocaleDateString() : 'No date'}`
+                        label: e.resource_id || e.eligibility_response_id || e.eligibility_id,
+                        data: e
                       }))}
-                      styles={selectStyles}
+                      formatOptionLabel={(option) => {
+                        const e = option.data;
+                        if (!e) return option.label;
+                        const date = e.response_date 
+                          ? new Date(e.response_date).toLocaleDateString() 
+                          : e.created_at 
+                            ? new Date(e.created_at).toLocaleDateString() 
+                            : '';
+                        return (
+                          <div className="flex items-center justify-between gap-3 py-0.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-mono font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded text-xs whitespace-nowrap">
+                                {e.resource_id || '—'}
+                              </span>
+                              <span className="text-sm text-gray-700 truncate">
+                                {e.insurer_name || 'Unknown Insurer'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {date && (
+                                <span className="text-xs text-gray-400 whitespace-nowrap">
+                                  {date}
+                                </span>
+                              )}
+                              {e.inforce && (
+                                <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium">
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }}
+                      styles={{
+                        ...selectStyles,
+                        option: (base, state) => ({
+                          ...(selectStyles?.option?.(base, state) || base),
+                          padding: '8px 12px',
+                        }),
+                      }}
                       placeholder="Select an eligibility response..."
                       isClearable
                       isSearchable
@@ -3080,10 +3117,18 @@ export default function PriorAuthorizationForm() {
                     />
                   )}
                   {formData.eligibility_response_id && (
-                    <p className="text-xs text-green-600 mt-1">
-                      Selected: {formData.eligibility_response_id}
-                      {formData.eligibility_response_system && ` (${formData.eligibility_response_system})`}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 text-xs">
+                      <span className="text-green-600 font-medium">ID:</span>
+                      <code className="bg-green-50 text-green-800 px-1.5 py-0.5 rounded font-mono text-xs">
+                        {formData.eligibility_response_id}
+                      </code>
+                      {formData.eligibility_response_system && (
+                        <>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-gray-500 truncate">{formData.eligibility_response_system}</span>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
