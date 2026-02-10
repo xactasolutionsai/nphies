@@ -39,12 +39,7 @@ export const getInitialItemData = (sequence, authType = '') => {
       prescribed_medication_code: '',
       pharmacist_selection_reason: 'patient-request',
       pharmacist_substitute: 'Irreplaceable',
-      days_supply: 30,
-      // Shadow billing fields (NPHIES: secondary SFDA code for unlisted medications)
-      // When medication_code is an unlisted code (e.g., 99999999999999), the actual SFDA/GTIN
-      // code must be added as a second coding entry in productOrService.coding[]
-      sfda_code: '',
-      sfda_display: ''
+      days_supply: 30
     };
   }
 

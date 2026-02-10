@@ -1428,7 +1428,7 @@ export default function PriorAuthorizationDetails() {
                           {(() => {
                             const hasDentalFields = priorAuth.auth_type === 'dental' && (item.tooth_number || item.tooth_surface);
                             const hasVisionFields = priorAuth.auth_type === 'vision' && item.eye;
-                            const hasPharmacyFields = priorAuth.auth_type === 'pharmacy' && (item.days_supply || item.sfda_code);
+                            const hasPharmacyFields = priorAuth.auth_type === 'pharmacy' && item.days_supply;
                             
                             if (!hasDentalFields && !hasVisionFields && !hasPharmacyFields) return null;
                             
@@ -1447,17 +1447,7 @@ export default function PriorAuthorizationDetails() {
                                 )}
                                 {/* Pharmacy fields - only for pharmacy auth type */}
                                 {priorAuth.auth_type === 'pharmacy' && item.days_supply && (
-                                  <span className="mr-4">Days Supply: {item.days_supply}</span>
-                                )}
-                                {/* Shadow Billing fields */}
-                                {priorAuth.auth_type === 'pharmacy' && item.sfda_code && (
-                                  <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
-                                    <span className="font-medium text-amber-800">Shadow Billing:</span>{' '}
-                                    <span className="text-amber-700">
-                                      SFDA Code: <code className="font-mono bg-amber-100 px-1 rounded">{item.sfda_code}</code>
-                                      {item.sfda_display && <> ({item.sfda_display})</>}
-                                    </span>
-                                  </div>
+                                  <span>Days Supply: {item.days_supply}</span>
                                 )}
                               </div>
                             );
