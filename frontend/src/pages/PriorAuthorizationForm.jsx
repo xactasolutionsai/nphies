@@ -156,6 +156,9 @@ export default function PriorAuthorizationForm() {
     // Eligibility response (per NPHIES Claim-173086.json)
     eligibility_response_id: '', // Identifier-based reference (preferred)
     eligibility_response_system: '', // System for the identifier
+    // Offline eligibility (when online eligibility check was not possible)
+    eligibility_offline_ref: '', // Reference number from offline verification
+    eligibility_offline_date: '', // Date eligibility was verified offline
     patient_id: '',
     provider_id: '',
     practice_code: '08.00', // NPHIES: Practice code for careTeam.qualification (default: Internal Medicine)
@@ -3132,6 +3135,51 @@ export default function PriorAuthorizationForm() {
                   )}
                 </div>
               )}
+
+              {/* Offline Eligibility Section */}
+              <div className="mt-4 pt-4 border-t border-green-200">
+                <div className="flex items-center gap-2 text-amber-700 font-medium text-sm mb-3">
+                  <AlertTriangle className="h-4 w-4" />
+                  Offline Eligibility (Optional)
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Use when online eligibility verification was not possible (e.g., phone verification, system downtime).
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="eligibility_offline_ref">Offline Reference Number</Label>
+                    <Input
+                      id="eligibility_offline_ref"
+                      value={formData.eligibility_offline_ref || ''}
+                      onChange={(e) => handleChange('eligibility_offline_ref', e.target.value)}
+                      placeholder="e.g., OFFLINE-REF-12345"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="eligibility_offline_date">Offline Verification Date</Label>
+                    <Input
+                      id="eligibility_offline_date"
+                      type="date"
+                      value={formData.eligibility_offline_date || ''}
+                      onChange={(e) => handleChange('eligibility_offline_date', e.target.value)}
+                    />
+                  </div>
+                </div>
+                {formData.eligibility_offline_ref && (
+                  <div className="flex items-center gap-2 mt-2 text-xs">
+                    <span className="text-amber-600 font-medium">Offline Ref:</span>
+                    <code className="bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded font-mono text-xs">
+                      {formData.eligibility_offline_ref}
+                    </code>
+                    {formData.eligibility_offline_date && (
+                      <>
+                        <span className="text-gray-400">|</span>
+                        <span className="text-gray-500">{formData.eligibility_offline_date}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Mother Patient Information (for newborn requests) - Full Width */}
