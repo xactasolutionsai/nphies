@@ -758,8 +758,25 @@ class PharmacyMapper extends BaseMapper {
       productOrServiceCoding.display = productDisplay;
     }
     
+    // Build coding array - supports shadow billing (multiple codings)
+    // Shadow billing: When an unlisted code (e.g., 99999999999999) is used, the actual SFDA/GTIN
+    // code is added as a second coding entry so the payer knows the real drug being dispensed
+    const codingArray = [productOrServiceCoding];
+    
+    if (item.sfda_code && item.sfda_code.trim()) {
+      const sfdaCoding = {
+        system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
+        code: item.sfda_code.trim()
+      };
+      if (item.sfda_display && item.sfda_display.trim()) {
+        sfdaCoding.display = item.sfda_display.trim();
+      }
+      codingArray.push(sfdaCoding);
+      console.log(`[PharmacyMapper] Shadow billing: Item ${sequence} unlisted code "${productCode}" with SFDA code "${item.sfda_code}"`);
+    }
+    
     claimItem.productOrService = {
-      coding: [productOrServiceCoding]
+      coding: codingArray
     };
 
     // Determine serviced date

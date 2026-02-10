@@ -340,6 +340,19 @@ export default function PriorAuthorizationForm() {
     return () => clearTimeout(timer);
   }, [formData.auth_type, formData.items, formData.patient_id, formData.diagnoses]);
 
+  // Parse a date string as a LOCAL date (avoids timezone shift when parsing date-only strings)
+  // new Date("2026-02-11") treats it as UTC midnight, which shifts -1 day in UTC+ timezones
+  // This helper extracts YYYY-MM-DD and creates a local date instead
+  const parseLocalDate = (dateStr) => {
+    if (!dateStr) return null;
+    const str = String(dateStr);
+    // Extract just the date part (handles "2026-02-11", "2026-02-11T00:00:00Z", "2026-02-10T21:00:00.000Z", etc.)
+    const datePart = str.includes('T') ? str.split('T')[0] : str.substring(0, 10);
+    const [year, month, day] = datePart.split('-').map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+  };
+
   // Helper to calculate patient age from birth date
   const calculatePatientAge = (birthDate) => {
     if (!birthDate) return null;
@@ -1822,6 +1835,35 @@ export default function PriorAuthorizationForm() {
       }
     }
     
+    // NPHIES Required Supporting Information validation
+    // These fields are mandatory in authorization and claim requests
+    const requiredClinicalFields = [
+      { key: 'investigation_result', label: 'Investigation Result', fieldName: 'clinical_info.investigation_result' },
+      { key: 'treatment_plan', label: 'Treatment Plan', fieldName: 'clinical_info.treatment_plan' },
+      { key: 'patient_history', label: 'Patient History', fieldName: 'clinical_info.patient_history' },
+      { key: 'physical_examination', label: 'Physical Examination', fieldName: 'clinical_info.physical_examination' },
+      { key: 'history_of_present_illness', label: 'History of Present Illness', fieldName: 'clinical_info.history_of_present_illness' }
+    ];
+
+    const missingClinicalFields = requiredClinicalFields.filter(
+      f => !formData.clinical_info?.[f.key] || formData.clinical_info[f.key].toString().trim() === ''
+    );
+
+    if (missingClinicalFields.length > 0) {
+      validationErrors.push({
+        field: 'clinical_info',
+        message: `The following supporting information fields are required by NPHIES: ${missingClinicalFields.map(f => f.label).join(', ')}`
+      });
+    }
+
+    // BV-00846: When investigation-result is "IRA" (results attached), at least one attachment must be provided
+    if (formData.clinical_info?.investigation_result === 'IRA' && (!formData.attachments || formData.attachments.length === 0)) {
+      validationErrors.push({
+        field: 'attachments',
+        message: 'Investigation Result is set to "IRA - Investigation results attached" but no attachments have been added. Please attach the investigation results or change the investigation result status (BV-00846)'
+      });
+    }
+
     // BV-00041: Validate that item servicedDate is within encounter period
     // This prevents NPHIES error: "Claim item serviced[x] is not within the encounter period"
     // NOTE: Vision and Pharmacy claims do NOT use encounters (BV-00354 for vision)
@@ -3565,7 +3607,9 @@ export default function PriorAuthorizationForm() {
                 {CLINICAL_TEXT_FIELDS.map((field) => (
                   <div key={field.key} className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor={field.key}>{field.label}</Label>
+                      <Label htmlFor={field.key}>
+                        {field.label} <span className="text-red-500">*</span>
+                      </Label>
                       <Button
                         type="button"
                         variant="ghost"
@@ -3597,7 +3641,9 @@ export default function PriorAuthorizationForm() {
                       className={`w-full rounded-md border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30 resize-y min-h-[120px] transition-colors ${
                         enhancingField === field.key 
                           ? 'border-blue-300 bg-blue-50/30' 
-                          : 'border-gray-200'
+                          : errors.some(e => e.field === 'clinical_info') && !formData.clinical_info?.[field.key]?.trim()
+                            ? 'border-red-400 bg-red-50/30'
+                            : 'border-gray-200'
                       }`}
                       disabled={enhancingField === field.key}
                     />
@@ -3615,12 +3661,20 @@ export default function PriorAuthorizationForm() {
 
               {/* Investigation Result */}
               <div className="space-y-2">
-                <Label>Investigation Result</Label>
+                <Label>Investigation Result <span className="text-red-500">*</span></Label>
                 <Select
                   value={INVESTIGATION_RESULT_OPTIONS.find(opt => opt.value === formData.clinical_info.investigation_result)}
                   onChange={(option) => handleClinicalInfoChange('investigation_result', option?.value || '')}
                   options={INVESTIGATION_RESULT_OPTIONS}
-                  styles={selectStyles}
+                  styles={{
+                    ...selectStyles,
+                    control: (base, state) => ({
+                      ...(selectStyles.control ? selectStyles.control(base, state) : base),
+                      ...(errors.some(e => e.field === 'clinical_info') && !formData.clinical_info?.investigation_result
+                        ? { borderColor: '#f87171', backgroundColor: 'rgba(254, 202, 202, 0.15)' }
+                        : {})
+                    })
+                  }}
                   placeholder="Select investigation result status..."
                   isClearable
                   menuPortalTarget={document.body}
@@ -3811,9 +3865,15 @@ export default function PriorAuthorizationForm() {
                     {VITAL_SIGNS_FIELDS.filter(f => formData.vital_signs[f.key]).length} / {VITAL_SIGNS_FIELDS.length}
                   </p>
                 </div>
-                <div className="bg-white rounded-lg p-2 border">
-                  <p className="text-gray-500 text-xs">Clinical Fields</p>
-                  <p className="font-medium">
+                <div className={`bg-white rounded-lg p-2 border ${
+                  CLINICAL_TEXT_FIELDS.filter(f => formData.clinical_info[f.key]).length < CLINICAL_TEXT_FIELDS.length 
+                    ? 'border-red-300' : 'border-green-300'
+                }`}>
+                  <p className="text-gray-500 text-xs">Clinical Fields <span className="text-red-500">*</span></p>
+                  <p className={`font-medium ${
+                    CLINICAL_TEXT_FIELDS.filter(f => formData.clinical_info[f.key]).length < CLINICAL_TEXT_FIELDS.length 
+                      ? 'text-red-600' : 'text-green-600'
+                  }`}>
                     {CLINICAL_TEXT_FIELDS.filter(f => formData.clinical_info[f.key]).length} / {CLINICAL_TEXT_FIELDS.length}
                   </p>
                 </div>
@@ -3823,9 +3883,13 @@ export default function PriorAuthorizationForm() {
                     {formData.clinical_info.chief_complaint_code || formData.clinical_info.chief_complaint_text ? 'Set' : 'Not set'}
                   </p>
                 </div>
-                <div className="bg-white rounded-lg p-2 border">
-                  <p className="text-gray-500 text-xs">Investigation Result</p>
-                  <p className="font-medium">
+                <div className={`bg-white rounded-lg p-2 border ${
+                  formData.clinical_info.investigation_result ? 'border-green-300' : 'border-red-300'
+                }`}>
+                  <p className="text-gray-500 text-xs">Investigation Result <span className="text-red-500">*</span></p>
+                  <p className={`font-medium ${
+                    formData.clinical_info.investigation_result ? 'text-green-600' : 'text-red-600'
+                  }`}>
                     {formData.clinical_info.investigation_result || 'Not set'}
                   </p>
                 </div>
@@ -4217,7 +4281,7 @@ export default function PriorAuthorizationForm() {
                     <Label>Service Date</Label>
                     <div className="datepicker-wrapper">
                       <DatePicker
-                        selected={item.serviced_date ? new Date(item.serviced_date) : null}
+                        selected={parseLocalDate(item.serviced_date)}
                         onChange={(date) => {
                           if (date) {
                             const year = date.getFullYear();
@@ -4815,6 +4879,85 @@ export default function PriorAuthorizationForm() {
                         </div>
                       )}
                     </div>
+                    )}
+
+                    {/* Shadow Billing Section - For unlisted medication codes (e.g., 99999999999999) */}
+                    {/* Per NPHIES: When using an unlisted drug code, the actual SFDA/GTIN code must be */}
+                    {/* added as a second coding entry in productOrService.coding[] */}
+                    {item.item_type !== 'device' && (item.medication_code || '').toString().match(/^9{13,14}$/) && (
+                      <div className="p-4 bg-amber-50 rounded-lg border border-amber-300">
+                        <div className="flex items-center gap-2 mb-3">
+                          <AlertTriangle className="h-5 w-5 text-amber-600" />
+                          <h4 className="font-medium text-amber-800">Shadow Billing - SFDA Code Required</h4>
+                        </div>
+                        <p className="text-xs text-amber-700 mb-3">
+                          You are using an unlisted medication code ({item.medication_code}). 
+                          Per NPHIES shadow billing guidelines, you must provide the actual SFDA/GTIN drug code 
+                          that will be added as a secondary coding entry alongside the unlisted code.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Actual SFDA/GTIN Code *</Label>
+                            <AsyncSelect
+                              value={item.sfda_code ? {
+                                value: item.sfda_code,
+                                label: `${item.sfda_code}${item.sfda_display ? ' - ' + item.sfda_display : ''}`
+                              } : null}
+                              onChange={(option) => {
+                                handleItemChange(index, 'sfda_code', option?.value || '');
+                                if (option?.medication) {
+                                  handleItemChange(index, 'sfda_display', option.medication.display || '');
+                                } else {
+                                  // Extract display from label
+                                  const display = option?.label?.includes(' - ')
+                                    ? option.label.split(' - ').slice(1).join(' - ')
+                                    : '';
+                                  handleItemChange(index, 'sfda_display', display);
+                                }
+                              }}
+                              loadOptions={async (inputValue) => {
+                                try {
+                                  const results = await api.searchMedicationCodes(inputValue, 50);
+                                  return results;
+                                } catch (error) {
+                                  console.error('Error loading medications:', error);
+                                  return [];
+                                }
+                              }}
+                              defaultOptions
+                              cacheOptions
+                              styles={selectStyles}
+                              placeholder="Search actual drug by name or GTIN code..."
+                              isClearable
+                              isSearchable
+                              menuPortalTarget={document.body}
+                              noOptionsMessage={({ inputValue }) => 
+                                inputValue ? `No medications found for "${inputValue}"` : 'Type to search medications...'
+                              }
+                              loadingMessage={() => 'Searching medications...'}
+                            />
+                            <p className="text-xs text-amber-600">
+                              The real SFDA drug code (e.g., 06285097000049) for the medication being dispensed
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>SFDA Drug Name</Label>
+                            <Input
+                              value={item.sfda_display || ''}
+                              onChange={(e) => handleItemChange(index, 'sfda_display', e.target.value)}
+                              placeholder="Auto-filled from selection"
+                              readOnly={!!(item.sfda_code && item.sfda_display)}
+                              className={item.sfda_code && item.sfda_display ? "bg-gray-50" : ""}
+                            />
+                          </div>
+                        </div>
+                        {item.sfda_code && (
+                          <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+                            <CheckCircle className="h-3.5 w-3.5 inline mr-1" />
+                            Shadow billing configured: Unlisted code <code className="font-mono bg-green-100 px-1 rounded">{item.medication_code}</code> will be sent with SFDA code <code className="font-mono bg-green-100 px-1 rounded">{item.sfda_code}</code> ({item.sfda_display || 'N/A'})
+                          </div>
+                        )}
+                      </div>
                     )}
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

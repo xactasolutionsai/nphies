@@ -513,6 +513,9 @@ export default function PriorAuthorizationDetails() {
         ext => ext.url?.includes('extension-identifier-country')
       )?.valueCodeableConcept?.coding?.[0]?.display,
       gender: patient.gender,
+      ksaGender: patient._gender?.extension?.find(
+        ext => ext.url?.includes('extension-ksa-administrative-gender')
+      )?.valueCodeableConcept?.coding?.[0]?.code,
       birthDate: patient.birthDate,
       active: patient.active,
       occupation: occupation,
@@ -574,6 +577,9 @@ export default function PriorAuthorizationDetails() {
       id: insurer.id,
       name: insurer.name,
       identifier: insurer.identifier?.[0]?.value,
+      identifierUse: insurer.identifier?.[0]?.use,
+      identifierTypeCode: insurer.identifier?.[0]?.type?.coding?.[0]?.code,
+      identifierTypeDisplay: insurer.identifier?.[0]?.type?.coding?.[0]?.display,
       organizationType: insurer.type?.[0]?.coding?.[0]?.display || insurer.type?.[0]?.coding?.[0]?.code || null,
       active: insurer.active,
       address: insurer.address?.[0]
@@ -1422,7 +1428,7 @@ export default function PriorAuthorizationDetails() {
                           {(() => {
                             const hasDentalFields = priorAuth.auth_type === 'dental' && (item.tooth_number || item.tooth_surface);
                             const hasVisionFields = priorAuth.auth_type === 'vision' && item.eye;
-                            const hasPharmacyFields = priorAuth.auth_type === 'pharmacy' && item.days_supply;
+                            const hasPharmacyFields = priorAuth.auth_type === 'pharmacy' && (item.days_supply || item.sfda_code);
                             
                             if (!hasDentalFields && !hasVisionFields && !hasPharmacyFields) return null;
                             
@@ -1441,7 +1447,17 @@ export default function PriorAuthorizationDetails() {
                                 )}
                                 {/* Pharmacy fields - only for pharmacy auth type */}
                                 {priorAuth.auth_type === 'pharmacy' && item.days_supply && (
-                                  <span>Days Supply: {item.days_supply}</span>
+                                  <span className="mr-4">Days Supply: {item.days_supply}</span>
+                                )}
+                                {/* Shadow Billing fields */}
+                                {priorAuth.auth_type === 'pharmacy' && item.sfda_code && (
+                                  <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                                    <span className="font-medium text-amber-800">Shadow Billing:</span>{' '}
+                                    <span className="text-amber-700">
+                                      SFDA Code: <code className="font-mono bg-amber-100 px-1 rounded">{item.sfda_code}</code>
+                                      {item.sfda_display && <> ({item.sfda_display})</>}
+                                    </span>
+                                  </div>
                                 )}
                               </div>
                             );
@@ -2602,6 +2618,9 @@ export default function PriorAuthorizationDetails() {
                         <div>
                           <Label className="text-gray-500">Gender</Label>
                           <p className="font-medium capitalize">{patient.gender || '-'}</p>
+                          {patient.ksaGender && patient.ksaGender !== patient.gender && (
+                            <p className="text-xs text-gray-500">KSA: {patient.ksaGender}</p>
+                          )}
                         </div>
                         <div>
                           <Label className="text-gray-500">Date of Birth</Label>
@@ -2712,6 +2731,15 @@ export default function PriorAuthorizationDetails() {
                         <div>
                           <Label className="text-gray-500">License ID</Label>
                           <p className="font-mono">{insurer.identifier || '-'}</p>
+                          {(insurer.identifierUse || insurer.identifierTypeCode) && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {insurer.identifierUse && <span className="capitalize">{insurer.identifierUse}</span>}
+                              {insurer.identifierUse && insurer.identifierTypeCode && ' · '}
+                              {insurer.identifierTypeCode && (
+                                <span>{insurer.identifierTypeDisplay || insurer.identifierTypeCode}</span>
+                              )}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <Label className="text-gray-500">Organization Type</Label>
