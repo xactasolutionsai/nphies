@@ -287,7 +287,7 @@ export default function PriorAuthorizations() {
             title="View Details"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/prior-authorizations/${row.id}`);
+              window.open(`/prior-authorizations/${row.id}`, '_blank');
             }}
           >
             <Eye className="h-4 w-4" />
@@ -565,7 +565,7 @@ export default function PriorAuthorizations() {
             searchable={false}
             sortable={true}
             pageSize={pagination.limit}
-            onRowClick={(row) => navigate(`/prior-authorizations/${row.id}`)}
+            onRowClick={(row) => window.open(`/prior-authorizations/${row.id}`, '_blank')}
           />
           
           {/* Pagination */}
