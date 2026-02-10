@@ -1970,12 +1970,16 @@ export default function PriorAuthorizationForm() {
         delete dataToSave.vision_prescription;
       }
       
-      // Dental/Vision claims use AMB encounter class - don't send end date
-      // Per NPHIES Encounter-10123 example: AMB encounters have no end date
-      // NPHIES Rules: Dental and Vision must use 'ambulatory'
-      if (dataToSave.auth_type === 'dental' || dataToSave.auth_type === 'vision') {
+      // Dental/Vision claims use AMB encounter class
+      // Vision doesn't use encounters - remove end date
+      // Dental uses AMB encounter - end date is optional (allows multi-day service dates)
+      if (dataToSave.auth_type === 'vision') {
         delete dataToSave.encounter_end;
         dataToSave.encounter_class = 'ambulatory';
+      }
+      if (dataToSave.auth_type === 'dental') {
+        dataToSave.encounter_class = 'ambulatory';
+        // encounter_end is optional for dental - keep it if provided
       }
       
       // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
@@ -2080,13 +2084,16 @@ export default function PriorAuthorizationForm() {
         delete dataToSave.vision_prescription;
       }
       
-      // Dental claims use AMB encounter class - don't send end date
-      // Dental/Vision claims use AMB encounter class - don't send end date
-      // Per NPHIES Encounter-10123 example: AMB encounters have no end date
-      // NPHIES Rules: Dental and Vision must use 'ambulatory'
-      if (dataToSave.auth_type === 'dental' || dataToSave.auth_type === 'vision') {
+      // Dental/Vision claims use AMB encounter class
+      // Vision doesn't use encounters - remove end date
+      // Dental uses AMB encounter - end date is optional (allows multi-day service dates)
+      if (dataToSave.auth_type === 'vision') {
         delete dataToSave.encounter_end;
         dataToSave.encounter_class = 'ambulatory';
+      }
+      if (dataToSave.auth_type === 'dental') {
+        dataToSave.encounter_class = 'ambulatory';
+        // encounter_end is optional for dental - keep it if provided
       }
       
       // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
@@ -2227,13 +2234,16 @@ export default function PriorAuthorizationForm() {
         delete dataToPreview.vision_prescription;
       }
       
-      // Dental claims use AMB encounter class - don't send end date
-      // Dental/Vision claims use AMB encounter class - don't send end date
-      // Per NPHIES Encounter-10123 example: AMB encounters have no end date
-      // NPHIES Rules: Dental and Vision must use 'ambulatory'
-      if (dataToPreview.auth_type === 'dental' || dataToPreview.auth_type === 'vision') {
+      // Dental/Vision claims use AMB encounter class
+      // Vision doesn't use encounters - remove end date
+      // Dental uses AMB encounter - end date is optional (allows multi-day service dates)
+      if (dataToPreview.auth_type === 'vision') {
         delete dataToPreview.encounter_end;
         dataToPreview.encounter_class = 'ambulatory';
+      }
+      if (dataToPreview.auth_type === 'dental') {
+        dataToPreview.encounter_class = 'ambulatory';
+        // encounter_end is optional for dental - keep it if provided
       }
       
       // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
@@ -2466,8 +2476,9 @@ export default function PriorAuthorizationForm() {
                       }
                     }
                     
-                    // Clear end date for dental/vision/pharmacy (no encounter needed)
-                    if (newAuthType === 'dental' || newAuthType === 'vision' || newAuthType === 'pharmacy') {
+                    // Clear end date for vision/pharmacy (no encounter needed)
+                    // Dental keeps encounter_end as optional
+                    if (newAuthType === 'vision' || newAuthType === 'pharmacy') {
                       handleChange('encounter_end', '');
                     }
 
@@ -2729,8 +2740,8 @@ export default function PriorAuthorizationForm() {
                   // BV-00811: Always require datetime with seconds for claims (even for ambulatory)
                   // Per NPHIES: Date time format up to seconds SHALL be mandatory for encounter.period.start
                   const needsDateTime = !isDentalClaim && ['inpatient', 'daycase'].includes(formData.encounter_class);
-                  // Show end date for all non-dental encounter types (optional field)
-                  const showEndDate = !isDentalClaim;
+                  // Show end date for all encounter types (optional field)
+                  const showEndDate = true;
                   
                   return (
                     <div className={`grid grid-cols-1 ${showEndDate ? 'md:grid-cols-2' : ''} gap-4`}>

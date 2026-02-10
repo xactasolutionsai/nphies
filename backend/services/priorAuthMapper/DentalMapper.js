@@ -467,9 +467,10 @@ class DentalMapper extends BaseMapper {
     ];
 
     // Items with dental-specific fields
+    // encounter_end is optional for dental - if provided, use it to validate servicedDate range
     const encounterPeriod = {
       start: priorAuth.encounter_start || new Date(),
-      end: null // Dental AMB encounters don't have end date
+      end: priorAuth.encounter_end || null
     };
     
     if (priorAuth.items && priorAuth.items.length > 0) {
@@ -617,7 +618,10 @@ class DentalMapper extends BaseMapper {
     encounter.period = {
       start: this.formatDateTimeWithTimezone(priorAuth.encounter_start || new Date())
     };
-    // NO end date for dental AMB encounters
+    // End date is optional for dental AMB encounters - include if provided
+    if (priorAuth.encounter_end) {
+      encounter.period.end = this.formatDateTimeWithTimezone(priorAuth.encounter_end);
+    }
 
     // ServiceProvider
     encounter.serviceProvider = { reference: `Organization/${providerId}` };
