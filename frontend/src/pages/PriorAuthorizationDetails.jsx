@@ -1175,8 +1175,8 @@ export default function PriorAuthorizationDetails() {
                 NPHIES Response
               </TabButton>
             )}
-            {/* Communications Tab - Show for queued, pended, or approved PAs */}
-            {(priorAuth.status === 'queued' || priorAuth.status === 'approved' || priorAuth.outcome === 'queued' || priorAuth.adjudication_outcome === 'pended') && (
+            {/* Communications Tab - Show for queued, pended, approved, or partial PAs */}
+            {(priorAuth.status === 'queued' || priorAuth.status === 'approved' || priorAuth.status === 'partial' || priorAuth.outcome === 'queued' || priorAuth.adjudication_outcome === 'pended' || priorAuth.adjudication_outcome === 'partial') && (
               <TabButton active={activeTab === 'communications'} onClick={() => setActiveTab('communications')}>
                 <MessageSquare className="h-4 w-4 mr-1 inline" />
                 Communications
@@ -2746,7 +2746,7 @@ export default function PriorAuthorizationDetails() {
           )}
 
           {/* Communications Tab */}
-          {activeTab === 'communications' && (priorAuth.status === 'queued' || priorAuth.status === 'approved' || priorAuth.outcome === 'queued' || priorAuth.adjudication_outcome === 'pended') && (
+          {activeTab === 'communications' && (priorAuth.status === 'queued' || priorAuth.status === 'approved' || priorAuth.status === 'partial' || priorAuth.outcome === 'queued' || priorAuth.adjudication_outcome === 'pended' || priorAuth.adjudication_outcome === 'partial') && (
             <CommunicationPanel
               priorAuthId={parseInt(id)}
               priorAuthStatus={priorAuth.status}
