@@ -46,7 +46,6 @@ import {
   INVESTIGATION_RESULT_OPTIONS,
   SERVICE_EVENT_TYPE_OPTIONS,
   PRACTICE_CODES_OPTIONS,
-  CHIEF_COMPLAINT_FORMAT_OPTIONS,
   TRIAGE_CATEGORY_OPTIONS,
   ENCOUNTER_SERVICE_TYPE_OPTIONS,
   ENCOUNTER_PRIORITY_OPTIONS,
@@ -1603,23 +1602,24 @@ export default function PriorAuthorizationForm() {
       }
     });
 
-    // Add chief complaint if provided (supports SNOMED code or free text)
-    if (formData.clinical_info.chief_complaint_format === 'text' && formData.clinical_info.chief_complaint_text) {
-      // Free text format: code.text
-      supportingInfo.push({
+    // Add chief complaint if provided (supports SNOMED code, free text, or both)
+    const hasChiefCode = formData.clinical_info.chief_complaint_code;
+    const hasChiefText = formData.clinical_info.chief_complaint_text;
+
+    if (hasChiefCode || hasChiefText) {
+      const chiefEntry = {
         sequence: sequence++,
         category: 'chief-complaint',
-        code_text: formData.clinical_info.chief_complaint_text
-      });
-    } else if (formData.clinical_info.chief_complaint_code) {
-      // SNOMED code format: code.coding
-      supportingInfo.push({
-        sequence: sequence++,
-        category: 'chief-complaint',
-        code: formData.clinical_info.chief_complaint_code,
-        code_system: 'http://snomed.info/sct',
-        code_display: formData.clinical_info.chief_complaint_display || ''
-      });
+      };
+      if (hasChiefCode) {
+        chiefEntry.code = formData.clinical_info.chief_complaint_code;
+        chiefEntry.code_system = 'http://snomed.info/sct';
+        chiefEntry.code_display = formData.clinical_info.chief_complaint_display || '';
+      }
+      if (hasChiefText) {
+        chiefEntry.code_text = formData.clinical_info.chief_complaint_text;
+      }
+      supportingInfo.push(chiefEntry);
     }
 
     // Add clinical text fields
@@ -3452,74 +3452,52 @@ export default function PriorAuthorizationForm() {
             <CardContent className="space-y-6">
               {/* Chief Complaint Section - Unified for all auth types */}
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Chief Complaint Format</Label>
-                    <Select
-                      value={CHIEF_COMPLAINT_FORMAT_OPTIONS.find(opt => opt.value === formData.clinical_info.chief_complaint_format)}
+                    <Label>Chief Complaint (SNOMED Code)</Label>
+                    <AsyncSelect
+                      value={formData.clinical_info.chief_complaint_code ? {
+                        value: formData.clinical_info.chief_complaint_code,
+                        label: `${formData.clinical_info.chief_complaint_code} - ${formData.clinical_info.chief_complaint_display || ''}`,
+                        display: formData.clinical_info.chief_complaint_display
+                      } : null}
                       onChange={(option) => {
-                        handleClinicalInfoChange('chief_complaint_format', option?.value || 'snomed');
-                        // Clear values when switching format
-                        if (option?.value === 'text') {
-                          handleClinicalInfoChange('chief_complaint_code', '');
-                          handleClinicalInfoChange('chief_complaint_display', '');
-                        } else {
-                          handleClinicalInfoChange('chief_complaint_text', '');
+                        handleClinicalInfoChange('chief_complaint_code', option?.value || '');
+                        handleClinicalInfoChange('chief_complaint_display', option?.display || '');
+                      }}
+                      loadOptions={async (inputValue) => {
+                        try {
+                          const results = await api.searchChiefComplaintCodes(inputValue, 50);
+                          return results || [];
+                        } catch (error) {
+                          console.error('Error loading chief complaints:', error);
+                          return [];
                         }
                       }}
-                      options={CHIEF_COMPLAINT_FORMAT_OPTIONS}
+                      defaultOptions
+                      cacheOptions
                       styles={selectStyles}
+                      placeholder="Search by code or description..."
+                      isClearable
                       menuPortalTarget={document.body}
+                      noOptionsMessage={({ inputValue }) => 
+                        inputValue ? `No chief complaints found for "${inputValue}"` : 'Type to search chief complaints...'
+                      }
+                    />
+                    {formData.clinical_info.chief_complaint_code && (
+                      <p className="text-xs text-gray-500">
+                        Code: {formData.clinical_info.chief_complaint_code} | Description: {formData.clinical_info.chief_complaint_display || 'N/A'}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Chief Complaint (Free Text)</Label>
+                    <Input
+                      value={formData.clinical_info?.chief_complaint_text ?? ''}
+                      onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
+                      placeholder="e.g., Patient presents with abdominal pain"
                     />
                   </div>
-                  {formData.clinical_info.chief_complaint_format === 'snomed' ? (
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Chief Complaint (SNOMED) *</Label>
-                      <AsyncSelect
-                        value={formData.clinical_info.chief_complaint_code ? {
-                          value: formData.clinical_info.chief_complaint_code,
-                          label: `${formData.clinical_info.chief_complaint_code} - ${formData.clinical_info.chief_complaint_display || ''}`,
-                          display: formData.clinical_info.chief_complaint_display
-                        } : null}
-                        onChange={(option) => {
-                          handleClinicalInfoChange('chief_complaint_code', option?.value || '');
-                          handleClinicalInfoChange('chief_complaint_display', option?.display || '');
-                        }}
-                        loadOptions={async (inputValue) => {
-                          try {
-                            const results = await api.searchChiefComplaintCodes(inputValue, 50);
-                            return results || [];
-                          } catch (error) {
-                            console.error('Error loading chief complaints:', error);
-                            return [];
-                          }
-                        }}
-                        defaultOptions
-                        cacheOptions
-                        styles={selectStyles}
-                        placeholder="Search by code or description..."
-                        isClearable
-                        menuPortalTarget={document.body}
-                        noOptionsMessage={({ inputValue }) => 
-                          inputValue ? `No chief complaints found for "${inputValue}"` : 'Type to search chief complaints...'
-                        }
-                      />
-                      {formData.clinical_info.chief_complaint_code && (
-                        <p className="text-xs text-gray-500">
-                          Code: {formData.clinical_info.chief_complaint_code} | Description: {formData.clinical_info.chief_complaint_display || 'N/A'}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Chief Complaint (Free Text) *</Label>
-                      <Input
-                        value={formData.clinical_info?.chief_complaint_text ?? ''}
-                        onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
-                        placeholder="e.g., Patient presents with abdominal pain"
-                      />
-                    </div>
-                  )}
                 </div>
               </div>
 

@@ -932,7 +932,17 @@ class BaseMapper {
     
     if (isChiefComplaint) {
       // Chief complaint MUST have code element (BV-00531)
-      if (hasCodeText || (hasValueString && !hasCode)) {
+      if (hasCode && hasCodeText) {
+        // Both SNOMED code and free text provided
+        supportingInfo.code = {
+          coding: [{
+            system: info.code_system || 'http://snomed.info/sct',
+            code: info.code,
+            display: info.code_display
+          }],
+          text: info.code_text
+        };
+      } else if (hasCodeText || (hasValueString && !hasCode)) {
         // Use code.text for free text format
         supportingInfo.code = {
           text: info.code_text || info.value_string

@@ -734,12 +734,6 @@ export const DENTAL_CHIEF_COMPLAINT_OPTIONS = [
   { value: 'other', label: 'Other (specify code)' }
 ];
 
-// Chief Complaint Format Options (for dental/oral claims)
-// NPHIES supports both SNOMED codes (Claim-293093) and free text (Claim-298042)
-export const CHIEF_COMPLAINT_FORMAT_OPTIONS = [
-  { value: 'snomed', label: 'SNOMED Code (structured)' },
-  { value: 'text', label: 'Free Text' }
-];
 
 // NPHIES Practice Codes (for careTeam.qualification) - Grouped by category
 // Reference: http://nphies.sa/terminology/CodeSystem/practice-codes
