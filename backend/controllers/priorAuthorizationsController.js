@@ -94,40 +94,42 @@ class PriorAuthorizationsController extends BaseController {
       const status = req.query.status || '';
       const authType = req.query.auth_type || '';
 
-      // Build dynamic WHERE clause
-      let whereConditions = [];
-      let queryParams = [limit, offset];
-      let countParams = [];
-      let paramIndex = 3;
+      // Build filter conditions with $1-based indices (for count query)
+      let filterConditions = [];
+      let filterValues = [];
 
       if (search) {
-        whereConditions.push(`(
-          pa.request_number ILIKE $${paramIndex} OR 
-          pa.pre_auth_ref ILIKE $${paramIndex} OR 
-          p.name ILIKE $${paramIndex} OR 
-          pr.provider_name ILIKE $${paramIndex} OR 
-          i.insurer_name ILIKE $${paramIndex}
+        filterValues.push(`%${search}%`);
+        const idx = filterValues.length;
+        filterConditions.push(`(
+          pa.request_number ILIKE $${idx} OR 
+          pa.pre_auth_ref ILIKE $${idx} OR 
+          p.name ILIKE $${idx} OR 
+          pr.provider_name ILIKE $${idx} OR 
+          i.insurer_name ILIKE $${idx}
         )`);
-        queryParams.push(`%${search}%`);
-        countParams.push(`%${search}%`);
-        paramIndex++;
       }
 
       if (status) {
-        whereConditions.push(`pa.status = $${paramIndex}`);
-        queryParams.push(status);
-        countParams.push(status);
-        paramIndex++;
+        filterValues.push(status);
+        const idx = filterValues.length;
+        filterConditions.push(`pa.status = $${idx}`);
       }
 
       if (authType) {
-        whereConditions.push(`pa.auth_type = $${paramIndex}`);
-        queryParams.push(authType);
-        countParams.push(authType);
-        paramIndex++;
+        filterValues.push(authType);
+        const idx = filterValues.length;
+        filterConditions.push(`pa.auth_type = $${idx}`);
       }
 
-      const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+      // Count query WHERE clause uses $1, $2, ... for filter values only
+      const countWhereClause = filterConditions.length > 0 ? 'WHERE ' + filterConditions.join(' AND ') : '';
+
+      // Data query WHERE clause shifts indices by +2 to reserve $1=limit, $2=offset
+      const dataWhereConditions = filterConditions.map(condition =>
+        condition.replace(/\$(\d+)/g, (_, num) => `$${parseInt(num) + 2}`)
+      );
+      const dataWhereClause = dataWhereConditions.length > 0 ? 'WHERE ' + dataWhereConditions.join(' AND ') : '';
 
       // Get total count
       const countQuery = `
@@ -136,9 +138,9 @@ class PriorAuthorizationsController extends BaseController {
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
         LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
-        ${whereClause}
+        ${countWhereClause}
       `;
-      const countResult = await query(countQuery, countParams);
+      const countResult = await query(countQuery, filterValues);
       const total = parseInt(countResult.rows[0].total);
 
       // Get paginated data with joins - including new adjudication columns
@@ -160,11 +162,11 @@ class PriorAuthorizationsController extends BaseController {
         LEFT JOIN patients p ON pa.patient_id = p.patient_id
         LEFT JOIN providers pr ON pa.provider_id = pr.provider_id
         LEFT JOIN insurers i ON pa.insurer_id = i.insurer_id
-        ${whereClause}
+        ${dataWhereClause}
         ORDER BY pa.created_at DESC 
         LIMIT $1 OFFSET $2
       `;
-      const result = await query(dataQuery, queryParams);
+      const result = await query(dataQuery, [limit, offset, ...filterValues]);
 
       res.json({
         data: result.rows,
