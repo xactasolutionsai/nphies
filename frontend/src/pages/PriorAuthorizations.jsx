@@ -52,10 +52,11 @@ export default function PriorAuthorizations() {
     status: searchParams.get('status') || '',
     auth_type: searchParams.get('auth_type') || ''
   });
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
 
   useEffect(() => {
     loadAuthorizations();
-  }, [pagination.page, filters.status, filters.auth_type]);
+  }, [pagination.page, filters.status, filters.auth_type, searchQuery]);
 
   const loadAuthorizations = async () => {
     try {
@@ -63,7 +64,7 @@ export default function PriorAuthorizations() {
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-        ...(filters.search && { search: filters.search }),
+        ...(searchQuery && { search: searchQuery }),
         ...(filters.status && { status: filters.status }),
         ...(filters.auth_type && { auth_type: filters.auth_type })
       };
@@ -86,8 +87,8 @@ export default function PriorAuthorizations() {
   };
 
   const handleSearch = () => {
+    setSearchQuery(filters.search);
     setPagination(prev => ({ ...prev, page: 1 }));
-    loadAuthorizations();
     // Update URL params
     const params = new URLSearchParams();
     if (filters.search) params.set('search', filters.search);
@@ -98,9 +99,9 @@ export default function PriorAuthorizations() {
 
   const handleClearFilters = () => {
     setFilters({ search: '', status: '', auth_type: '' });
+    setSearchQuery('');
     setSearchParams({});
     setPagination(prev => ({ ...prev, page: 1 }));
-    loadAuthorizations();
   };
 
   const handleDelete = async (id) => {
@@ -500,7 +501,10 @@ export default function PriorAuthorizations() {
               <label className="text-sm font-medium mb-1 block">Status</label>
               <select
                 value={filters.status}
-                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                onChange={(e) => {
+                  setFilters(prev => ({ ...prev, status: e.target.value }));
+                  setPagination(prev => ({ ...prev, page: 1 }));
+                }}
                 className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
               >
                 <option value="">All Status</option>
@@ -518,7 +522,10 @@ export default function PriorAuthorizations() {
               <label className="text-sm font-medium mb-1 block">Type</label>
               <select
                 value={filters.auth_type}
-                onChange={(e) => setFilters(prev => ({ ...prev, auth_type: e.target.value }))}
+                onChange={(e) => {
+                  setFilters(prev => ({ ...prev, auth_type: e.target.value }));
+                  setPagination(prev => ({ ...prev, page: 1 }));
+                }}
                 className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
               >
                 <option value="">All Types</option>
