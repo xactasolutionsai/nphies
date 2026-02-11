@@ -2510,8 +2510,13 @@ export default function PriorAuthorizationDetails() {
                 const responseItems = claimResponseForItems?.item;
                 if (!responseItems || responseItems.length === 0) return null;
 
-                // Check if any item has a non-approved outcome or a reason
-                const hasPartialOrReasons = responseItems.some(ri => {
+                // Filter to only show response items that match request items
+                const requestSequences = new Set((priorAuth.items || []).map(i => i.sequence));
+                const matchedResponseItems = responseItems.filter(ri => requestSequences.has(ri.itemSequence));
+                if (matchedResponseItems.length === 0) return null;
+
+                // Check if any matched item has a non-approved outcome or a reason
+                const hasPartialOrReasons = matchedResponseItems.some(ri => {
                   const outcome = ri.extension?.find(
                     ext => ext.url?.includes('extension-adjudication-outcome')
                   )?.valueCodeableConcept?.coding?.[0]?.code;
@@ -2534,7 +2539,7 @@ export default function PriorAuthorizationDetails() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
-                        {responseItems.map((ri, idx) => {
+                        {matchedResponseItems.map((ri, idx) => {
                           const itemOutcome = ri.extension?.find(
                             ext => ext.url?.includes('extension-adjudication-outcome')
                           )?.valueCodeableConcept?.coding?.[0];
