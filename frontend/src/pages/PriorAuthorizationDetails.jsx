@@ -1397,6 +1397,10 @@ export default function PriorAuthorizationDetails() {
                                       ? value 
                                       : '-';
                                   
+                                  const reason = adj.reason;
+                                  const reasonCode = reason?.coding?.[0]?.code;
+                                  const reasonDisplay = reason?.coding?.[0]?.display || reason?.text;
+                                  
                                   const categoryColors = {
                                     eligible: 'text-blue-600',
                                     benefit: 'text-green-600',
@@ -1410,6 +1414,9 @@ export default function PriorAuthorizationDetails() {
                                       <p className={`font-medium ${categoryColors[category] || ''}`}>
                                         {displayValue}
                                       </p>
+                                      {reasonDisplay && (
+                                        <p className="text-xs text-orange-600 mt-0.5">{reasonCode}: {reasonDisplay}</p>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -1417,7 +1424,35 @@ export default function PriorAuthorizationDetails() {
                             </div>
                           )}
                           
-                          {/* Adjudication Reason if present */}
+                          {/* NPHIES Adjudication Reasons from response bundle */}
+                          {(() => {
+                            const reasons = itemAdjudications
+                              .filter(adj => adj.reason)
+                              .map(adj => ({
+                                category: adj.category?.coding?.[0]?.code,
+                                code: adj.reason?.coding?.[0]?.code,
+                                display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                              }));
+                            if (reasons.length === 0) return null;
+                            return (
+                              <div className="mt-3 space-y-2">
+                                {reasons.map((r, i) => (
+                                  <div key={i} className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm">
+                                    <div className="flex items-start gap-2">
+                                      <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                                      <div>
+                                        <span className="font-semibold text-orange-800">{r.code}</span>
+                                        <span className="text-orange-700 ml-1">({r.category})</span>
+                                        <p className="text-orange-700 mt-1">{r.display}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Adjudication Reason if present (from database) */}
                           {item.adjudication_reason && (
                             <div className="mt-3 p-2 bg-yellow-50 rounded text-sm text-yellow-800">
                               <span className="font-medium">Reason:</span> {item.adjudication_reason}
@@ -2455,6 +2490,149 @@ export default function PriorAuthorizationDetails() {
                             </p>
                           </div>
                         ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Item Adjudication Details */}
+              {(() => {
+                let claimResponseForItems = null;
+                if (priorAuth.response_bundle?.resourceType === 'Bundle') {
+                  claimResponseForItems = priorAuth.response_bundle?.entry?.find(
+                    e => e.resource?.resourceType === 'ClaimResponse'
+                  )?.resource;
+                } else if (priorAuth.response_bundle?.resourceType === 'ClaimResponse') {
+                  claimResponseForItems = priorAuth.response_bundle;
+                }
+                
+                const responseItems = claimResponseForItems?.item;
+                if (!responseItems || responseItems.length === 0) return null;
+
+                // Check if any item has a non-approved outcome or a reason
+                const hasPartialOrReasons = responseItems.some(ri => {
+                  const outcome = ri.extension?.find(
+                    ext => ext.url?.includes('extension-adjudication-outcome')
+                  )?.valueCodeableConcept?.coding?.[0]?.code;
+                  const hasReasons = ri.adjudication?.some(adj => adj.reason);
+                  return outcome !== 'approved' || hasReasons;
+                });
+
+                if (!hasPartialOrReasons) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Receipt className="h-5 w-5" />
+                        Item Adjudication Details
+                      </CardTitle>
+                      <CardDescription>
+                        Per-item outcomes and reasons from NPHIES response
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {responseItems.map((ri, idx) => {
+                          const itemOutcome = ri.extension?.find(
+                            ext => ext.url?.includes('extension-adjudication-outcome')
+                          )?.valueCodeableConcept?.coding?.[0];
+                          const outcomeCode = itemOutcome?.code;
+                          const outcomeDisplay = itemOutcome?.display || outcomeCode;
+                          
+                          // Get key financial values
+                          const submitted = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'submitted')?.amount?.value;
+                          const benefit = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+                          const approvedQty = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'approved-quantity')?.value;
+                          
+                          // Get reasons
+                          const reasons = ri.adjudication
+                            ?.filter(adj => adj.reason)
+                            .map(adj => ({
+                              category: adj.category?.coding?.[0]?.code,
+                              code: adj.reason?.coding?.[0]?.code,
+                              display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                            })) || [];
+
+                          // Match with request item for display info
+                          const requestItem = priorAuth.items?.find(it => it.sequence === ri.itemSequence);
+
+                          const outcomeColors = {
+                            approved: 'bg-green-500',
+                            partial: 'bg-orange-500',
+                            rejected: 'bg-red-500',
+                            denied: 'bg-red-500'
+                          };
+
+                          const borderColors = {
+                            approved: 'border-green-200',
+                            partial: 'border-orange-200',
+                            rejected: 'border-red-200',
+                            denied: 'border-red-200'
+                          };
+
+                          return (
+                            <div key={idx} className={`p-4 border rounded-lg ${borderColors[outcomeCode] || 'border-gray-200'}`}>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-gray-600 text-white flex items-center justify-center text-sm font-medium">
+                                    {ri.itemSequence}
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">
+                                      {requestItem?.product_or_service_code || `Item ${ri.itemSequence}`}
+                                    </p>
+                                    {requestItem?.product_or_service_display && (
+                                      <p className="text-sm text-gray-500">{requestItem.product_or_service_display}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <Badge className={`${outcomeColors[outcomeCode] || 'bg-gray-500'} text-white`}>
+                                  {outcomeDisplay || 'Unknown'}
+                                </Badge>
+                              </div>
+
+                              {/* Financial summary for this item */}
+                              <div className="grid grid-cols-3 gap-4 text-sm mb-3">
+                                <div>
+                                  <p className="text-gray-500">Submitted</p>
+                                  <p className="font-medium">{formatAmount(submitted)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-500">Benefit</p>
+                                  <p className={`font-medium ${benefit !== undefined && submitted !== undefined && benefit < submitted ? 'text-orange-600' : 'text-green-600'}`}>
+                                    {formatAmount(benefit)}
+                                  </p>
+                                </div>
+                                {approvedQty !== undefined && (
+                                  <div>
+                                    <p className="text-gray-500">Approved Qty</p>
+                                    <p className="font-medium text-purple-600">{approvedQty}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Reasons */}
+                              {reasons.length > 0 && (
+                                <div className="space-y-2">
+                                  {reasons.map((r, rIdx) => (
+                                    <div key={rIdx} className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm">
+                                      <div className="flex items-start gap-2">
+                                        <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <span className="font-semibold text-orange-800">{r.code}</span>
+                                          <span className="text-orange-700 ml-1">({r.category})</span>
+                                          <p className="text-orange-700 mt-1">{r.display}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </CardContent>
                   </Card>
