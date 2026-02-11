@@ -1053,6 +1053,24 @@ class CommunicationService {
       }
     }
 
+    // Store poll response in prior_authorization_responses table
+    await client.query(`
+      INSERT INTO prior_authorization_responses 
+      (prior_auth_id, response_type, outcome, disposition, pre_auth_ref, 
+       bundle_json, has_errors, is_nphies_generated, nphies_response_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
+      priorAuthId,
+      'poll',
+      outcome,
+      claimResponse.disposition || null,
+      claimResponse.preAuthRef || null,
+      JSON.stringify(claimResponse),
+      false,
+      true,
+      claimResponse.id || null
+    ]);
+
     return {
       id: claimResponse.id,
       outcome,

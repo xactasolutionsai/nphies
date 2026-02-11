@@ -1,5 +1,5 @@
 {
-  "id": "52dc2152-803f-4c45-821b-b7426ec95b1c",
+  "id": "d1b7dc36-7029-4e4a-915e-ea3bd20021d1",
   "use": "preauthorization",
   "item": [
     {
@@ -34,7 +34,7 @@
         },
         {
           "amount": {
-            "value": 200,
+            "value": 0,
             "currency": "SAR"
           },
           "category": {
@@ -87,7 +87,7 @@
         },
         {
           "amount": {
-            "value": 200,
+            "value": 0,
             "currency": "SAR"
           },
           "category": {
@@ -101,7 +101,7 @@
         },
         {
           "amount": {
-            "value": 200,
+            "value": 0,
             "currency": "SAR"
           },
           "category": {
@@ -115,244 +115,6 @@
         }
       ],
       "itemSequence": 1
-    },
-    {
-      "extension": [
-        {
-          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
-          "valueCodeableConcept": {
-            "coding": [
-              {
-                "code": "approved",
-                "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
-                "display": "Approved"
-              }
-            ]
-          }
-        }
-      ],
-      "adjudication": [
-        {
-          "amount": {
-            "value": 0,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "copay",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 300,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "benefit",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "value": 1,
-          "category": {
-            "coding": [
-              {
-                "code": "approved-quantity",
-                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 0,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "tax",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 0,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "patientShare",
-                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 300,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "submitted",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 300,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "eligible",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        }
-      ],
-      "itemSequence": 2
-    },
-    {
-      "extension": [
-        {
-          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
-          "valueCodeableConcept": {
-            "coding": [
-              {
-                "code": "partial",
-                "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
-                "display": "Partially Approved"
-              }
-            ]
-          }
-        }
-      ],
-      "adjudication": [
-        {
-          "amount": {
-            "value": 0,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "copay",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 100,
-            "currency": "SAR"
-          },
-          "reason": {
-            "text": "Service/procedure/device/medication was included within another service/procedure",
-            "coding": [
-              {
-                "code": "CV-4-9",
-                "system": "http://nphies.sa/terminology/CodeSystem/adjudication-reason",
-                "display": "Service/procedure/device/medication was included within another service/procedure"
-              }
-            ]
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "benefit",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "value": 1,
-          "category": {
-            "coding": [
-              {
-                "code": "approved-quantity",
-                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 0,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "tax",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 0,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "patientShare",
-                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 200,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "submitted",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        },
-        {
-          "amount": {
-            "value": 200,
-            "currency": "SAR"
-          },
-          "category": {
-            "coding": [
-              {
-                "code": "eligible",
-                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
-              }
-            ]
-          }
-        }
-      ],
-      "itemSequence": 3
     }
   ],
   "meta": {
@@ -367,7 +129,7 @@
   "type": {
     "coding": [
       {
-        "code": "institutional",
+        "code": "vision",
         "system": "http://terminology.hl7.org/CodeSystem/claim-type"
       }
     ]
@@ -389,7 +151,7 @@
     },
     {
       "amount": {
-        "value": 600,
+        "value": 0,
         "currency": "SAR"
       },
       "category": {
@@ -403,7 +165,7 @@
     },
     {
       "amount": {
-        "value": 3,
+        "value": 1,
         "currency": "SAR"
       },
       "category": {
@@ -445,7 +207,7 @@
     },
     {
       "amount": {
-        "value": 700,
+        "value": 0,
         "currency": "SAR"
       },
       "category": {
@@ -459,7 +221,7 @@
     },
     {
       "amount": {
-        "value": 700,
+        "value": 0,
         "currency": "SAR"
       },
       "category": {
@@ -477,21 +239,21 @@
   "insurer": {
     "reference": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
   },
-  "outcome": "partial",
+  "outcome": "complete",
   "patient": {
-    "reference": "http://provider.com/Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
+    "reference": "http://provider.com/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
   },
   "request": {
     "type": "Claim",
     "identifier": {
-      "value": "PA-1770759136785",
+      "value": "DUP-1770769791354",
       "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
     }
   },
   "subType": {
     "coding": [
       {
-        "code": "ip",
+        "code": "op",
         "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype"
       }
     ]
@@ -502,11 +264,28 @@
       "valueCodeableConcept": {
         "coding": [
           {
-            "code": "partial",
+            "code": "approved",
             "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
-            "display": "Partially Approved"
+            "display": "Approved"
           }
         ]
+      }
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transferAuthorizationNumber",
+      "valueString": "TR-2183610000"
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transferAuthorizationPeriod",
+      "valuePeriod": {
+        "end": "2026-02-16",
+        "start": "2026-02-11"
+      }
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transferAuthorizationProvider",
+      "valueReference": {
+        "reference": "http://pseudo-payer.com.sa/Organization/bff3aa1fbd3648619ac082357bf135ab"
       }
     }
   ],
@@ -514,7 +293,7 @@
     {
       "focal": true,
       "coverage": {
-        "reference": "http://provider.com/Coverage/e0f35a28-2e32-436c-915b-85ef1721ece7"
+        "reference": "http://provider.com/Coverage/7d508c95-e1bd-475a-bae5-575f3d946117"
       },
       "sequence": 1
     }
@@ -524,13 +303,14 @@
   },
   "identifier": [
     {
-      "value": "6fba6859-bf03-4db4-8c59-94e61a868be0",
+      "value": "116a49e3-163e-4b36-9c65-600e81e9a850",
       "system": "http://insurer.com/"
     }
   ],
+  "preAuthRef": "9c573b54-cf8a-4bca-9273-61facc752d77",
   "resourceType": "ClaimResponse",
   "preAuthPeriod": {
-    "end": "2026-02-16T21:00:00Z",
+    "end": "2026-02-13T21:00:00Z",
     "start": "2026-02-10T21:00:00Z"
   }
 }
