@@ -1,5 +1,5 @@
 {
-  "id": "52738ddb-fda3-48d9-9cfd-cd419b00771e",
+  "id": "ecc578b1-5ca9-4b78-8544-3a4bc5a7ca19",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "urn:uuid:973789fd-fd32-4ed1-b4e7-4e1e0b434bf6",
+      "fullUrl": "urn:uuid:7bfecf43-3f5c-4bd8-81e4-64d787732e10",
       "resource": {
-        "id": "973789fd-fd32-4ed1-b4e7-4e1e0b434bf6",
+        "id": "7bfecf43-3f5c-4bd8-81e4-64d787732e10",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -18,7 +18,7 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/ca8638d9-b8eb-4c6e-8df2-1788b66aa586"
+            "reference": "http://provider.com/Claim/d4feac7d-cb57-4c9b-bc95-7a736b14ef2e"
           }
         ],
         "sender": {
@@ -51,24 +51,15 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/ca8638d9-b8eb-4c6e-8df2-1788b66aa586",
+      "fullUrl": "http://provider.com/Claim/d4feac7d-cb57-4c9b-bc95-7a736b14ef2e",
       "resource": {
-        "id": "ca8638d9-b8eb-4c6e-8df2-1788b66aa586",
+        "id": "d4feac7d-cb57-4c9b-bc95-7a736b14ef2e",
         "use": "preauthorization",
         "item": [
           {
             "net": {
-              "value": 300,
+              "value": 200,
               "currency": "SAR"
-            },
-            "bodySite": {
-              "coding": [
-                {
-                  "code": "13",
-                  "system": "http://nphies.sa/terminology/CodeSystem/fdi-oral-region",
-                  "display": "UPPER RIGHT; PERMANENT TEETH # 3"
-                }
-              ]
             },
             "quantity": {
               "value": 1
@@ -87,38 +78,55 @@
                 }
               },
               {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share",
-                "valueMoney": {
-                  "value": 300,
-                  "currency": "SAR"
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "06285097000056",
+                      "system": "http://nphies.sa/terminology/CodeSystem/medication-codes"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "patient-request",
+                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "Not-substituted",
+                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-substitute",
+                      "display": "Not substituted"
+                    }
+                  ]
                 }
               },
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
                 "valueBoolean": false
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax",
-                "valueMoney": {
-                  "value": 0,
-                  "currency": "SAR"
-                }
               }
             ],
             "unitPrice": {
-              "value": 300,
+              "value": 200,
               "currency": "SAR"
             },
-            "servicedDate": "2026-02-11",
-            "careTeamSequence": [
-              1
-            ],
+            "servicedDate": "2026-02-12",
             "productOrService": {
               "coding": [
                 {
-                  "code": "415",
-                  "system": "http://nphies.sa/terminology/CodeSystem/oral-health-op",
-                  "display": "Root canal"
+                  "code": "06285097000056",
+                  "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
+                  "display": "Drug1"
                 }
               ]
             },
@@ -126,28 +134,181 @@
               1
             ],
             "informationSequence": [
-              1,
-              2,
-              3,
-              4,
-              5,
-              6,
-              7,
-              8,
-              9,
+              10
+            ]
+          },
+          {
+            "net": {
+              "value": 300,
+              "currency": "SAR"
+            },
+            "quantity": {
+              "value": 1
+            },
+            "sequence": 2,
+            "extension": [
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
+                "valueBoolean": false
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
+                "valueMoney": {
+                  "value": 0,
+                  "currency": "SAR"
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "06285096000798",
+                      "system": "http://nphies.sa/terminology/CodeSystem/medication-codes"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "patient-request",
+                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "Replaceable",
+                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-substitute",
+                      "display": "SFDA Replaceable drugs"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
+                "valueBoolean": false
+              }
+            ],
+            "unitPrice": {
+              "value": 300,
+              "currency": "SAR"
+            },
+            "servicedDate": "2026-02-12",
+            "productOrService": {
+              "coding": [
+                {
+                  "code": "06285096000798",
+                  "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
+                  "display": "Drug 2"
+                }
+              ]
+            },
+            "diagnosisSequence": [
+              1
+            ],
+            "informationSequence": [
+              10
+            ]
+          },
+          {
+            "net": {
+              "value": 399.97,
+              "currency": "SAR"
+            },
+            "quantity": {
+              "value": 1
+            },
+            "sequence": 3,
+            "extension": [
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
+                "valueBoolean": false
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
+                "valueMoney": {
+                  "value": 0,
+                  "currency": "SAR"
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "99999999999999",
+                      "system": "http://nphies.sa/terminology/CodeSystem/medication-codes"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "patient-request",
+                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "Irreplaceable",
+                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-substitute",
+                      "display": "SFDA Irreplaceable drugs"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
+                "valueBoolean": false
+              }
+            ],
+            "unitPrice": {
+              "value": 399.97,
+              "currency": "SAR"
+            },
+            "servicedDate": "2026-02-12",
+            "productOrService": {
+              "coding": [
+                {
+                  "code": "99999999999999",
+                  "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
+                  "display": "Drug 3"
+                }
+              ]
+            },
+            "diagnosisSequence": [
+              1
+            ],
+            "informationSequence": [
               10
             ]
           }
         ],
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-priorauth|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-priorauth|1.0.0"
           ]
         },
         "type": {
           "coding": [
             {
-              "code": "oral",
+              "code": "pharmacy",
               "system": "http://terminology.hl7.org/CodeSystem/claim-type"
             }
           ]
@@ -163,11 +324,11 @@
           }
         },
         "total": {
-          "value": 300,
+          "value": 899.97,
           "currency": "SAR"
         },
         "status": "active",
-        "created": "2026-02-10T22:19:34.643Z",
+        "created": "2026-02-11T02:47:14+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -182,30 +343,6 @@
             }
           ]
         },
-        "careTeam": [
-          {
-            "role": {
-              "coding": [
-                {
-                  "code": "primary",
-                  "system": "http://terminology.hl7.org/CodeSystem/claimcareteamrole"
-                }
-              ]
-            },
-            "provider": {
-              "reference": "Practitioner/3f81a12b-c662-421e-be19-f1a165c6a58a"
-            },
-            "sequence": 1,
-            "qualification": {
-              "coding": [
-                {
-                  "code": "08.00",
-                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes"
-                }
-              ]
-            }
-          }
-        ],
         "priority": {
           "coding": [
             {
@@ -233,9 +370,31 @@
             "diagnosisCodeableConcept": {
               "coding": [
                 {
-                  "code": "K01.1",
+                  "code": "R51",
                   "system": "http://hl7.org/fhir/sid/icd-10-am",
-                  "display": "Impacted teeth"
+                  "display": "Headache"
+                }
+              ]
+            }
+          },
+          {
+            "type": [
+              {
+                "coding": [
+                  {
+                    "code": "secondary",
+                    "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type"
+                  }
+                ]
+              }
+            ],
+            "sequence": 2,
+            "diagnosisCodeableConcept": {
+              "coding": [
+                {
+                  "code": "G44.4",
+                  "system": "http://hl7.org/fhir/sid/icd-10-am",
+                  "display": "Drug-induced headache, not elsewhere classified"
                 }
               ]
             }
@@ -243,18 +402,13 @@
         ],
         "extension": [
           {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response",
             "valueReference": {
-              "reference": "Encounter/68e13b9a-dc14-4048-bfcc-43aaddc0f1a0"
+              "identifier": {
+                "value": "f1bd5e2e-a470-40d3-ac8e-c63bc6e148b0",
+                "system": "http://pseudo-payer.com.sa/coverageeligibilityresponse"
+              }
             }
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-reference",
-            "valueString": "EligResp-31212432"
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-offline-date",
-            "valueDateTime": "2023-12-04"
           }
         ],
         "insurance": [
@@ -268,7 +422,7 @@
         ],
         "identifier": [
           {
-            "value": "DUP-1770761974420",
+            "value": "DUP-1770767234066",
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
           }
         ],
@@ -285,12 +439,12 @@
             },
             "sequence": 1,
             "timingPeriod": {
-              "end": "2026-02-07T21:00:00.000Z",
-              "start": "2026-02-07T21:00:00.000Z"
+              "end": "2026-02-05T21:00:00.000Z",
+              "start": "2026-02-05T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "mm[Hg]",
-              "value": 115,
+              "value": 117,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -305,12 +459,12 @@
             },
             "sequence": 2,
             "timingPeriod": {
-              "end": "2026-02-07T21:00:00.000Z",
-              "start": "2026-02-07T21:00:00.000Z"
+              "end": "2026-02-05T21:00:00.000Z",
+              "start": "2026-02-05T21:00:00.000Z"
             },
             "valueQuantity": {
               "code": "mm[Hg]",
-              "value": 81,
+              "value": 87,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -318,19 +472,19 @@
             "category": {
               "coding": [
                 {
-                  "code": "pulse",
+                  "code": "vital-sign-height",
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
                 }
               ]
             },
             "sequence": 3,
             "timingPeriod": {
-              "end": "2026-02-07T21:00:00.000Z",
-              "start": "2026-02-07T21:00:00.000Z"
+              "end": "2026-02-05T21:00:00.000Z",
+              "start": "2026-02-05T21:00:00.000Z"
             },
             "valueQuantity": {
-              "code": "/min",
-              "value": 98,
+              "code": "cm",
+              "value": 184,
               "system": "http://unitsofmeasure.org"
             }
           },
@@ -338,35 +492,21 @@
             "category": {
               "coding": [
                 {
-                  "code": "oxygen-saturation",
+                  "code": "vital-sign-weight",
                   "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
                 }
               ]
             },
             "sequence": 4,
             "timingPeriod": {
-              "end": "2026-02-07T21:00:00.000Z",
-              "start": "2026-02-07T21:00:00.000Z"
+              "end": "2026-02-05T21:00:00.000Z",
+              "start": "2026-02-05T21:00:00.000Z"
             },
             "valueQuantity": {
-              "code": "%",
-              "value": 0.2,
+              "code": "kg",
+              "value": 73.8,
               "system": "http://unitsofmeasure.org"
             }
-          },
-          {
-            "code": {
-              "text": "Periodic oral examination"
-            },
-            "category": {
-              "coding": [
-                {
-                  "code": "chief-complaint",
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
-                }
-              ]
-            },
-            "sequence": 5
           },
           {
             "category": {
@@ -377,8 +517,8 @@
                 }
               ]
             },
-            "sequence": 6,
-            "valueString": "Patient reports good oral hygiene habits. Last dental visit 6 months ago. No known allergies."
+            "sequence": 5,
+            "valueString": "No Hsitory"
           },
           {
             "category": {
@@ -389,8 +529,8 @@
                 }
               ]
             },
-            "sequence": 7,
-            "valueString": "Wisdom tooth pain in lower left for 1 week. Difficulty opening mouth fully. Mild swelling."
+            "sequence": 6,
+            "valueString": "Seasonal allergies flare-up. Previous antihistamine effective. Requesting same medication."
           },
           {
             "category": {
@@ -401,8 +541,8 @@
                 }
               ]
             },
-            "sequence": 8,
-            "valueString": "Gingival erythema and edema. Probing depths 4-5mm in posterior. Bleeding on probing."
+            "sequence": 7,
+            "valueString": "No Plan"
           },
           {
             "category": {
@@ -413,8 +553,8 @@
                 }
               ]
             },
-            "sequence": 9,
-            "valueString": "Deep cleaning with local anesthesia. Periodontal maintenance program. Recall in 3 months."
+            "sequence": 8,
+            "valueString": "Continue current antihypertensive regimen. 90-day supply authorized. Follow up with PCP in 3 months."
           },
           {
             "code": {
@@ -434,66 +574,27 @@
                 }
               ]
             },
-            "sequence": 10
-          }
-        ]
-      }
-    },
-    {
-      "fullUrl": "http://provider.com/Encounter/68e13b9a-dc14-4048-bfcc-43aaddc0f1a0",
-      "resource": {
-        "id": "68e13b9a-dc14-4048-bfcc-43aaddc0f1a0",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
-          ]
-        },
-        "class": {
-          "code": "AMB",
-          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-          "display": "ambulatory"
-        },
-        "period": {
-          "end": "2026-02-13T00:00:00+03:00",
-          "start": "2026-02-11T00:00:00+03:00"
-        },
-        "status": "planned",
-        "subject": {
-          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-        },
-        "extension": [
+            "sequence": 9
+          },
           {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceEventType",
-            "valueCodeableConcept": {
+            "category": {
               "coding": [
                 {
-                  "code": "ICSE",
-                  "system": "http://nphies.sa/terminology/CodeSystem/service-event-type",
-                  "display": "Initial client service event"
+                  "code": "days-supply",
+                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
                 }
               ]
+            },
+            "sequence": 10,
+            "timingDate": "2026-02-11",
+            "valueQuantity": {
+              "code": "d",
+              "unit": "d",
+              "value": 30,
+              "system": "http://unitsofmeasure.org"
             }
           }
-        ],
-        "identifier": [
-          {
-            "value": "DUP-1770761974420",
-            "system": "http://PR-FHIR.com.sa/identifiers/encounter"
-          }
-        ],
-        "serviceType": {
-          "coding": [
-            {
-              "code": "dental-care",
-              "system": "http://nphies.sa/terminology/CodeSystem/service-type",
-              "display": "Dental Care"
-            }
-          ]
-        },
-        "resourceType": "Encounter",
-        "serviceProvider": {
-          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
-        }
+        ]
       }
     },
     {
@@ -563,57 +664,6 @@
           ]
         },
         "resourceType": "Coverage"
-      }
-    },
-    {
-      "fullUrl": "http://provider.com/Practitioner/3f81a12b-c662-421e-be19-f1a165c6a58a",
-      "resource": {
-        "id": "3f81a12b-c662-421e-be19-f1a165c6a58a",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
-          ]
-        },
-        "name": [
-          {
-            "use": "official",
-            "text": "Default Practitioner",
-            "given": [
-              "Default"
-            ],
-            "family": "Practitioner"
-          }
-        ],
-        "active": true,
-        "identifier": [
-          {
-            "type": {
-              "coding": [
-                {
-                  "code": "MD",
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                  "display": "Medical License Number"
-                }
-              ]
-            },
-            "value": "PRACT-3f81a12b",
-            "system": "http://nphies.sa/license/practitioner-license"
-          }
-        ],
-        "resourceType": "Practitioner",
-        "qualification": [
-          {
-            "code": {
-              "coding": [
-                {
-                  "code": "22.00",
-                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
-                  "display": "Healthcare Professional"
-                }
-              ]
-            }
-          }
-        ]
       }
     },
     {
@@ -814,6 +864,6 @@
       }
     }
   ],
-  "timestamp": "2026-02-10T22:21:03.569Z",
+  "timestamp": "2026-02-10T23:48:55.671Z",
   "resourceType": "Bundle"
 }

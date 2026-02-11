@@ -85,10 +85,10 @@ class PharmacyMapper extends BaseMapper {
    */
   getPharmacistSubstituteDisplay(code) {
     const displays = {
+      'form-not-available': 'Dosage form not available',
+      'Others': 'Others : specify',
       'Irreplaceable': 'SFDA Irreplaceable drugs',
-      'Replaceable': 'SFDA Replaceable drugs',
-      'Therapeutic-alternative': 'Therapeutic alternative',
-      'Not-substituted': 'Not substituted'
+      'strength-not-available': 'Strength not available at pharmacy store'
     };
     return displays[code] || code;
   }

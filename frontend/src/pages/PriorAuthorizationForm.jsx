@@ -4908,17 +4908,17 @@ export default function PriorAuthorizationForm() {
                         <Label>Pharmacist Substitute (Optional)</Label>
                         <Select
                           value={item.pharmacist_substitute ? [
+                            { value: 'form-not-available', label: 'Dosage form not available' },
+                            { value: 'Others', label: 'Others : specify' },
                             { value: 'Irreplaceable', label: 'SFDA Irreplaceable drugs' },
-                            { value: 'Replaceable', label: 'SFDA Replaceable drugs' },
-                            { value: 'Therapeutic-alternative', label: 'Therapeutic Alternative' },
-                            { value: 'Not-substituted', label: 'Not Substituted' }
+                            { value: 'strength-not-available', label: 'Strength not available at pharmacy store' }
                           ].find(opt => opt.value === item.pharmacist_substitute) : null}
                           onChange={(option) => handleItemChange(index, 'pharmacist_substitute', option?.value || null)}
                           options={[
+                            { value: 'form-not-available', label: 'Dosage form not available' },
+                            { value: 'Others', label: 'Others : specify' },
                             { value: 'Irreplaceable', label: 'SFDA Irreplaceable drugs' },
-                            { value: 'Replaceable', label: 'SFDA Replaceable drugs' },
-                            { value: 'Therapeutic-alternative', label: 'Therapeutic Alternative' },
-                            { value: 'Not-substituted', label: 'Not Substituted' }
+                            { value: 'strength-not-available', label: 'Strength not available at pharmacy store' }
                           ]}
                           styles={selectStyles}
                           menuPortalTarget={document.body}
