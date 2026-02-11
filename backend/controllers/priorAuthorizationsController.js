@@ -304,7 +304,7 @@ class PriorAuthorizationsController extends BaseController {
     // Get responses
     const responsesQuery = `
       SELECT id, prior_auth_id, response_type, outcome, disposition, 
-             pre_auth_ref, has_errors, errors, is_nphies_generated, 
+             pre_auth_ref, bundle_json, has_errors, errors, is_nphies_generated, 
              nphies_response_id, received_at
       FROM prior_authorization_responses
       WHERE prior_auth_id = $1

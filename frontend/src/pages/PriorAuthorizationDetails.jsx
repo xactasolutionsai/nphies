@@ -1556,6 +1556,138 @@ export default function PriorAuthorizationDetails() {
               </CardContent>
             </Card>
 
+            {/* Additional NPHIES Response Items - items returned by payer not in original request */}
+            {(() => {
+              let claimResponseForAdditional = null;
+              if (priorAuth.response_bundle?.resourceType === 'Bundle') {
+                claimResponseForAdditional = priorAuth.response_bundle?.entry?.find(
+                  e => e.resource?.resourceType === 'ClaimResponse'
+                )?.resource;
+              } else if (priorAuth.response_bundle?.resourceType === 'ClaimResponse') {
+                claimResponseForAdditional = priorAuth.response_bundle;
+              }
+              
+              const allResponseItems = claimResponseForAdditional?.item || [];
+              const requestSequences = new Set((priorAuth.items || []).map(i => i.sequence));
+              const unmatchedItems = allResponseItems.filter(ri => !requestSequences.has(ri.itemSequence));
+              
+              // Only show if there are unmatched items with non-approved outcomes or reasons
+              const relevantUnmatched = unmatchedItems.filter(ri => {
+                const outcome = ri.extension?.find(
+                  ext => ext.url?.includes('extension-adjudication-outcome')
+                )?.valueCodeableConcept?.coding?.[0]?.code;
+                const hasReasons = ri.adjudication?.some(adj => adj.reason);
+                return outcome !== 'approved' || hasReasons;
+              });
+              
+              if (relevantUnmatched.length === 0) return null;
+              
+              const outcomeColors = {
+                approved: 'bg-green-500',
+                partial: 'bg-orange-500',
+                rejected: 'bg-red-500',
+                denied: 'bg-red-500'
+              };
+              const borderColors = {
+                approved: 'border-green-200',
+                partial: 'border-orange-200',
+                rejected: 'border-red-200',
+                denied: 'border-red-200'
+              };
+              
+              return (
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-orange-500" />
+                      Additional Payer Response Items
+                    </CardTitle>
+                    <CardDescription>
+                      Items added by the payer in the response that were not in your original request
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {relevantUnmatched.map((ri, idx) => {
+                        const itemOutcome = ri.extension?.find(
+                          ext => ext.url?.includes('extension-adjudication-outcome')
+                        )?.valueCodeableConcept?.coding?.[0];
+                        const outcomeCode = itemOutcome?.code;
+                        const outcomeDisplay = itemOutcome?.display || outcomeCode;
+                        
+                        const submitted = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'submitted')?.amount?.value;
+                        const benefit = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+                        const approvedQty = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'approved-quantity')?.value;
+                        
+                        const reasons = ri.adjudication
+                          ?.filter(adj => adj.reason)
+                          .map(adj => ({
+                            category: adj.category?.coding?.[0]?.code,
+                            code: adj.reason?.coding?.[0]?.code,
+                            display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                          })) || [];
+                        
+                        return (
+                          <div key={idx} className={`p-4 border rounded-lg ${borderColors[outcomeCode] || 'border-gray-200'}`}>
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gray-600 text-white flex items-center justify-center text-sm font-medium">
+                                  {ri.itemSequence}
+                                </div>
+                                <div>
+                                  <p className="font-medium">Item {ri.itemSequence}</p>
+                                  <p className="text-xs text-blue-600">Added by Payer</p>
+                                </div>
+                              </div>
+                              <Badge className={`${outcomeColors[outcomeCode] || 'bg-gray-500'} text-white`}>
+                                {outcomeDisplay || 'Unknown'}
+                              </Badge>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-4 text-sm mb-3">
+                              <div>
+                                <p className="text-gray-500">Submitted</p>
+                                <p className="font-medium">{formatAmount(submitted)}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500">Benefit</p>
+                                <p className={`font-medium ${benefit !== undefined && submitted !== undefined && benefit < submitted ? 'text-orange-600' : 'text-green-600'}`}>
+                                  {formatAmount(benefit)}
+                                </p>
+                              </div>
+                              {approvedQty !== undefined && (
+                                <div>
+                                  <p className="text-gray-500">Approved Qty</p>
+                                  <p className="font-medium text-purple-600">{approvedQty}</p>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {reasons.length > 0 && (
+                              <div className="space-y-2">
+                                {reasons.map((r, rIdx) => (
+                                  <div key={rIdx} className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm">
+                                    <div className="flex items-start gap-2">
+                                      <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                                      <div>
+                                        <span className="font-semibold text-orange-800">{r.code}</span>
+                                        <span className="text-orange-700 ml-1">({r.category})</span>
+                                        <p className="text-orange-700 mt-1">{r.display}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
             {/* Lab Observations Section - Only for Professional auth type */}
             {priorAuth.auth_type === 'professional' && priorAuth.lab_observations && priorAuth.lab_observations.length > 0 && (
               <Card className="mt-6">
@@ -2510,21 +2642,8 @@ export default function PriorAuthorizationDetails() {
                 const responseItems = claimResponseForItems?.item;
                 if (!responseItems || responseItems.length === 0) return null;
 
-                // Filter to only show response items that match request items
+                // Identify which items were in the original request
                 const requestSequences = new Set((priorAuth.items || []).map(i => i.sequence));
-                const matchedResponseItems = responseItems.filter(ri => requestSequences.has(ri.itemSequence));
-                if (matchedResponseItems.length === 0) return null;
-
-                // Check if any matched item has a non-approved outcome or a reason
-                const hasPartialOrReasons = matchedResponseItems.some(ri => {
-                  const outcome = ri.extension?.find(
-                    ext => ext.url?.includes('extension-adjudication-outcome')
-                  )?.valueCodeableConcept?.coding?.[0]?.code;
-                  const hasReasons = ri.adjudication?.some(adj => adj.reason);
-                  return outcome !== 'approved' || hasReasons;
-                });
-
-                if (!hasPartialOrReasons) return null;
 
                 return (
                   <Card>
@@ -2539,7 +2658,8 @@ export default function PriorAuthorizationDetails() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
-                        {matchedResponseItems.map((ri, idx) => {
+                        {responseItems.map((ri, idx) => {
+                          const isPayerAdded = !requestSequences.has(ri.itemSequence);
                           const itemOutcome = ri.extension?.find(
                             ext => ext.url?.includes('extension-adjudication-outcome')
                           )?.valueCodeableConcept?.coding?.[0];
@@ -2593,9 +2713,16 @@ export default function PriorAuthorizationDetails() {
                                     )}
                                   </div>
                                 </div>
-                                <Badge className={`${outcomeColors[outcomeCode] || 'bg-gray-500'} text-white`}>
-                                  {outcomeDisplay || 'Unknown'}
-                                </Badge>
+                                <div className="flex items-center gap-2">
+                                  {isPayerAdded && (
+                                    <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">
+                                      Added by Payer
+                                    </Badge>
+                                  )}
+                                  <Badge className={`${outcomeColors[outcomeCode] || 'bg-gray-500'} text-white`}>
+                                    {outcomeDisplay || 'Unknown'}
+                                  </Badge>
+                                </div>
                               </div>
 
                               {/* Financial summary for this item */}
@@ -3022,6 +3149,209 @@ export default function PriorAuthorizationDetails() {
                             </ul>
                           </div>
                         )}
+
+                        {/* Adjudication Details from bundle_json */}
+                        {(() => {
+                          const bundle = typeof resp.bundle_json === 'string' 
+                            ? (() => { try { return JSON.parse(resp.bundle_json); } catch { return null; } })() 
+                            : resp.bundle_json;
+                          if (!bundle) return null;
+
+                          let claimResp = null;
+                          if (bundle?.resourceType === 'Bundle') {
+                            claimResp = bundle?.entry?.find(
+                              e => e.resource?.resourceType === 'ClaimResponse'
+                            )?.resource;
+                          } else if (bundle?.resourceType === 'ClaimResponse') {
+                            claimResp = bundle;
+                          }
+                          if (!claimResp) return null;
+
+                          // Overall adjudication outcome
+                          const overallOutcome = claimResp.extension?.find(
+                            ext => ext.url?.includes('extension-adjudication-outcome')
+                          )?.valueCodeableConcept?.coding?.[0];
+                          const overallCode = overallOutcome?.code;
+                          const overallDisplay = overallOutcome?.display || overallCode;
+
+                          const outcomeColors = {
+                            approved: 'bg-green-500',
+                            partial: 'bg-orange-500',
+                            rejected: 'bg-red-500',
+                            denied: 'bg-red-500',
+                            queued: 'bg-blue-500'
+                          };
+
+                          // Total financial summary
+                          const totals = claimResp.total || [];
+                          const getTotal = (code) => totals.find(t => t.category?.coding?.[0]?.code === code)?.amount?.value;
+                          const totalSubmitted = getTotal('submitted');
+                          const totalBenefit = getTotal('benefit');
+                          const totalCopay = getTotal('copay');
+                          const totalTax = getTotal('tax');
+                          const totalPatientShare = getTotal('patientShare');
+
+                          // Response items
+                          const respItems = claimResp.item || [];
+
+                          return (
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                              {/* Overall Adjudication Outcome */}
+                              {overallCode && (
+                                <div className="flex items-center gap-2 mb-3">
+                                  <span className="text-sm text-gray-500">Adjudication Outcome:</span>
+                                  <Badge className={`${outcomeColors[overallCode] || 'bg-gray-500'} text-white`}>
+                                    {overallDisplay}
+                                  </Badge>
+                                </div>
+                              )}
+
+                              {/* Total Financial Summary */}
+                              {totals.length > 0 && (
+                                <div className="mb-4">
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                                    Financial Summary
+                                  </p>
+                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                                    {totalSubmitted !== undefined && (
+                                      <div className="p-2 bg-gray-50 rounded">
+                                        <p className="text-gray-500 text-xs">Submitted</p>
+                                        <p className="font-medium">{formatAmount(totalSubmitted)}</p>
+                                      </div>
+                                    )}
+                                    {totalBenefit !== undefined && (
+                                      <div className="p-2 bg-green-50 rounded">
+                                        <p className="text-gray-500 text-xs">Benefit</p>
+                                        <p className="font-medium text-green-600">{formatAmount(totalBenefit)}</p>
+                                      </div>
+                                    )}
+                                    {totalCopay !== undefined && (
+                                      <div className="p-2 bg-gray-50 rounded">
+                                        <p className="text-gray-500 text-xs">Copay</p>
+                                        <p className="font-medium">{formatAmount(totalCopay)}</p>
+                                      </div>
+                                    )}
+                                    {totalTax !== undefined && (
+                                      <div className="p-2 bg-gray-50 rounded">
+                                        <p className="text-gray-500 text-xs">Tax</p>
+                                        <p className="font-medium">{formatAmount(totalTax)}</p>
+                                      </div>
+                                    )}
+                                    {totalPatientShare !== undefined && (
+                                      <div className="p-2 bg-gray-50 rounded">
+                                        <p className="text-gray-500 text-xs">Patient Share</p>
+                                        <p className="font-medium">{formatAmount(totalPatientShare)}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Per-item Adjudication Details */}
+                              {respItems.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                                    Item Adjudication ({respItems.length} item{respItems.length !== 1 ? 's' : ''})
+                                  </p>
+                                  <div className="space-y-3">
+                                    {respItems.map((ri, riIdx) => {
+                                      const itemOutcome = ri.extension?.find(
+                                        ext => ext.url?.includes('extension-adjudication-outcome')
+                                      )?.valueCodeableConcept?.coding?.[0];
+                                      const itemOutcomeCode = itemOutcome?.code;
+                                      const itemOutcomeDisplay = itemOutcome?.display || itemOutcomeCode;
+
+                                      const itemSubmitted = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'submitted')?.amount?.value;
+                                      const itemBenefit = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+                                      const itemApprovedQty = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'approved-quantity')?.value;
+
+                                      const reasons = ri.adjudication
+                                        ?.filter(adj => adj.reason)
+                                        .map(adj => ({
+                                          category: adj.category?.coding?.[0]?.code,
+                                          code: adj.reason?.coding?.[0]?.code,
+                                          display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                                        })) || [];
+
+                                      const requestItem = priorAuth.items?.find(it => it.sequence === ri.itemSequence);
+                                      const isPayerAdded = !requestItem;
+
+                                      const itemBorderColors = {
+                                        approved: 'border-green-200',
+                                        partial: 'border-orange-200',
+                                        rejected: 'border-red-200',
+                                        denied: 'border-red-200'
+                                      };
+
+                                      return (
+                                        <div key={riIdx} className={`p-3 border rounded-lg text-sm ${itemBorderColors[itemOutcomeCode] || 'border-gray-200'}`}>
+                                          <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-6 h-6 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs font-medium">
+                                                {ri.itemSequence}
+                                              </div>
+                                              <span className="font-medium">
+                                                {requestItem?.product_or_service_code || `Item ${ri.itemSequence}`}
+                                              </span>
+                                              {isPayerAdded && (
+                                                <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">
+                                                  Added by Payer
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <Badge className={`${outcomeColors[itemOutcomeCode] || 'bg-gray-500'} text-white text-xs`}>
+                                              {itemOutcomeDisplay || 'Unknown'}
+                                            </Badge>
+                                          </div>
+
+                                          <div className="grid grid-cols-3 gap-3 text-xs">
+                                            {itemSubmitted !== undefined && (
+                                              <div>
+                                                <p className="text-gray-500">Submitted</p>
+                                                <p className="font-medium">{formatAmount(itemSubmitted)}</p>
+                                              </div>
+                                            )}
+                                            {itemBenefit !== undefined && (
+                                              <div>
+                                                <p className="text-gray-500">Benefit</p>
+                                                <p className={`font-medium ${itemBenefit !== undefined && itemSubmitted !== undefined && itemBenefit < itemSubmitted ? 'text-orange-600' : 'text-green-600'}`}>
+                                                  {formatAmount(itemBenefit)}
+                                                </p>
+                                              </div>
+                                            )}
+                                            {itemApprovedQty !== undefined && (
+                                              <div>
+                                                <p className="text-gray-500">Approved Qty</p>
+                                                <p className="font-medium text-purple-600">{itemApprovedQty}</p>
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {reasons.length > 0 && (
+                                            <div className="mt-2 space-y-1">
+                                              {reasons.map((r, rIdx) => (
+                                                <div key={rIdx} className="p-2 bg-orange-50 border border-orange-200 rounded text-xs">
+                                                  <div className="flex items-start gap-1.5">
+                                                    <AlertCircle className="h-3.5 w-3.5 text-orange-500 mt-0.5 flex-shrink-0" />
+                                                    <div>
+                                                      <span className="font-semibold text-orange-800">{r.code}</span>
+                                                      <span className="text-orange-700 ml-1">({r.category})</span>
+                                                      <p className="text-orange-700 mt-0.5">{r.display}</p>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
