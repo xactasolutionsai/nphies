@@ -11,7 +11,8 @@ import {
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck, Pill,
-  MessageSquare, RotateCcw, PlusCircle, Download, Package
+  MessageSquare, RotateCcw, PlusCircle, Download, Package,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 
 // Import AI Medication Safety Panel
@@ -191,6 +192,8 @@ export default function PriorAuthorizationDetails() {
   // Poll results state
   const [showPollResultsModal, setShowPollResultsModal] = useState(false);
   const [pollResultsData, setPollResultsData] = useState(null);
+  const [showPollDebug, setShowPollDebug] = useState(false);
+  const [pollDebugCopied, setPollDebugCopied] = useState(null);
 
   useEffect(() => {
     loadPriorAuthorization();
@@ -634,7 +637,9 @@ export default function PriorAuthorizationDetails() {
         acknowledgments: pollResults.acknowledgments || [],
         matchingDetails,
         errors: response.errors || [],
-        responseCode: response.responseCode
+        responseCode: response.responseCode,
+        pollBundle: response.pollBundle || null,
+        responseBundle: response.responseBundle || null
       });
       setShowPollResultsModal(true);
     } catch (error) {
@@ -4281,6 +4286,107 @@ export default function PriorAuthorizationDetails() {
                     {err.message || err.diagnostics || JSON.stringify(err)}
                   </p>
                 ))}
+              </div>
+            )}
+
+            {/* Debug: Raw NPHIES Bundles */}
+            {(pollResultsData.pollBundle || pollResultsData.responseBundle) && (
+              <div className="border-t border-gray-200 pt-3">
+                <button
+                  onClick={() => setShowPollDebug(!showPollDebug)}
+                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <Code className="h-3 w-3" />
+                  <span>Debug: Raw NPHIES Bundles</span>
+                  {showPollDebug ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </button>
+                
+                {showPollDebug && (
+                  <div className="mt-2 space-y-3">
+                    {/* Identifier Comparison */}
+                    {pollResultsData.matchingDetails?.pollIdentifier && (
+                      <div className="bg-white border border-gray-200 rounded p-3">
+                        <p className="text-xs font-semibold text-gray-700 mb-2">Identifier Comparison</p>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500 w-32 flex-shrink-0">Sent (expected):</span>
+                            <code className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200">
+                              {pollResultsData.matchingDetails.pollIdentifier.value}
+                            </code>
+                          </div>
+                          {pollResultsData.matchingDetails.unmatchedDetails?.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <span className="text-gray-500 w-32 flex-shrink-0">Received (resp {idx + 1}):</span>
+                              <code className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
+                                {item.requestIdentifier || 'N/A'}
+                              </code>
+                              <span className="text-red-500 font-medium flex items-center gap-0.5">
+                                <XCircle className="h-3 w-3" /> Mismatch
+                              </span>
+                            </div>
+                          ))}
+                          {pollResultsData.matchingDetails.matched > 0 && pollResultsData.matchingDetails.unmatched === 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-500 w-32 flex-shrink-0">Received (response):</span>
+                              <code className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200">
+                                {pollResultsData.matchingDetails.pollIdentifier.value}
+                              </code>
+                              <span className="text-green-500 font-medium flex items-center gap-0.5">
+                                <CheckCircle className="h-3 w-3" /> Match
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Poll Request Bundle */}
+                    {pollResultsData.pollBundle && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-medium text-gray-600">Poll Request Bundle (Sent)</p>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(JSON.stringify(pollResultsData.pollBundle, null, 2));
+                              setPollDebugCopied('request');
+                              setTimeout(() => setPollDebugCopied(null), 2000);
+                            }}
+                            className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
+                          >
+                            {pollDebugCopied === 'request' ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                            {pollDebugCopied === 'request' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <pre className="bg-gray-900 text-green-400 text-[10px] rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap">
+                          {JSON.stringify(pollResultsData.pollBundle, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* NPHIES Response Bundle */}
+                    {pollResultsData.responseBundle && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-medium text-gray-600">NPHIES Response Bundle (Received)</p>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(JSON.stringify(pollResultsData.responseBundle, null, 2));
+                              setPollDebugCopied('response');
+                              setTimeout(() => setPollDebugCopied(null), 2000);
+                            }}
+                            className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
+                          >
+                            {pollDebugCopied === 'response' ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                            {pollDebugCopied === 'response' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <pre className="bg-gray-900 text-green-400 text-[10px] rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap">
+                          {JSON.stringify(pollResultsData.responseBundle, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -61,6 +61,10 @@ const CommunicationPanel = ({
   const [isAutoPolling, setIsAutoPolling] = useState(false);
   const [autoPollTimeout, setAutoPollTimeout] = useState(null);
   const [finalResponseStatus, setFinalResponseStatus] = useState(null); // 'waiting', 'received', 'approved', 'denied', 'partial'
+  
+  // Debug panel state
+  const [showPollDebug, setShowPollDebug] = useState(false);
+  const [pollDebugCopied, setPollDebugCopied] = useState(null); // 'request' or 'response'
 
   // Generate the full Poll Request Bundle that will be sent to NPHIES
   // Based on official NPHIES IG: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
@@ -1086,72 +1090,233 @@ const CommunicationPanel = ({
       )}
 
       {/* Poll Result */}
-      {pollResult && (
-        <div className={`border rounded-lg p-4 ${
-          pollResult.errors && pollResult.errors.length > 0
-            ? 'bg-red-50 border-red-200'
-            : 'bg-green-50 border-green-200'
-        }`}>
-          <p className={`font-medium ${
-            pollResult.errors && pollResult.errors.length > 0
-              ? 'text-red-800'
-              : 'text-green-800'
-          }`}>
-            {pollResult.message}
-          </p>
-          
-          {/* Display Errors if any */}
-          {pollResult.errors && pollResult.errors.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-red-300">
-              <p className="text-red-800 font-semibold mb-2">⚠️ Errors Found:</p>
-              <div className="space-y-2">
-                {pollResult.errors.map((err, index) => (
-                  <div key={index} className="bg-red-100 border border-red-300 rounded p-2">
-                    <p className="text-sm text-red-800">
-                      <span className="font-medium">Error {index + 1}:</span>
-                      {err.code && <span className="ml-2">Code: <code className="bg-red-200 px-1 rounded">{err.code}</code></span>}
-                    </p>
-                    <p className="text-sm text-red-700 mt-1">
-                      {err.message || err.details || JSON.stringify(err)}
-                    </p>
-                    {err.expression && (
-                      <p className="text-xs text-red-600 mt-1 font-mono">
-                        Location: {err.expression}
+      {pollResult && (() => {
+        const hasErrors = pollResult.errors && pollResult.errors.length > 0;
+        const matchingDetails = pollResult.pollResults?.matchingDetails;
+        const hasUnmatched = matchingDetails?.unmatched > 0;
+        const borderColor = hasErrors ? 'border-red-200' : hasUnmatched ? 'border-amber-200' : 'border-green-200';
+        const bgColor = hasErrors ? 'bg-red-50' : hasUnmatched ? 'bg-amber-50' : 'bg-green-50';
+        const textColor = hasErrors ? 'text-red-800' : hasUnmatched ? 'text-amber-800' : 'text-green-800';
+
+        return (
+          <div className={`border rounded-lg p-4 ${bgColor} ${borderColor}`}>
+            <p className={`font-medium ${textColor}`}>
+              {pollResult.message}
+            </p>
+            
+            {/* Display Errors if any */}
+            {hasErrors && (
+              <div className="mt-3 pt-3 border-t border-red-300">
+                <p className="text-red-800 font-semibold mb-2 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" /> Errors Found:
+                </p>
+                <div className="space-y-2">
+                  {pollResult.errors.map((err, index) => (
+                    <div key={index} className="bg-red-100 border border-red-300 rounded p-2">
+                      <p className="text-sm text-red-800">
+                        <span className="font-medium">Error {index + 1}:</span>
+                        {err.code && <span className="ml-2">Code: <code className="bg-red-200 px-1 rounded">{err.code}</code></span>}
                       </p>
-                    )}
+                      <p className="text-sm text-red-700 mt-1">
+                        {err.message || err.details || JSON.stringify(err)}
+                      </p>
+                      {err.expression && (
+                        <p className="text-xs text-red-600 mt-1 font-mono">
+                          Location: {err.expression}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Matching Summary */}
+            {matchingDetails && (matchingDetails.totalFound > 0 || matchingDetails.unmatched > 0) && (
+              <div className="mt-3 bg-white border border-gray-200 rounded-lg p-3 space-y-2">
+                <p className="text-sm font-semibold text-gray-700">Matching Summary</p>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div className="bg-gray-50 rounded p-2 text-center border">
+                    <p className="text-lg font-bold text-gray-800">{matchingDetails.totalFound || 0}</p>
+                    <p className="text-xs text-gray-500">Total Found</p>
+                  </div>
+                  <div className="bg-gray-50 rounded p-2 text-center border">
+                    <p className="text-lg font-bold text-green-600">{matchingDetails.matched || 0}</p>
+                    <p className="text-xs text-gray-500">Matched</p>
+                  </div>
+                  <div className="bg-gray-50 rounded p-2 text-center border">
+                    <p className={`text-lg font-bold ${hasUnmatched ? 'text-amber-600' : 'text-gray-400'}`}>
+                      {matchingDetails.unmatched || 0}
+                    </p>
+                    <p className="text-xs text-gray-500">Unmatched</p>
+                  </div>
+                </div>
+                {matchingDetails.pollIdentifier && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    <span className="font-medium">Expected Identifier:</span>{' '}
+                    <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-700">
+                      {matchingDetails.pollIdentifier.value}
+                    </code>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Unmatched Responses Warning */}
+            {matchingDetails?.unmatchedDetails?.length > 0 && (
+              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                <p className="text-sm font-semibold text-amber-800 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  Unmatched Responses (Different Authorization)
+                </p>
+                <p className="text-xs text-amber-700">
+                  These responses were returned by NPHIES but belong to a different authorization. This is a payer/NPHIES issue, not a system error.
+                </p>
+                {matchingDetails.unmatchedDetails.map((item, idx) => (
+                  <div key={idx} className="bg-white border border-amber-100 rounded p-2 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Response ID:</span>
+                      <code className="text-gray-700">{item.id || 'N/A'}</code>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Response Identifier:</span>
+                      <code className="text-amber-700 font-medium">{item.requestIdentifier || 'N/A'}</code>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">System:</span>
+                      <code className="text-gray-600 text-[10px]">{item.requestSystem || 'N/A'}</code>
+                    </div>
+                    <div className="mt-1 pt-1 border-t border-amber-100">
+                      <span className="text-amber-700">{item.reason}</span>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-          
-          {pollResult.pollResults && (
-            <div className={`mt-2 text-sm ${
-              pollResult.errors && pollResult.errors.length > 0
-                ? 'text-red-700'
-                : 'text-green-700'
-            }`}>
-              <p>• ClaimResponses: {pollResult.pollResults.claimResponses?.length || 0}</p>
-              <p>• CommunicationRequests: {pollResult.pollResults.communicationRequests?.length || 0}</p>
-              <p>• Acknowledgments: {pollResult.pollResults.acknowledgments?.length || 0}</p>
-              {pollResult.pollResults.shouldAutoPollForFinalResponse && (
-                <p className="mt-2 text-blue-700 font-medium">
-                  ℹ️ Acknowledgment received! Auto-polling for final response in {pollResult.pollResults.autoPollDelayMs || 3000}ms...
-                </p>
-              )}
-            </div>
-          )}
-          
-          {/* Show responseCode if available */}
-          {pollResult.responseCode && (
-            <p className={`text-xs mt-2 ${
-              pollResult.responseCode === 'ok' ? 'text-green-600' : 'text-red-600'
-            }`}>
-              Response Code: <code className="bg-gray-100 px-1 rounded">{pollResult.responseCode}</code>
-            </p>
-          )}
-        </div>
-      )}
+            )}
+            
+            {pollResult.pollResults && (
+              <div className={`mt-2 text-sm ${textColor}`}>
+                <p>ClaimResponses: {pollResult.pollResults.claimResponses?.length || 0}</p>
+                <p>CommunicationRequests: {pollResult.pollResults.communicationRequests?.length || 0}</p>
+                <p>Acknowledgments: {pollResult.pollResults.acknowledgments?.length || 0}</p>
+                {pollResult.pollResults.shouldAutoPollForFinalResponse && (
+                  <p className="mt-2 text-blue-700 font-medium">
+                    Acknowledgment received! Auto-polling for final response in {pollResult.pollResults.autoPollDelayMs || 3000}ms...
+                  </p>
+                )}
+              </div>
+            )}
+            
+            {/* Show responseCode if available */}
+            {pollResult.responseCode && (
+              <p className={`text-xs mt-2 ${
+                pollResult.responseCode === 'ok' ? 'text-green-600' : 'text-red-600'
+              }`}>
+                Response Code: <code className="bg-gray-100 px-1 rounded">{pollResult.responseCode}</code>
+              </p>
+            )}
+
+            {/* Debug: Raw NPHIES Bundles */}
+            {(pollResult.pollBundle || pollResult.responseBundle) && (
+              <div className="mt-3 border-t border-gray-200 pt-3">
+                <button
+                  onClick={() => setShowPollDebug(!showPollDebug)}
+                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <Code className="w-3 h-3" />
+                  <span>Debug: Raw NPHIES Bundles</span>
+                  {showPollDebug ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                
+                {showPollDebug && (
+                  <div className="mt-2 space-y-3">
+                    {/* Identifier Comparison */}
+                    {matchingDetails?.pollIdentifier && (
+                      <div className="bg-white border border-gray-200 rounded p-3">
+                        <p className="text-xs font-semibold text-gray-700 mb-2">Identifier Comparison</p>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500 w-32 flex-shrink-0">Sent (expected):</span>
+                            <code className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200">
+                              {matchingDetails.pollIdentifier.value}
+                            </code>
+                          </div>
+                          {matchingDetails.unmatchedDetails?.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <span className="text-gray-500 w-32 flex-shrink-0">Received (response):</span>
+                              <code className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
+                                {item.requestIdentifier || 'N/A'}
+                              </code>
+                              <span className="text-red-500 font-medium">Mismatch</span>
+                            </div>
+                          ))}
+                          {matchingDetails.matched > 0 && matchingDetails.unmatched === 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-500 w-32 flex-shrink-0">Received (response):</span>
+                              <code className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200">
+                                {matchingDetails.pollIdentifier.value}
+                              </code>
+                              <span className="text-green-500 font-medium flex items-center gap-0.5">
+                                <CheckCircle className="w-3 h-3" /> Match
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Poll Request Bundle */}
+                    {pollResult.pollBundle && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-medium text-gray-600">Poll Request Bundle (Sent)</p>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(JSON.stringify(pollResult.pollBundle, null, 2));
+                              setPollDebugCopied('request');
+                              setTimeout(() => setPollDebugCopied(null), 2000);
+                            }}
+                            className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
+                          >
+                            {pollDebugCopied === 'request' ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            {pollDebugCopied === 'request' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <pre className="bg-gray-900 text-green-400 text-[10px] rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap">
+                          {JSON.stringify(pollResult.pollBundle, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* NPHIES Response Bundle */}
+                    {pollResult.responseBundle && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-medium text-gray-600">NPHIES Response Bundle (Received)</p>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(JSON.stringify(pollResult.responseBundle, null, 2));
+                              setPollDebugCopied('response');
+                              setTimeout(() => setPollDebugCopied(null), 2000);
+                            }}
+                            className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
+                          >
+                            {pollDebugCopied === 'response' ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            {pollDebugCopied === 'response' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <pre className="bg-gray-900 text-green-400 text-[10px] rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap">
+                          {JSON.stringify(pollResult.responseBundle, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Acknowledgment Poll Result */}
       {ackPollResult && (
