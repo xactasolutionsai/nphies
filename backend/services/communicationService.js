@@ -821,10 +821,12 @@ class CommunicationService {
           }
         }
         
-        // Strategy 4: If only one ClaimResponse and it has a request identifier, assume it's for this auth
-        // (This handles cases where NPHIES might return responses without perfect identifier matching)
+        // Strategy 4: REMOVED - Previously assumed a single ClaimResponse was for this auth,
+        // but this caused false matches when NPHIES returned responses for different authorizations.
+        // Now we only match on identifier value (Strategies 1-3) to prevent cross-contamination.
         if (!matches && allClaimResponses.length === 1 && requestIdentifier) {
-          matches = true;
+          console.warn(`[CommunicationService] Poll returned 1 ClaimResponse but identifier does not match. ` +
+            `Expected "${authReference}", got "${requestIdentifier}". Skipping to avoid cross-contamination.`);
         }
         
         if (matches) {

@@ -1,5 +1,5 @@
 {
-  "id": "affa9c8f-0f20-432a-8245-ee66d84f4733",
+  "id": "49d6b5bb-8635-4524-a8fa-9db3a5032eaa",
   "use": "preauthorization",
   "item": [
     {
@@ -115,6 +115,254 @@
         }
       ],
       "itemSequence": 1
+    },
+    {
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "rejected",
+                "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
+                "display": "Rejected"
+              }
+            ]
+          }
+        }
+      ],
+      "adjudication": [
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "copay",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "eligible",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "reason": {
+            "text": "Service/procedure/device/medication was included within another service/procedure",
+            "coding": [
+              {
+                "code": "CV-4-9",
+                "system": "http://nphies.sa/terminology/CodeSystem/adjudication-reason",
+                "display": "Service/procedure/device/medication was included within another service/procedure"
+              }
+            ]
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "benefit",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "patientShare",
+                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "value": 0,
+          "category": {
+            "coding": [
+              {
+                "code": "approved-quantity",
+                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "tax",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 200,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "submitted",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        }
+      ],
+      "itemSequence": 3
+    },
+    {
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "rejected",
+                "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
+                "display": "Rejected"
+              }
+            ]
+          }
+        }
+      ],
+      "adjudication": [
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "copay",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "eligible",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "reason": {
+            "text": "Service/procedure/device/medication was included within another service/procedure",
+            "coding": [
+              {
+                "code": "CV-4-9",
+                "system": "http://nphies.sa/terminology/CodeSystem/adjudication-reason",
+                "display": "Service/procedure/device/medication was included within another service/procedure"
+              }
+            ]
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "benefit",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "patientShare",
+                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "value": 0,
+          "category": {
+            "coding": [
+              {
+                "code": "approved-quantity",
+                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "tax",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 200,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "submitted",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        }
+      ],
+      "itemSequence": 4
     }
   ],
   "meta": {
@@ -207,7 +455,7 @@
     },
     {
       "amount": {
-        "value": 200,
+        "value": 600,
         "currency": "SAR"
       },
       "category": {
@@ -264,9 +512,9 @@
       "valueCodeableConcept": {
         "coding": [
           {
-            "code": "approved",
+            "code": "partial",
             "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome",
-            "display": "Approved"
+            "display": "Partially Approved"
           }
         ]
       }
@@ -286,7 +534,7 @@
   },
   "identifier": [
     {
-      "value": "fb4a30c7-0586-4e93-887f-056c9925ef17",
+      "value": "2ea5279a-2add-4eac-bdca-2e60bfbf63cc",
       "system": "http://insurer.com/"
     }
   ],
