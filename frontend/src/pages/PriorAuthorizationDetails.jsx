@@ -1079,13 +1079,11 @@ export default function PriorAuthorizationDetails() {
             </>
           )}
           
-          {/* Queued status: Poll */}
-          {priorAuth.status === 'queued' && (
-            <Button size="sm" onClick={handlePoll} disabled={actionLoading}>
-              <RefreshCw className={`h-4 w-4 mr-1 ${actionLoading ? 'animate-spin' : ''}`} />
-              Poll
-            </Button>
-          )}
+          {/* Poll button - always visible */}
+          <Button size="sm" onClick={handlePoll} disabled={actionLoading}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${actionLoading ? 'animate-spin' : ''}`} />
+            Poll
+          </Button>
           
           {/* Approved status actions */}
           {priorAuth.status === 'approved' && (
@@ -1181,8 +1179,8 @@ export default function PriorAuthorizationDetails() {
                 NPHIES Response
               </TabButton>
             )}
-            {/* Communications Tab - Show only for queued PAs */}
-            {priorAuth.status === 'queued' && (
+            {/* Communications Tab - Show for queued, pended, approved, or partial PAs */}
+            {(priorAuth.status === 'queued' || priorAuth.status === 'approved' || priorAuth.status === 'partial' || priorAuth.outcome === 'queued' || priorAuth.adjudication_outcome === 'pended' || priorAuth.adjudication_outcome === 'partial') && (
               <TabButton active={activeTab === 'communications'} onClick={() => setActiveTab('communications')}>
                 <MessageSquare className="h-4 w-4 mr-1 inline" />
                 Communications
@@ -3074,7 +3072,7 @@ export default function PriorAuthorizationDetails() {
           )}
 
           {/* Communications Tab */}
-          {activeTab === 'communications' && priorAuth.status === 'queued' && (
+          {activeTab === 'communications' && (priorAuth.status === 'queued' || priorAuth.status === 'approved' || priorAuth.status === 'partial' || priorAuth.outcome === 'queued' || priorAuth.adjudication_outcome === 'pended' || priorAuth.adjudication_outcome === 'partial') && (
             <CommunicationPanel
               priorAuthId={parseInt(id)}
               priorAuthStatus={priorAuth.status}
