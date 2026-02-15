@@ -188,23 +188,19 @@ class AdvancedAuthorizationsController {
         client.release();
       }
 
+      // Build a plain poll bundle (no input/focus) - same structure that works for prior auth polling
+      // Advanced authorizations are payer-initiated, so we poll for ALL pending messages
+      // and filter for advanced-authorization profile in the response
       const pollBundle = this.mapper.buildPollRequestBundle(
         providerNphiesId,
-        providerName,
-        undefined,
-        {
-          input: {
-            includeMessageTypes: ['advanced-prior-authorization'],
-            count: 10
-          }
-        }
+        providerName
       );
 
       res.json({
         success: true,
         pollBundle,
         endpoint: `${NPHIES_CONFIG.BASE_URL}/$process-message`,
-        description: 'This is the FHIR Bundle that will be sent to NPHIES to poll for Advanced Authorization responses.'
+        description: 'This is the FHIR Bundle that will be sent to NPHIES to poll for Advanced Authorization responses. Uses plain poll (no input filters) - same structure as working prior auth polls.'
       });
     } catch (error) {
       console.error('[AdvancedAuth] Error building preview:', error);
@@ -244,18 +240,12 @@ class AdvancedAuthorizationsController {
         client.release();
       }
 
-      // Build poll request bundle with include-message-type filter
-      // for advanced-prior-authorization messages
+      // Build a plain poll bundle (no input/focus) - same structure that works for prior auth polling
+      // Advanced authorizations are payer-initiated, so we poll for ALL pending messages
+      // and filter for advanced-authorization profile in the response
       const pollBundle = this.mapper.buildPollRequestBundle(
         providerNphiesId,
-        providerName,
-        undefined, // providerType
-        {
-          input: {
-            includeMessageTypes: ['advanced-prior-authorization'],
-            count: 10
-          }
-        }
+        providerName
       );
 
       console.log('[AdvancedAuth] Sending poll request for advanced authorizations...');
@@ -264,15 +254,21 @@ class AdvancedAuthorizationsController {
       const pollResponse = await nphiesService.sendPoll(pollBundle);
 
       if (!pollResponse.success) {
+        // Extract meaningful error details from NPHIES response
+        const nphiesErrors = pollResponse.errors || [];
+        const errorDetails = nphiesErrors.length > 0
+          ? nphiesErrors.map(e => e.diagnostics || e.message || e.code || JSON.stringify(e)).join('; ')
+          : pollResponse.error || 'Unknown error';
+        
         return res.json({
           success: false,
-          message: 'Failed to poll NPHIES',
+          message: `NPHIES Error (${pollResponse.responseCode || 'unknown'}): ${errorDetails}`,
           error: pollResponse.error,
           details: pollResponse.error,
           pollBundle,
           responseBundle: pollResponse.data || null,
           endpoint: `${NPHIES_CONFIG.BASE_URL}/$process-message`,
-          errors: pollResponse.errors || [],
+          errors: nphiesErrors,
           responseCode: pollResponse.responseCode
         });
       }

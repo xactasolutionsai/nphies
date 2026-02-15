@@ -147,12 +147,31 @@ export default function AdvancedAuthorizations() {
       setShowDebug(false);
       const response = await api.pollAdvancedAuthorizations();
       setPollResult(response);
+      // Auto-expand debug JSON on error so user can see the NPHIES response
+      if (!response?.success) {
+        setShowDebug(true);
+      }
       if (response?.stats?.found > 0) {
         await loadData();
       }
     } catch (error) {
       console.error('Error polling:', error);
-      setPollResult({ success: false, message: extractErrorMessage(error) });
+      // Extract response data from error if available
+      const errorData = error?.response?.data;
+      if (errorData && (errorData.pollBundle || errorData.responseBundle || errorData.errors)) {
+        setPollResult({
+          success: false,
+          message: errorData.message || extractErrorMessage(error),
+          pollBundle: errorData.pollBundle || null,
+          responseBundle: errorData.responseBundle || null,
+          endpoint: errorData.endpoint || null,
+          errors: errorData.errors || [],
+          responseCode: errorData.responseCode
+        });
+        setShowDebug(true);
+      } else {
+        setPollResult({ success: false, message: extractErrorMessage(error) });
+      }
     } finally {
       setPolling(false);
     }
@@ -286,18 +305,56 @@ export default function AdvancedAuthorizations() {
               </div>
             </div>
 
+            {/* Response Code */}
+            {!pollResult.success && pollResult.responseCode && (
+              <div className="text-xs text-red-600">
+                <span className="font-medium">HTTP Status: </span>
+                <code className="bg-red-100 px-1.5 py-0.5 rounded">{pollResult.responseCode}</code>
+              </div>
+            )}
+
             {/* Errors */}
             {pollResult.errors?.length > 0 && (
               <div className="bg-red-100 border border-red-200 rounded p-2 text-xs text-red-700 space-y-1">
-                <p className="font-semibold">Errors:</p>
+                <p className="font-semibold">NPHIES Errors:</p>
                 {pollResult.errors.map((err, i) => (
-                  <div key={i}>
-                    {err.code && <code className="mr-1">[{err.code}]</code>}
-                    {typeof err === 'string' ? err : err.message || err.code || JSON.stringify(err)}
-                    {err.expression && <span className="text-red-400 ml-1">({err.expression})</span>}
+                  <div key={i} className="flex items-start gap-1">
+                    <span className="text-red-400 mt-0.5">-</span>
+                    <div>
+                      {err.severity && <span className="font-medium capitalize mr-1">[{err.severity}]</span>}
+                      {err.code && <code className="bg-red-200/50 px-1 rounded mr-1">{err.code}</code>}
+                      {err.diagnostics || err.message || (typeof err === 'string' ? err : JSON.stringify(err))}
+                      {err.expression && <span className="text-red-400 ml-1">({Array.isArray(err.expression) ? err.expression.join(', ') : err.expression})</span>}
+                    </div>
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* OperationOutcome from response bundle */}
+            {!pollResult.success && pollResult.responseBundle && (
+              (() => {
+                const opOutcome = pollResult.responseBundle?.resourceType === 'OperationOutcome' 
+                  ? pollResult.responseBundle
+                  : pollResult.responseBundle?.entry?.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
+                if (!opOutcome?.issue?.length) return null;
+                return (
+                  <div className="bg-orange-50 border border-orange-200 rounded p-2 text-xs text-orange-800 space-y-1">
+                    <p className="font-semibold">OperationOutcome Issues:</p>
+                    {opOutcome.issue.map((issue, i) => (
+                      <div key={i} className="flex items-start gap-1">
+                        <span className="text-orange-400 mt-0.5">-</span>
+                        <div>
+                          <span className="font-medium capitalize">[{issue.severity}]</span>{' '}
+                          <code className="bg-orange-100 px-1 rounded">{issue.code}</code>{' '}
+                          {issue.diagnostics || issue.details?.text || ''}
+                          {issue.expression && <span className="text-orange-500 ml-1">({Array.isArray(issue.expression) ? issue.expression.join(', ') : issue.expression})</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()
             )}
 
             {/* Debug JSON Viewer */}
