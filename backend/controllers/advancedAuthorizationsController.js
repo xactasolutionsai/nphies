@@ -161,6 +161,58 @@ class AdvancedAuthorizationsController {
   }
 
   /**
+   * Preview the poll request bundle without sending
+   * Returns the exact FHIR bundle that would be sent to NPHIES
+   */
+  async previewPollBundle(req, res) {
+    try {
+      const schemaName = req.schemaName || 'public';
+
+      const client = await pool.connect();
+      let providerNphiesId;
+      let providerName;
+
+      try {
+        await client.query(`SET search_path TO ${schemaName}`);
+        const providerResult = await client.query(
+          `SELECT nphies_id, provider_name FROM providers LIMIT 1`
+        );
+        if (providerResult.rows.length > 0) {
+          providerNphiesId = providerResult.rows[0].nphies_id;
+          providerName = providerResult.rows[0].provider_name;
+        } else {
+          providerNphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
+          providerName = 'Healthcare Provider';
+        }
+      } finally {
+        client.release();
+      }
+
+      const pollBundle = this.mapper.buildPollRequestBundle(
+        providerNphiesId,
+        providerName,
+        undefined,
+        {
+          input: {
+            includeMessageTypes: ['advanced-prior-authorization'],
+            count: 10
+          }
+        }
+      );
+
+      res.json({
+        success: true,
+        pollBundle,
+        endpoint: `${NPHIES_CONFIG.BASE_URL}/$process-message`,
+        description: 'This is the FHIR Bundle that will be sent to NPHIES to poll for Advanced Authorization responses.'
+      });
+    } catch (error) {
+      console.error('[AdvancedAuth] Error building preview:', error);
+      res.status(500).json({ error: error.message || 'Failed to build poll preview' });
+    }
+  }
+
+  /**
    * Poll NPHIES for new Advanced Authorization responses
    * Builds a poll-request bundle with message type advanced-prior-authorization
    */
@@ -192,12 +244,18 @@ class AdvancedAuthorizationsController {
         client.release();
       }
 
-      // Build poll request bundle
-      // Using the same Task-based structure but without specific focus
-      // to get all pending advanced authorizations
+      // Build poll request bundle with include-message-type filter
+      // for advanced-prior-authorization messages
       const pollBundle = this.mapper.buildPollRequestBundle(
         providerNphiesId,
-        providerName
+        providerName,
+        undefined, // providerType
+        {
+          input: {
+            includeMessageTypes: ['advanced-prior-authorization'],
+            count: 10
+          }
+        }
       );
 
       console.log('[AdvancedAuth] Sending poll request for advanced authorizations...');
@@ -206,12 +264,16 @@ class AdvancedAuthorizationsController {
       const pollResponse = await nphiesService.sendPoll(pollBundle);
 
       if (!pollResponse.success) {
-        return res.status(500).json({
+        return res.json({
           success: false,
-          error: 'Failed to poll NPHIES',
+          message: 'Failed to poll NPHIES',
+          error: pollResponse.error,
           details: pollResponse.error,
           pollBundle,
-          errors: pollResponse.errors || []
+          responseBundle: pollResponse.data || null,
+          endpoint: `${NPHIES_CONFIG.BASE_URL}/$process-message`,
+          errors: pollResponse.errors || [],
+          responseCode: pollResponse.responseCode
         });
       }
 
@@ -254,6 +316,7 @@ class AdvancedAuthorizationsController {
         data: saved,
         pollBundle,
         responseBundle: pollResponse.data,
+        endpoint: `${NPHIES_CONFIG.BASE_URL}/$process-message`,
         errors: [...(pollResponse.errors || []), ...saveErrors],
         responseCode: pollResponse.responseCode,
         stats: {

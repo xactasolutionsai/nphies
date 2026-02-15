@@ -8,7 +8,7 @@ import api, { extractErrorMessage } from '@/services/api';
 import {
   RefreshCw, Eye, Trash2, Download, Search, Filter,
   ShieldCheck, ShieldAlert, ShieldX, Clock, CheckCircle,
-  AlertCircle, XCircle, FileJson
+  AlertCircle, XCircle, FileJson, Code, Copy, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 // Auth reason display helper
@@ -68,6 +68,8 @@ export default function AdvancedAuthorizations() {
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
   const [pollResult, setPollResult] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugCopied, setDebugCopied] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -142,6 +144,7 @@ export default function AdvancedAuthorizations() {
     try {
       setPolling(true);
       setPollResult(null);
+      setShowDebug(false);
       const response = await api.pollAdvancedAuthorizations();
       setPollResult(response);
       if (response?.stats?.found > 0) {
@@ -153,6 +156,30 @@ export default function AdvancedAuthorizations() {
     } finally {
       setPolling(false);
     }
+  };
+
+  const handlePreviewPollBundle = async () => {
+    try {
+      const response = await api.previewAdvancedAuthPollBundle();
+      setPollResult({
+        success: true,
+        message: 'Preview only - not sent to NPHIES',
+        pollBundle: response.pollBundle,
+        endpoint: response.endpoint,
+        isPreview: true,
+        stats: null
+      });
+      setShowDebug(true);
+    } catch (error) {
+      console.error('Error previewing:', error);
+      setPollResult({ success: false, message: extractErrorMessage(error) });
+    }
+  };
+
+  const copyToClipboard = (data, key) => {
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    setDebugCopied(key);
+    setTimeout(() => setDebugCopied(null), 2000);
   };
 
   const handleDelete = async (id) => {
@@ -198,28 +225,40 @@ export default function AdvancedAuthorizations() {
             Payer-initiated Advanced Prior Authorization responses received via polling
           </p>
         </div>
-        <Button
-          onClick={handlePoll}
-          disabled={polling}
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${polling ? 'animate-spin' : ''}`} />
-          {polling ? 'Polling...' : 'Poll for New'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handlePreviewPollBundle}
+            className="flex items-center gap-2"
+          >
+            <Code className="h-4 w-4" />
+            Preview Bundle
+          </Button>
+          <Button
+            onClick={handlePoll}
+            disabled={polling}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${polling ? 'animate-spin' : ''}`} />
+            {polling ? 'Polling...' : 'Poll for New'}
+          </Button>
+        </div>
       </div>
 
       {/* Poll Result Banner */}
       {pollResult && (
-        <Card className={`border ${pollResult.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-          <CardContent className="py-3 px-4">
+        <Card className={`border ${pollResult.isPreview ? 'border-blue-200 bg-blue-50' : pollResult.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+          <CardContent className="py-3 px-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {pollResult.success ? (
+                {pollResult.isPreview ? (
+                  <Code className="h-4 w-4 text-blue-600" />
+                ) : pollResult.success ? (
                   <CheckCircle className="h-4 w-4 text-green-600" />
                 ) : (
                   <XCircle className="h-4 w-4 text-red-600" />
                 )}
-                <span className={`text-sm font-medium ${pollResult.success ? 'text-green-800' : 'text-red-800'}`}>
+                <span className={`text-sm font-medium ${pollResult.isPreview ? 'text-blue-800' : pollResult.success ? 'text-green-800' : 'text-red-800'}`}>
                   {pollResult.message}
                 </span>
                 {pollResult.stats && (
@@ -228,15 +267,86 @@ export default function AdvancedAuthorizations() {
                   </span>
                 )}
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setPollResult(null)}>
-                <XCircle className="h-3 w-3" />
-              </Button>
+              <div className="flex items-center gap-1">
+                {(pollResult.pollBundle || pollResult.responseBundle) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowDebug(!showDebug)}
+                    className="text-xs"
+                  >
+                    <Code className="h-3 w-3 mr-1" />
+                    {showDebug ? 'Hide' : 'Show'} JSON
+                    {showDebug ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => { setPollResult(null); setShowDebug(false); }}>
+                  <XCircle className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
+
+            {/* Errors */}
             {pollResult.errors?.length > 0 && (
-              <div className="mt-2 text-xs text-red-600">
+              <div className="bg-red-100 border border-red-200 rounded p-2 text-xs text-red-700 space-y-1">
+                <p className="font-semibold">Errors:</p>
                 {pollResult.errors.map((err, i) => (
-                  <div key={i}>{typeof err === 'string' ? err : err.message || err.code || JSON.stringify(err)}</div>
+                  <div key={i}>
+                    {err.code && <code className="mr-1">[{err.code}]</code>}
+                    {typeof err === 'string' ? err : err.message || err.code || JSON.stringify(err)}
+                    {err.expression && <span className="text-red-400 ml-1">({err.expression})</span>}
+                  </div>
                 ))}
+              </div>
+            )}
+
+            {/* Debug JSON Viewer */}
+            {showDebug && (
+              <div className="space-y-3 border-t border-gray-200 pt-3">
+                {pollResult.endpoint && (
+                  <div className="text-xs">
+                    <span className="font-medium text-gray-500">Endpoint: </span>
+                    <code className="bg-white px-2 py-0.5 rounded border text-gray-700">{pollResult.endpoint}</code>
+                  </div>
+                )}
+
+                {/* Poll Request Bundle */}
+                {pollResult.pollBundle && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs font-medium text-gray-600">Poll Request Bundle (Sent to NPHIES)</p>
+                      <button
+                        onClick={() => copyToClipboard(pollResult.pollBundle, 'request')}
+                        className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
+                      >
+                        {debugCopied === 'request' ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                        {debugCopied === 'request' ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                    <pre className="bg-gray-900 text-green-400 text-[10px] rounded p-3 overflow-auto max-h-64 whitespace-pre-wrap">
+                      {JSON.stringify(pollResult.pollBundle, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {/* NPHIES Response Bundle */}
+                {pollResult.responseBundle && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs font-medium text-gray-600">NPHIES Response Bundle (Received)</p>
+                      <button
+                        onClick={() => copyToClipboard(pollResult.responseBundle, 'response')}
+                        className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
+                      >
+                        {debugCopied === 'response' ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                        {debugCopied === 'response' ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                    <pre className="bg-gray-900 text-amber-400 text-[10px] rounded p-3 overflow-auto max-h-64 whitespace-pre-wrap">
+                      {JSON.stringify(pollResult.responseBundle, null, 2)}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

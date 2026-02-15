@@ -1395,6 +1395,13 @@ class ApiService {
   }
 
   /**
+   * Preview the poll bundle that would be sent to NPHIES (without actually polling)
+   */
+  async previewAdvancedAuthPollBundle() {
+    return this.request('/advanced-authorizations/poll/preview');
+  }
+
+  /**
    * Download the raw JSON for an Advanced Authorization
    * @param {number} id - Advanced Authorization ID
    */
