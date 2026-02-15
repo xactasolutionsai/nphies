@@ -174,9 +174,17 @@ class AdvancedAuthorizationsController {
 
       try {
         await client.query(`SET search_path TO ${schemaName}`);
-        const providerResult = await client.query(
-          `SELECT nphies_id, provider_name FROM providers LIMIT 1`
+        // First try to find the provider matching the configured NPHIES provider ID
+        let providerResult = await client.query(
+          `SELECT nphies_id, provider_name FROM providers WHERE nphies_id = $1 LIMIT 1`,
+          [NPHIES_CONFIG.DEFAULT_PROVIDER_ID]
         );
+        if (providerResult.rows.length === 0) {
+          // Fallback: pick any provider that doesn't have a placeholder nphies_id
+          providerResult = await client.query(
+            `SELECT nphies_id, provider_name FROM providers WHERE nphies_id ~ '^[0-9]+$' ORDER BY created_at DESC LIMIT 1`
+          );
+        }
         if (providerResult.rows.length > 0) {
           providerNphiesId = providerResult.rows[0].nphies_id;
           providerName = providerResult.rows[0].provider_name;
@@ -200,6 +208,7 @@ class AdvancedAuthorizationsController {
         success: true,
         pollBundle,
         endpoint: `${NPHIES_CONFIG.BASE_URL}/$process-message`,
+        providerUsed: { nphiesId: providerNphiesId, name: providerName },
         description: 'This is the FHIR Bundle that will be sent to NPHIES to poll for Advanced Authorization responses. Uses plain poll (no input filters) - same structure as working prior auth polls.'
       });
     } catch (error) {
@@ -224,10 +233,17 @@ class AdvancedAuthorizationsController {
       try {
         await client.query(`SET search_path TO ${schemaName}`);
 
-        // Get the first provider to use for polling
-        const providerResult = await client.query(
-          `SELECT nphies_id, provider_name FROM providers LIMIT 1`
+        // Find the provider matching the configured NPHIES provider ID
+        let providerResult = await client.query(
+          `SELECT nphies_id, provider_name FROM providers WHERE nphies_id = $1 LIMIT 1`,
+          [NPHIES_CONFIG.DEFAULT_PROVIDER_ID]
         );
+        if (providerResult.rows.length === 0) {
+          // Fallback: pick any provider with a numeric nphies_id (real license, not placeholder)
+          providerResult = await client.query(
+            `SELECT nphies_id, provider_name FROM providers WHERE nphies_id ~ '^[0-9]+$' ORDER BY created_at DESC LIMIT 1`
+          );
+        }
 
         if (providerResult.rows.length > 0) {
           providerNphiesId = providerResult.rows[0].nphies_id;
@@ -248,7 +264,7 @@ class AdvancedAuthorizationsController {
         providerName
       );
 
-      console.log('[AdvancedAuth] Sending poll request for advanced authorizations...');
+      console.log(`[AdvancedAuth] Sending poll request using provider: ${providerNphiesId} (${providerName})`);
 
       // Send poll to NPHIES
       const pollResponse = await nphiesService.sendPoll(pollBundle);
