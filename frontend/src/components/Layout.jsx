@@ -29,7 +29,8 @@ import {
   FileSearch,
   LogOut,
   User,
-  MessageSquare
+  MessageSquare,
+  ShieldAlert
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +64,7 @@ const requestsAndClaimsItems = [
   { name: 'Dental Form', href: '/dental-form', icon: ToothIcon },
   { name: 'Eyesight Form', href: '/eyesight-form', icon: Eye },
   { name: 'Prior Authorizations', href: '/prior-authorizations', icon: ClipboardCheck },
+  { name: 'Advanced Auth', href: '/advanced-authorizations', icon: ShieldAlert },
   { name: 'Claim Submissions', href: '/claim-submissions', icon: Send },
   { name: 'Standard Approvals', href: '/standard-approvals', icon: FileCheck },
   { name: 'Dental Approvals', href: '/dental-approvals', icon: ToothIcon },

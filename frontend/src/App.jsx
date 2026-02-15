@@ -44,6 +44,8 @@ import NphiesEligibilityDetails from './pages/NphiesEligibilityDetails';
 import PriorAuthorizations from './pages/PriorAuthorizations';
 import PriorAuthorizationForm from './pages/PriorAuthorizationForm';
 import PriorAuthorizationDetails from './pages/PriorAuthorizationDetails';
+import AdvancedAuthorizations from './pages/AdvancedAuthorizations';
+import AdvancedAuthorizationDetails from './pages/AdvancedAuthorizationDetails';
 import ClaimSubmissionsList from './pages/ClaimSubmissionsList';
 import ClaimDetails from './pages/ClaimDetails';
 import PaymentReconciliations from './pages/PaymentReconciliations';
@@ -141,6 +143,8 @@ function AppRoutes() {
           <Route path="/prior-authorizations/new" element={<PriorAuthorizationForm />} />
           <Route path="/prior-authorizations/:id" element={<PriorAuthorizationDetails />} />
           <Route path="/prior-authorizations/:id/edit" element={<PriorAuthorizationForm />} />
+          <Route path="/advanced-authorizations" element={<AdvancedAuthorizations />} />
+          <Route path="/advanced-authorizations/:id" element={<AdvancedAuthorizationDetails />} />
           <Route path="/claim-submissions" element={<ClaimSubmissionsList />} />
           <Route path="/claim-submissions/:id" element={<ClaimDetails />} />
           <Route path="/payment-reconciliations" element={<PaymentReconciliations />} />

@@ -1363,6 +1363,54 @@ class ApiService {
       body: JSON.stringify(data)
     });
   }
+
+  // ============================================================================
+  // ADVANCED AUTHORIZATIONS
+  // ============================================================================
+
+  /**
+   * List Advanced Authorizations with pagination and filters
+   * @param {Object} params - Query params (page, limit, auth_reason, outcome, claim_type, search)
+   */
+  async getAdvancedAuthorizations(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/advanced-authorizations?${queryString}`);
+  }
+
+  /**
+   * Get a single Advanced Authorization by ID
+   * @param {number} id - Advanced Authorization ID
+   */
+  async getAdvancedAuthorization(id) {
+    return this.request(`/advanced-authorizations/${id}`);
+  }
+
+  /**
+   * Poll NPHIES for new Advanced Authorization responses
+   */
+  async pollAdvancedAuthorizations() {
+    return this.request('/advanced-authorizations/poll', {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Download the raw JSON for an Advanced Authorization
+   * @param {number} id - Advanced Authorization ID
+   */
+  async downloadAdvancedAuthorizationJson(id) {
+    return this.request(`/advanced-authorizations/${id}/download`);
+  }
+
+  /**
+   * Delete an Advanced Authorization
+   * @param {number} id - Advanced Authorization ID
+   */
+  async deleteAdvancedAuthorization(id) {
+    return this.request(`/advanced-authorizations/${id}`, {
+      method: 'DELETE'
+    });
+  }
 }
 
 /**

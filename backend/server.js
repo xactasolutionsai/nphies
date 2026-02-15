@@ -31,6 +31,7 @@ import priorAuthorizationsRoutes from './routes/priorAuthorizations.js';
 import claimSubmissionsRoutes from './routes/claimSubmissions.js';
 import paymentReconciliationRoutes from './routes/paymentReconciliation.js';
 import coveragesRoutes from './routes/coverages.js';
+import advancedAuthorizationsRoutes from './routes/advancedAuthorizations.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import contactsRoutes from './routes/contacts.js';
@@ -142,6 +143,7 @@ app.use('/api/prior-authorizations', priorAuthorizationsRoutes);
 app.use('/api/claim-submissions', claimSubmissionsRoutes);
 app.use('/api/payment-reconciliation', paymentReconciliationRoutes);
 app.use('/api/coverages', coveragesRoutes);
+app.use('/api/advanced-authorizations', advancedAuthorizationsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -174,6 +176,7 @@ app.get('/', (req, res) => {
       claimSubmissions: '/api/claim-submissions',
       paymentReconciliation: '/api/payment-reconciliation',
       coverages: '/api/coverages',
+      advancedAuthorizations: '/api/advanced-authorizations',
       contacts: '/api/contacts',
       health: '/health'
     }
