@@ -789,16 +789,22 @@ class PriorAuthorizationsController extends BaseController {
       // Generate request ID
       const nphiesRequestId = `pa-req-${Date.now()}`;
 
+      // Extract outbound MessageHeader.id for poll response correlation
+      const outboundMessageHeaderId = bundle?.entry?.find(
+        e => e.resource?.resourceType === 'MessageHeader'
+      )?.resource?.id || null;
+
       // Update status to pending and store request bundle
       await query(`
         UPDATE prior_authorizations 
         SET status = 'pending', 
             nphies_request_id = $1, 
             request_bundle = $2,
+            outbound_message_header_id = $3,
             request_date = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $3
-      `, [nphiesRequestId, JSON.stringify(bundle), id]);
+        WHERE id = $4
+      `, [nphiesRequestId, JSON.stringify(bundle), outboundMessageHeaderId, id]);
 
       // Send to NPHIES (use submitPriorAuth for prior authorization requests)
       const nphiesResponse = await nphiesService.submitPriorAuth(bundle);

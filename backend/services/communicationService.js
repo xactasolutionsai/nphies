@@ -941,30 +941,11 @@ class CommunicationService {
       }
 
       // 7. Process Communications (acknowledgments)
-      let hasUnsolicitedAcknowledgment = false;
-      let unsolicitedPriorAuthId = null;
-      
       for (const comm of communications) {
         const processed = await this.processAcknowledgment(client, comm);
         if (processed) {
           results.acknowledgments.push(processed);
-          
-          // Check if this was an acknowledgment for an unsolicited communication
-          if (processed.isUnsolicited && processed.priorAuthId) {
-            hasUnsolicitedAcknowledgment = true;
-            unsolicitedPriorAuthId = processed.priorAuthId;
-          }
         }
-      }
-
-      // 8. Auto-poll for final response after unsolicited communication acknowledgment (Step 7)
-      if (hasUnsolicitedAcknowledgment && NPHIES_CONFIG.AUTO_POLL_AFTER_ACKNOWLEDGMENT) {
-        console.log(`[CommunicationService] Unsolicited communication acknowledged. Auto-polling for final response in ${NPHIES_CONFIG.AUTO_POLL_DELAY_MS}ms...`);
-        
-        // Set flag to indicate auto-poll should be triggered
-        results.shouldAutoPollForFinalResponse = true;
-        results.autoPollDelayMs = NPHIES_CONFIG.AUTO_POLL_DELAY_MS;
-        results.autoPollPriorAuthId = unsolicitedPriorAuthId;
       }
 
       return results;

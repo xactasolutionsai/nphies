@@ -190,10 +190,7 @@ export default function PriorAuthorizationDetails() {
   const [confirmCallback, setConfirmCallback] = useState(null);
   
   // Poll results state
-  const [showPollResultsModal, setShowPollResultsModal] = useState(false);
-  const [pollResultsData, setPollResultsData] = useState(null);
-  const [showPollDebug, setShowPollDebug] = useState(false);
-  const [pollDebugCopied, setPollDebugCopied] = useState(null);
+  // Poll results modal state removed - polling now handled via System Poll page
 
   useEffect(() => {
     loadPriorAuthorization();
@@ -618,37 +615,6 @@ export default function PriorAuthorizationDetails() {
       }
     });
     setShowConfirmModal(true);
-  };
-
-  const handlePoll = async () => {
-    try {
-      setActionLoading(true);
-      const response = await api.pollPriorAuthorizationResponse(id);
-      await loadPriorAuthorization();
-      
-      // Store poll results for detailed display
-      const pollResults = response.pollResults || {};
-      const matchingDetails = pollResults.matchingDetails || {};
-      
-      setPollResultsData({
-        message: response.message || 'Polling complete',
-        claimResponses: pollResults.claimResponses || [],
-        communicationRequests: pollResults.communicationRequests || [],
-        acknowledgments: pollResults.acknowledgments || [],
-        matchingDetails,
-        errors: response.errors || [],
-        responseCode: response.responseCode,
-        pollBundle: response.pollBundle || null,
-        responseBundle: response.responseBundle || null
-      });
-      setShowPollResultsModal(true);
-    } catch (error) {
-      console.error('Error polling:', error);
-      setErrorMessage(`Error: ${extractErrorMessage(error)}`);
-      setShowErrorModal(true);
-    } finally {
-      setActionLoading(false);
-    }
   };
 
   const handleCancel = async () => {
@@ -1101,10 +1067,10 @@ export default function PriorAuthorizationDetails() {
             </>
           )}
           
-          {/* Poll button - always visible */}
-          <Button size="sm" onClick={handlePoll} disabled={actionLoading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${actionLoading ? 'animate-spin' : ''}`} />
-            Poll
+          {/* System Poll link */}
+          <Button size="sm" variant="outline" onClick={() => navigate('/system-poll')}>
+            <RefreshCw className="h-4 w-4 mr-1" />
+            System Poll
           </Button>
           
           {/* Approved status actions */}
@@ -4143,254 +4109,6 @@ export default function PriorAuthorizationDetails() {
           <CheckCircle className="h-5 w-5" />
           <p className="whitespace-pre-line">{successMessage}</p>
         </div>
-      </Modal>
-
-      {/* Poll Results Modal */}
-      <Modal
-        open={showPollResultsModal}
-        onClose={() => setShowPollResultsModal(false)}
-        title="Poll Results"
-        description=""
-        footer={
-          <Button onClick={() => setShowPollResultsModal(false)}>
-            Close
-          </Button>
-        }
-      >
-        {pollResultsData && (
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-            {/* Main Message */}
-            <div className={`flex items-center gap-3 ${
-              pollResultsData.claimResponses?.length > 0 ? 'text-green-600' : 
-              pollResultsData.matchingDetails?.unmatched > 0 ? 'text-amber-600' : 'text-blue-600'
-            }`}>
-              {pollResultsData.claimResponses?.length > 0 ? (
-                <CheckCircle className="h-5 w-5 flex-shrink-0" />
-              ) : pollResultsData.matchingDetails?.unmatched > 0 ? (
-                <AlertCircle className="h-5 w-5 flex-shrink-0" />
-              ) : (
-                <RefreshCw className="h-5 w-5 flex-shrink-0" />
-              )}
-              <p className="font-medium">{pollResultsData.message}</p>
-            </div>
-
-            {/* Matching Summary */}
-            {pollResultsData.matchingDetails && (pollResultsData.matchingDetails.totalFound > 0 || pollResultsData.matchingDetails.unmatched > 0) && (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
-                <p className="text-sm font-semibold text-gray-700">Matching Summary</p>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  <div className="bg-white rounded p-2 text-center border">
-                    <p className="text-lg font-bold text-gray-800">{pollResultsData.matchingDetails.totalFound || 0}</p>
-                    <p className="text-xs text-gray-500">Total Found</p>
-                  </div>
-                  <div className="bg-white rounded p-2 text-center border">
-                    <p className="text-lg font-bold text-green-600">{pollResultsData.matchingDetails.matched || 0}</p>
-                    <p className="text-xs text-gray-500">Matched</p>
-                  </div>
-                  <div className="bg-white rounded p-2 text-center border">
-                    <p className={`text-lg font-bold ${pollResultsData.matchingDetails.unmatched > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                      {pollResultsData.matchingDetails.unmatched || 0}
-                    </p>
-                    <p className="text-xs text-gray-500">Unmatched</p>
-                  </div>
-                </div>
-
-                {/* Poll Identifier */}
-                {pollResultsData.matchingDetails.pollIdentifier && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    <span className="font-medium">Expected Identifier:</span>{' '}
-                    <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-700">
-                      {pollResultsData.matchingDetails.pollIdentifier.value}
-                    </code>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Unmatched Responses Warning */}
-            {pollResultsData.matchingDetails?.unmatchedDetails?.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-                <p className="text-sm font-semibold text-amber-800 flex items-center gap-1">
-                  <AlertCircle className="h-4 w-4" />
-                  Unmatched Responses (Different Authorization)
-                </p>
-                <p className="text-xs text-amber-700">
-                  These responses were returned by NPHIES but belong to a different authorization. This is a payer/NPHIES issue, not a system error.
-                </p>
-                {pollResultsData.matchingDetails.unmatchedDetails.map((item, idx) => (
-                  <div key={idx} className="bg-white border border-amber-100 rounded p-2 text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Response ID:</span>
-                      <code className="text-gray-700">{item.id || 'N/A'}</code>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Response Identifier:</span>
-                      <code className="text-amber-700 font-medium">{item.requestIdentifier || 'N/A'}</code>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">System:</span>
-                      <code className="text-gray-600 text-[10px]">{item.requestSystem || 'N/A'}</code>
-                    </div>
-                    <div className="mt-1 pt-1 border-t border-amber-100">
-                      <span className="text-amber-700">{item.reason}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Matched Claim Responses */}
-            {pollResultsData.claimResponses?.length > 0 && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
-                <p className="text-sm font-semibold text-green-800 flex items-center gap-1">
-                  <CheckCircle className="h-4 w-4" />
-                  Matched Claim Responses ({pollResultsData.claimResponses.length})
-                </p>
-                {pollResultsData.claimResponses.map((cr, idx) => (
-                  <div key={idx} className="bg-white border border-green-100 rounded p-2 text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Outcome:</span>
-                      <Badge variant={cr.adjudicationOutcome === 'approved' ? 'default' : cr.adjudicationOutcome === 'partial' ? 'secondary' : 'destructive'}>
-                        {cr.adjudicationOutcome || cr.status || 'N/A'}
-                      </Badge>
-                    </div>
-                    {cr.preAuthRef && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Pre-Auth Ref:</span>
-                        <code className="text-green-700">{cr.preAuthRef}</code>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Communication Requests */}
-            {pollResultsData.communicationRequests?.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-sm font-semibold text-blue-800 flex items-center gap-1">
-                  <MessageSquare className="h-4 w-4" />
-                  Communication Requests ({pollResultsData.communicationRequests.length})
-                </p>
-                <p className="text-xs text-blue-600 mt-1">Insurer is requesting additional information.</p>
-              </div>
-            )}
-
-            {/* Errors */}
-            {pollResultsData.errors?.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
-                <p className="text-sm font-semibold text-red-800">Errors</p>
-                {pollResultsData.errors.map((err, idx) => (
-                  <p key={idx} className="text-xs text-red-700">
-                    {err.code && <code className="mr-1">[{err.code}]</code>}
-                    {err.message || err.diagnostics || JSON.stringify(err)}
-                  </p>
-                ))}
-              </div>
-            )}
-
-            {/* Debug: Raw NPHIES Bundles */}
-            {(pollResultsData.pollBundle || pollResultsData.responseBundle) && (
-              <div className="border-t border-gray-200 pt-3">
-                <button
-                  onClick={() => setShowPollDebug(!showPollDebug)}
-                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  <Code className="h-3 w-3" />
-                  <span>Debug: Raw NPHIES Bundles</span>
-                  {showPollDebug ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                </button>
-                
-                {showPollDebug && (
-                  <div className="mt-2 space-y-3">
-                    {/* Identifier Comparison */}
-                    {pollResultsData.matchingDetails?.pollIdentifier && (
-                      <div className="bg-white border border-gray-200 rounded p-3">
-                        <p className="text-xs font-semibold text-gray-700 mb-2">Identifier Comparison</p>
-                        <div className="space-y-1 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-500 w-32 flex-shrink-0">Sent (expected):</span>
-                            <code className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200">
-                              {pollResultsData.matchingDetails.pollIdentifier.value}
-                            </code>
-                          </div>
-                          {pollResultsData.matchingDetails.unmatchedDetails?.map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-2">
-                              <span className="text-gray-500 w-32 flex-shrink-0">Received (resp {idx + 1}):</span>
-                              <code className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
-                                {item.requestIdentifier || 'N/A'}
-                              </code>
-                              <span className="text-red-500 font-medium flex items-center gap-0.5">
-                                <XCircle className="h-3 w-3" /> Mismatch
-                              </span>
-                            </div>
-                          ))}
-                          {pollResultsData.matchingDetails.matched > 0 && pollResultsData.matchingDetails.unmatched === 0 && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-gray-500 w-32 flex-shrink-0">Received (response):</span>
-                              <code className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200">
-                                {pollResultsData.matchingDetails.pollIdentifier.value}
-                              </code>
-                              <span className="text-green-500 font-medium flex items-center gap-0.5">
-                                <CheckCircle className="h-3 w-3" /> Match
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Poll Request Bundle */}
-                    {pollResultsData.pollBundle && (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-medium text-gray-600">Poll Request Bundle (Sent)</p>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(JSON.stringify(pollResultsData.pollBundle, null, 2));
-                              setPollDebugCopied('request');
-                              setTimeout(() => setPollDebugCopied(null), 2000);
-                            }}
-                            className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
-                          >
-                            {pollDebugCopied === 'request' ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                            {pollDebugCopied === 'request' ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                        <pre className="bg-gray-900 text-green-400 text-[10px] rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap">
-                          {JSON.stringify(pollResultsData.pollBundle, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-
-                    {/* NPHIES Response Bundle */}
-                    {pollResultsData.responseBundle && (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-medium text-gray-600">NPHIES Response Bundle (Received)</p>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(JSON.stringify(pollResultsData.responseBundle, null, 2));
-                              setPollDebugCopied('response');
-                              setTimeout(() => setPollDebugCopied(null), 2000);
-                            }}
-                            className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
-                          >
-                            {pollDebugCopied === 'response' ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                            {pollDebugCopied === 'response' ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                        <pre className="bg-gray-900 text-green-400 text-[10px] rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap">
-                          {JSON.stringify(pollResultsData.responseBundle, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </Modal>
 
       {/* Confirm Modal */}

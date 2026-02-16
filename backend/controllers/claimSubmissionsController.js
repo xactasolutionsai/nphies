@@ -447,7 +447,12 @@ class ClaimSubmissionsController extends BaseController {
       const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, policyHolder: null, motherPatient });
       const nphiesRequestId = `clm-req-${Date.now()}`;
 
-      await query(`UPDATE claim_submissions SET status = 'pending', nphies_request_id = $1, request_bundle = $2, request_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $3`, [nphiesRequestId, JSON.stringify(bundle), id]);
+      // Extract outbound MessageHeader.id for poll response correlation
+      const outboundMessageHeaderId = bundle?.entry?.find(
+        e => e.resource?.resourceType === 'MessageHeader'
+      )?.resource?.id || null;
+
+      await query(`UPDATE claim_submissions SET status = 'pending', nphies_request_id = $1, request_bundle = $2, outbound_message_header_id = $3, request_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $4`, [nphiesRequestId, JSON.stringify(bundle), outboundMessageHeaderId, id]);
 
       const nphiesResponse = await nphiesService.submitClaim(bundle);
 

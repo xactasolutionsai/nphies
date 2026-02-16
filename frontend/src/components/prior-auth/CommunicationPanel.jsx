@@ -6,11 +6,13 @@
  * - Test Case #2: Send SOLICITED Communication (respond to HIC's CommunicationRequest)
  * 
  * Features:
- * - Poll for updates (ClaimResponse, CommunicationRequests, Acknowledgments)
  * - View pending CommunicationRequests from HIC
  * - Compose and send Communications with free text or attachments
  * - Select which claim items the communication relates to (ClaimItemSequence)
  * - View sent Communications and their acknowledgment status
+ * 
+ * Note: Polling is handled by the System Poll service. This panel is display-only
+ * for poll results. Use "Refresh" to reload data from the database.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -31,8 +33,7 @@ import {
   X,
   Copy,
   Eye,
-  Code,
-  XCircle
+  Code
 } from 'lucide-react';
 import api from '../../services/api';
 import { selectStyles } from './styles';
@@ -45,26 +46,12 @@ const CommunicationPanel = ({
 }) => {
   // State
   const [isPolling, setIsPolling] = useState(false);
-  const [pollResult, setPollResult] = useState(null);
   const [communicationRequests, setCommunicationRequests] = useState([]);
   const [communications, setCommunications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Acknowledgment polling state
-  const [pollingAckFor, setPollingAckFor] = useState(null); // Communication ID being polled
-  const [ackPollResult, setAckPollResult] = useState(null);
-  const [ackPollJsonCopied, setAckPollJsonCopied] = useState(null); // 'request' or 'response'
   const [pollPreviewCopied, setPollPreviewCopied] = useState(false);
-  
-  // Auto-poll state (Step 7-8)
-  const [isAutoPolling, setIsAutoPolling] = useState(false);
-  const [autoPollTimeout, setAutoPollTimeout] = useState(null);
-  const [finalResponseStatus, setFinalResponseStatus] = useState(null); // 'waiting', 'received', 'approved', 'denied', 'partial'
-  
-  // Debug panel state
-  const [showPollDebug, setShowPollDebug] = useState(false);
-  const [pollDebugCopied, setPollDebugCopied] = useState(null); // 'request' or 'response'
 
   // Generate the full Poll Request Bundle that will be sent to NPHIES
   // Based on official NPHIES IG: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
@@ -273,15 +260,6 @@ const CommunicationPanel = ({
     }
   }, [priorAuthId]);
 
-  // Cleanup auto-poll timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (autoPollTimeout) {
-        clearTimeout(autoPollTimeout);
-      }
-    };
-  }, [autoPollTimeout]);
-
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -301,169 +279,23 @@ const CommunicationPanel = ({
     }
   };
 
-  // Poll for updates
-  const handlePoll = async (isAutoPoll = false) => {
-    if (isAutoPoll) {
-      setIsAutoPolling(true);
-    } else {
-      setIsPolling(true);
-    }
-    setError(null);
-    setPollResult(null);
-    
-    try {
-      const result = await api.pollPriorAuthorizationResponse(priorAuthId);
-      setPollResult(result);
-      
-      // Reload data to get new requests/acknowledgments
-      await loadData();
-      
-      // Check if we should auto-poll for final response (Step 7)
-      if (result.pollResults?.shouldAutoPollForFinalResponse && !isAutoPoll) {
-        const delayMs = result.pollResults.autoPollDelayMs || 3000;
-        console.log(`[CommunicationPanel] Auto-polling for final response in ${delayMs}ms...`);
-        
-        // Clear any existing timeout
-        if (autoPollTimeout) {
-          clearTimeout(autoPollTimeout);
-        }
-        
-        // Set timeout for auto-poll
-        const timeout = setTimeout(async () => {
-          console.log('[CommunicationPanel] Executing auto-poll for final response...');
-          await handlePoll(true); // Recursive call with isAutoPoll flag
-        }, delayMs);
-        
-        setAutoPollTimeout(timeout);
-        setFinalResponseStatus('waiting');
-      }
-      
-      // Check if final response was received (Step 8)
-      if (result.pollResults?.claimResponses && result.pollResults.claimResponses.length > 0) {
-        const claimResponse = result.pollResults.claimResponses[0];
-        // claimResponse is already processed, check status field
-        if (claimResponse.status === 'approved' || claimResponse.status === 'denied' || claimResponse.status === 'partial') {
-          setFinalResponseStatus(claimResponse.status);
-        } else if (claimResponse.outcome === 'complete') {
-          const disposition = claimResponse.disposition?.toLowerCase() || '';
-          if (disposition.includes('approved') || disposition.includes('accept')) {
-            setFinalResponseStatus('approved');
-          } else if (disposition.includes('denied') || disposition.includes('reject')) {
-            setFinalResponseStatus('denied');
-          } else {
-            setFinalResponseStatus('approved'); // Default
-          }
-        } else if (claimResponse.outcome === 'partial') {
-          setFinalResponseStatus('partial');
-        }
-      }
-      
-      // Notify parent if status changed
-      if (result.data && onStatusUpdate) {
-        onStatusUpdate(result.data);
-      }
-    } catch (err) {
-      console.error('Error polling:', err);
-      // Handle error object properly - extract message string
-      const errorData = err.response?.data?.error;
-      let errorMessage;
-      if (typeof errorData === 'object' && errorData !== null) {
-        errorMessage = errorData.message || errorData.details || JSON.stringify(errorData);
-      } else {
-        errorMessage = errorData || err.response?.data?.details || err.message || 'Failed to poll for updates';
-      }
-      setError(errorMessage);
-      
-      // If auto-poll failed, allow manual retry
-      if (isAutoPoll) {
-        setFinalResponseStatus('waiting'); // Keep waiting, show manual button
-      }
-    } finally {
-      if (isAutoPoll) {
-        setIsAutoPolling(false);
-      } else {
-        setIsPolling(false);
-      }
-    }
-  };
-
-  // Poll for acknowledgment of a specific communication
-  const handlePollAcknowledgment = async (communicationId) => {
-    setPollingAckFor(communicationId);
-    setAckPollResult(null);
-    setError(null);
-    
-    try {
-      const result = await api.pollCommunicationAcknowledgment(priorAuthId, communicationId);
-      
-      setAckPollResult(result);
-      
-      // Reload communications to get updated acknowledgment status
-      await loadData();
-      
-      // Show success/info message
-      if (result.acknowledgmentFound) {
-        setAckPollResult({
-          ...result,
-          message: `Acknowledgment received: ${result.acknowledgmentStatus}`
-        });
-        
-        // Check if this was an unsolicited communication - trigger auto-poll (Step 7)
-        const comm = communications.find(c => c.communication_id === communicationId);
-        if (comm && comm.communication_type === 'unsolicited') {
-          const delayMs = 3000; // Default delay
-          console.log(`[CommunicationPanel] Unsolicited communication acknowledged. Auto-polling for final response in ${delayMs}ms...`);
-          
-          // Clear any existing timeout
-          if (autoPollTimeout) {
-            clearTimeout(autoPollTimeout);
-          }
-          
-          // Set timeout for auto-poll
-          const timeout = setTimeout(async () => {
-            console.log('[CommunicationPanel] Executing auto-poll for final response after acknowledgment...');
-            await handlePoll(true); // Auto-poll
-          }, delayMs);
-          
-          setAutoPollTimeout(timeout);
-          setFinalResponseStatus('waiting');
-        }
-      } else if (result.alreadyAcknowledged) {
-        setAckPollResult({
-          ...result,
-          message: 'Communication was already acknowledged'
-        });
-      }
-    } catch (err) {
-      console.error('Error polling for acknowledgment:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to poll for acknowledgment';
-      setError(errorMessage);
-    } finally {
-      setPollingAckFor(null);
-    }
-  };
-
-  // Poll for all queued acknowledgments
-  const handlePollAllAcknowledgments = async () => {
+  // Refresh data from database (polling is now done via System Poll page)
+  const handleRefresh = async () => {
     setIsPolling(true);
-    setAckPollResult(null);
     setError(null);
-    
     try {
-      const result = await api.pollAllQueuedAcknowledgments(priorAuthId);
-      
-      setAckPollResult(result);
-      
-      // Reload communications to get updated acknowledgment status
       await loadData();
+      if (onStatusUpdate) {
+        onStatusUpdate(null);
+      }
     } catch (err) {
-      console.error('Error polling for all acknowledgments:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to poll for acknowledgments';
-      setError(errorMessage);
+      console.error('Error refreshing data:', err);
+      setError('Failed to refresh data');
     } finally {
       setIsPolling(false);
     }
   };
+
 
   // Preview poll bundle (without sending)
   const handlePreviewPollBundle = async () => {
@@ -802,15 +634,6 @@ const CommunicationPanel = ({
         
         // Reload data
         await loadData();
-        
-        // Auto-poll for acknowledgment after a delay (both unsolicited and solicited)
-        console.log(`[CommunicationPanel] ${communicationType} communication sent. Auto-polling for acknowledgment in 2 seconds...`);
-        
-        // Wait 2 seconds for NPHIES to process, then poll for acknowledgment
-        setTimeout(async () => {
-          console.log('[CommunicationPanel] Auto-polling for acknowledgment...');
-          await handlePoll(false);
-        }, 2000);
       } else {
         // Handle error object properly
         const errMsg = result.message;
@@ -971,14 +794,14 @@ const CommunicationPanel = ({
               </>
             )}
           </button>
-          {/* Poll Button */}
+          {/* Refresh Button */}
           <button
-            onClick={handlePoll}
+            onClick={handleRefresh}
             disabled={isPolling}
             className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isPolling ? 'animate-spin' : ''}`} />
-            {isPolling ? 'Polling...' : 'Poll for Updates'}
+            {isPolling ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       </div>
@@ -1015,403 +838,18 @@ const CommunicationPanel = ({
         </div>
       )}
 
-      {/* Final Response Status (Step 8) */}
-      {finalResponseStatus && (
-        <div className={`border rounded-lg p-4 ${
-          finalResponseStatus === 'approved' 
-            ? 'bg-green-50 border-green-200' 
-            : finalResponseStatus === 'denied'
-            ? 'bg-red-50 border-red-200'
-            : finalResponseStatus === 'partial'
-            ? 'bg-yellow-50 border-yellow-200'
-            : 'bg-blue-50 border-blue-200'
-        }`}>
-          <div className="flex items-start">
-            {finalResponseStatus === 'approved' && (
-              <>
-                <CheckCircle className="w-5 h-5 text-green-600 mr-2 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-green-800 font-semibold">✅ Final Authorization Response Received: Approved</p>
-                  <p className="text-sm text-green-700 mt-1">
-                    The authorization has been approved. Check the Prior Authorization details for approved amounts and disposition.
-                  </p>
-                </div>
-              </>
-            )}
-            {finalResponseStatus === 'denied' && (
-              <>
-                <XCircle className="w-5 h-5 text-red-600 mr-2 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-red-800 font-semibold">❌ Final Authorization Response Received: Denied</p>
-                  <p className="text-sm text-red-700 mt-1">
-                    The authorization has been denied. Check the Prior Authorization details for denial reason.
-                  </p>
-                </div>
-              </>
-            )}
-            {finalResponseStatus === 'partial' && (
-              <>
-                <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-yellow-800 font-semibold">⚠️ Final Authorization Response Received: Partial</p>
-                  <p className="text-sm text-yellow-700 mt-1">
-                    The authorization has been partially approved. Check the Prior Authorization details for approved items.
-                  </p>
-                </div>
-              </>
-            )}
-            {finalResponseStatus === 'waiting' && (
-              <>
-                <Clock className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5 animate-pulse" />
-                <div className="flex-1">
-                  <p className="text-blue-800 font-semibold">⏳ Waiting for Final Authorization Response</p>
-                  <p className="text-sm text-blue-700 mt-1">
-                    {isAutoPolling 
-                      ? 'Polling for final response...' 
-                      : 'After HIC acknowledges your communication, they will adjudicate and send the final authorization response. Click "Poll for Updates" to retrieve it.'}
-                  </p>
-                  {!isAutoPolling && (
-                    <button
-                      onClick={() => handlePoll(false)}
-                      disabled={isPolling}
-                      className="mt-2 flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                    >
-                      <RefreshCw className={`w-3 h-3 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
-                      Poll for Final Response
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+      {/* System Poll Info */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <div className="flex items-center">
+          <RefreshCw className="w-4 h-4 text-blue-600 mr-2 flex-shrink-0" />
+          <p className="text-blue-800 text-sm">
+            Polling is now handled by the{' '}
+            <a href="/system-poll" className="font-semibold underline hover:text-blue-900">System Poll</a> service.
+            After sending a communication, use System Poll to retrieve responses. Click "Refresh" to see updated data.
+          </p>
         </div>
-      )}
+      </div>
 
-      {/* Poll Result */}
-      {pollResult && (() => {
-        const hasErrors = pollResult.errors && pollResult.errors.length > 0;
-        const matchingDetails = pollResult.pollResults?.matchingDetails;
-        const hasUnmatched = matchingDetails?.unmatched > 0;
-        const borderColor = hasErrors ? 'border-red-200' : hasUnmatched ? 'border-amber-200' : 'border-green-200';
-        const bgColor = hasErrors ? 'bg-red-50' : hasUnmatched ? 'bg-amber-50' : 'bg-green-50';
-        const textColor = hasErrors ? 'text-red-800' : hasUnmatched ? 'text-amber-800' : 'text-green-800';
-
-        return (
-          <div className={`border rounded-lg p-4 ${bgColor} ${borderColor}`}>
-            <p className={`font-medium ${textColor}`}>
-              {pollResult.message}
-            </p>
-            
-            {/* Display Errors if any */}
-            {hasErrors && (
-              <div className="mt-3 pt-3 border-t border-red-300">
-                <p className="text-red-800 font-semibold mb-2 flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" /> Errors Found:
-                </p>
-                <div className="space-y-2">
-                  {pollResult.errors.map((err, index) => (
-                    <div key={index} className="bg-red-100 border border-red-300 rounded p-2">
-                      <p className="text-sm text-red-800">
-                        <span className="font-medium">Error {index + 1}:</span>
-                        {err.code && <span className="ml-2">Code: <code className="bg-red-200 px-1 rounded">{err.code}</code></span>}
-                      </p>
-                      <p className="text-sm text-red-700 mt-1">
-                        {err.message || err.details || JSON.stringify(err)}
-                      </p>
-                      {err.expression && (
-                        <p className="text-xs text-red-600 mt-1 font-mono">
-                          Location: {err.expression}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Matching Summary */}
-            {matchingDetails && (matchingDetails.totalFound > 0 || matchingDetails.unmatched > 0) && (
-              <div className="mt-3 bg-white border border-gray-200 rounded-lg p-3 space-y-2">
-                <p className="text-sm font-semibold text-gray-700">Matching Summary</p>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  <div className="bg-gray-50 rounded p-2 text-center border">
-                    <p className="text-lg font-bold text-gray-800">{matchingDetails.totalFound || 0}</p>
-                    <p className="text-xs text-gray-500">Total Found</p>
-                  </div>
-                  <div className="bg-gray-50 rounded p-2 text-center border">
-                    <p className="text-lg font-bold text-green-600">{matchingDetails.matched || 0}</p>
-                    <p className="text-xs text-gray-500">Matched</p>
-                  </div>
-                  <div className="bg-gray-50 rounded p-2 text-center border">
-                    <p className={`text-lg font-bold ${hasUnmatched ? 'text-amber-600' : 'text-gray-400'}`}>
-                      {matchingDetails.unmatched || 0}
-                    </p>
-                    <p className="text-xs text-gray-500">Unmatched</p>
-                  </div>
-                </div>
-                {matchingDetails.pollIdentifier && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    <span className="font-medium">Expected Identifier:</span>{' '}
-                    <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-700">
-                      {matchingDetails.pollIdentifier.value}
-                    </code>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Unmatched Responses Warning */}
-            {matchingDetails?.unmatchedDetails?.length > 0 && (
-              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-                <p className="text-sm font-semibold text-amber-800 flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" />
-                  Unmatched Responses (Different Authorization)
-                </p>
-                <p className="text-xs text-amber-700">
-                  These responses were returned by NPHIES but belong to a different authorization. This is a payer/NPHIES issue, not a system error.
-                </p>
-                {matchingDetails.unmatchedDetails.map((item, idx) => (
-                  <div key={idx} className="bg-white border border-amber-100 rounded p-2 text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Response ID:</span>
-                      <code className="text-gray-700">{item.id || 'N/A'}</code>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Response Identifier:</span>
-                      <code className="text-amber-700 font-medium">{item.requestIdentifier || 'N/A'}</code>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">System:</span>
-                      <code className="text-gray-600 text-[10px]">{item.requestSystem || 'N/A'}</code>
-                    </div>
-                    <div className="mt-1 pt-1 border-t border-amber-100">
-                      <span className="text-amber-700">{item.reason}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {pollResult.pollResults && (
-              <div className={`mt-2 text-sm ${textColor}`}>
-                <p>ClaimResponses: {pollResult.pollResults.claimResponses?.length || 0}</p>
-                <p>CommunicationRequests: {pollResult.pollResults.communicationRequests?.length || 0}</p>
-                <p>Acknowledgments: {pollResult.pollResults.acknowledgments?.length || 0}</p>
-                {pollResult.pollResults.shouldAutoPollForFinalResponse && (
-                  <p className="mt-2 text-blue-700 font-medium">
-                    Acknowledgment received! Auto-polling for final response in {pollResult.pollResults.autoPollDelayMs || 3000}ms...
-                  </p>
-                )}
-              </div>
-            )}
-            
-            {/* Show responseCode if available */}
-            {pollResult.responseCode && (
-              <p className={`text-xs mt-2 ${
-                pollResult.responseCode === 'ok' ? 'text-green-600' : 'text-red-600'
-              }`}>
-                Response Code: <code className="bg-gray-100 px-1 rounded">{pollResult.responseCode}</code>
-              </p>
-            )}
-
-            {/* Debug: Raw NPHIES Bundles */}
-            {(pollResult.pollBundle || pollResult.responseBundle) && (
-              <div className="mt-3 border-t border-gray-200 pt-3">
-                <button
-                  onClick={() => setShowPollDebug(!showPollDebug)}
-                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  <Code className="w-3 h-3" />
-                  <span>Debug: Raw NPHIES Bundles</span>
-                  {showPollDebug ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </button>
-                
-                {showPollDebug && (
-                  <div className="mt-2 space-y-3">
-                    {/* Identifier Comparison */}
-                    {matchingDetails?.pollIdentifier && (
-                      <div className="bg-white border border-gray-200 rounded p-3">
-                        <p className="text-xs font-semibold text-gray-700 mb-2">Identifier Comparison</p>
-                        <div className="space-y-1 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-500 w-32 flex-shrink-0">Sent (expected):</span>
-                            <code className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200">
-                              {matchingDetails.pollIdentifier.value}
-                            </code>
-                          </div>
-                          {matchingDetails.unmatchedDetails?.map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-2">
-                              <span className="text-gray-500 w-32 flex-shrink-0">Received (response):</span>
-                              <code className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
-                                {item.requestIdentifier || 'N/A'}
-                              </code>
-                              <span className="text-red-500 font-medium">Mismatch</span>
-                            </div>
-                          ))}
-                          {matchingDetails.matched > 0 && matchingDetails.unmatched === 0 && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-gray-500 w-32 flex-shrink-0">Received (response):</span>
-                              <code className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200">
-                                {matchingDetails.pollIdentifier.value}
-                              </code>
-                              <span className="text-green-500 font-medium flex items-center gap-0.5">
-                                <CheckCircle className="w-3 h-3" /> Match
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Poll Request Bundle */}
-                    {pollResult.pollBundle && (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-medium text-gray-600">Poll Request Bundle (Sent)</p>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(JSON.stringify(pollResult.pollBundle, null, 2));
-                              setPollDebugCopied('request');
-                              setTimeout(() => setPollDebugCopied(null), 2000);
-                            }}
-                            className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
-                          >
-                            {pollDebugCopied === 'request' ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                            {pollDebugCopied === 'request' ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                        <pre className="bg-gray-900 text-green-400 text-[10px] rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap">
-                          {JSON.stringify(pollResult.pollBundle, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-
-                    {/* NPHIES Response Bundle */}
-                    {pollResult.responseBundle && (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-medium text-gray-600">NPHIES Response Bundle (Received)</p>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(JSON.stringify(pollResult.responseBundle, null, 2));
-                              setPollDebugCopied('response');
-                              setTimeout(() => setPollDebugCopied(null), 2000);
-                            }}
-                            className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
-                          >
-                            {pollDebugCopied === 'response' ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                            {pollDebugCopied === 'response' ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                        <pre className="bg-gray-900 text-green-400 text-[10px] rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap">
-                          {JSON.stringify(pollResult.responseBundle, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Acknowledgment Poll Result */}
-      {ackPollResult && (
-        <div className={`border rounded-lg p-4 ${
-          ackPollResult.acknowledgmentFound 
-            ? 'bg-green-50 border-green-200' 
-            : ackPollResult.alreadyAcknowledged
-            ? 'bg-blue-50 border-blue-200'
-            : 'bg-yellow-50 border-yellow-200'
-        }`}>
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <p className={`font-medium ${
-                ackPollResult.acknowledgmentFound 
-                  ? 'text-green-800' 
-                  : ackPollResult.alreadyAcknowledged
-                  ? 'text-blue-800'
-                  : 'text-yellow-800'
-              }`}>
-                {ackPollResult.acknowledgmentFound && (
-                  <><CheckCircle className="w-4 h-4 inline mr-1" /> Acknowledgment Received!</>
-                )}
-                {ackPollResult.alreadyAcknowledged && (
-                  <><CheckCircle className="w-4 h-4 inline mr-1" /> Already Acknowledged</>
-                )}
-                {!ackPollResult.acknowledgmentFound && !ackPollResult.alreadyAcknowledged && (
-                  <><Clock className="w-4 h-4 inline mr-1" /> No Acknowledgment Yet</>
-                )}
-              </p>
-              <p className={`text-sm mt-1 ${
-                ackPollResult.acknowledgmentFound 
-                  ? 'text-green-700' 
-                  : ackPollResult.alreadyAcknowledged
-                  ? 'text-blue-700'
-                  : 'text-yellow-700'
-              }`}>
-                {ackPollResult.message}
-              </p>
-              {ackPollResult.acknowledgmentStatus && (
-                <p className="text-sm mt-1">
-                  Status: <span className="font-medium">{ackPollResult.acknowledgmentStatus}</span>
-                </p>
-              )}
-              {ackPollResult.queuedCount !== undefined && (
-                <p className="text-sm mt-1">
-                  Polled: {ackPollResult.queuedCount} communication(s) | 
-                  Acknowledged: {ackPollResult.acknowledgedCount || 0} | 
-                  Still queued: {ackPollResult.stillQueuedCount || 0}
-                </p>
-              )}
-              
-              {/* Copy JSON Buttons */}
-              {(ackPollResult.pollBundle || ackPollResult.responseBundle) && (
-                <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-gray-200">
-                  <p className="text-xs text-gray-500">
-                    <strong>Poll Request:</strong> POST /$process-message with poll-request Bundle
-                  </p>
-                  <div className="flex items-center gap-2">
-                    {ackPollResult.pollBundle && (
-                      <button
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(JSON.stringify(ackPollResult.pollBundle, null, 2));
-                          setAckPollJsonCopied('request');
-                          setTimeout(() => setAckPollJsonCopied(null), 2000);
-                        }}
-                        className="flex items-center px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                      >
-                        <Copy className="w-3 h-3 mr-1" />
-                        {ackPollJsonCopied === 'request' ? '✓ Copied!' : 'Copy Poll Bundle'}
-                      </button>
-                    )}
-                    {ackPollResult.responseBundle && (
-                      <button
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(JSON.stringify(ackPollResult.responseBundle, null, 2));
-                          setAckPollJsonCopied('response');
-                          setTimeout(() => setAckPollJsonCopied(null), 2000);
-                        }}
-                        className="flex items-center px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
-                      >
-                        <Copy className="w-3 h-3 mr-1" />
-                        {ackPollJsonCopied === 'response' ? '✓ Copied!' : 'Copy Response JSON'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={() => setAckPollResult(null)}
-              className="text-gray-400 hover:text-gray-600 ml-2"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Pending CommunicationRequests from HIC */}
       {pendingRequests.length > 0 && (
@@ -1782,21 +1220,6 @@ const CommunicationPanel = ({
             )}
           </button>
           <div className="flex items-center gap-2">
-            {/* Poll All Acknowledgments button */}
-            {communications.filter(c => c.acknowledgment_status === 'queued' || (!c.acknowledgment_received && c.status === 'completed')).length > 0 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePollAllAcknowledgments();
-                }}
-                disabled={isPolling}
-                className="flex items-center px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Poll for all pending acknowledgments"
-              >
-                <RefreshCw className={`w-3 h-3 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
-                {isPolling ? 'Polling...' : 'Poll All Acks'}
-              </button>
-            )}
             <button onClick={() => toggleSection('history')}>
               {expandedSections.history ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
             </button>
@@ -1843,15 +1266,6 @@ const CommunicationPanel = ({
                             >
                               <Copy className="w-3 h-3 mr-1" />
                               {pollPreviewCopied ? '✓ Copied!' : 'Copy Poll JSON'}
-                            </button>
-                            <button
-                              onClick={() => handlePollAcknowledgment(comm.communication_id)}
-                              disabled={pollingAckFor === comm.communication_id}
-                              className="flex items-center px-2 py-1 text-xs bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              title="Poll NPHIES for acknowledgment"
-                            >
-                              <RefreshCw className={`w-3 h-3 mr-1 ${pollingAckFor === comm.communication_id ? 'animate-spin' : ''}`} />
-                              {pollingAckFor === comm.communication_id ? 'Polling...' : 'Poll Ack'}
                             </button>
                           </>
                         )}

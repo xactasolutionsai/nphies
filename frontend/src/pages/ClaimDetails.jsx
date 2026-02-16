@@ -1026,18 +1026,13 @@ export default function ClaimDetails() {
             )}
             
             <Button 
-              onClick={handlePollPayments} 
-              disabled={pollingPayments}
+              onClick={() => navigate('/system-poll')}
               variant="outline"
               size="sm"
               className="border-purple-500 text-purple-600 hover:bg-purple-50"
             >
-              {pollingPayments ? (
-                <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
-              ) : (
-                <Wallet className="h-4 w-4 mr-1.5" />
-              )}
-              <span className="hidden sm:inline">Poll Payments</span>
+              <RefreshCw className="h-4 w-4 mr-1.5" />
+              <span className="hidden sm:inline">System Poll</span>
               <span className="sm:hidden">Poll</span>
             </Button>
           </div>

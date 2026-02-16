@@ -30,7 +30,8 @@ import {
   LogOut,
   User,
   MessageSquare,
-  ShieldAlert
+  ShieldAlert,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -88,6 +89,7 @@ const claimsPaymentsItems = [
 
 // Tools section
 const toolsItems = [
+  { name: 'System Poll', href: '/system-poll', icon: RefreshCw },
   { name: 'Response Viewer', href: '/response-viewer', icon: FileSearch },
   { name: 'Medicine Search', href: '/medicines', icon: Pill },
 ];

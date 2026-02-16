@@ -32,9 +32,11 @@ import claimSubmissionsRoutes from './routes/claimSubmissions.js';
 import paymentReconciliationRoutes from './routes/paymentReconciliation.js';
 import coveragesRoutes from './routes/coverages.js';
 import advancedAuthorizationsRoutes from './routes/advancedAuthorizations.js';
+import systemPollRoutes from './routes/systemPoll.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import contactsRoutes from './routes/contacts.js';
+import { startPollScheduler } from './scheduler/pollScheduler.js';
 
 // Load environment variables
 dotenv.config();
@@ -144,6 +146,7 @@ app.use('/api/claim-submissions', claimSubmissionsRoutes);
 app.use('/api/payment-reconciliation', paymentReconciliationRoutes);
 app.use('/api/coverages', coveragesRoutes);
 app.use('/api/advanced-authorizations', advancedAuthorizationsRoutes);
+app.use('/api/system-poll', systemPollRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -258,6 +261,9 @@ app.listen(PORT, async () => {
   
   // Initialize dynamic query loader
   await initializeQueryLoader();
+
+  // Start optional scheduled polling (disabled by default)
+  startPollScheduler();
 });
 
 export default app;

@@ -1418,6 +1418,56 @@ class ApiService {
       method: 'DELETE'
     });
   }
+
+  // =========================================================================
+  // System Poll
+  // =========================================================================
+
+  /**
+   * Trigger a manual system-wide poll
+   */
+  async triggerSystemPoll() {
+    return this.request('/system-poll/trigger', {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Get paginated poll logs history
+   */
+  async getSystemPollLogs(params = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set('page', params.page);
+    if (params.limit) searchParams.set('limit', params.limit);
+    if (params.status) searchParams.set('status', params.status);
+    const qs = searchParams.toString();
+    return this.request(`/system-poll/logs${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Get a specific poll log with its messages
+   */
+  async getSystemPollLog(id) {
+    return this.request(`/system-poll/logs/${id}`);
+  }
+
+  /**
+   * Get aggregate polling statistics
+   */
+  async getSystemPollStats() {
+    return this.request('/system-poll/stats');
+  }
+
+  /**
+   * Get poll messages for a specific record (used by detail pages)
+   */
+  async getRecordPollMessages(table, recordId, params = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set('page', params.page);
+    if (params.limit) searchParams.set('limit', params.limit);
+    const qs = searchParams.toString();
+    return this.request(`/system-poll/messages/${table}/${recordId}${qs ? `?${qs}` : ''}`);
+  }
 }
 
 /**
