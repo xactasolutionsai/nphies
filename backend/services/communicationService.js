@@ -279,6 +279,14 @@ class CommunicationService {
 
       // 4. Send to NPHIES
       const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
+      
+      console.log(`[CommunicationService] Unsolicited NPHIES response:`, {
+        success: nphiesResponse.success,
+        status: nphiesResponse.status,
+        hasData: !!nphiesResponse.data,
+        dataType: typeof nphiesResponse.data,
+        hasError: !!nphiesResponse.error
+      });
 
       // 5. Extract Communication ID from our request bundle
       const communicationResource = communicationBundle.entry?.find(
@@ -388,7 +396,11 @@ class CommunicationService {
         acknowledgmentReceived ? new Date() : null,
         acknowledgmentStatus,
         JSON.stringify(communicationBundle),
-        nphiesResponse.data ? JSON.stringify(nphiesResponse.data) : null
+        nphiesResponse.data 
+          ? JSON.stringify(nphiesResponse.data) 
+          : nphiesResponse.error 
+            ? JSON.stringify({ _fallback: true, error: nphiesResponse.error, status: nphiesResponse.status, message: 'NPHIES returned no response bundle' })
+            : null
       ]);
 
       const communication = insertResult.rows[0];
@@ -543,6 +555,14 @@ class CommunicationService {
 
       // 4. Send to NPHIES
       const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
+      
+      console.log(`[CommunicationService] Solicited NPHIES response:`, {
+        success: nphiesResponse.success,
+        status: nphiesResponse.status,
+        hasData: !!nphiesResponse.data,
+        dataType: typeof nphiesResponse.data,
+        hasError: !!nphiesResponse.error
+      });
 
       // 5. Extract Communication ID from our request bundle
       const communicationResource = communicationBundle.entry?.find(
@@ -646,12 +666,16 @@ class CommunicationService {
         acknowledgmentReceived ? new Date() : null,
         acknowledgmentStatus,
         JSON.stringify(communicationBundle),
-        nphiesResponse.data ? JSON.stringify(nphiesResponse.data) : null
+        nphiesResponse.data 
+          ? JSON.stringify(nphiesResponse.data) 
+          : nphiesResponse.error 
+            ? JSON.stringify({ _fallback: true, error: nphiesResponse.error, status: nphiesResponse.status, message: 'NPHIES returned no response bundle' })
+            : null
       ]);
 
       const communication = insertResult.rows[0];
 
-      // 7. Store payloads
+      // 7b. Store payloads
       for (let i = 0; i < payloads.length; i++) {
         const payload = payloads[i];
         await client.query(`

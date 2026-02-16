@@ -803,16 +803,14 @@ const CommunicationPanel = ({
         // Reload data
         await loadData();
         
-        // If unsolicited communication was sent, auto-poll for acknowledgment after a delay
-        if (communicationType === 'unsolicited') {
-          console.log('[CommunicationPanel] Unsolicited communication sent. Auto-polling for acknowledgment in 2 seconds...');
-          
-          // Wait 2 seconds for NPHIES to process, then poll for acknowledgment
-          setTimeout(async () => {
-            console.log('[CommunicationPanel] Auto-polling for acknowledgment...');
-            await handlePoll(false); // Poll for acknowledgment
-          }, 2000);
-        }
+        // Auto-poll for acknowledgment after a delay (both unsolicited and solicited)
+        console.log(`[CommunicationPanel] ${communicationType} communication sent. Auto-polling for acknowledgment in 2 seconds...`);
+        
+        // Wait 2 seconds for NPHIES to process, then poll for acknowledgment
+        setTimeout(async () => {
+          console.log('[CommunicationPanel] Auto-polling for acknowledgment...');
+          await handlePoll(false);
+        }, 2000);
       } else {
         // Handle error object properly
         const errMsg = result.message;
@@ -1897,55 +1895,72 @@ const CommunicationPanel = ({
                     )}
 
                     {/* Response Summary - Show key info from response_bundle */}
-                    {comm.response_bundle && (
+                    {comm.response_bundle ? (
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <p className="text-xs font-medium text-gray-500 mb-2">NPHIES Response:</p>
-                        <div className="bg-white rounded border p-3 space-y-2">
-                          {/* Extract MessageHeader response info */}
-                          {(() => {
-                            const messageHeader = comm.response_bundle.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
-                            const responseCode = messageHeader?.response?.code;
-                            const eventCode = messageHeader?.eventCoding?.code;
-                            
-                            return (
-                              <>
-                                <div className="flex items-center gap-3">
-                                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                    responseCode === 'ok' 
-                                      ? 'bg-green-100 text-green-800' 
-                                      : responseCode === 'fatal-error' 
-                                        ? 'bg-red-100 text-red-800'
-                                        : 'bg-yellow-100 text-yellow-800'
-                                  }`}>
-                                    {responseCode === 'ok' ? (
-                                      <CheckCircle className="w-3 h-3 mr-1" />
-                                    ) : (
-                                      <AlertCircle className="w-3 h-3 mr-1" />
-                                    )}
-                                    {responseCode?.toUpperCase() || 'PENDING'}
-                                  </span>
-                                  {eventCode && (
-                                    <span className="text-xs text-gray-500">
-                                      Event: {eventCode}
+                        {comm.response_bundle._fallback ? (
+                          <div className="bg-red-50 rounded border border-red-200 p-2">
+                            <p className="text-xs text-red-700 flex items-center">
+                              <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
+                              No response bundle received
+                              {comm.response_bundle.status && <span className="ml-1">(HTTP {comm.response_bundle.status})</span>}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-white rounded border p-3 space-y-2">
+                            {/* Extract MessageHeader response info */}
+                            {(() => {
+                              const messageHeader = comm.response_bundle.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+                              const responseCode = messageHeader?.response?.code;
+                              const eventCode = messageHeader?.eventCoding?.code;
+                              
+                              return (
+                                <>
+                                  <div className="flex items-center gap-3">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                      responseCode === 'ok' 
+                                        ? 'bg-green-100 text-green-800' 
+                                        : responseCode === 'fatal-error' 
+                                          ? 'bg-red-100 text-red-800'
+                                          : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {responseCode === 'ok' ? (
+                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                      ) : (
+                                        <AlertCircle className="w-3 h-3 mr-1" />
+                                      )}
+                                      {responseCode?.toUpperCase() || 'PENDING'}
                                     </span>
+                                    {eventCode && (
+                                      <span className="text-xs text-gray-500">
+                                        Event: {eventCode}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {messageHeader?.response?.identifier && (
+                                    <p className="text-xs text-gray-600">
+                                      Response to: {messageHeader.response.identifier}
+                                    </p>
                                   )}
-                                </div>
-                                {messageHeader?.response?.identifier && (
-                                  <p className="text-xs text-gray-600">
-                                    Response to: {messageHeader.response.identifier}
-                                  </p>
-                                )}
-                                {/* Check for queued-messages tag */}
-                                {messageHeader?.meta?.tag?.some(t => t.code === 'queued-messages') && (
-                                  <p className="text-xs text-blue-600 flex items-center">
-                                    <Clock className="w-3 h-3 mr-1" />
-                                    Message queued for processing
-                                  </p>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
+                                  {/* Check for queued-messages tag */}
+                                  {messageHeader?.meta?.tag?.some(t => t.code === 'queued-messages') && (
+                                    <p className="text-xs text-blue-600 flex items-center">
+                                      <Clock className="w-3 h-3 mr-1" />
+                                      Message queued for processing
+                                    </p>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-xs text-gray-400 flex items-center">
+                          <AlertCircle className="w-3 h-3 mr-1" />
+                          No NPHIES response bundle received
+                        </p>
                       </div>
                     )}
                   </div>
@@ -2343,7 +2358,7 @@ const CommunicationPanel = ({
               )}
 
               {/* NPHIES Response Details */}
-              {selectedCommunication.response_bundle && (
+              {selectedCommunication.response_bundle ? (
                 <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
                   <h4 className="text-sm font-semibold text-indigo-700 mb-3 flex items-center">
                     <CheckCircle className="w-4 h-4 mr-2" />
@@ -2351,6 +2366,30 @@ const CommunicationPanel = ({
                   </h4>
                   {(() => {
                     const response = selectedCommunication.response_bundle;
+                    
+                    // Check if this is a fallback error response (no actual NPHIES response bundle was received)
+                    if (response._fallback) {
+                      return (
+                        <div className="bg-white rounded-lg p-3 border border-red-200">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-sm font-medium text-red-800">NPHIES did not return a response bundle</p>
+                              <p className="text-xs text-red-600 mt-1">{response.message}</p>
+                              {response.status && (
+                                <p className="text-xs text-gray-600 mt-1">HTTP Status: <code className="bg-gray-100 px-1 rounded">{response.status}</code></p>
+                              )}
+                              {response.error && (
+                                <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-700 font-mono break-all">
+                                  {typeof response.error === 'string' ? response.error : JSON.stringify(response.error, null, 2)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    
                     const messageHeader = response.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
                     
                     return (
@@ -2419,6 +2458,20 @@ const CommunicationPanel = ({
                     );
                   })()}
                 </div>
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <h4 className="text-sm font-semibold text-gray-500 mb-2 flex items-center">
+                    <AlertCircle className="w-4 h-4 mr-2 text-gray-400" />
+                    NPHIES Response
+                  </h4>
+                  <p className="text-sm text-gray-500">
+                    No response bundle was received from NPHIES for this communication.
+                    This can happen if NPHIES returned a server error (5xx) or the request timed out.
+                  </p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Try sending the communication again or check the server logs for more details.
+                  </p>
+                </div>
               )}
 
               {/* Acknowledgment Bundle */}
@@ -2445,7 +2498,7 @@ const CommunicationPanel = ({
                 </div>
               )}
 
-              {/* View Raw JSON Button */}
+              {/* View Raw JSON Buttons */}
               <div className="flex justify-center gap-3">
                 {selectedCommunication.request_bundle && (
                   <button
@@ -2460,7 +2513,7 @@ const CommunicationPanel = ({
                     View Request Bundle JSON
                   </button>
                 )}
-                {selectedCommunication.response_bundle && (
+                {selectedCommunication.response_bundle ? (
                   <button
                     onClick={() => {
                       setPreviewJson(selectedCommunication.response_bundle);
@@ -2472,6 +2525,11 @@ const CommunicationPanel = ({
                     <Code className="w-4 h-4 mr-2" />
                     View Response Bundle JSON
                   </button>
+                ) : (
+                  <span className="flex items-center px-4 py-2 bg-gray-50 text-gray-400 rounded-lg text-sm border border-dashed border-gray-300 cursor-not-allowed">
+                    <Code className="w-4 h-4 mr-2" />
+                    No Response Bundle
+                  </span>
                 )}
               </div>
             </div>

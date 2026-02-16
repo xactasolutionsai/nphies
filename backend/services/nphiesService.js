@@ -1028,8 +1028,15 @@ class NphiesService {
       
     } catch (error) {
       console.error('[NPHIES] Communication error:', error.message);
+      // Capture error response data (e.g. from 5xx responses) so it can be saved as response_bundle
+      const errorResponseData = error.response?.data || null;
+      if (errorResponseData) {
+        console.log('[NPHIES] Error response data available, status:', error.response?.status);
+      }
       return {
         success: false,
+        status: error.response?.status || null,
+        data: errorResponseData,
         error: this.formatError(error),
         requestBundle: communicationBundle
       };
