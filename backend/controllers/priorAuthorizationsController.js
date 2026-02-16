@@ -2154,8 +2154,8 @@ class PriorAuthorizationsController extends BaseController {
          body_site_code, body_site_system, sub_site_code, description, notes,
          manual_code_entry, manual_prescribed_code_entry, prescribed_medication_code,
          pharmacist_selection_reason, pharmacist_substitute, patient_share, is_package, is_maternity,
-         item_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+         item_type, shadow_code, shadow_code_system, shadow_code_display)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
         RETURNING id
       `;
       const itemResult = await query(itemQuery, [
@@ -2191,7 +2191,10 @@ class PriorAuthorizationsController extends BaseController {
         item.patient_share || null,
         item.is_package || false,
         item.is_maternity || false,
-        item.item_type || 'medication' // Save item_type (medication or device)
+        item.item_type || 'medication', // Save item_type (medication or device)
+        item.shadow_code || null,
+        item.shadow_code_system || null,
+        item.shadow_code_display || null
       ]);
       
       const itemId = itemResult.rows[0].id;
@@ -2212,8 +2215,9 @@ class PriorAuthorizationsController extends BaseController {
         INSERT INTO prior_authorization_item_details
         (item_id, sequence, product_or_service_code, product_or_service_system,
          product_or_service_display, quantity, unit_price, factor, net_amount, currency,
-         serviced_date, body_site_code, body_site_system, sub_site_code, description)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         serviced_date, body_site_code, body_site_system, sub_site_code, description,
+         shadow_code, shadow_code_system, shadow_code_display)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       `;
       await query(detailQuery, [
         itemId,
@@ -2230,7 +2234,10 @@ class PriorAuthorizationsController extends BaseController {
         detail.body_site_code || null,
         detail.body_site_system || null,
         detail.sub_site_code || null,
-        detail.description || null
+        detail.description || null,
+        detail.shadow_code || null,
+        detail.shadow_code_system || null,
+        detail.shadow_code_display || null
       ]);
     }
   }

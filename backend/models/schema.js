@@ -546,7 +546,11 @@ export const validationSchemas = {
       information_sequences: Joi.array().items(Joi.number().integer()).allow(null).optional(),
       // Medication fields (for pharmacy items)
       medication_name: Joi.string().max(255).allow(null, '').optional(),
-      service_description: Joi.string().max(500).allow(null, '').optional()
+      service_description: Joi.string().max(500).allow(null, '').optional(),
+      // Shadow billing (dual coding) fields - for unlisted/non-standard codes
+      shadow_code: Joi.string().max(50).allow(null, '').optional(),
+      shadow_code_system: Joi.string().max(255).allow(null, '').optional(),
+      shadow_code_display: Joi.string().max(255).allow(null, '').optional()
     })).optional(),
     
     supporting_info: Joi.array().items(Joi.object({

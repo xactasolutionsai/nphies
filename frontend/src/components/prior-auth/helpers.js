@@ -39,7 +39,10 @@ export const getInitialItemData = (sequence, authType = '') => {
       prescribed_medication_code: '',
       pharmacist_selection_reason: 'patient-request',
       pharmacist_substitute: 'Irreplaceable',
-      days_supply: 30
+      days_supply: 30,
+      shadow_code: '',
+      shadow_code_system: '',
+      shadow_code_display: ''
     };
   }
 

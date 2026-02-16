@@ -758,8 +758,22 @@ class PharmacyMapper extends BaseMapper {
       productOrServiceCoding.display = productDisplay;
     }
     
+    // Support shadow billing (dual coding) for unlisted/non-standard codes
+    // When shadow_code is present, add a secondary provider-specific coding
+    const productOrServiceCodings = [productOrServiceCoding];
+    if (item.shadow_code && item.shadow_code_system) {
+      const shadowCoding = {
+        system: item.shadow_code_system,
+        code: item.shadow_code
+      };
+      if (item.shadow_code_display) {
+        shadowCoding.display = item.shadow_code_display;
+      }
+      productOrServiceCodings.push(shadowCoding);
+    }
+    
     claimItem.productOrService = {
-      coding: [productOrServiceCoding]
+      coding: productOrServiceCodings
     };
 
     // Determine serviced date
