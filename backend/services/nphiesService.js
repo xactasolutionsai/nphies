@@ -988,9 +988,12 @@ class NphiesService {
     )?.resource;
     console.log('[NPHIES] Communication ID:', communication?.id);
     console.log('[NPHIES] Communication status:', communication?.status);
-    console.log('[NPHIES] About reference:', communication?.about?.[0]?.reference);
-    console.log('[NPHIES] BasedOn:', communication?.basedOn?.[0]?.reference || 'None (unsolicited)');
+    console.log('[NPHIES] About:', JSON.stringify(communication?.about?.[0], null, 2));
+    console.log('[NPHIES] BasedOn:', communication?.basedOn ? JSON.stringify(communication.basedOn[0], null, 2) : 'None (unsolicited)');
     console.log('[NPHIES] Payload count:', communication?.payload?.length);
+    console.log('[NPHIES] Subject:', JSON.stringify(communication?.subject));
+    console.log('[NPHIES] Sender:', JSON.stringify(communication?.sender?.identifier));
+    console.log('[NPHIES] Recipient:', JSON.stringify(communication?.recipient?.[0]?.identifier));
     console.log('[NPHIES] ====================================');
     
     try {

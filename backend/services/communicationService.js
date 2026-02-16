@@ -131,7 +131,11 @@ class CommunicationService {
           communicationRequest: {
             request_id: commRequest.request_id,
             about_reference: commRequest.about_reference,
-            about_type: commRequest.about_type
+            about_identifier: commRequest.about_identifier,
+            about_identifier_system: commRequest.about_identifier_system,
+            about_type: commRequest.about_type,
+            cr_identifier: commRequest.cr_identifier,
+            cr_identifier_system: commRequest.cr_identifier_system
           },
           priorAuth: {
             nphies_request_id: priorAuth.nphies_request_id,
@@ -519,7 +523,11 @@ class CommunicationService {
         communicationRequest: {
           request_id: commRequest.request_id,
           about_reference: commRequest.about_reference,
-          about_type: commRequest.about_type
+          about_identifier: commRequest.about_identifier,
+          about_identifier_system: commRequest.about_identifier_system,
+          about_type: commRequest.about_type,
+          cr_identifier: commRequest.cr_identifier,
+          cr_identifier_system: commRequest.cr_identifier_system
         },
         priorAuth: {
           nphies_request_id: commRequest.nphies_request_id,
@@ -553,7 +561,33 @@ class CommunicationService {
         payloads
       });
 
-      // 4. Send to NPHIES
+      // 4. Debug: Log all key values and full bundle before sending
+      console.log(`[CommunicationService] ===== SOLICITED COMMUNICATION DEBUG =====`);
+      console.log(`[CommunicationService] DB values:`, {
+        request_id: commRequest.request_id,
+        about_reference: commRequest.about_reference,
+        about_identifier: commRequest.about_identifier,
+        about_identifier_system: commRequest.about_identifier_system,
+        about_type: commRequest.about_type,
+        cr_identifier: commRequest.cr_identifier,
+        cr_identifier_system: commRequest.cr_identifier_system,
+        pa_id: commRequest.pa_id,
+        request_number: commRequest.request_number,
+        nphies_request_id: commRequest.nphies_request_id,
+        pre_auth_ref: commRequest.pre_auth_ref
+      });
+      // Log original CommunicationRequest about/identifier from stored bundle
+      if (commRequest.request_bundle) {
+        const origBundle = typeof commRequest.request_bundle === 'string' 
+          ? JSON.parse(commRequest.request_bundle) : commRequest.request_bundle;
+        console.log(`[CommunicationService] Original CommunicationRequest about:`, JSON.stringify(origBundle.about, null, 2));
+        console.log(`[CommunicationService] Original CommunicationRequest identifier:`, JSON.stringify(origBundle.identifier, null, 2));
+        console.log(`[CommunicationService] Original CommunicationRequest basedOn:`, JSON.stringify(origBundle.basedOn, null, 2));
+      }
+      console.log(`[CommunicationService] Full solicited bundle:`, JSON.stringify(communicationBundle, null, 2));
+      console.log(`[CommunicationService] ===== END SOLICITED DEBUG =====`);
+
+      // Send to NPHIES
       const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
       
       console.log(`[CommunicationService] Solicited NPHIES response:`, {
@@ -563,6 +597,9 @@ class CommunicationService {
         dataType: typeof nphiesResponse.data,
         hasError: !!nphiesResponse.error
       });
+      if (!nphiesResponse.success) {
+        console.log(`[CommunicationService] Solicited NPHIES error response:`, JSON.stringify(nphiesResponse.data, null, 2));
+      }
 
       // 5. Extract Communication ID from our request bundle
       const communicationResource = communicationBundle.entry?.find(
@@ -1158,7 +1195,7 @@ class CommunicationService {
       }
     }
 
-    // Store in database (include claim_id when available)
+    // Store in database (include claim_id and identifier fields when available)
     const result = await client.query(`
       INSERT INTO nphies_communication_requests (
         request_id,
@@ -1169,13 +1206,17 @@ class CommunicationService {
         priority,
         about_reference,
         about_type,
+        about_identifier,
+        about_identifier_system,
+        cr_identifier,
+        cr_identifier_system,
         payload_content_type,
         payload_content_string,
         sender_identifier,
         recipient_identifier,
         authored_on,
         request_bundle
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *
     `, [
       commRequest.id,
@@ -1186,6 +1227,10 @@ class CommunicationService {
       parsed.priority,
       parsed.aboutReference,
       parsed.aboutType,
+      parsed.aboutIdentifier || null,
+      parsed.aboutIdentifierSystem || null,
+      parsed.identifier || null,
+      parsed.identifierSystem || null,
       parsed.payloadContentType,
       parsed.payloadContentString,
       parsed.senderIdentifier,

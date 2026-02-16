@@ -533,7 +533,7 @@ class ClaimCommunicationService {
     // Parse the CommunicationRequest
     const parsed = this.mapper.parseCommunicationRequest(commRequest);
 
-    // Store in database with claim_id
+    // Store in database with claim_id and identifier fields
     const result = await client.query(`
       INSERT INTO nphies_communication_requests (
         request_id,
@@ -544,13 +544,17 @@ class ClaimCommunicationService {
         priority,
         about_reference,
         about_type,
+        about_identifier,
+        about_identifier_system,
+        cr_identifier,
+        cr_identifier_system,
         payload_content_type,
         payload_content_string,
         sender_identifier,
         recipient_identifier,
         authored_on,
         request_bundle
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *
     `, [
       commRequest.id,
@@ -561,6 +565,10 @@ class ClaimCommunicationService {
       parsed.priority,
       parsed.aboutReference,
       parsed.aboutType || 'Claim',
+      parsed.aboutIdentifier || null,
+      parsed.aboutIdentifierSystem || null,
+      parsed.identifier || null,
+      parsed.identifierSystem || null,
       parsed.payloadContentType,
       parsed.payloadContentString,
       parsed.senderIdentifier,
@@ -932,7 +940,11 @@ class ClaimCommunicationService {
         communicationRequest: {
           request_id: commRequest.request_id,
           about_reference: commRequest.about_reference,
-          about_type: commRequest.about_type || 'Claim'
+          about_identifier: commRequest.about_identifier,
+          about_identifier_system: commRequest.about_identifier_system,
+          about_type: commRequest.about_type || 'Claim',
+          cr_identifier: commRequest.cr_identifier,
+          cr_identifier_system: commRequest.cr_identifier_system
         },
         priorAuth: {
           nphies_request_id: commRequest.nphies_request_id,
@@ -1312,7 +1324,11 @@ class ClaimCommunicationService {
           communicationRequest: {
             request_id: commRequest.request_id,
             about_reference: commRequest.about_reference,
-            about_type: commRequest.about_type || 'Claim'
+            about_identifier: commRequest.about_identifier,
+            about_identifier_system: commRequest.about_identifier_system,
+            about_type: commRequest.about_type || 'Claim',
+            cr_identifier: commRequest.cr_identifier,
+            cr_identifier_system: commRequest.cr_identifier_system
           },
           priorAuth: {
             nphies_request_id: claim.nphies_request_id,

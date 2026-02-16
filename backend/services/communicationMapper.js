@@ -688,21 +688,28 @@ class CommunicationMapper {
     
     // Build the 'about' reference using proper identifier system URL format
     // NPHIES FIX: The 'about' identifier MUST match the Claim.identifier from the original authorization request
-    // Uses the same identifier system and request_number value for consistency
     const providerDomain = this.extractProviderDomain(provider.provider_name || provider.name || 'provider');
-    const aboutIdentifier = this.getNphiesAuthReference(priorAuth);
+    const aboutIdentifierValue = this.getNphiesAuthReference(priorAuth);
     
-    // Use existing about_reference from CommunicationRequest if available, otherwise build new one
-    const aboutReference = communicationRequest.about_reference ? 
-      { identifier: { system: `http://${providerDomain}/identifiers/authorization`, value: communicationRequest.about_reference } } :
-      { identifier: { system: `http://${providerDomain}/identifiers/authorization`, value: aboutIdentifier } };
+    // Priority for about identifier value:
+    // 1. about_identifier (extracted from CommunicationRequest.about[0].identifier.value) - most accurate
+    // 2. getNphiesAuthReference(priorAuth) fallback (same logic as unsolicited) - reliable
+    // NOTE: about_reference is a FHIR reference string (e.g. "Claim/123"), NOT an identifier value
+    const resolvedAboutValue = communicationRequest.about_identifier || aboutIdentifierValue;
+    const resolvedAboutSystem = communicationRequest.about_identifier_system || `http://${providerDomain}/identifiers/authorization`;
+    const aboutReference = {
+      identifier: { system: resolvedAboutSystem, value: resolvedAboutValue }
+    };
     
     // Build basedOn identifier per NPHIES example format
     // Per NPHIES: { identifier: { system: "http://sni.com.sa/identifiers/communicationrequest", value: "CommReq_12361231" } }
+    // Priority for basedOn:
+    // 1. cr_identifier/cr_identifier_system from stored CommunicationRequest identifier - exact match
+    // 2. Fallback: construct from insurer domain and request_id (backward compatibility)
     const insurerDomain = (insurer.insurer_name || insurer.name || 'insurer').toLowerCase().replace(/\s+/g, '');
     const basedOnIdentifier = {
-      system: `http://${insurerDomain}.com.sa/identifiers/communicationrequest`,
-      value: communicationRequest.request_id || `CommReq_${communicationId}`
+      system: communicationRequest.cr_identifier_system || `http://${insurerDomain}.com.sa/identifiers/communicationrequest`,
+      value: communicationRequest.cr_identifier || communicationRequest.request_id || `CommReq_${communicationId}`
     };
 
     // Build the Communication resource with basedOn identifier
