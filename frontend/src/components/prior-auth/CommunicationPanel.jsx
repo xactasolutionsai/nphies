@@ -285,9 +285,6 @@ const CommunicationPanel = ({
     setError(null);
     try {
       await loadData();
-      if (onStatusUpdate) {
-        onStatusUpdate(null);
-      }
     } catch (err) {
       console.error('Error refreshing data:', err);
       setError('Failed to refresh data');
