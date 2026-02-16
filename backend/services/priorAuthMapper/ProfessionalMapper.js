@@ -319,7 +319,7 @@ class ProfessionalMapper extends BaseMapper {
     if (priorAuth.eligibility_response_id) {
       // Identifier-based format (preferred per NPHIES Claim-173086.json example)
       const identifierSystem = priorAuth.eligibility_response_system || 
-        `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
       
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
@@ -339,7 +339,7 @@ class ProfessionalMapper extends BaseMapper {
         const refParts = priorAuth.eligibility_ref.split('/');
         const refId = refParts[refParts.length - 1];
         const identifierSystem = priorAuth.eligibility_response_system || 
-          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+          `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
         
         extensions.push({
           url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
@@ -353,7 +353,7 @@ class ProfessionalMapper extends BaseMapper {
       } else {
         // Treat as identifier value
         const identifierSystem = priorAuth.eligibility_response_system || 
-          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+          `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
         extensions.push({
           url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
           valueReference: {

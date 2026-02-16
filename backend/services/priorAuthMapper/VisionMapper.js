@@ -208,7 +208,7 @@ class VisionMapper extends BaseMapper {
     // IC-01428: valueReference must include identifier per NPHIES cardinality rules
     if (priorAuth.eligibility_response_id) {
       const identifierSystem = priorAuth.eligibility_response_system || 
-        `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
       
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
@@ -224,7 +224,7 @@ class VisionMapper extends BaseMapper {
         const refParts = priorAuth.eligibility_ref.split('/');
         const refId = refParts[refParts.length - 1];
         const identifierSystem = priorAuth.eligibility_response_system || 
-          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+          `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
         
         extensions.push({
           url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
@@ -237,7 +237,7 @@ class VisionMapper extends BaseMapper {
         });
       } else {
         const identifierSystem = priorAuth.eligibility_response_system || 
-          `http://${(insurer.nphies_id || 'payer').toLowerCase()}.com.sa/identifiers/coverageeligibilityresponse`;
+          `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
         extensions.push({
           url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
           valueReference: {

@@ -14,6 +14,10 @@ export const NPHIES_CONFIG = {
   // Default Insurer ID for fallback
   DEFAULT_INSURER_ID: process.env.NPHIES_INSURER_ID || 'INS-FHIR',
   
+  // Insurer Domain for URL construction (e.g., http://sni.com.sa/identifiers/communicationrequest)
+  // For sandbox: 'sni', change for production to actual insurer domain
+  INSURER_DOMAIN: process.env.NPHIES_INSURER_DOMAIN || 'sni',
+  
   // NPHIES API Configuration
   BASE_URL: process.env.NPHIES_BASE_URL || 'http://176.105.150.83',
   PRODUCTION_URL: process.env.NPHIES_PRODUCTION_URL || 'https://hsb.nphies.sa',

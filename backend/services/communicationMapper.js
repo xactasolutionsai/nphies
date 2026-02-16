@@ -705,10 +705,9 @@ class CommunicationMapper {
     // Per NPHIES: { identifier: { system: "http://sni.com.sa/identifiers/communicationrequest", value: "CommReq_12361231" } }
     // Priority for basedOn:
     // 1. cr_identifier/cr_identifier_system from stored CommunicationRequest identifier - exact match
-    // 2. Fallback: construct from insurer domain and request_id (backward compatibility)
-    const insurerDomain = (insurer.insurer_name || insurer.name || 'insurer').toLowerCase().replace(/\s+/g, '');
+    // 2. Fallback: use INSURER_DOMAIN from config (env variable)
     const basedOnIdentifier = {
-      system: communicationRequest.cr_identifier_system || `http://${insurerDomain}.com.sa/identifiers/communicationrequest`,
+      system: communicationRequest.cr_identifier_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/communicationrequest`,
       value: communicationRequest.cr_identifier || communicationRequest.request_id || `CommReq_${communicationId}`
     };
 
@@ -904,11 +903,10 @@ class CommunicationMapper {
           }
         }];
       } else {
-        // Legacy string format - convert to identifier format
-        const insurerDomain = (insurer.insurer_name || insurer.name || 'insurer').toLowerCase().replace(/\s+/g, '');
+        // Legacy string format - convert to identifier format using INSURER_DOMAIN from config
         communication.basedOn = [{
           identifier: {
-            system: `http://${insurerDomain}.com.sa/identifiers/communicationrequest`,
+            system: `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/communicationrequest`,
             value: typeof basedOn === 'string' ? basedOn.replace('CommunicationRequest/', '') : String(basedOn)
           }
         }];
