@@ -610,7 +610,9 @@ class ApiService {
       // Additional response/adjudication fields
       'adjudication_outcome', 'eligible_amount', 'benefit_amount', 'copay_amount',
       'eligibility_offline_ref', 'sub_type', 'outcome', 'disposition',
-      'nphies_request_id', 'is_nphies_generated', 'pre_auth_period_start', 'pre_auth_period_end'
+      'nphies_request_id', 'is_nphies_generated', 'pre_auth_period_start', 'pre_auth_period_end',
+      // Cancellation fields - should not carry over to duplicates
+      'is_cancelled', 'cancellation_reason'
     ];
     
     // Create a clean copy for duplication
