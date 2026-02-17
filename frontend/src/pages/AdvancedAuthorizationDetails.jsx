@@ -177,13 +177,38 @@ function formatFileSize(bytes) {
 // BUNDLE DATA EXTRACTION
 // ============================================================================
 
-function extractBundleEntities(responseBundle) {
-  if (!responseBundle) return { patient: null, provider: null, insurer: null, coverage: null };
+/**
+ * Get the inner message Bundle from a poll response that contains ClaimResponse + Patient/Org/Coverage.
+ * Poll response structure: entry[].resource can be Task, MessageHeader, or a Bundle (type message).
+ * The Bundle with type "message" contains entry[] with ClaimResponse, Patient, Organization, Coverage.
+ */
+function getDisplayBundleFromPollResponse(pollResponseBundle) {
+  if (!pollResponseBundle || pollResponseBundle.resourceType !== 'Bundle' || !pollResponseBundle.entry) return null;
+  for (const entry of pollResponseBundle.entry) {
+    const resource = entry?.resource;
+    if (resource?.resourceType === 'Bundle' && resource.type === 'message' && resource.entry?.length) {
+      const hasClaimResponse = resource.entry.some(e => e.resource?.resourceType === 'ClaimResponse');
+      if (hasClaimResponse) return resource;
+    }
+  }
+  return null;
+}
 
+/**
+ * Extract Patient, Provider, Insurer, Coverage from a Bundle (with entry[]) or from poll_response_bundle.
+ * When response_bundle is the raw ClaimResponse (no entry[]), use poll_response_bundle to get the inner message Bundle.
+ */
+function extractBundleEntities(responseBundle, pollResponseBundle = null) {
   let entries = [];
-  if (responseBundle.resourceType === 'Bundle' && responseBundle.entry) {
+
+  const innerBundle = getDisplayBundleFromPollResponse(pollResponseBundle);
+  if (innerBundle?.entry) {
+    entries = innerBundle.entry.map(e => e.resource).filter(Boolean);
+  } else if (responseBundle?.resourceType === 'Bundle' && responseBundle.entry) {
     entries = responseBundle.entry.map(e => e.resource).filter(Boolean);
   }
+
+  if (entries.length === 0) return { patient: null, provider: null, insurer: null, coverage: null };
 
   // Patient
   const patientRes = entries.find(r => r.resourceType === 'Patient');
@@ -199,10 +224,12 @@ function extractBundleEntities(responseBundle) {
       gender: patientRes.gender || null,
       birthDate: patientRes.birthDate || null,
       phone: patientRes.telecom?.find(t => t.system === 'phone')?.value || null,
+      maritalStatus: patientRes.maritalStatus?.coding?.[0]?.code || null,
+      maritalStatusDisplay: patientRes.maritalStatus?.coding?.[0]?.display || null,
     };
   }
 
-  // Provider Organization
+  // Provider Organization (type = prov)
   const providerOrg = entries.find(r =>
     r.resourceType === 'Organization' &&
     r.type?.some(t => t.coding?.some(c => c.code === 'prov'))
@@ -216,7 +243,7 @@ function extractBundleEntities(responseBundle) {
     };
   }
 
-  // Insurer Organization
+  // Insurer Organization (type = ins)
   const insurerOrg = entries.find(r =>
     r.resourceType === 'Organization' &&
     r.type?.some(t => t.coding?.some(c => c.code === 'ins'))
@@ -230,17 +257,23 @@ function extractBundleEntities(responseBundle) {
     };
   }
 
-  // Coverage
+  // Coverage (identifier, class, relationship, type from bundle)
   const coverageRes = entries.find(r => r.resourceType === 'Coverage');
   let coverage = null;
   if (coverageRes) {
+    const class0 = coverageRes.class?.[0];
+    const id0 = coverageRes.identifier?.[0];
     coverage = {
       id: coverageRes.id,
       status: coverageRes.status,
       subscriberId: coverageRes.subscriberId,
+      identifierValue: id0?.value || null,
+      identifierSystem: id0?.system || null,
       relationship: coverageRes.relationship?.coding?.[0]?.code,
-      classValue: coverageRes.class?.[0]?.value,
-      className: coverageRes.class?.[0]?.name,
+      relationshipDisplay: coverageRes.relationship?.coding?.[0]?.display || null,
+      classValue: class0?.value ?? null,
+      className: class0?.name ?? null,
+      typeDisplay: coverageRes.type?.coding?.[0]?.display || null,
     };
   }
 
@@ -344,8 +377,21 @@ export default function AdvancedAuthorizationDetails() {
   const processNotes = data.process_notes || [];
   const insurance = data.insurance || [];
 
-  // Extract entities from response_bundle for sidebar
-  const { patient, provider, insurer, coverage } = extractBundleEntities(data.response_bundle);
+  // Extract entities: use poll_response_bundle inner Bundle when available (has Patient/Org/Coverage)
+  const { patient, provider, insurer, coverage } = extractBundleEntities(
+    data.response_bundle,
+    data.poll_response_bundle
+  );
+
+  // Request identifier & payee type from raw ClaimResponse (response_bundle)
+  const claimResponse = data.response_bundle?.resourceType === 'ClaimResponse'
+    ? data.response_bundle
+    : null;
+  const requestIdentifier = claimResponse?.request?.identifier?.value ?? null;
+  const requestIdentifierSystem = claimResponse?.request?.identifier?.system ?? null;
+  const payeeTypeDisplay = claimResponse?.payeeType?.coding?.[0]?.display
+    || claimResponse?.payeeType?.coding?.[0]?.code
+    || null;
 
   // Financial summary from totals
   const benefitTotal = totals.find(t => t.category === 'benefit');
@@ -448,6 +494,18 @@ export default function AdvancedAuthorizationDetails() {
                     <InfoItem label="PreAuth Ref">
                       <span className="font-mono text-xs">{data.pre_auth_ref || '-'}</span>
                     </InfoItem>
+                    {requestIdentifier && (
+                      <InfoItem label="Request Identifier">
+                        <span className="font-mono text-xs" title={requestIdentifierSystem || ''}>
+                          {requestIdentifier}
+                        </span>
+                      </InfoItem>
+                    )}
+                    {payeeTypeDisplay && (
+                      <InfoItem label="Payee Type">
+                        {payeeTypeDisplay}
+                      </InfoItem>
+                    )}
                     <InfoItem label="Created Date">
                       {formatDate(data.created_date)}
                     </InfoItem>
@@ -633,18 +691,37 @@ export default function AdvancedAuthorizationDetails() {
                   </CardContent>
                 </Card>
               ) : (
-                addItems.map((item, i) => (
+                addItems.map((item, i) => {
+                  const rawAddItem = claimResponse?.addItem?.[i];
+                  const productCodings = rawAddItem?.productOrService?.coding || (item.productOrService?.code ? [{ code: item.productOrService.code, system: item.productOrService.system, display: item.productOrService.display }] : []);
+                  return (
                   <Card key={i}>
                     <CardContent className="p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline">Item {item.sequence || i + 1}</Badge>
-                          <span className="font-medium text-sm">
-                            {item.productOrService?.display || item.productOrService?.code || '-'}
-                          </span>
-                          <span className="text-xs text-gray-400 font-mono">
-                            {item.productOrService?.code}
-                          </span>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <Badge variant="outline">Item {item.sequence || i + 1}</Badge>
+                            <span className="font-medium text-sm">
+                              {item.productOrService?.display || item.productOrService?.code || '-'}
+                            </span>
+                            {productCodings.length > 0 && (
+                              <span className="text-xs text-gray-400 font-mono">
+                                {productCodings.map(c => c.code).filter(Boolean).join(', ')}
+                              </span>
+                            )}
+                          </div>
+                          {productCodings.length > 1 && (
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {productCodings.map((coding, k) => (
+                                <span key={k} className="text-xs bg-gray-100 rounded px-2 py-0.5 font-mono" title={coding.system}>
+                                  {coding.display || coding.code}
+                                  {coding.system && !coding.system.includes('nphies.sa') && (
+                                    <span className="text-gray-400 ml-1">({coding.code})</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <Badge className={getOutcomeBadgeClass(item.adjudicationOutcome)}>
                           {item.adjudicationOutcome || '-'}
@@ -718,7 +795,8 @@ export default function AdvancedAuthorizationDetails() {
                       )}
                     </CardContent>
                   </Card>
-                ))
+                  );
+                })
               )}
             </div>
           )}
@@ -907,8 +985,10 @@ export default function AdvancedAuthorizationDetails() {
                 <>
                   {patient.name && <div><span className="text-gray-500">Name:</span> {patient.name}</div>}
                   {patient.identifier && <div><span className="text-gray-500">ID:</span> <span className="font-mono text-xs">{patient.identifier}</span></div>}
+                  {patient.identifierType && <div><span className="text-gray-500">ID Type:</span> <span className="font-mono text-xs">{patient.identifierType}</span></div>}
                   {patient.gender && <div><span className="text-gray-500">Gender:</span> <span className="capitalize">{patient.gender}</span></div>}
                   {patient.birthDate && <div><span className="text-gray-500">DOB:</span> {formatDate(patient.birthDate)}</div>}
+                  {(patient.maritalStatusDisplay || patient.maritalStatus) && <div><span className="text-gray-500">Marital:</span> {patient.maritalStatusDisplay || patient.maritalStatus}</div>}
                   {patient.phone && <div><span className="text-gray-500">Phone:</span> {patient.phone}</div>}
                 </>
               ) : (
@@ -971,9 +1051,13 @@ export default function AdvancedAuthorizationDetails() {
               </CardHeader>
               <CardContent className="space-y-1.5 text-sm">
                 {coverage.status && <div><span className="text-gray-500">Status:</span> {coverage.status}</div>}
-                {coverage.subscriberId && <div><span className="text-gray-500">Subscriber ID:</span> <span className="font-mono text-xs">{coverage.subscriberId}</span></div>}
-                {coverage.relationship && <div><span className="text-gray-500">Relationship:</span> {coverage.relationship}</div>}
-                {coverage.className && <div><span className="text-gray-500">Class:</span> {coverage.className} ({coverage.classValue})</div>}
+                {(coverage.identifierValue || coverage.subscriberId) && (
+                  <div><span className="text-gray-500">Identifier:</span> <span className="font-mono text-xs break-all">{coverage.identifierValue || coverage.subscriberId}</span></div>
+                )}
+                {coverage.identifierSystem && <div><span className="text-gray-500">ID System:</span> <span className="font-mono text-xs break-all">{coverage.identifierSystem}</span></div>}
+                {(coverage.relationshipDisplay || coverage.relationship) && <div><span className="text-gray-500">Relationship:</span> {coverage.relationshipDisplay || coverage.relationship}</div>}
+                {(coverage.classValue || coverage.className) && <div><span className="text-gray-500">Class:</span> {coverage.className ? `${coverage.className} (${coverage.classValue})` : coverage.classValue}</div>}
+                {coverage.typeDisplay && <div><span className="text-gray-500">Type:</span> {coverage.typeDisplay}</div>}
               </CardContent>
             </Card>
           )}
