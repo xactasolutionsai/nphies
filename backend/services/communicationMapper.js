@@ -886,16 +886,17 @@ class CommunicationMapper {
     };
 
     // Add basedOn for solicited communications (Test Case #2)
-    // Per NPHIES example: uses identifier format instead of reference
-    // Example: { identifier: { system: "http://sni.com.sa/identifiers/communicationrequest", value: "CommReq_12361231" } }
+    // Per NPHIES example: { type: "CommunicationRequest", identifier: { system: "http://sni.com.sa/identifiers/communicationrequest", value: "CommReq_12361231" } }
     if (basedOn) {
       // basedOn can be either a string (legacy) or an object with identifier info
       if (typeof basedOn === 'object' && basedOn.identifier) {
         communication.basedOn = [{
+          type: 'CommunicationRequest',
           identifier: basedOn.identifier
         }];
       } else if (typeof basedOn === 'object' && basedOn.system && basedOn.value) {
         communication.basedOn = [{
+          type: 'CommunicationRequest',
           identifier: {
             system: basedOn.system,
             value: basedOn.value
@@ -904,6 +905,7 @@ class CommunicationMapper {
       } else {
         // Legacy string format - convert to identifier format using INSURER_DOMAIN from config
         communication.basedOn = [{
+          type: 'CommunicationRequest',
           identifier: {
             system: `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/communicationrequest`,
             value: typeof basedOn === 'string' ? basedOn.replace('CommunicationRequest/', '') : String(basedOn)
