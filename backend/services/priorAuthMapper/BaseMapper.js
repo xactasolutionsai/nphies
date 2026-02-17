@@ -1192,15 +1192,17 @@ class BaseMapper {
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
-      productOrService: {
-        coding: [
-          {
-            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
-            code: item.product_or_service_code,
-            display: item.product_or_service_display
-          }
-        ]
-      }
+      ...(item.product_or_service_code ? {
+        productOrService: {
+          coding: [
+            {
+              system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+              code: item.product_or_service_code,
+              ...(item.product_or_service_display ? { display: item.product_or_service_display } : {})
+            }
+          ]
+        }
+      } : {})
     };
 
     // Determine serviced date
@@ -1283,13 +1285,15 @@ class BaseMapper {
 
         return {
           sequence: detail.sequence || (idx + 1),
-          productOrService: {
-            coding: [{
-              system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
-              code: detail.product_or_service_code,
-              display: detail.product_or_service_display
-            }]
-          },
+          ...(detail.product_or_service_code ? {
+            productOrService: {
+              coding: [{
+                system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+                code: detail.product_or_service_code,
+                ...(detail.product_or_service_display ? { display: detail.product_or_service_display } : {})
+              }]
+            }
+          } : {}),
           quantity: { value: detailQuantity },
           unitPrice: { 
             value: detailUnitPrice, 

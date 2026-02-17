@@ -984,9 +984,11 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       productOrServiceCoding.display = productDisplay;
     }
     
-    claimItem.productOrService = {
-      coding: [productOrServiceCoding]
-    };
+    if (productCode) {
+      claimItem.productOrService = {
+        coding: [productOrServiceCoding]
+      };
+    }
 
     // Serviced date - must be within encounter period per BV-00041
     let servicedDate = item.serviced_date ? new Date(item.serviced_date) : 
@@ -1062,13 +1064,15 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
 
         return {
           sequence: detail.sequence || (idx + 1),
-          productOrService: {
-            coding: [{
-              system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/services',
-              code: detail.product_or_service_code,
-              display: detail.product_or_service_display
-            }]
-          },
+          ...(detail.product_or_service_code ? {
+            productOrService: {
+              coding: [{
+                system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/services',
+                code: detail.product_or_service_code,
+                ...(detail.product_or_service_display ? { display: detail.product_or_service_display } : {})
+              }]
+            }
+          } : {}),
           quantity: { value: detailQuantity },
           unitPrice: { 
             value: detailUnitPrice, 

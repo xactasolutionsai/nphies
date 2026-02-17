@@ -748,33 +748,36 @@ class PharmacyMapper extends BaseMapper {
     };
 
     // ProductOrService using appropriate code system (medication-codes or medical-devices)
-    const productOrServiceCoding = {
-      system: codeSystem,
-      code: productCode
-    };
-    
-    // Only add display if it has a non-empty value
-    if (productDisplay) {
-      productOrServiceCoding.display = productDisplay;
-    }
-    
-    // Support shadow billing (dual coding) for unlisted/non-standard codes
-    // When shadow_code is present, add a secondary provider-specific coding
-    const productOrServiceCodings = [productOrServiceCoding];
-    if (item.shadow_code && item.shadow_code_system) {
-      const shadowCoding = {
-        system: item.shadow_code_system,
-        code: item.shadow_code
+    // Only include if productCode exists to avoid sending null values to NPHIES
+    if (productCode) {
+      const productOrServiceCoding = {
+        system: codeSystem,
+        code: productCode
       };
-      if (item.shadow_code_display) {
-        shadowCoding.display = item.shadow_code_display;
+      
+      // Only add display if it has a non-empty value
+      if (productDisplay) {
+        productOrServiceCoding.display = productDisplay;
       }
-      productOrServiceCodings.push(shadowCoding);
+      
+      // Support shadow billing (dual coding) for unlisted/non-standard codes
+      // When shadow_code is present, add a secondary provider-specific coding
+      const productOrServiceCodings = [productOrServiceCoding];
+      if (item.shadow_code && item.shadow_code_system) {
+        const shadowCoding = {
+          system: item.shadow_code_system,
+          code: item.shadow_code
+        };
+        if (item.shadow_code_display) {
+          shadowCoding.display = item.shadow_code_display;
+        }
+        productOrServiceCodings.push(shadowCoding);
+      }
+      
+      claimItem.productOrService = {
+        coding: productOrServiceCodings
+      };
     }
-    
-    claimItem.productOrService = {
-      coding: productOrServiceCodings
-    };
 
     // Determine serviced date
     let servicedDate;

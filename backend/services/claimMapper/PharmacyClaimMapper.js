@@ -860,9 +860,11 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       productOrServiceCoding.display = productDisplay;
     }
     
-    claimItem.productOrService = {
-      coding: [productOrServiceCoding]
-    };
+    if (productCode) {
+      claimItem.productOrService = {
+        coding: [productOrServiceCoding]
+      };
+    }
 
     // Serviced date
     const servicedDate = item.serviced_date ? new Date(item.serviced_date) : new Date();
@@ -899,13 +901,15 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
 
         return {
           sequence: detail.sequence || (idx + 1),
-          productOrService: {
-            coding: [{
-              system: detailCodeSystem,
-              code: detail.product_or_service_code,
-              display: detail.product_or_service_display
-            }]
-          },
+          ...(detail.product_or_service_code ? {
+            productOrService: {
+              coding: [{
+                system: detailCodeSystem,
+                code: detail.product_or_service_code,
+                ...(detail.product_or_service_display ? { display: detail.product_or_service_display } : {})
+              }]
+            }
+          } : {}),
           quantity: { value: detailQuantity },
           unitPrice: { 
             value: detailUnitPrice, 
