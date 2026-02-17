@@ -401,81 +401,64 @@ class PharmacyMapper extends BaseMapper {
     }
 
     // SupportingInfo - days-supply is REQUIRED for pharmacy claims per BV-00376
-    // The item.informationSequence MUST reference the days-supply supportingInfo
-    // Support for MULTIPLE days-supply entries per usecase requirement
+    // STRATEGY: Create per-item days-supply entries so each item links to its OWN days-supply
+    // via informationSequence (1-to-1 mapping), as required by HIC/NPHIES.
+    // Non-days-supply entries (attachment, vital signs, info, etc.) are global.
     let supportingInfoList = [];
-    let daysSupplySequences = []; // Array to track all days-supply sequence numbers
     let currentSequence = 1;
     
-    // Process all supporting_info entries from the database (including multiple days-supply entries)
-    // IMPORTANT: Reassign sequences sequentially to ensure uniqueness (regardless of DB sequences)
-    // This prevents duplicate sequence numbers in the FHIR output
+    // STEP 1: Process NON-days-supply supporting_info entries first (global entries)
+    // These are shared across all items (attachments, vital signs, patient history, etc.)
     if (priorAuth.supporting_info && priorAuth.supporting_info.length > 0) {
-      // Sort by original sequence from DB to maintain relative order
       const sortedSupportingInfo = [...priorAuth.supporting_info].sort((a, b) => 
         (a.sequence || 0) - (b.sequence || 0)
       );
       
       sortedSupportingInfo.forEach(info => {
-        // Assign sequential sequence numbers (1, 2, 3, ...) to ensure uniqueness
+        const cat = info.category;
+        // Skip days-supply entries here -- they will be created per-item in Step 2
+        if (cat === 'days-supply' || cat === 'days_supply') {
+          return;
+        }
         const sequence = currentSequence++;
+        supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence: sequence }));
+      });
+    }
+
+    // STEP 2: Create one days-supply entry PER item (1-to-1 mapping)
+    // Each item gets its own days-supply supportingInfo with a unique sequence.
+    // The item's informationSequence will point to its dedicated days-supply entry.
+    const itemDaysSupplyMap = {}; // Maps item index -> days-supply sequence number
+    
+    if (priorAuth.items && priorAuth.items.length > 0) {
+      priorAuth.items.forEach((item, idx) => {
+        const daysSupplyValue = parseInt(
+          item.days_supply || priorAuth.days_supply || 30
+        );
+        const daysSupplySequence = currentSequence++;
         
-        // Process days-supply entries - ALL of them, not just the first one
-        if (info.category === 'days-supply' || info.category === 'days_supply') {
-          const daysSupplyValue = info.value_quantity || priorAuth.items?.[0]?.days_supply || priorAuth.days_supply || 30;
-          const daysSupplyEntry = {
-            sequence: sequence,
-            category: {
-              coding: [{
-                system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-                code: 'days-supply'
-              }]
-            },
-            timingDate: info.timing_date ? this.formatDate(info.timing_date) : this.formatDate(priorAuth.request_date || new Date()),
-            valueQuantity: {
-              value: parseInt(daysSupplyValue),
-              unit: 'd',
-              system: 'http://unitsofmeasure.org',
-              code: 'd'
-            }
-          };
-          supportingInfoList.push(daysSupplyEntry);
-          // Track this days-supply sequence
-          daysSupplySequences.push(sequence);
-        } else {
-          // Process other supporting info categories - use sequential sequence
-          supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence: sequence }));
-        }
+        supportingInfoList.push({
+          sequence: daysSupplySequence,
+          category: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+              code: 'days-supply'
+            }]
+          },
+          timingDate: this.formatDate(priorAuth.request_date || new Date()),
+          valueQuantity: {
+            value: daysSupplyValue,
+            unit: 'd',
+            system: 'http://unitsofmeasure.org',
+            code: 'd'
+          }
+        });
+        
+        itemDaysSupplyMap[idx] = daysSupplySequence;
       });
     }
     
-    // If no days-supply entries found in supporting_info, add a default one (backward compatibility)
-    const hasDaysSupply = supportingInfoList.some(info => 
-      info.category?.coding?.[0]?.code === 'days-supply' || info.category === 'days-supply'
-    );
-    if (!hasDaysSupply) {
-      const daysSupplyValue = priorAuth.items?.[0]?.days_supply || priorAuth.days_supply || 30;
-      const defaultSequence = currentSequence++;
-      supportingInfoList.push({
-        sequence: defaultSequence,
-        category: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: 'days-supply'
-          }]
-        },
-        timingDate: this.formatDate(priorAuth.request_date || new Date()),
-        valueQuantity: {
-          value: parseInt(daysSupplyValue),
-          unit: 'd',
-          system: 'http://unitsofmeasure.org',
-          code: 'd'
-        }
-      });
-      daysSupplySequences.push(defaultSequence);
-    }
-    
-    // Sort supportingInfoList by sequence to ensure proper ordering (already sequential, but good practice)
+    // Sort supportingInfoList by sequence to ensure proper ordering
     supportingInfoList.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
 
     // Add birth-weight supportingInfo for newborn patients
@@ -516,10 +499,9 @@ class PharmacyMapper extends BaseMapper {
     };
     
     if (priorAuth.items && priorAuth.items.length > 0) {
-      // Build items with item-specific informationSequence linking
-      // Pass supportingInfoList to enable auto-matching by days_supply value
+      // Build items with per-item days-supply linking via itemDaysSupplyMap
       claim.item = priorAuth.items.map((item, idx) => 
-        this.buildPharmacyClaimItem(item, idx + 1, supportingInfoList, encounterPeriod)
+        this.buildPharmacyClaimItem(item, idx + 1, supportingInfoList, encounterPeriod, itemDaysSupplyMap[idx])
       );
     }
 
@@ -565,9 +547,9 @@ class PharmacyMapper extends BaseMapper {
    * - NO medication-specific extensions
    * 
    * IMPORTANT: informationSequence MUST reference the days-supply supportingInfo (BV-00376)
-   * Auto-matches item.days_supply to supporting_info.value_quantity to find the correct sequence
+   * Each item receives its pre-assigned days-supply sequence via itemDaysSupplySequence.
    */
-  buildPharmacyClaimItem(item, itemIndex, supportingInfoList, encounterPeriod) {
+  buildPharmacyClaimItem(item, itemIndex, supportingInfoList, encounterPeriod, itemDaysSupplySequence) {
     const sequence = item.sequence || itemIndex;
     
     const quantity = parseFloat(item.quantity || 1);
@@ -681,69 +663,33 @@ class PharmacyMapper extends BaseMapper {
       valueBoolean: item.is_maternity || false
     });
 
-    // Determine informationSequence: auto-match item.days_supply to supporting_info.value_quantity
-    // IMPORTANT: Medical devices do NOT have days-supply, so they should NOT link to days-supply supportingInfo
+    // Determine informationSequence: use the pre-assigned per-item days-supply sequence
+    // ALL pharmacy items (medications AND devices) must link to their own days-supply entry (BV-00376)
     let informationSequences = [];
     
-    if (isDevice) {
-      // Medical devices don't have days-supply - use explicitly provided sequences if any, otherwise empty array
-      // Devices may link to other supporting info (vital signs, etc.) but not days-supply
-      if (item.information_sequences && Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
-        informationSequences = item.information_sequences;
-      }
-      // If no sequences provided for device, leave empty (no days-supply linking)
+    if (item.information_sequences && Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
+      // Use explicitly provided sequences from item (if user manually selected)
+      informationSequences = item.information_sequences;
+    } else if (itemDaysSupplySequence) {
+      // Use the pre-assigned per-item days-supply sequence (1-to-1 mapping)
+      informationSequences = [itemDaysSupplySequence];
     } else {
-      // Medication items: link to days-supply supportingInfo (BV-00376)
-      if (item.information_sequences && Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
-        // Use explicitly provided sequences from item (if user manually selected)
-        informationSequences = item.information_sequences;
-      } else if (item.days_supply && supportingInfoList && supportingInfoList.length > 0) {
-        // Auto-match: find days-supply supporting info with matching value_quantity
-        const itemDaysSupply = parseInt(item.days_supply);
-        const matchingDaysSupply = supportingInfoList.filter(info => {
-          const isDaysSupply = info.category?.coding?.[0]?.code === 'days-supply' || 
-                              info.category === 'days-supply';
-          if (!isDaysSupply) return false;
-          const daysValue = parseInt(info.valueQuantity?.value || info.value_quantity || 0);
-          return daysValue === itemDaysSupply;
-        });
-        
-        if (matchingDaysSupply.length > 0) {
-          // Use the matching sequence(s) - if multiple match, use all
-          informationSequences = matchingDaysSupply.map(info => info.sequence);
-        } else {
-          // No exact match found - use first available days-supply as fallback
-          const firstDaysSupply = supportingInfoList.find(info => 
-            info.category?.coding?.[0]?.code === 'days-supply' || info.category === 'days-supply'
-          );
-          if (firstDaysSupply) {
-            informationSequences = [firstDaysSupply.sequence];
-          }
-        }
-      }
-      
-      // If still no sequences for medication, log warning and default to first days-supply
-      if (informationSequences.length === 0) {
-        console.warn(`[PharmacyMapper] WARNING: Medication item ${sequence} (days_supply: ${item.days_supply}) could not be matched to any days-supply supportingInfo`);
-        // Default to sequence 1 as last resort (assuming days-supply is at sequence 1)
-        const firstDaysSupply = supportingInfoList?.find(info => 
-          info.category?.coding?.[0]?.code === 'days-supply' || info.category === 'days-supply'
-        );
-        if (firstDaysSupply) {
-          informationSequences = [firstDaysSupply.sequence];
-        } else {
-          informationSequences = [1]; // Fallback
-        }
+      // Fallback: find first available days-supply in supportingInfoList
+      console.warn(`[PharmacyMapper] WARNING: Item ${sequence} has no pre-assigned days-supply sequence, using fallback`);
+      const firstDaysSupply = supportingInfoList?.find(info => 
+        info.category?.coding?.[0]?.code === 'days-supply'
+      );
+      if (firstDaysSupply) {
+        informationSequences = [firstDaysSupply.sequence];
       }
     }
 
     // Build the claim item
-    // IMPORTANT: informationSequence MUST reference the days-supply supportingInfo per BV-00376 (for medications only)
+    // IMPORTANT: informationSequence MUST reference the days-supply supportingInfo per BV-00376
     const claimItem = {
       extension: itemExtensions,
       sequence: sequence,
       diagnosisSequence: item.diagnosis_sequences || [1],
-      // Only include informationSequence if not empty (devices may have empty array)
       ...(informationSequences.length > 0 && { informationSequence: informationSequences })
     };
 
@@ -760,14 +706,21 @@ class PharmacyMapper extends BaseMapper {
     
     // Support shadow billing (dual coding) for unlisted/non-standard codes
     // When shadow_code is present, add a secondary provider-specific coding
+    // HIC requires the shadow code .display to be the actual medication/service description
     const productOrServiceCodings = [productOrServiceCoding];
     if (item.shadow_code && item.shadow_code_system) {
       const shadowCoding = {
         system: item.shadow_code_system,
         code: item.shadow_code
       };
-      if (item.shadow_code_display) {
+      if (item.shadow_code_display && item.shadow_code_display.trim().toUpperCase() !== 'UNLISTED CODE') {
         shadowCoding.display = item.shadow_code_display;
+      } else {
+        console.warn(`[PharmacyMapper] WARNING: Item ${sequence} shadow code '${item.shadow_code}' is missing a proper display name. The .display must describe the actual medication/service, not 'UNLISTED CODE'.`);
+        // Still set display if provided (even if bad) so the request isn't incomplete
+        if (item.shadow_code_display) {
+          shadowCoding.display = item.shadow_code_display;
+        }
       }
       productOrServiceCodings.push(shadowCoding);
     }

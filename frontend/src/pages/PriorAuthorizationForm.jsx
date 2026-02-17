@@ -4852,13 +4852,17 @@ export default function PriorAuthorizationForm() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs">Display Name</Label>
+                            <Label className="text-xs">Display Name (Actual Medication Name) *</Label>
                             <Input
                               value={item.shadow_code_display || ''}
                               onChange={(e) => handleItemChange(index, 'shadow_code_display', e.target.value)}
-                              placeholder="e.g., Internal Medication Code"
-                              className="text-sm"
+                              placeholder="e.g., Amoxicillin 500mg Capsules"
+                              className={`text-sm ${(!item.shadow_code_display || item.shadow_code_display.trim().toUpperCase() === 'UNLISTED CODE') ? 'border-red-400 bg-red-50' : ''}`}
+                              required
                             />
+                            {(!item.shadow_code_display || item.shadow_code_display.trim().toUpperCase() === 'UNLISTED CODE') && (
+                              <p className="text-xs text-red-500">Required: Enter the actual medication/service description, not "UNLISTED CODE"</p>
+                            )}
                           </div>
                         </div>
                       )}
