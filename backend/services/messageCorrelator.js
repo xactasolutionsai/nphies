@@ -297,6 +297,20 @@ class MessageCorrelator {
             recordId: csResult.rows[0].id
           };
         }
+
+        // Check advanced_authorizations (payer-initiated, stored by identifier_value)
+        const aaResult = await client.query(
+          `SELECT id FROM advanced_authorizations 
+           WHERE identifier_value = $1
+           LIMIT 1`,
+          [identifierValue]
+        );
+        if (aaResult.rows.length > 0) {
+          return {
+            table: 'advanced_authorizations',
+            recordId: aaResult.rows[0].id
+          };
+        }
       }
 
       // Try to match by reference string (e.g., "Claim/123")
@@ -323,6 +337,17 @@ class MessageCorrelator {
           if (csResult.rows.length > 0) {
             return { table: 'claim_submissions', recordId: csResult.rows[0].id };
           }
+
+          // Check advanced_authorizations
+          const aaResult = await client.query(
+            `SELECT id FROM advanced_authorizations 
+             WHERE identifier_value = $1
+             LIMIT 1`,
+            [refId]
+          );
+          if (aaResult.rows.length > 0) {
+            return { table: 'advanced_authorizations', recordId: aaResult.rows[0].id };
+          }
         }
       }
     }
@@ -342,7 +367,7 @@ class MessageCorrelator {
       if (identifierValue) {
         // Check if it references a stored CommunicationRequest
         const crResult = await client.query(
-          `SELECT id, prior_auth_id, claim_id FROM nphies_communication_requests 
+          `SELECT id, prior_auth_id, claim_id, advanced_authorization_id FROM nphies_communication_requests 
            WHERE request_id = $1 OR cr_identifier = $1
            LIMIT 1`,
           [identifierValue]
@@ -353,7 +378,8 @@ class MessageCorrelator {
             table: 'nphies_communications',
             relatedCommunicationRequestId: cr.id,
             relatedPriorAuthId: cr.prior_auth_id,
-            relatedClaimId: cr.claim_id
+            relatedClaimId: cr.claim_id,
+            relatedAdvancedAuthId: cr.advanced_authorization_id
           };
         }
 
@@ -373,6 +399,15 @@ class MessageCorrelator {
         );
         if (csResult.rows.length > 0) {
           return { table: 'claim_submissions', recordId: csResult.rows[0].id };
+        }
+
+        // Check advanced_authorizations
+        const aaResult = await client.query(
+          `SELECT id FROM advanced_authorizations WHERE identifier_value = $1 LIMIT 1`,
+          [identifierValue]
+        );
+        if (aaResult.rows.length > 0) {
+          return { table: 'advanced_authorizations', recordId: aaResult.rows[0].id };
         }
       }
     }

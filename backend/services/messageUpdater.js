@@ -368,20 +368,23 @@ class MessageUpdater {
 
       const priorAuthId = correlationResult?.table === 'prior_authorizations' ? correlationResult.recordId : null;
       const claimId = correlationResult?.table === 'claim_submissions' ? correlationResult.recordId : null;
+      const advancedAuthId = correlationResult?.table === 'advanced_authorizations' ? correlationResult.recordId : null;
 
       const result = await client.query(`
         INSERT INTO nphies_communication_requests (
-          request_id, prior_auth_id, claim_id, status, category, priority,
+          request_id, prior_auth_id, claim_id, advanced_authorization_id,
+          status, category, priority,
           about_reference, about_type, about_identifier, about_identifier_system,
           cr_identifier, cr_identifier_system,
           payload_content_type, payload_content_string,
           sender_identifier, recipient_identifier, authored_on, request_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         RETURNING *
       `, [
         commRequest.id,
         priorAuthId,
         claimId,
+        advancedAuthId,
         parsed.status || 'active',
         parsed.category,
         parsed.priority,
@@ -399,12 +402,22 @@ class MessageUpdater {
         JSON.stringify(commRequest)
       ]);
 
-      console.log(`[MessageUpdater] Stored CommunicationRequest: id=${commRequest.id}, prior_auth=${priorAuthId}, claim=${claimId}`);
+      console.log(`[MessageUpdater] Stored CommunicationRequest: id=${commRequest.id}, prior_auth=${priorAuthId}, claim=${claimId}, advanced_auth=${advancedAuthId}`);
+
+      // Return the parent (correlated) record info for the link,
+      // so the poll UI can link to the original PA/Claim/AdvancedAuth rather than
+      // the CommunicationRequest record itself
+      const parentTable = priorAuthId ? 'prior_authorizations' :
+                          claimId ? 'claim_submissions' :
+                          advancedAuthId ? 'advanced_authorizations' : null;
+      const parentRecordId = priorAuthId || claimId || advancedAuthId || null;
 
       return {
         id: result.rows[0].id,
-        table: 'nphies_communication_requests',
-        recordId: result.rows[0].id,
+        table: parentTable || 'nphies_communication_requests',
+        recordId: parentRecordId || result.rows[0].id,
+        newRecordTable: 'nphies_communication_requests',
+        newRecordId: result.rows[0].id,
         isNew: true
       };
 
@@ -434,6 +447,8 @@ class MessageUpdater {
                           (correlationResult?.table === 'prior_authorizations' ? correlationResult.recordId : null);
       const claimId = correlationResult?.relatedClaimId ||
                       (correlationResult?.table === 'claim_submissions' ? correlationResult.recordId : null);
+      const advancedAuthId = correlationResult?.relatedAdvancedAuthId ||
+                             (correlationResult?.table === 'advanced_authorizations' ? correlationResult.recordId : null);
       const communicationRequestId = correlationResult?.relatedCommunicationRequestId || null;
 
       // If this is an acknowledgment for a communication request, update its status
@@ -449,16 +464,18 @@ class MessageUpdater {
 
       const result = await client.query(`
         INSERT INTO nphies_communications (
-          communication_id, prior_auth_id, claim_id, communication_request_id,
+          communication_id, prior_auth_id, claim_id, advanced_authorization_id,
+          communication_request_id,
           status, category, payload_content_type, payload_content_string,
           sender_identifier, recipient_identifier, sent_date,
           communication_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING *
       `, [
         communication.id,
         priorAuthId,
         claimId,
+        advancedAuthId,
         communicationRequestId,
         communication.status || 'completed',
         communication.category?.[0]?.coding?.[0]?.code || null,
@@ -470,12 +487,20 @@ class MessageUpdater {
         JSON.stringify(communication)
       ]);
 
-      console.log(`[MessageUpdater] Stored Communication: id=${communication.id}, prior_auth=${priorAuthId}, claim=${claimId}`);
+      console.log(`[MessageUpdater] Stored Communication: id=${communication.id}, prior_auth=${priorAuthId}, claim=${claimId}, advanced_auth=${advancedAuthId}`);
+
+      // Return the parent (correlated) record info for the link
+      const parentTable = priorAuthId ? 'prior_authorizations' :
+                          claimId ? 'claim_submissions' :
+                          advancedAuthId ? 'advanced_authorizations' : null;
+      const parentRecordId = priorAuthId || claimId || advancedAuthId || null;
 
       return {
         id: result.rows[0].id,
-        table: 'nphies_communications',
-        recordId: result.rows[0].id,
+        table: parentTable || 'nphies_communications',
+        recordId: parentRecordId || result.rows[0].id,
+        newRecordTable: 'nphies_communications',
+        newRecordId: result.rows[0].id,
         isNew: true
       };
 

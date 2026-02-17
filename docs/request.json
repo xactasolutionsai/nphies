@@ -1,833 +1,649 @@
 {
-  "id": "fd7cc940-9e71-41a8-8d81-832472ccc144",
+  "id": "1771311369835",
+  "use": "preauthorization",
   "meta": {
     "profile": [
-      "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
+      "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/advanced-authorization|1.0.0"
     ]
   },
-  "type": "message",
-  "entry": [
-    {
-      "fullUrl": "urn:uuid:563ae892-88ee-4ad3-87c1-57c1e7afc33c",
-      "resource": {
-        "id": "563ae892-88ee-4ad3-87c1-57c1e7afc33c",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
-          ]
-        },
-        "focus": [
-          {
-            "reference": "http://provider.com/Claim/993d1d36-ac64-401c-87bd-9f3e2920b9bd"
-          }
-        ],
-        "sender": {
-          "type": "Organization",
-          "identifier": {
-            "value": "1010613708",
-            "system": "http://nphies.sa/license/provider-license"
-          }
-        },
-        "source": {
-          "endpoint": "http://provider.com"
-        },
-        "destination": [
-          {
-            "endpoint": "http://nphies.sa/license/payer-license/INS-FHIR",
-            "receiver": {
-              "type": "Organization",
-              "identifier": {
-                "value": "INS-FHIR",
-                "system": "http://nphies.sa/license/payer-license"
-              }
-            }
-          }
-        ],
-        "eventCoding": {
-          "code": "priorauth-request",
-          "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events"
-        },
-        "resourceType": "MessageHeader"
+  "type": {
+    "coding": [
+      {
+        "code": "pharmacy",
+        "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+        "display": "Pharmacy"
       }
-    },
+    ]
+  },
+  "total": [
     {
-      "fullUrl": "http://provider.com/Claim/993d1d36-ac64-401c-87bd-9f3e2920b9bd",
-      "resource": {
-        "id": "993d1d36-ac64-401c-87bd-9f3e2920b9bd",
-        "use": "preauthorization",
-        "item": [
+      "amount": {
+        "value": 350,
+        "currency": "SAR"
+      },
+      "category": {
+        "coding": [
           {
-            "net": {
-              "value": 0,
-              "currency": "SAR"
-            },
-            "quantity": {
-              "value": 1
-            },
-            "sequence": 1,
-            "extension": [
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
-                "valueBoolean": false
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
-                "valueMoney": {
-                  "value": 0,
-                  "currency": "SAR"
-                }
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share",
-                "valueMoney": {
-                  "value": 0,
-                  "currency": "SAR"
-                }
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
-                "valueBoolean": false
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax",
-                "valueMoney": {
-                  "value": 0,
-                  "currency": "SAR"
-                }
-              }
-            ],
-            "unitPrice": {
-              "value": 0,
-              "currency": "SAR"
-            },
-            "servicedDate": "2026-02-17",
-            "careTeamSequence": [
-              1
-            ],
-            "productOrService": {
-              "coding": [
-                {
-                  "code": null,
-                  "system": "http://nphies.sa/terminology/CodeSystem/procedures",
-                  "display": null
-                }
-              ]
-            },
-            "diagnosisSequence": [
-              1
-            ],
-            "informationSequence": [
-              1,
-              2,
-              3,
-              4,
-              5,
-              6
-            ]
-          }
-        ],
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-priorauth|1.0.0"
-          ]
-        },
-        "type": {
-          "coding": [
-            {
-              "code": "vision",
-              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
-            }
-          ]
-        },
-        "payee": {
-          "type": {
-            "coding": [
-              {
-                "code": "provider",
-                "system": "http://terminology.hl7.org/CodeSystem/payeetype"
-              }
-            ]
-          }
-        },
-        "total": {
-          "value": 0,
-          "currency": "SAR"
-        },
-        "status": "active",
-        "created": "2026-02-17T09:45:36.202Z",
-        "insurer": {
-          "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
-        },
-        "patient": {
-          "reference": "Patient/493c47ac-8c86-44ed-92e3-4f887761cb26"
-        },
-        "subType": {
-          "coding": [
-            {
-              "code": "op",
-              "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype"
-            }
-          ]
-        },
-        "careTeam": [
-          {
-            "role": {
-              "coding": [
-                {
-                  "code": "primary",
-                  "system": "http://terminology.hl7.org/CodeSystem/claimcareteamrole"
-                }
-              ]
-            },
-            "provider": {
-              "reference": "Practitioner/be268e90-e747-4f02-a67b-67dd8afb1c61"
-            },
-            "sequence": 1,
-            "qualification": {
-              "coding": [
-                {
-                  "code": "08.00",
-                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes"
-                }
-              ]
-            }
-          }
-        ],
-        "priority": {
-          "coding": [
-            {
-              "code": "deferred",
-              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
-            }
-          ]
-        },
-        "provider": {
-          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
-        },
-        "diagnosis": [
-          {
-            "type": [
-              {
-                "coding": [
-                  {
-                    "code": "principal",
-                    "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type"
-                  }
-                ]
-              }
-            ],
-            "sequence": 1,
-            "diagnosisCodeableConcept": {
-              "coding": [
-                {
-                  "code": "Z38",
-                  "system": "http://hl7.org/fhir/sid/icd-10-am",
-                  "display": "Liveborn infants according to place of birth"
-                }
-              ]
-            }
-          }
-        ],
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescription",
-            "valueReference": {
-              "reference": "VisionPrescription/439fabc4-4262-4361-8d87-7a060fc3ac23"
-            }
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-newborn",
-            "valueBoolean": true
-          },
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response",
-            "valueReference": {
-              "identifier": {
-                "value": "58c1b1a6-0cd2-4290-8b2a-92e141ccc4fb",
-                "system": "http://pseudo-payer.com.sa/coverageeligibilityresponse"
-              }
-            }
-          }
-        ],
-        "insurance": [
-          {
-            "focal": true,
-            "coverage": {
-              "reference": "Coverage/eb97cc1d-745c-4f06-8693-2ad7f7cb447f"
-            },
-            "sequence": 1
-          }
-        ],
-        "identifier": [
-          {
-            "value": "DUP-1771321535983",
-            "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
-          }
-        ],
-        "prescription": {
-          "reference": "VisionPrescription/439fabc4-4262-4361-8d87-7a060fc3ac23"
-        },
-        "resourceType": "Claim",
-        "supportingInfo": [
-          {
-            "category": {
-              "coding": [
-                {
-                  "code": "patient-history",
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
-                }
-              ]
-            },
-            "sequence": 1,
-            "valueString": "No History"
-          },
-          {
-            "category": {
-              "coding": [
-                {
-                  "code": "history-of-present-illness",
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
-                }
-              ]
-            },
-            "sequence": 2,
-            "valueString": "No Present Illness"
-          },
-          {
-            "category": {
-              "coding": [
-                {
-                  "code": "physical-examination",
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
-                }
-              ]
-            },
-            "sequence": 3,
-            "valueString": "Nothing"
-          },
-          {
-            "category": {
-              "coding": [
-                {
-                  "code": "treatment-plan",
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
-                }
-              ]
-            },
-            "sequence": 4,
-            "valueString": "No Plan"
-          },
-          {
-            "code": {
-              "coding": [
-                {
-                  "code": "INP",
-                  "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
-                  "display": "INP - Investigation(s) not performed"
-                }
-              ]
-            },
-            "category": {
-              "coding": [
-                {
-                  "code": "investigation-result",
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
-                }
-              ]
-            },
-            "sequence": 5
-          },
-          {
-            "category": {
-              "coding": [
-                {
-                  "code": "birth-weight",
-                  "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
-                }
-              ]
-            },
-            "sequence": 6,
-            "valueQuantity": {
-              "code": "kg",
-              "value": 3.201,
-              "system": "http://unitsofmeasure.org"
-            }
+            "code": "eligible",
+            "system": "http://terminology.hl7.org/CodeSystem/adjudication"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/VisionPrescription/439fabc4-4262-4361-8d87-7a060fc3ac23",
-      "resource": {
-        "id": "439fabc4-4262-4361-8d87-7a060fc3ac23",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0"
-          ]
-        },
-        "status": "active",
-        "created": "2026-02-17T21:00:00.000Z",
-        "patient": {
-          "reference": "Patient/493c47ac-8c86-44ed-92e3-4f887761cb26"
-        },
-        "identifier": [
+      "amount": {
+        "value": 0,
+        "currency": "SAR"
+      },
+      "category": {
+        "coding": [
           {
-            "value": "RX-439fabc4",
-            "system": "http://PR-FHIR.com.sa/identifiers/prescription"
-          }
-        ],
-        "prescriber": {
-          "reference": "Practitioner/be268e90-e747-4f02-a67b-67dd8afb1c61"
-        },
-        "dateWritten": "2026-02-17",
-        "resourceType": "VisionPrescription",
-        "lensSpecification": [
-          {
-            "eye": "right",
-            "axis": 80,
-            "sphere": 2.25,
-            "product": {
-              "coding": [
-                {
-                  "code": "lens",
-                  "system": "http://nphies.sa/terminology/CodeSystem/lens-type"
-                }
-              ]
-            },
-            "cylinder": 0.75
-          },
-          {
-            "eye": "left",
-            "axis": 110,
-            "prism": [
-              {
-                "base": "up",
-                "amount": 2
-              }
-            ],
-            "sphere": 1.5,
-            "product": {
-              "coding": [
-                {
-                  "code": "lens",
-                  "system": "http://nphies.sa/terminology/CodeSystem/lens-type"
-                }
-              ]
-            },
-            "cylinder": 0.75
+            "code": "copay",
+            "system": "http://terminology.hl7.org/CodeSystem/adjudication"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Coverage/eb97cc1d-745c-4f06-8693-2ad7f7cb447f",
-      "resource": {
-        "id": "eb97cc1d-745c-4f06-8693-2ad7f7cb447f",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
-          ]
-        },
-        "type": {
-          "coding": [
-            {
-              "code": "EHCPOL",
-              "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
-              "display": "Extended healthcare"
-            }
-          ]
-        },
-        "class": [
+      "amount": {
+        "value": 350,
+        "currency": "SAR"
+      },
+      "category": {
+        "coding": [
           {
-            "name": "Dream Team",
-            "type": {
-              "coding": [
-                {
-                  "code": "plan",
-                  "system": "http://terminology.hl7.org/CodeSystem/coverage-class"
-                }
-              ]
-            },
-            "value": "default-plan"
-          }
-        ],
-        "payor": [
-          {
-            "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
-          }
-        ],
-        "period": {
-          "end": "2028-09-28",
-          "start": "2021-09-28"
-        },
-        "status": "active",
-        "identifier": [
-          {
-            "value": "0000000001",
-            "system": "http://payer.com/memberid"
-          }
-        ],
-        "subscriber": {
-          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-        },
-        "beneficiary": {
-          "reference": "Patient/493c47ac-8c86-44ed-92e3-4f887761cb26"
-        },
-        "policyHolder": {
-          "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-        },
-        "relationship": {
-          "coding": [
-            {
-              "code": "child",
-              "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
-              "display": "Child"
-            }
-          ]
-        },
-        "resourceType": "Coverage"
-      }
-    },
-    {
-      "fullUrl": "http://provider.com/Practitioner/be268e90-e747-4f02-a67b-67dd8afb1c61",
-      "resource": {
-        "id": "be268e90-e747-4f02-a67b-67dd8afb1c61",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
-          ]
-        },
-        "name": [
-          {
-            "use": "official",
-            "text": "Default Practitioner",
-            "given": [
-              "Default"
-            ],
-            "family": "Practitioner"
-          }
-        ],
-        "active": true,
-        "identifier": [
-          {
-            "type": {
-              "coding": [
-                {
-                  "code": "MD",
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                  "display": "Medical License Number"
-                }
-              ]
-            },
-            "value": "PRACT-be268e90",
-            "system": "http://nphies.sa/license/practitioner-license"
-          }
-        ],
-        "resourceType": "Practitioner",
-        "qualification": [
-          {
-            "code": {
-              "coding": [
-                {
-                  "code": "11.00",
-                  "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
-                  "display": "Healthcare Professional"
-                }
-              ]
-            }
+            "code": "benefit",
+            "system": "http://terminology.hl7.org/CodeSystem/adjudication"
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
-      "resource": {
-        "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
-          ]
-        },
-        "name": "Saudi General Hospital",
-        "type": [
+      "amount": {
+        "value": 0,
+        "currency": "SAR"
+      },
+      "category": {
+        "coding": [
           {
-            "coding": [
-              {
-                "code": "prov",
-                "system": "http://nphies.sa/terminology/CodeSystem/organization-type"
-              }
-            ]
+            "code": "tax",
+            "system": "http://terminology.hl7.org/CodeSystem/adjudication"
           }
-        ],
-        "active": true,
-        "address": [
-          {
-            "use": "work",
-            "city": "Riyadh",
-            "line": [
-              "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
-            ],
-            "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
-            "country": "Saudi Arabia"
-          }
-        ],
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
-            "valueCodeableConcept": {
-              "coding": [
-                {
-                  "code": "1",
-                  "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                  "display": "Hospital"
-                }
-              ]
-            }
-          }
-        ],
-        "identifier": [
-          {
-            "value": "1010613708",
-            "system": "http://nphies.sa/license/provider-license"
-          }
-        ],
-        "resourceType": "Organization"
-      }
-    },
-    {
-      "fullUrl": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
-      "resource": {
-        "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"
-          ]
-        },
-        "name": "Saudi National Insurance",
-        "type": [
-          {
-            "coding": [
-              {
-                "code": "ins",
-                "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-                "display": "Insurance Company"
-              }
-            ]
-          }
-        ],
-        "active": true,
-        "address": [
-          {
-            "use": "work",
-            "city": "Riyadh",
-            "line": [
-              "Business Tower, Riyadh"
-            ],
-            "text": "Business Tower, Riyadh",
-            "country": "Saudi Arabia"
-          }
-        ],
-        "identifier": [
-          {
-            "use": "official",
-            "type": {
-              "coding": [
-                {
-                  "code": "NII",
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
-                }
-              ]
-            },
-            "value": "INS-FHIR",
-            "system": "http://nphies.sa/license/payer-license"
-          }
-        ],
-        "resourceType": "Organization"
-      }
-    },
-    {
-      "fullUrl": "http://provider.com/Patient/493c47ac-8c86-44ed-92e3-4f887761cb26",
-      "resource": {
-        "id": "493c47ac-8c86-44ed-92e3-4f887761cb26",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
-          ]
-        },
-        "name": [
-          {
-            "use": "official",
-            "text": "Alaa Baby",
-            "given": [
-              "Alaa"
-            ],
-            "family": "Baby"
-          }
-        ],
-        "active": true,
-        "gender": "male",
-        "_gender": {
-          "extension": [
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
-              "valueCodeableConcept": {
-                "coding": [
-                  {
-                    "code": "male",
-                    "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "birthDate": "2026-02-04",
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
-            "valueCodeableConcept": {
-              "coding": [
-                {
-                  "code": "business",
-                  "system": "http://nphies.sa/terminology/CodeSystem/occupation"
-                }
-              ]
-            }
-          }
-        ],
-        "identifier": [
-          {
-            "type": {
-              "coding": [
-                {
-                  "code": "MR",
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                  "display": "Medical Record Number"
-                }
-              ]
-            },
-            "value": "332212",
-            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-            "extension": [
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "code": "SAU",
-                      "system": "urn:iso:std:iso:3166",
-                      "display": "Saudi Arabia"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ],
-        "resourceType": "Patient",
-        "maritalStatus": {
-          "coding": [
-            {
-              "code": "U",
-              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus"
-            }
-          ]
-        },
-        "deceasedBoolean": false
-      }
-    },
-    {
-      "fullUrl": "http://provider.com/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
-      "resource": {
-        "id": "09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
-          ]
-        },
-        "name": [
-          {
-            "use": "official",
-            "text": "Alaa Jamal",
-            "given": [
-              "Alaa"
-            ],
-            "family": "Jamal"
-          }
-        ],
-        "active": true,
-        "gender": "female",
-        "_gender": {
-          "extension": [
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
-              "valueCodeableConcept": {
-                "coding": [
-                  {
-                    "code": "female",
-                    "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "birthDate": "1989-01-30",
-        "extension": [
-          {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
-            "valueCodeableConcept": {
-              "coding": [
-                {
-                  "code": "business",
-                  "system": "http://nphies.sa/terminology/CodeSystem/occupation"
-                }
-              ]
-            }
-          }
-        ],
-        "identifier": [
-          {
-            "type": {
-              "coding": [
-                {
-                  "code": "PRC",
-                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                  "display": "Permanent Resident Card"
-                }
-              ]
-            },
-            "value": "2000000003",
-            "system": "http://nphies.sa/identifier/iqama",
-            "extension": [
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "code": "SAU",
-                      "system": "urn:iso:std:iso:3166",
-                      "display": "Saudi Arabia"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ],
-        "resourceType": "Patient",
-        "maritalStatus": {
-          "coding": [
-            {
-              "code": "U",
-              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus"
-            }
-          ]
-        },
-        "deceasedBoolean": false
+        ]
       }
     }
   ],
-  "timestamp": "2026-02-17T10:02:38.303Z",
-  "resourceType": "Bundle"
+  "status": "active",
+  "addItem": [
+    {
+      "quantity": {
+        "value": 1
+      },
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-sequence",
+          "valuePositiveInt": 1
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
+          "valueBoolean": false
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
+          "valueBoolean": false
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-sequence",
+          "valuePositiveInt": 1
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-informationSequence",
+          "valuePositiveInt": 2
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "approved",
+                "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome"
+              }
+            ]
+          }
+        }
+      ],
+      "adjudication": [
+        {
+          "amount": {
+            "value": 200,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "eligible",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "copay",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "value": 1,
+          "category": {
+            "coding": [
+              {
+                "code": "approved-quantity",
+                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 200,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "benefit",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "tax",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        }
+      ],
+      "productOrService": {
+        "coding": [
+          {
+            "code": "58983",
+            "system": "http://nphies.sa/terminology/CodeSystem/medical-devices",
+            "display": "Compression bandaging kit"
+          }
+        ]
+      }
+    },
+    {
+      "quantity": {
+        "value": 1
+      },
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-sequence",
+          "valuePositiveInt": 2
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
+          "valueBoolean": false
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
+          "valueBoolean": false
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-sequence",
+          "valuePositiveInt": 1
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-informationSequence",
+          "valuePositiveInt": 3
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "approved",
+                "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome"
+              }
+            ]
+          }
+        }
+      ],
+      "adjudication": [
+        {
+          "amount": {
+            "value": 150,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "eligible",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "copay",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "value": 1,
+          "category": {
+            "coding": [
+              {
+                "code": "approved-quantity",
+                "system": "http://nphies.sa/terminology/CodeSystem/ksa-adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 150,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "benefit",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        },
+        {
+          "amount": {
+            "value": 0,
+            "currency": "SAR"
+          },
+          "category": {
+            "coding": [
+              {
+                "code": "tax",
+                "system": "http://terminology.hl7.org/CodeSystem/adjudication"
+              }
+            ]
+          }
+        }
+      ],
+      "productOrService": {
+        "coding": [
+          {
+            "code": "99999999999999",
+            "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
+            "display": "UNLISTED CODE"
+          },
+          {
+            "code": "ITC213342",
+            "system": "http://INS-FHIR.nphies.sa/",
+            "display": "non-nphies code display"
+          }
+        ]
+      }
+    }
+  ],
+  "created": "2026-02-17",
+  "insurer": {
+    "reference": "https://payer.oba.nphies.sa/Organization/4"
+  },
+  "outcome": "complete",
+  "patient": {
+    "reference": "https://payer.oba.nphies.sa/Patient/2"
+  },
+  "request": {
+    "type": "Claim",
+    "identifier": {
+      "value": "APA_INS-FHIR_1010613708_1771311369836",
+      "system": "http://pr-fhir.com.sa/Authorization"
+    }
+  },
+  "subType": {
+    "coding": [
+      {
+        "code": "op",
+        "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype",
+        "display": "OutPatient"
+      }
+    ]
+  },
+  "extension": [
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis",
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-sequence",
+          "valuePositiveInt": 1
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-diagnosisCodeableConcept",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "S92",
+                "system": "http://hl7.org/fhir/sid/icd-10-am",
+                "display": "Fracture of foot, except ankle"
+              }
+            ]
+          }
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-type",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "principal",
+                "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type",
+                "display": "Principal Diagnosis"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis",
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-sequence",
+          "valuePositiveInt": 2
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-diagnosisCodeableConcept",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "E13.72",
+                "system": "http://hl7.org/fhir/sid/icd-10-am",
+                "display": "Other specified diabetes mellitus with features of insulin resistance"
+              }
+            ]
+          }
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-type",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "secondary",
+                "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type",
+                "display": "Secondary Diagnosis"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis",
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-sequence",
+          "valuePositiveInt": 3
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-diagnosisCodeableConcept",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "R52.9",
+                "system": "http://hl7.org/fhir/sid/icd-10-am",
+                "display": "Pain, unspecified"
+              }
+            ]
+          }
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosis-type",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "secondary",
+                "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type",
+                "display": "Secondary Diagnosis"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo",
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-sequence",
+          "valuePositiveInt": 1
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-category",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "attachment",
+                "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                "display": "Attachment"
+              }
+            ]
+          }
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-valueAttachment",
+          "valueAttachment": {
+            "data": "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xNV0+5J3WqL4E4sd4ij3Ab99jrJ8MGVG3LikGL0mQqNemJxqjYzQpjWsnyVHusZFJ9p0r4nHNa/pbInR41xnDG1LIgwRmsh48pH6JfUbrIeeioVyyyNx5SHvrAAOGz6nucKchB9W4G1hs2rLa6dNc9VOrJVrA5HekYJaPIRRh9IaF53jGjyuyTuBRw9YlXJP5E5WQpA/88rDby6/FU6gZlittVY2qmoLApEF3pG+gto03tihvrRGHW/urOPwbCfPyu8eeJt0ogg7EI96xrw0dv/w79zqHjv92f6dh9Uv6W0pmbmxM7rLUs6Un+NL3GhYUsb/e9dLj/NjCM7V+r8ogxD5QeGM2LQku06r54PgtkYawoNw1t1Rthib2Wz+odGRJPHw6czovxmp6/h9uOqRsdOHE2cOYwZfWTL4ypKhR9RmKOfEDL6+ZGD8HmL8sMic4ZULrMQ6+Btlc+CC3+rwAsLwBRkw+BHR2XUZRk1CHQ56mrM34xhSjG14WRFLDd2MR4QrRPIa596C8zrnngbFHfjZgVHuBQunjBlw7x2VbI9Ltmkbb1COGboYcndcbu3E0m3VuAfHXU1UxNjhbpN/VsnSyzvlVHF+O/332Usq0wJ+uV9Y8FACER8F8JcWz/ZZOX9Veis7+pZ3rlv+P1aZXPwKZW5kc3RyZWFtCmVuZG9iagoxMyAwIG9iago8PCAvUHJvZHVjZXIgKG1hY09TIFZlcnNpb24gMjYuMC4xIFwoQnVpbGQgMjVBMzYyXCkgUXVhcnR6IFBERkNvbnRleHQpIC9DcmVhdGlvbkRhdGUKKEQ6MjAyNTEyMTYwNjE3NDJaMDAnMDAnKSAvTW9kRGF0ZSAoRDoyMDI1MTIxNjA2MTc0MlowMCcwMCcpID4+CmVuZG9iagp4cmVmCjAgMTQKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMzMxIDAwMDAwIG4gCjAwMDAwMDMyNzkgMDAwMDAgbiAKMDAwMDAwMDAyMiAwMDAwMCBuIAowMDAwMDAwNDM1IDAwMDAwIG4gCjAwMDAwMDMyNDQgMDAwMDAgbiAKMDAwMDAwMDAwMCAwMDAwMCBuIAowMDAwMDAzNDExIDAwMDAwIG4gCjAwMDAwMDA1MzIgMDAwMDAgbiAKMDAwMDAwMzM2MiAwMDAwMCBuIAowMDAwMDA0MDE3IDAwMDAwIG4gCjAwMDAwMDM2MzcgMDAwMDAgbiAKMDAwMDAwNDI1MyAwMDAwMCBuIAowMDAwMDE0OTE1IDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgMTQgL1Jvb3QgOSAwIFIgL0luZm8gMTMgMCBSIC9JRCBbIDxhZWI4MzcxZjAyYThmMTgzMWYxYjdkMTE0MTAwZWI2NT4KPGFlYjgzNzFmMDJhOGYxODMxZjFiN2QxMTQxMDBlYjY1PiBdID4+CnN0YXJ0eHJlZgoxNTA4MAolJUVPRgo=",
+            "size": 15518,
+            "title": "Test Attachment For Nphies.pdf.pdf",
+            "contentType": "application/pdf"
+          }
+        }
+      ]
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo",
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-sequence",
+          "valuePositiveInt": 2
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-category",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "days-supply",
+                "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                "display": "Days Supply"
+              }
+            ]
+          }
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-valueQuantity",
+          "valueQuantity": {
+            "code": "d",
+            "value": 1,
+            "system": "http://unitsofmeasure.org"
+          }
+        }
+      ]
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo",
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-sequence",
+          "valuePositiveInt": 3
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-category",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "days-supply",
+                "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                "display": "Days Supply"
+              }
+            ]
+          }
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-valueQuantity",
+          "valueQuantity": {
+            "code": "d",
+            "value": 2,
+            "system": "http://unitsofmeasure.org"
+          }
+        }
+      ]
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo",
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-sequence",
+          "valuePositiveInt": 4
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-category",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "info",
+                "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                "display": "Information"
+              }
+            ]
+          }
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-valueString",
+          "valueString": "apa info"
+        }
+      ]
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo",
+      "extension": [
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-sequence",
+          "valuePositiveInt": 5
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-category",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "investigation-result",
+                "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                "display": "Investigation Result"
+              }
+            ]
+          }
+        },
+        {
+          "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-supportingInfo-code",
+          "valueCodeableConcept": {
+            "coding": [
+              {
+                "code": "INP",
+                "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
+                "display": "Investigation(s) not performed"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-advancedAuth-reason",
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "code": "referral",
+            "system": "http://nphies.sa/terminology/CodeSystem/advancedAuth-reason",
+            "display": "Referral"
+          }
+        ]
+      }
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceProvider",
+      "valueReference": {
+        "reference": "https://payer.oba.nphies.sa/Organization/3"
+      }
+    },
+    {
+      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-adjudication-outcome",
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "code": "approved",
+            "system": "http://nphies.sa/terminology/CodeSystem/adjudication-outcome"
+          }
+        ]
+      }
+    }
+  ],
+  "insurance": [
+    {
+      "focal": false,
+      "coverage": {
+        "reference": "https://payer.oba.nphies.sa/Coverage/1"
+      },
+      "sequence": 1
+    }
+  ],
+  "payeeType": {
+    "coding": [
+      {
+        "code": "subscriber",
+        "system": "http://terminology.hl7.org/CodeSystem/payeetype",
+        "display": "Subscriber"
+      }
+    ]
+  },
+  "requestor": {
+    "reference": "https://payer.oba.nphies.sa/Organization/3"
+  },
+  "identifier": [
+    {
+      "value": "1771311369835",
+      "system": "https://payer.oba.nphies.sa/claimresponse"
+    }
+  ],
+  "preAuthRef": "1010613708-202612170950",
+  "resourceType": "ClaimResponse",
+  "preAuthPeriod": {
+    "end": "2026-02-20T21:00:00Z",
+    "start": "2026-02-16T21:00:00Z"
+  }
 }

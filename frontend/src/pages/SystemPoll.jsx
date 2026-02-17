@@ -21,6 +21,7 @@ const tableDisplayName = {
   claim_submissions: 'Claim',
   advanced_authorizations: 'Advanced Auth',
   nphies_communications: 'Communication',
+  nphies_communication_requests: 'Communication Request',
 };
 
 const RecordLink = ({ table, recordId, children }) => {
