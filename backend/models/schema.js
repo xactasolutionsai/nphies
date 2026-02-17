@@ -513,7 +513,7 @@ export const validationSchemas = {
     // Nested arrays
     items: Joi.array().items(Joi.object({
       sequence: Joi.number().integer().min(1).required(),
-      product_or_service_code: Joi.string().max(50).allow(null, '').optional(),
+      product_or_service_code: Joi.string().max(50).required(),
       product_or_service_system: Joi.string().max(255).allow(null, '').optional(),
       product_or_service_display: Joi.string().max(255).allow(null, '').optional(),
       tooth_number: Joi.string().max(10).allow(null, '').optional(),
@@ -670,7 +670,7 @@ export const validationSchemas = {
   priorAuthorizationItem: Joi.object({
     prior_auth_id: Joi.number().integer().required(),
     sequence: Joi.number().integer().min(1).required(),
-    product_or_service_code: Joi.string().max(50).allow(null, '').optional(),
+    product_or_service_code: Joi.string().max(50).required(),
     product_or_service_system: Joi.string().max(255).allow(null, '').optional(),
     product_or_service_display: Joi.string().max(255).allow(null, '').optional(),
     tooth_number: Joi.string().max(10).allow(null, '').optional(),
@@ -753,7 +753,7 @@ export const validationSchemas = {
     // Nested arrays
     items: Joi.array().items(Joi.object({
       sequence: Joi.number().integer().min(1).required(),
-      product_or_service_code: Joi.string().max(50).allow(null, '').optional(),
+      product_or_service_code: Joi.string().max(50).required(),
       product_or_service_system: Joi.string().max(255).allow(null, '').optional(),
       product_or_service_display: Joi.string().max(255).allow(null, '').optional(),
       quantity: Joi.number().precision(2).allow(null).optional(),

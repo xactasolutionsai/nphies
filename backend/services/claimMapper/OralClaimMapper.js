@@ -395,7 +395,7 @@ class OralClaimMapper extends DentalMapper {
     if (claim.items?.length > 0) {
       claimResource.item = claim.items.map((item, idx) => 
         this.buildOralClaimItem(item, idx + 1, claimServicedDate, providerIdentifierSystem, claim, supportingInfoSequences)
-      ).filter(Boolean);
+      );
     }
 
     // Total - BV-00059: Must equal sum of item net values
@@ -524,15 +524,13 @@ class OralClaimMapper extends DentalMapper {
       sequence,
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
-      ...(item.product_or_service_code ? {
-        productOrService: {
-          coding: [{
-            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
-            code: item.product_or_service_code,
-            ...(item.product_or_service_display ? { display: item.product_or_service_display } : {})
-          }]
-        }
-      } : {}),
+      productOrService: {
+        coding: [{
+          system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
+          code: item.product_or_service_code,
+          display: item.product_or_service_display
+        }]
+      },
       servicedDate: this.formatDate(item.serviced_date || servicedDate),
       quantity: { value: quantity },
       unitPrice: { value: unitPrice, currency: item.currency || claim?.currency || 'SAR' },
@@ -557,15 +555,13 @@ class OralClaimMapper extends DentalMapper {
 
         return {
           sequence: detail.sequence || (idx + 1),
-          ...(detail.product_or_service_code ? {
-            productOrService: {
-              coding: [{
-                system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
-                code: detail.product_or_service_code,
-                ...(detail.product_or_service_display ? { display: detail.product_or_service_display } : {})
-              }]
-            }
-          } : {}),
+          productOrService: {
+            coding: [{
+              system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
+              code: detail.product_or_service_code,
+              display: detail.product_or_service_display
+            }]
+          },
           quantity: { value: detailQuantity },
           unitPrice: { 
             value: detailUnitPrice, 

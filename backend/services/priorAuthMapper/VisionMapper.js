@@ -421,7 +421,7 @@ class VisionMapper extends BaseMapper {
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
         this.buildVisionClaimItem(item, idx + 1, supportingInfoSequences, servicedDate)
-      ).filter(Boolean);
+      );
     }
 
     // Total
@@ -503,18 +503,16 @@ class VisionMapper extends BaseMapper {
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
-      ...(item.product_or_service_code ? {
-        productOrService: {
-          coding: [
-            {
-              // IB-00030: Vision claims use 'procedures' CodeSystem, NOT 'scientific-codes'
-              system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
-              code: item.product_or_service_code,
-              ...(item.product_or_service_display ? { display: item.product_or_service_display } : {})
-            }
-          ]
-        }
-      } : {}),
+      productOrService: {
+        coding: [
+          {
+            // IB-00030: Vision claims use 'procedures' CodeSystem, NOT 'scientific-codes'
+            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+            code: item.product_or_service_code,
+            display: item.product_or_service_display
+          }
+        ]
+      },
       servicedDate: this.formatDate(item.serviced_date || servicedDate),
       quantity: { value: quantity },
       unitPrice: {

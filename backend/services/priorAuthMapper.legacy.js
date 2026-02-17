@@ -502,7 +502,7 @@ class PriorAuthMapper {
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
         this.buildClaimItem(item, priorAuth.auth_type, idx + 1, supportingInfoSequences, encounterPeriod)
-      ).filter(Boolean);
+      );
     }
 
     // Total - REQUIRED per NPHIES spec (IC-00062 error if missing)
@@ -733,17 +733,15 @@ class PriorAuthMapper {
       diagnosisSequence: item.diagnosis_sequences || [1],
       // Link to all supportingInfo entries
       informationSequence: item.information_sequences || supportingInfoSequences,
-      ...(item.product_or_service_code ? {
-        productOrService: {
-          coding: [
-            {
-              system: item.product_or_service_system || getDefaultProductSystem(authType),
-              code: item.product_or_service_code,
-              ...(item.product_or_service_display ? { display: item.product_or_service_display } : {})
-            }
-          ]
-        }
-      } : {})
+      productOrService: {
+        coding: [
+          {
+            system: item.product_or_service_system || getDefaultProductSystem(authType),
+            code: item.product_or_service_code,
+            display: item.product_or_service_display
+          }
+        ]
+      }
     };
 
     // BV-00118: servicedDate MUST be within the encounter period

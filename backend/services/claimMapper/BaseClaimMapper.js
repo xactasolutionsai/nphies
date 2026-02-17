@@ -398,15 +398,13 @@ class BaseClaimMapper {
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
-      ...(item.product_or_service_code ? {
-        productOrService: {
-          coding: [{
-            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
-            code: item.product_or_service_code,
-            ...(item.product_or_service_display ? { display: item.product_or_service_display } : {})
-          }]
-        }
-      } : {}),
+      productOrService: {
+        coding: [{
+          system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+          code: item.product_or_service_code,
+          display: item.product_or_service_display
+        }]
+      },
       servicedDate: this.formatDate(servicedDate),
       quantity: { value: quantity },
       unitPrice: { value: unitPrice, currency: item.currency || 'SAR' },

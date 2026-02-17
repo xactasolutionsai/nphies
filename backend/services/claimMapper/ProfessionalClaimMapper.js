@@ -467,7 +467,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     if (claim.items && claim.items.length > 0) {
       builtItems = claim.items.map((item, idx) => 
         this.buildProfessionalClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim)
-      ).filter(Boolean);
+      );
       claimResource.item = builtItems;
     }
 
@@ -959,10 +959,9 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     const productCode = item.product_or_service_code || item.service_code;
     const productDisplay = item.product_or_service_display || item.service_display;
     
-    // Log warning if product code is missing (items without codes will be skipped)
     if (!productCode) {
-      console.warn(`[ProfessionalClaimMapper] WARNING: Item ${sequence} missing product_or_service_code - skipping item`);
-      return null;
+      console.error(`[ProfessionalClaimMapper] ERROR: Item ${sequence} missing product_or_service_code`);
+      throw new Error(`Service code (product_or_service_code) is required for professional claim item ${sequence}`);
     }
     
     // Use provided system or default to services for professional claims
@@ -984,11 +983,9 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       productOrServiceCoding.display = productDisplay;
     }
     
-    if (productCode) {
-      claimItem.productOrService = {
-        coding: [productOrServiceCoding]
-      };
-    }
+    claimItem.productOrService = {
+      coding: [productOrServiceCoding]
+    };
 
     // Serviced date - must be within encounter period per BV-00041
     let servicedDate = item.serviced_date ? new Date(item.serviced_date) : 
@@ -1064,15 +1061,13 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
 
         return {
           sequence: detail.sequence || (idx + 1),
-          ...(detail.product_or_service_code ? {
-            productOrService: {
-              coding: [{
-                system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/services',
-                code: detail.product_or_service_code,
-                ...(detail.product_or_service_display ? { display: detail.product_or_service_display } : {})
-              }]
-            }
-          } : {}),
+          productOrService: {
+            coding: [{
+              system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/services',
+              code: detail.product_or_service_code,
+              display: detail.product_or_service_display
+            }]
+          },
           quantity: { value: detailQuantity },
           unitPrice: { 
             value: detailUnitPrice, 

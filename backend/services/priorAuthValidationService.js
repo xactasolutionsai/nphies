@@ -267,7 +267,16 @@ class PriorAuthValidationService {
       });
     }
 
-    // Items are optional - no validation required
+    // Check items
+    if (!formData.items || formData.items.length === 0) {
+      issues.push({
+        category: this.rejectionCategories.BILLING,
+        field: 'items',
+        code: 'BL-1',
+        message: 'At least one service/procedure item is required',
+        severity: 'high'
+      });
+    }
 
     return {
       passed: issues.length === 0,

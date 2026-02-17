@@ -620,7 +620,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     if (claim.items && claim.items.length > 0) {
       builtItems = claim.items.map((item, idx) => 
         this.buildPharmacyClaimItemForClaim(item, idx + 1, supportingInfoList, providerIdentifierSystem)
-      ).filter(Boolean);
+      );
       claimResource.item = builtItems;
     }
 
@@ -703,10 +703,10 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       codeSystem = 'http://nphies.sa/terminology/CodeSystem/medication-codes';
     }
     
-    // Log warning if product code is missing (items without codes will be skipped)
+    // Validate product code exists (required)
     if (!productCode) {
-      console.warn(`[PharmacyClaimMapper] WARNING: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code - skipping item`);
-      return null;
+      console.error(`[PharmacyClaimMapper] ERROR: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code`);
+      throw new Error(`${isDevice ? 'Device' : 'Medication'} code is required for pharmacy item ${sequence}`);
     }
     
     // Build pharmacy-specific extensions per NPHIES claim example
@@ -860,11 +860,9 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       productOrServiceCoding.display = productDisplay;
     }
     
-    if (productCode) {
-      claimItem.productOrService = {
-        coding: [productOrServiceCoding]
-      };
-    }
+    claimItem.productOrService = {
+      coding: [productOrServiceCoding]
+    };
 
     // Serviced date
     const servicedDate = item.serviced_date ? new Date(item.serviced_date) : new Date();
@@ -901,15 +899,13 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
 
         return {
           sequence: detail.sequence || (idx + 1),
-          ...(detail.product_or_service_code ? {
-            productOrService: {
-              coding: [{
-                system: detailCodeSystem,
-                code: detail.product_or_service_code,
-                ...(detail.product_or_service_display ? { display: detail.product_or_service_display } : {})
-              }]
-            }
-          } : {}),
+          productOrService: {
+            coding: [{
+              system: detailCodeSystem,
+              code: detail.product_or_service_code,
+              display: detail.product_or_service_display
+            }]
+          },
           quantity: { value: detailQuantity },
           unitPrice: { 
             value: detailUnitPrice, 

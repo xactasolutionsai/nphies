@@ -476,7 +476,7 @@ class DentalMapper extends BaseMapper {
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
         this.buildDentalClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod)
-      ).filter(Boolean);
+      );
     }
 
     // Total
@@ -507,20 +507,16 @@ class DentalMapper extends BaseMapper {
   buildDentalClaimItem(item, itemIndex, supportingInfoSequences, encounterPeriod) {
     const claimItem = this.buildClaimItem(item, 'dental', itemIndex, supportingInfoSequences, encounterPeriod);
     
-    // Override productOrService to use oral-health-op system (only if code exists)
-    if (item.product_or_service_code) {
-      claimItem.productOrService = {
-        coding: [
-          {
-            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
-            code: item.product_or_service_code,
-            ...(item.product_or_service_display ? { display: item.product_or_service_display } : {})
-          }
-        ]
-      };
-    } else {
-      delete claimItem.productOrService;
-    }
+    // Override productOrService to use oral-health-op system
+    claimItem.productOrService = {
+      coding: [
+        {
+          system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
+          code: item.product_or_service_code,
+          display: item.product_or_service_display
+        }
+      ]
+    };
 
     // Add tooth number using FDI oral region system
     if (item.tooth_number) {

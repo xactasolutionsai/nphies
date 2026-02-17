@@ -432,7 +432,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     if (claim.items?.length > 0) {
       claimResource.item = claim.items.map((item, idx) => 
         this.buildClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim)
-      ).filter(Boolean);
+      );
     }
 
     // Total - BV-00059: Must equal sum of item net values
@@ -512,15 +512,13 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
-      ...(item.product_or_service_code ? {
-        productOrService: {
-          coding: [{
-            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
-            code: item.product_or_service_code,
-            ...(item.product_or_service_display ? { display: item.product_or_service_display } : {})
-          }]
-        }
-      } : {}),
+      productOrService: {
+        coding: [{
+          system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+          code: item.product_or_service_code,
+          display: item.product_or_service_display
+        }]
+      },
       servicedDate: this.formatDate(servicedDate),
       quantity: { value: quantity },
       unitPrice: { value: unitPrice, currency: item.currency || claim?.currency || 'SAR' },
@@ -540,15 +538,13 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
 
         return {
           sequence: detail.sequence || (idx + 1),
-          ...(detail.product_or_service_code ? {
-            productOrService: {
-              coding: [{
-                system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
-                code: detail.product_or_service_code,
-                ...(detail.product_or_service_display ? { display: detail.product_or_service_display } : {})
-              }]
-            }
-          } : {}),
+          productOrService: {
+            coding: [{
+              system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+              code: detail.product_or_service_code,
+              display: detail.product_or_service_display
+            }]
+          },
           quantity: { value: detailQuantity },
           unitPrice: { 
             value: detailUnitPrice, 

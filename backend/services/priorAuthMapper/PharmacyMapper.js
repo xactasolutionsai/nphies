@@ -520,7 +520,7 @@ class PharmacyMapper extends BaseMapper {
       // Pass supportingInfoList to enable auto-matching by days_supply value
       claim.item = priorAuth.items.map((item, idx) => 
         this.buildPharmacyClaimItem(item, idx + 1, supportingInfoList, encounterPeriod)
-      ).filter(Boolean);
+      );
     }
 
     // Total (required)
@@ -601,10 +601,10 @@ class PharmacyMapper extends BaseMapper {
       codeSystem = 'http://nphies.sa/terminology/CodeSystem/medication-codes';
     }
     
-    // Log warning if product code is missing (items without codes will be skipped)
+    // Validate product code exists (required)
     if (!productCode) {
-      console.warn(`[PharmacyMapper] WARNING: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code - skipping item`);
-      return null;
+      console.error(`[PharmacyMapper] ERROR: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code - this will cause NPHIES rejection`);
+      throw new Error(`${isDevice ? 'Device' : 'Medication'} code is required for pharmacy item ${sequence}`);
     }
     
     // Build pharmacy-specific extensions per NPHIES spec
@@ -748,36 +748,33 @@ class PharmacyMapper extends BaseMapper {
     };
 
     // ProductOrService using appropriate code system (medication-codes or medical-devices)
-    // Only include if productCode exists to avoid sending null values to NPHIES
-    if (productCode) {
-      const productOrServiceCoding = {
-        system: codeSystem,
-        code: productCode
-      };
-      
-      // Only add display if it has a non-empty value
-      if (productDisplay) {
-        productOrServiceCoding.display = productDisplay;
-      }
-      
-      // Support shadow billing (dual coding) for unlisted/non-standard codes
-      // When shadow_code is present, add a secondary provider-specific coding
-      const productOrServiceCodings = [productOrServiceCoding];
-      if (item.shadow_code && item.shadow_code_system) {
-        const shadowCoding = {
-          system: item.shadow_code_system,
-          code: item.shadow_code
-        };
-        if (item.shadow_code_display) {
-          shadowCoding.display = item.shadow_code_display;
-        }
-        productOrServiceCodings.push(shadowCoding);
-      }
-      
-      claimItem.productOrService = {
-        coding: productOrServiceCodings
-      };
+    const productOrServiceCoding = {
+      system: codeSystem,
+      code: productCode
+    };
+    
+    // Only add display if it has a non-empty value
+    if (productDisplay) {
+      productOrServiceCoding.display = productDisplay;
     }
+    
+    // Support shadow billing (dual coding) for unlisted/non-standard codes
+    // When shadow_code is present, add a secondary provider-specific coding
+    const productOrServiceCodings = [productOrServiceCoding];
+    if (item.shadow_code && item.shadow_code_system) {
+      const shadowCoding = {
+        system: item.shadow_code_system,
+        code: item.shadow_code
+      };
+      if (item.shadow_code_display) {
+        shadowCoding.display = item.shadow_code_display;
+      }
+      productOrServiceCodings.push(shadowCoding);
+    }
+    
+    claimItem.productOrService = {
+      coding: productOrServiceCodings
+    };
 
     // Determine serviced date
     let servicedDate;
@@ -952,10 +949,22 @@ class PharmacyMapper extends BaseMapper {
       errors.push('Insurer data is required');
     }
 
-    // Items are optional - no validation required for item count or medication codes
+    // Pharmacy-specific validations
+    if (!priorAuth.items || priorAuth.items.length === 0) {
+      errors.push('At least one medication item is required for pharmacy prior authorization');
+    }
 
     if (!priorAuth.diagnoses || priorAuth.diagnoses.length === 0) {
       errors.push('At least one diagnosis is required for pharmacy prior authorization');
+    }
+
+    // Validate medication codes
+    if (priorAuth.items) {
+      priorAuth.items.forEach((item, idx) => {
+        if (!item.medication_code && !item.product_or_service_code) {
+          errors.push(`Item ${idx + 1}: Medication code is required`);
+        }
+      });
     }
 
     return errors;
