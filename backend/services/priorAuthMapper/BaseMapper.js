@@ -932,8 +932,9 @@ class BaseMapper {
     
     if (isChiefComplaint) {
       // Chief complaint MUST have code element (BV-00531)
+      // NPHIES does NOT allow valueString for chief-complaint - free text MUST go in code.text
       if (hasCode && hasCodeText) {
-        // Both SNOMED code and free text provided
+        // Both SNOMED code and free text provided (direct/preview flow)
         supportingInfo.code = {
           coding: [{
             system: info.code_system || 'http://snomed.info/sct',
@@ -942,15 +943,26 @@ class BaseMapper {
           }],
           text: info.code_text
         };
+        info._usedValueStringForCodeText = true;
+      } else if (hasCode && hasValueString) {
+        // Both SNOMED code and free text (DB round-trip: code_text was saved as value_string)
+        supportingInfo.code = {
+          coding: [{
+            system: info.code_system || 'http://snomed.info/sct',
+            code: info.code,
+            display: info.code_display
+          }],
+          text: info.value_string
+        };
+        info._usedValueStringForCodeText = true;
       } else if (hasCodeText || (hasValueString && !hasCode)) {
-        // Use code.text for free text format
+        // Free text only - use code.text format
         supportingInfo.code = {
           text: info.code_text || info.value_string
         };
-        // Mark that we used value_string for code.text so we don't add valueString later
         info._usedValueStringForCodeText = true;
       } else if (hasCode) {
-        // Use code.coding for SNOMED code format
+        // SNOMED code only - use code.coding format
         supportingInfo.code = {
           coding: [{
             system: info.code_system || 'http://snomed.info/sct',

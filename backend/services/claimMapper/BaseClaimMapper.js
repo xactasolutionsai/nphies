@@ -338,7 +338,42 @@ class BaseClaimMapper {
       category: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category', code: categoryCode }] }
     };
 
-    if (info.code_text) {
+    // NPHIES does NOT allow valueString for chief-complaint - free text MUST go in code.text
+    const category = (info.category || '').toLowerCase();
+    const isChiefComplaint = category === 'chief-complaint';
+    const hasCodeText = info.code_text && info.code_text.trim().length > 0;
+    const hasValueString = info.value_string != null && String(info.value_string).trim().length > 0;
+    const hasCode = info.code && String(info.code).trim().length > 0;
+    let usedValueStringForCodeText = false;
+
+    if (isChiefComplaint) {
+      if (hasCode && hasCodeText) {
+        // Both SNOMED code and free text
+        supportingInfo.code = {
+          coding: [{ system: info.code_system || 'http://snomed.info/sct', code: info.code, display: info.code_display }],
+          text: info.code_text
+        };
+        usedValueStringForCodeText = true;
+      } else if (hasCode && hasValueString) {
+        // Both SNOMED code and free text (DB round-trip: code_text saved as value_string)
+        supportingInfo.code = {
+          coding: [{ system: info.code_system || 'http://snomed.info/sct', code: info.code, display: info.code_display }],
+          text: info.value_string
+        };
+        usedValueStringForCodeText = true;
+      } else if (hasCodeText || (hasValueString && !hasCode)) {
+        // Free text only
+        supportingInfo.code = { text: info.code_text || info.value_string };
+        usedValueStringForCodeText = true;
+      } else if (hasCode) {
+        // SNOMED code only
+        supportingInfo.code = {
+          coding: [{ system: info.code_system || 'http://snomed.info/sct', code: info.code, display: info.code_display }]
+        };
+      } else {
+        supportingInfo.code = { text: 'Chief complaint' };
+      }
+    } else if (info.code_text) {
       supportingInfo.code = { text: info.code_text };
     } else if (info.code) {
       supportingInfo.code = {
@@ -355,7 +390,7 @@ class BaseClaimMapper {
       supportingInfo.timingDate = this.formatDate(info.timing_date);
     }
 
-    if (info.value_string != null) supportingInfo.valueString = info.value_string;
+    if (info.value_string != null && !usedValueStringForCodeText) supportingInfo.valueString = info.value_string;
     else if (info.value_quantity != null) {
       supportingInfo.valueQuantity = { value: parseFloat(info.value_quantity), system: 'http://unitsofmeasure.org', code: this.getUCUMCode(info.value_quantity_unit) };
     }

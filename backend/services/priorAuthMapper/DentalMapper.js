@@ -391,11 +391,13 @@ class DentalMapper extends BaseMapper {
     const existingChiefComplaint = supportingInfoList.find(info => info.category === 'chief-complaint');
     if (existingChiefComplaint) {
       // Convert any SNOMED code format to free text format for dental
+      // Also check value_string as fallback (DB round-trip: code_text saved as value_string)
       if (existingChiefComplaint.code && !existingChiefComplaint.code_text) {
-        existingChiefComplaint.code_text = existingChiefComplaint.code_display || existingChiefComplaint.code || 'Dental complaint';
+        existingChiefComplaint.code_text = existingChiefComplaint.value_string || existingChiefComplaint.code_display || existingChiefComplaint.code || 'Dental complaint';
         delete existingChiefComplaint.code;
         delete existingChiefComplaint.code_system;
         delete existingChiefComplaint.code_display;
+        delete existingChiefComplaint.value_string;
       }
     } else {
       // Add chief complaint if not present
