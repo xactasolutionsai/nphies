@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,8 +7,38 @@ import api, { extractErrorMessage } from '@/services/api';
 import {
   RefreshCw, Play, Clock, CheckCircle, AlertCircle, XCircle,
   ChevronDown, ChevronUp, FileJson, Copy, Activity,
-  Inbox, Link2, HelpCircle, BarChart3, ArrowRight
+  Inbox, Link2, HelpCircle, BarChart3, ArrowRight, ExternalLink
 } from 'lucide-react';
+
+const tableToRoute = {
+  prior_authorizations: '/prior-authorizations',
+  claim_submissions: '/claim-submissions',
+  advanced_authorizations: '/advanced-authorizations',
+};
+
+const tableDisplayName = {
+  prior_authorizations: 'Prior Auth',
+  claim_submissions: 'Claim',
+  advanced_authorizations: 'Advanced Auth',
+  nphies_communications: 'Communication',
+};
+
+const RecordLink = ({ table, recordId, children }) => {
+  const basePath = tableToRoute[table];
+  if (!basePath || !recordId) {
+    return <span>{children}</span>;
+  }
+  return (
+    <Link
+      to={`${basePath}/${recordId}`}
+      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+      <ExternalLink className="w-3 h-3" />
+    </Link>
+  );
+};
 
 const statusColors = {
   success: 'bg-green-100 text-green-800',
@@ -259,7 +290,10 @@ function SystemPoll() {
                     <ArrowRight className="w-3 h-3 text-gray-300" />
                     {msg.matched ? (
                       <span className="text-green-600">
-                        {msg.isNew ? 'New record' : 'Updated'} {msg.matchedTable}#{msg.matchedRecordId}
+                        {msg.isNew ? 'New record' : 'Updated'}{' '}
+                        <RecordLink table={msg.matchedTable} recordId={msg.matchedRecordId}>
+                          {tableDisplayName[msg.matchedTable] || msg.matchedTable}#{msg.matchedRecordId}
+                        </RecordLink>
                         <span className="text-gray-400 ml-1">via {msg.matchStrategy}</span>
                       </span>
                     ) : (
@@ -467,7 +501,9 @@ function SystemPoll() {
                                       <td className="p-2">
                                         {msg.matched ? (
                                           <span className="text-green-600">
-                                            {msg.matched_table}#{msg.matched_record_id}
+                                            <RecordLink table={msg.matched_table} recordId={msg.matched_record_id}>
+                                              {tableDisplayName[msg.matched_table] || msg.matched_table}#{msg.matched_record_id}
+                                            </RecordLink>
                                             <span className="text-gray-400 ml-1 block">via {msg.match_strategy}</span>
                                           </span>
                                         ) : (
