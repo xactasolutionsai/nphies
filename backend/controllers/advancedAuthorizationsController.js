@@ -10,6 +10,7 @@ import pool from '../db.js';
 import nphiesService from '../services/nphiesService.js';
 import advancedAuthParser from '../services/advancedAuthParser.js';
 import CommunicationMapper from '../services/communicationMapper.js';
+import advancedAuthCommunicationService from '../services/advancedAuthCommunicationService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
 
 class AdvancedAuthorizationsController {
@@ -478,6 +479,180 @@ class AdvancedAuthorizationsController {
     } catch (error) {
       console.error('[AdvancedAuth] Error downloading JSON:', error);
       res.status(500).json({ error: error.message || 'Failed to download' });
+    }
+  }
+
+  // ============================================================================
+  // COMMUNICATION METHODS
+  // ============================================================================
+
+  /**
+   * Preview Communication bundle without sending
+   */
+  async previewCommunicationBundle(req, res) {
+    try {
+      const { id } = req.params;
+      const schemaName = req.schemaName || 'public';
+      const { payloads = [], type = 'unsolicited', communicationRequestId = null } = req.body;
+
+      const result = await advancedAuthCommunicationService.previewCommunicationBundle(
+        parseInt(id), payloads, type, communicationRequestId, schemaName
+      );
+
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error('[AdvancedAuth] Error previewing communication bundle:', error);
+      res.status(500).json({ error: error.message || 'Failed to preview communication bundle' });
+    }
+  }
+
+  /**
+   * Send unsolicited communication
+   */
+  async sendUnsolicitedCommunication(req, res) {
+    try {
+      const { id } = req.params;
+      const schemaName = req.schemaName || 'public';
+      const { payloads } = req.body;
+
+      if (!payloads || payloads.length === 0) {
+        return res.status(400).json({ error: 'At least one payload is required' });
+      }
+
+      const result = await advancedAuthCommunicationService.sendUnsolicitedCommunication(
+        parseInt(id), payloads, schemaName
+      );
+
+      res.json(result);
+    } catch (error) {
+      console.error('[AdvancedAuth] Error sending unsolicited communication:', error);
+      res.status(500).json({ error: error.message || 'Failed to send communication' });
+    }
+  }
+
+  /**
+   * Send solicited communication (response to CommunicationRequest)
+   */
+  async sendSolicitedCommunication(req, res) {
+    try {
+      const { id } = req.params;
+      const schemaName = req.schemaName || 'public';
+      const { communicationRequestId, payloads } = req.body;
+
+      if (!communicationRequestId) {
+        return res.status(400).json({ error: 'communicationRequestId is required' });
+      }
+      if (!payloads || payloads.length === 0) {
+        return res.status(400).json({ error: 'At least one payload is required' });
+      }
+
+      const result = await advancedAuthCommunicationService.sendSolicitedCommunication(
+        parseInt(communicationRequestId), payloads, schemaName
+      );
+
+      res.json(result);
+    } catch (error) {
+      console.error('[AdvancedAuth] Error sending solicited communication:', error);
+      res.status(500).json({ error: error.message || 'Failed to send solicited communication' });
+    }
+  }
+
+  /**
+   * Get CommunicationRequests for an Advanced Authorization
+   */
+  async getCommunicationRequests(req, res) {
+    try {
+      const { id } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      const requests = await advancedAuthCommunicationService.getCommunicationRequests(
+        parseInt(id), schemaName
+      );
+
+      res.json({ success: true, data: requests });
+    } catch (error) {
+      console.error('[AdvancedAuth] Error getting communication requests:', error);
+      res.status(500).json({ error: error.message || 'Failed to get communication requests' });
+    }
+  }
+
+  /**
+   * Get sent Communications for an Advanced Authorization
+   */
+  async getCommunications(req, res) {
+    try {
+      const { id } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      const communications = await advancedAuthCommunicationService.getCommunications(
+        parseInt(id), schemaName
+      );
+
+      res.json({ success: true, data: communications });
+    } catch (error) {
+      console.error('[AdvancedAuth] Error getting communications:', error);
+      res.status(500).json({ error: error.message || 'Failed to get communications' });
+    }
+  }
+
+  /**
+   * Get a single Communication by ID
+   */
+  async getCommunicationById(req, res) {
+    try {
+      const { commId } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      const communication = await advancedAuthCommunicationService.getCommunication(
+        commId, schemaName
+      );
+
+      if (!communication) {
+        return res.status(404).json({ error: 'Communication not found' });
+      }
+
+      res.json({ success: true, data: communication });
+    } catch (error) {
+      console.error('[AdvancedAuth] Error getting communication:', error);
+      res.status(500).json({ error: error.message || 'Failed to get communication' });
+    }
+  }
+
+  /**
+   * Poll for acknowledgment of a specific Communication
+   */
+  async pollCommunicationAcknowledgment(req, res) {
+    try {
+      const { id, commId } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      const result = await advancedAuthCommunicationService.pollCommunicationAcknowledgment(
+        parseInt(id), commId, schemaName
+      );
+
+      res.json(result);
+    } catch (error) {
+      console.error('[AdvancedAuth] Error polling for acknowledgment:', error);
+      res.status(500).json({ error: error.message || 'Failed to poll for acknowledgment' });
+    }
+  }
+
+  /**
+   * Poll for all queued acknowledgments
+   */
+  async pollAllQueuedAcknowledgments(req, res) {
+    try {
+      const { id } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      const result = await advancedAuthCommunicationService.pollAllQueuedAcknowledgments(
+        parseInt(id), schemaName
+      );
+
+      res.json(result);
+    } catch (error) {
+      console.error('[AdvancedAuth] Error polling all acknowledgments:', error);
+      res.status(500).json({ error: error.message || 'Failed to poll acknowledgments' });
     }
   }
 

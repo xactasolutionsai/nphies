@@ -1419,6 +1419,80 @@ class ApiService {
     });
   }
 
+  // ============================================================================
+  // ADVANCED AUTHORIZATION COMMUNICATION METHODS
+  // ============================================================================
+
+  /**
+   * Preview Communication bundle for an Advanced Authorization
+   */
+  async previewAdvancedAuthCommunicationBundle(advAuthId, payloads, type = 'unsolicited', communicationRequestId = null) {
+    return this.request(`/advanced-authorizations/${advAuthId}/communication/preview`, {
+      method: 'POST',
+      body: JSON.stringify({ payloads, type, communicationRequestId })
+    });
+  }
+
+  /**
+   * Send unsolicited communication for an Advanced Authorization
+   */
+  async sendAdvancedAuthUnsolicitedCommunication(advAuthId, payloads) {
+    return this.request(`/advanced-authorizations/${advAuthId}/communication/unsolicited`, {
+      method: 'POST',
+      body: JSON.stringify({ payloads })
+    });
+  }
+
+  /**
+   * Send solicited communication for an Advanced Authorization
+   */
+  async sendAdvancedAuthSolicitedCommunication(advAuthId, communicationRequestId, payloads) {
+    return this.request(`/advanced-authorizations/${advAuthId}/communication/solicited`, {
+      method: 'POST',
+      body: JSON.stringify({ communicationRequestId, payloads })
+    });
+  }
+
+  /**
+   * Get CommunicationRequests for an Advanced Authorization
+   */
+  async getAdvancedAuthCommunicationRequests(advAuthId, pendingOnly = false) {
+    const params = pendingOnly ? '?pending=true' : '';
+    return this.request(`/advanced-authorizations/${advAuthId}/communication-requests${params}`);
+  }
+
+  /**
+   * Get sent Communications for an Advanced Authorization
+   */
+  async getAdvancedAuthCommunications(advAuthId) {
+    return this.request(`/advanced-authorizations/${advAuthId}/communications`);
+  }
+
+  /**
+   * Get a single Communication for an Advanced Authorization
+   */
+  async getAdvancedAuthCommunication(advAuthId, communicationId) {
+    return this.request(`/advanced-authorizations/${advAuthId}/communications/${communicationId}`);
+  }
+
+  /**
+   * Poll acknowledgment for a specific communication
+   */
+  async pollAdvancedAuthCommunicationAcknowledgment(advAuthId, communicationId) {
+    return this.request(`/advanced-authorizations/${advAuthId}/communications/${communicationId}/poll-acknowledgment`, {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Poll all queued acknowledgments for an Advanced Authorization
+   */
+  async pollAdvancedAuthAllQueuedAcknowledgments(advAuthId) {
+    return this.request(`/advanced-authorizations/${advAuthId}/communications/poll-all-acknowledgments`, {
+      method: 'POST'
+    });
+  }
+
   // =========================================================================
   // System Poll
   // =========================================================================
