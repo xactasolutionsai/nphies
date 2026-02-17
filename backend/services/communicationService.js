@@ -513,10 +513,8 @@ class CommunicationService {
 
       const commRequest = crResult.rows[0];
 
-      // 2. Validate CommunicationRequest hasn't been responded to
-      if (commRequest.responded_at) {
-        throw new Error('CommunicationRequest has already been responded to');
-      }
+      // 2. Allow multiple solicited responses to the same CommunicationRequest
+      // (responded_at is tracked for audit but does not block further responses)
 
       // 3. Build Communication bundle with basedOn reference and coverage data
       const communicationBundle = this.mapper.buildSolicitedCommunicationBundle({

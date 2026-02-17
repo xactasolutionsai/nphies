@@ -703,11 +703,10 @@ class CommunicationMapper {
     
     // Build basedOn identifier per NPHIES example format
     // Per NPHIES: { identifier: { system: "http://sni.com.sa/identifiers/communicationrequest", value: "CommReq_12361231" } }
-    // Priority for basedOn:
-    // 1. cr_identifier/cr_identifier_system from stored CommunicationRequest identifier - exact match
-    // 2. Fallback: use INSURER_DOMAIN from config (env variable)
+    // Always use INSURER_DOMAIN from env config for the system URL (sandbox: sni)
+    // Do NOT use cr_identifier_system from DB as the insurer may send a non-standard system URL
     const basedOnIdentifier = {
-      system: communicationRequest.cr_identifier_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/communicationrequest`,
+      system: `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/communicationrequest`,
       value: communicationRequest.cr_identifier || communicationRequest.request_id || `CommReq_${communicationId}`
     };
 

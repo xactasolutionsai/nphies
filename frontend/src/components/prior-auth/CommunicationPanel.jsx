@@ -740,7 +740,10 @@ const CommunicationPanel = ({
     );
   }
 
-  const pendingRequests = communicationRequests.filter(r => !r.responded_at);
+  // Show ALL communication requests (allow multiple solicited responses)
+  // pendingCount is used for badge display only
+  const allRequests = communicationRequests;
+  const pendingCount = communicationRequests.filter(r => !r.responded_at).length;
 
   return (
     <div className="space-y-4">
@@ -848,8 +851,8 @@ const CommunicationPanel = ({
       </div>
 
 
-      {/* Pending CommunicationRequests from HIC */}
-      {pendingRequests.length > 0 && (
+      {/* CommunicationRequests from HIC */}
+      {allRequests.length > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg overflow-hidden">
           <button
             onClick={() => toggleSection('requests')}
@@ -858,19 +861,32 @@ const CommunicationPanel = ({
             <div className="flex items-center">
               <Inbox className="w-5 h-5 text-orange-600 mr-2" />
               <span className="font-medium text-orange-800">
-                Pending Requests from Insurer ({pendingRequests.length})
+                Requests from Insurer ({allRequests.length})
               </span>
+              {pendingCount > 0 && (
+                <span className="ml-2 px-2 py-0.5 text-xs bg-orange-200 text-orange-800 rounded-full">
+                  {pendingCount} new
+                </span>
+              )}
             </div>
             {expandedSections.requests ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </button>
           
           {expandedSections.requests && (
             <div className="p-4 pt-0 space-y-3">
-              {pendingRequests.map(request => (
-                <div key={request.id} className="bg-white rounded-lg p-4 border border-orange-200">
+              {allRequests.map(request => (
+                <div key={request.id} className={`bg-white rounded-lg p-4 border ${request.responded_at ? 'border-gray-200' : 'border-orange-200'}`}>
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="font-medium text-gray-800">Request ID: {request.request_id}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-800">Request ID: {request.request_id}</p>
+                        {request.responded_at && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Responded {formatDate(request.responded_at)}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-600 mt-1">
                         Received: {formatDate(request.received_at)}
                       </p>
@@ -883,9 +899,13 @@ const CommunicationPanel = ({
                     <button
                       onClick={() => handleRespondToRequest(request)}
                       disabled={!canSendCommunication}
-                      className="px-3 py-1.5 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className={`px-3 py-1.5 text-white text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+                        request.responded_at 
+                          ? 'bg-blue-600 hover:bg-blue-700' 
+                          : 'bg-orange-600 hover:bg-orange-700'
+                      }`}
                     >
-                      Respond
+                      {request.responded_at ? 'Respond Again' : 'Respond'}
                     </button>
                   </div>
                 </div>
@@ -936,10 +956,10 @@ const CommunicationPanel = ({
                       value="solicited"
                       checked={communicationType === 'solicited'}
                       onChange={(e) => setCommunicationType(e.target.value)}
-                      disabled={pendingRequests.length === 0}
+                      disabled={allRequests.length === 0}
                       className="mr-2"
                     />
-                    <span className={`text-sm ${pendingRequests.length === 0 ? 'text-gray-400' : ''}`}>
+                    <span className={`text-sm ${allRequests.length === 0 ? 'text-gray-400' : ''}`}>
                       Solicited (Response to Request)
                     </span>
                   </label>
@@ -953,14 +973,14 @@ const CommunicationPanel = ({
                     Responding to Request
                   </label>
                   <Select
-                    value={pendingRequests.map(req => ({
+                    value={allRequests.map(req => ({
                       value: req.id,
-                      label: `${req.request_id} - ${formatDate(req.received_at)}`
+                      label: `${req.request_id} - ${formatDate(req.received_at)}${req.responded_at ? ' (responded)' : ''}`
                     })).find(opt => opt.value === selectedRequestId)}
                     onChange={(option) => setSelectedRequestId(option?.value || null)}
-                    options={pendingRequests.map(req => ({
+                    options={allRequests.map(req => ({
                       value: req.id,
-                      label: `${req.request_id} - ${formatDate(req.received_at)}`
+                      label: `${req.request_id} - ${formatDate(req.received_at)}${req.responded_at ? ' (responded)' : ''}`
                     }))}
                     styles={selectStyles}
                     menuPortalTarget={document.body}
