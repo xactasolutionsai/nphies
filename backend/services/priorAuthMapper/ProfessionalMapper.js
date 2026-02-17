@@ -737,7 +737,7 @@ class ProfessionalMapper extends BaseMapper {
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
         this.buildClaimItemProfessional(item, idx + 1, supportingInfoSequences, encounterPeriod)
-      );
+      ).filter(Boolean);
     }
 
     // Total

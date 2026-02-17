@@ -1779,41 +1779,7 @@ export default function PriorAuthorizationForm() {
     if (!formData.patient_id) validationErrors.push({ field: 'patient_id', message: 'Patient is required' });
     if (!formData.provider_id) validationErrors.push({ field: 'provider_id', message: 'Provider is required' });
     if (!formData.insurer_id) validationErrors.push({ field: 'insurer_id', message: 'Insurer is required' });
-    if (!formData.items || formData.items.length === 0) validationErrors.push({ field: 'items', message: 'At least one service item is required' });
-    
-    // Validate item codes based on auth type and item type
-    // Pharmacy: medication items use medication_code, device items use product_or_service_code (or medication_code as fallback)
-    // Others: use product_or_service_code
-    const invalidItems = formData.items.filter(item => {
-      if (formData.auth_type === 'pharmacy') {
-        const itemType = item.item_type || 'medication';
-        if (itemType === 'device') {
-          // Device items: check for product_or_service_code or medication_code (both are valid)
-          return !item.product_or_service_code && !item.medication_code;
-        } else {
-          // Medication items: check for medication_code
-          return !item.medication_code;
-        }
-      }
-      return !item.product_or_service_code;
-    });
-    if (invalidItems.length > 0) {
-      // Build more specific error message based on item types
-      const deviceItems = invalidItems.filter(item => (item.item_type || 'medication') === 'device');
-      const medicationItems = invalidItems.filter(item => (item.item_type || 'medication') !== 'device');
-      
-      if (formData.auth_type === 'pharmacy') {
-        if (deviceItems.length > 0 && medicationItems.length > 0) {
-          validationErrors.push({ field: 'items', message: `All items must have a code: medical device items need a device code, medication items need a medication code` });
-        } else if (deviceItems.length > 0) {
-          validationErrors.push({ field: 'items', message: `Medical device items must have a device code` });
-        } else {
-          validationErrors.push({ field: 'items', message: `All medication items must have a medication code` });
-        }
-      } else {
-        validationErrors.push({ field: 'items', message: `All items must have a service code` });
-      }
-    }
+    // Items are optional - no validation required for item count or service codes
     
     // Validate ICU hours for institutional claims with offline eligibility
     // Per test case requirements: ICU hours should be provided for institutional claims with offline eligibility references

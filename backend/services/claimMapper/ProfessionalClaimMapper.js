@@ -467,7 +467,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     if (claim.items && claim.items.length > 0) {
       builtItems = claim.items.map((item, idx) => 
         this.buildProfessionalClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim)
-      );
+      ).filter(Boolean);
       claimResource.item = builtItems;
     }
 
@@ -959,9 +959,10 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     const productCode = item.product_or_service_code || item.service_code;
     const productDisplay = item.product_or_service_display || item.service_display;
     
+    // Log warning if product code is missing (items without codes will be skipped)
     if (!productCode) {
-      console.error(`[ProfessionalClaimMapper] ERROR: Item ${sequence} missing product_or_service_code`);
-      throw new Error(`Service code (product_or_service_code) is required for professional claim item ${sequence}`);
+      console.warn(`[ProfessionalClaimMapper] WARNING: Item ${sequence} missing product_or_service_code - skipping item`);
+      return null;
     }
     
     // Use provided system or default to services for professional claims

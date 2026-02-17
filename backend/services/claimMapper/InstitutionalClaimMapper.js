@@ -432,7 +432,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     if (claim.items?.length > 0) {
       claimResource.item = claim.items.map((item, idx) => 
         this.buildClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim)
-      );
+      ).filter(Boolean);
     }
 
     // Total - BV-00059: Must equal sum of item net values

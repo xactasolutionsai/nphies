@@ -520,7 +520,7 @@ class PharmacyMapper extends BaseMapper {
       // Pass supportingInfoList to enable auto-matching by days_supply value
       claim.item = priorAuth.items.map((item, idx) => 
         this.buildPharmacyClaimItem(item, idx + 1, supportingInfoList, encounterPeriod)
-      );
+      ).filter(Boolean);
     }
 
     // Total (required)
@@ -601,10 +601,10 @@ class PharmacyMapper extends BaseMapper {
       codeSystem = 'http://nphies.sa/terminology/CodeSystem/medication-codes';
     }
     
-    // Validate product code exists (required)
+    // Log warning if product code is missing (items without codes will be skipped)
     if (!productCode) {
-      console.error(`[PharmacyMapper] ERROR: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code - this will cause NPHIES rejection`);
-      throw new Error(`${isDevice ? 'Device' : 'Medication'} code is required for pharmacy item ${sequence}`);
+      console.warn(`[PharmacyMapper] WARNING: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code - skipping item`);
+      return null;
     }
     
     // Build pharmacy-specific extensions per NPHIES spec
@@ -949,22 +949,10 @@ class PharmacyMapper extends BaseMapper {
       errors.push('Insurer data is required');
     }
 
-    // Pharmacy-specific validations
-    if (!priorAuth.items || priorAuth.items.length === 0) {
-      errors.push('At least one medication item is required for pharmacy prior authorization');
-    }
+    // Items are optional - no validation required for item count or medication codes
 
     if (!priorAuth.diagnoses || priorAuth.diagnoses.length === 0) {
       errors.push('At least one diagnosis is required for pharmacy prior authorization');
-    }
-
-    // Validate medication codes
-    if (priorAuth.items) {
-      priorAuth.items.forEach((item, idx) => {
-        if (!item.medication_code && !item.product_or_service_code) {
-          errors.push(`Item ${idx + 1}: Medication code is required`);
-        }
-      });
     }
 
     return errors;

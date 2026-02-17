@@ -476,7 +476,7 @@ class DentalMapper extends BaseMapper {
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
         this.buildDentalClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod)
-      );
+      ).filter(Boolean);
     }
 
     // Total

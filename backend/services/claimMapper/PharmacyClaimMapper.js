@@ -620,7 +620,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     if (claim.items && claim.items.length > 0) {
       builtItems = claim.items.map((item, idx) => 
         this.buildPharmacyClaimItemForClaim(item, idx + 1, supportingInfoList, providerIdentifierSystem)
-      );
+      ).filter(Boolean);
       claimResource.item = builtItems;
     }
 
@@ -703,10 +703,10 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       codeSystem = 'http://nphies.sa/terminology/CodeSystem/medication-codes';
     }
     
-    // Validate product code exists (required)
+    // Log warning if product code is missing (items without codes will be skipped)
     if (!productCode) {
-      console.error(`[PharmacyClaimMapper] ERROR: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code`);
-      throw new Error(`${isDevice ? 'Device' : 'Medication'} code is required for pharmacy item ${sequence}`);
+      console.warn(`[PharmacyClaimMapper] WARNING: Item ${sequence} missing ${isDevice ? 'device' : 'medication'}_code - skipping item`);
+      return null;
     }
     
     // Build pharmacy-specific extensions per NPHIES claim example

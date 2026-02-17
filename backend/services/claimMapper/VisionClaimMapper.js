@@ -357,7 +357,7 @@ class VisionClaimMapper extends VisionPAMapper {
     if (claim.items?.length > 0) {
       claimResource.item = claim.items.map((item, idx) => 
         this.buildVisionClaimItem(item, idx + 1, claimServicedDate, providerIdentifierSystem, claim, supportingInfoSequences)
-      );
+      ).filter(Boolean);
     }
 
     // Total - BV-00059: Must equal sum of item net values
