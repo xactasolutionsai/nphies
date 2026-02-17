@@ -76,6 +76,104 @@ const adjCategoryDisplay = {
 };
 
 // ============================================================================
+// ATTACHMENT EXTRACTION FROM RAW BUNDLE
+// ============================================================================
+
+function extractAttachmentFromBundle(responseBundle, sequence) {
+  if (!responseBundle) return null;
+
+  // The response_bundle is the ClaimResponse itself (or could be wrapped in a Bundle)
+  let claimResponse = responseBundle;
+  if (responseBundle.resourceType === 'Bundle' && responseBundle.entry) {
+    claimResponse = responseBundle.entry.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+  }
+  if (!claimResponse) return null;
+
+  const extensions = claimResponse.extension || [];
+  
+  // Find the supportingInfo extension matching this sequence
+  const infoExt = extensions.find(ext => {
+    if (!ext.url?.includes('extension-supportingInfo') || ext.url?.includes('extension-supportingInfo-')) return false;
+    const subExts = ext.extension || [];
+    const seqExt = subExts.find(e => e.url?.includes('extension-supportingInfo-sequence'));
+    return seqExt?.valuePositiveInt === sequence;
+  });
+
+  if (!infoExt) return null;
+
+  const subExts = infoExt.extension || [];
+  const attachmentExt = subExts.find(e => e.url?.includes('extension-supportingInfo-valueAttachment'));
+  if (!attachmentExt?.valueAttachment?.data) return null;
+
+  return {
+    data: attachmentExt.valueAttachment.data,
+    contentType: attachmentExt.valueAttachment.contentType || 'application/octet-stream',
+    title: attachmentExt.valueAttachment.title || 'attachment',
+    size: attachmentExt.valueAttachment.size || null,
+  };
+}
+
+function handleDownloadAttachment(responseBundle, sequence, title) {
+  const attachment = extractAttachmentFromBundle(responseBundle, sequence);
+  if (!attachment) {
+    alert('Attachment data not found in the response bundle.');
+    return;
+  }
+
+  try {
+    const byteCharacters = atob(attachment.data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: attachment.contentType });
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = title || attachment.title;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (err) {
+    console.error('Error downloading attachment:', err);
+    alert('Failed to download attachment.');
+  }
+}
+
+function handleViewAttachment(responseBundle, sequence) {
+  const attachment = extractAttachmentFromBundle(responseBundle, sequence);
+  if (!attachment) {
+    alert('Attachment data not found in the response bundle.');
+    return;
+  }
+
+  try {
+    const byteCharacters = atob(attachment.data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: attachment.contentType });
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  } catch (err) {
+    console.error('Error viewing attachment:', err);
+    alert('Failed to open attachment.');
+  }
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ============================================================================
 // BUNDLE DATA EXTRACTION
 // ============================================================================
 
@@ -694,7 +792,7 @@ export default function AdvancedAuthorizationDetails() {
                               {categoryDisplayMap[info.category] || info.category || '-'}
                             </td>
                             <td className="px-4 py-2">
-                              <SupportingInfoValue info={info} />
+                              <SupportingInfoValue info={info} responseBundle={data.response_bundle} />
                             </td>
                           </tr>
                         ))}
@@ -963,7 +1061,7 @@ function TimelineItem({ icon, label, date }) {
   );
 }
 
-function SupportingInfoValue({ info }) {
+function SupportingInfoValue({ info, responseBundle }) {
   if (!info) return <span>-</span>;
 
   switch (info.valueType) {
@@ -984,11 +1082,40 @@ function SupportingInfoValue({ info }) {
       );
     case 'attachment':
       return (
-        <span className="flex items-center gap-1">
-          <FileText className="h-3 w-3" />
-          {info.title || info.contentType || 'Attachment'}
-          {info.hasData && <Badge className="text-xs bg-blue-100 text-blue-800">Has Data</Badge>}
-        </span>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-blue-500 flex-shrink-0" />
+            <span className="font-medium">{info.title || 'Attachment'}</span>
+            {info.contentType && (
+              <Badge variant="outline" className="text-xs">{info.contentType}</Badge>
+            )}
+          </div>
+          {info.hasData && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => handleViewAttachment(responseBundle, info.sequence)}
+              >
+                <Eye className="h-3 w-3 mr-1" />
+                View
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => handleDownloadAttachment(responseBundle, info.sequence, info.title)}
+              >
+                <Download className="h-3 w-3 mr-1" />
+                Download
+              </Button>
+              {info.size && (
+                <span className="text-xs text-gray-400">{formatFileSize(info.size)}</span>
+              )}
+            </div>
+          )}
+        </div>
       );
     default:
       if (info.reason) {

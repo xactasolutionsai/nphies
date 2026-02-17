@@ -253,6 +253,7 @@ class AdvancedAuthParser {
         info.contentType = attachmentExt.valueAttachment?.contentType || null;
         info.title = attachmentExt.valueAttachment?.title || null;
         info.creation = attachmentExt.valueAttachment?.creation || null;
+        info.size = attachmentExt.valueAttachment?.size || null;
         // Don't store base64 data in parsed form, it's in the raw bundle
         info.hasData = !!attachmentExt.valueAttachment?.data;
       }
