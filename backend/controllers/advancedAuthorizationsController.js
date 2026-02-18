@@ -11,6 +11,7 @@ import nphiesService from '../services/nphiesService.js';
 import advancedAuthParser from '../services/advancedAuthParser.js';
 import CommunicationMapper from '../services/communicationMapper.js';
 import advancedAuthCommunicationService from '../services/advancedAuthCommunicationService.js';
+import priorAuthMapper from '../services/priorAuthMapper/index.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
 
 class AdvancedAuthorizationsController {
@@ -447,7 +448,9 @@ class AdvancedAuthorizationsController {
   }
 
   /**
-   * Download the raw FHIR ClaimResponse as JSON
+   * Download the full FHIR message Bundle as JSON.
+   * Prefers the inner message Bundle from poll_response_bundle (contains ClaimResponse + Patient + Organizations + Coverage).
+   * Falls back to response_bundle (raw ClaimResponse) if poll_response_bundle is unavailable.
    */
   async downloadJson(req, res) {
     try {
@@ -459,7 +462,7 @@ class AdvancedAuthorizationsController {
         await client.query(`SET search_path TO ${schemaName}`);
 
         const result = await client.query(
-          'SELECT response_bundle, identifier_value FROM advanced_authorizations WHERE id = $1',
+          'SELECT response_bundle, poll_response_bundle, identifier_value FROM advanced_authorizations WHERE id = $1',
           [id]
         );
 
@@ -467,18 +470,195 @@ class AdvancedAuthorizationsController {
           return res.status(404).json({ error: 'Advanced authorization not found' });
         }
 
-        const { response_bundle, identifier_value } = result.rows[0];
+        const { response_bundle, poll_response_bundle, identifier_value } = result.rows[0];
         const filename = `advanced-auth-${identifier_value || id}.json`;
+
+        let downloadBundle = response_bundle;
+
+        if (poll_response_bundle && poll_response_bundle.resourceType === 'Bundle' && poll_response_bundle.entry) {
+          // Case 1: poll_response_bundle is the outer poll response - find the inner message Bundle
+          const innerBundle = poll_response_bundle.entry.find(e => {
+            const r = e?.resource;
+            return r?.resourceType === 'Bundle' && r.type === 'message' &&
+                   r.entry?.some(ie => ie.resource?.resourceType === 'ClaimResponse');
+          })?.resource;
+
+          if (innerBundle) {
+            downloadBundle = innerBundle;
+          } else if (poll_response_bundle.type === 'message') {
+            // Case 2: poll_response_bundle IS the inner message Bundle directly
+            downloadBundle = poll_response_bundle;
+          }
+        }
 
         res.setHeader('Content-Type', 'application/fhir+json');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.json(response_bundle);
+        res.json(downloadBundle);
       } finally {
         client.release();
       }
     } catch (error) {
       console.error('[AdvancedAuth] Error downloading JSON:', error);
       res.status(500).json({ error: error.message || 'Failed to download' });
+    }
+  }
+
+  // ============================================================================
+  // CANCEL
+  // ============================================================================
+
+  /**
+   * Cancel an Advanced Authorization by sending a cancel-request to NPHIES.
+   * Reuses the prior auth cancel bundle structure since the Task resource is identical.
+   */
+  async cancel(req, res) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const schemaName = req.schemaName || 'public';
+
+      const client = await pool.connect();
+      try {
+        await client.query(`SET search_path TO ${schemaName}`);
+
+        // Fetch the advanced authorization
+        const result = await client.query(
+          'SELECT * FROM advanced_authorizations WHERE id = $1',
+          [id]
+        );
+        if (result.rows.length === 0) {
+          return res.status(404).json({ error: 'Advanced authorization not found' });
+        }
+
+        const advAuth = result.rows[0];
+
+        if (advAuth.status === 'cancelled' || advAuth.is_cancelled) {
+          return res.status(400).json({ error: 'Advanced authorization is already cancelled' });
+        }
+
+        if (!advAuth.pre_auth_ref && !advAuth.identifier_value) {
+          return res.status(400).json({ error: 'Cannot cancel: no authorization reference exists' });
+        }
+
+        if (advAuth.pre_auth_period_end) {
+          const periodEnd = new Date(advAuth.pre_auth_period_end);
+          if (periodEnd < new Date()) {
+            return res.status(400).json({ error: 'Cannot cancel: authorization period has expired' });
+          }
+        }
+
+        // Extract provider/insurer from the bundle
+        const commService = advancedAuthCommunicationService;
+        const bundleData = commService.extractBundleData(advAuth);
+
+        // Build provider/insurer objects compatible with priorAuthMapper
+        let providerNphiesId = bundleData.provider?.nphies_id;
+        let providerName = bundleData.provider?.provider_name;
+
+        if (!providerNphiesId) {
+          const provResult = await client.query(
+            'SELECT nphies_id, provider_name FROM providers WHERE nphies_id = $1 LIMIT 1',
+            [NPHIES_CONFIG.DEFAULT_PROVIDER_ID]
+          );
+          if (provResult.rows.length > 0) {
+            providerNphiesId = provResult.rows[0].nphies_id;
+            providerName = provResult.rows[0].provider_name;
+          } else {
+            providerNphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
+            providerName = 'Healthcare Provider';
+          }
+        }
+
+        const insurerNphiesId = bundleData.insurer?.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID;
+        const insurerName = bundleData.insurer?.insurer_name || 'Insurance Company';
+
+        // Use the original Claim identifier for the cancel Task focus
+        const claimResponse = advAuth.response_bundle;
+        const requestIdentifier = claimResponse?.request?.identifier?.value || advAuth.identifier_value;
+        const identifierSystem = claimResponse?.request?.identifier?.system ||
+          `http://${(providerName || 'provider').toLowerCase().replace(/\s+/g, '')}.com/Authorization`;
+
+        const provider = {
+          nphies_id: providerNphiesId,
+          provider_name: providerName,
+          provider_id: providerNphiesId,
+          identifier_system: identifierSystem
+        };
+
+        const insurer = {
+          nphies_id: insurerNphiesId,
+          insurer_name: insurerName,
+          insurer_id: insurerNphiesId
+        };
+
+        // Build the cancel bundle - reuse prior auth mapper's cancel task builder
+        const cancelBundle = priorAuthMapper.buildCancelRequestBundle(
+          {
+            request_number: requestIdentifier,
+            nphies_request_id: requestIdentifier,
+            pre_auth_ref: advAuth.pre_auth_ref || advAuth.identifier_value,
+            id: advAuth.id
+          },
+          provider,
+          insurer,
+          reason
+        );
+
+        console.log(`[AdvancedAuth] Sending cancel request for APA ${advAuth.identifier_value}`);
+
+        const nphiesResponse = await nphiesService.submitCancelRequest(cancelBundle);
+
+        if (nphiesResponse.success) {
+          const dbOutcome = nphiesResponse.taskStatus === 'completed' ? 'complete' :
+                            nphiesResponse.taskStatus === 'failed' ? 'error' : 'complete';
+
+          await client.query(`
+            UPDATE advanced_authorizations
+            SET status = 'cancelled',
+                is_cancelled = true,
+                cancellation_reason = $1,
+                cancel_outcome = $2,
+                cancelled_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $3
+          `, [reason, dbOutcome, id]);
+
+          const updatedResult = await client.query(
+            'SELECT * FROM advanced_authorizations WHERE id = $1',
+            [id]
+          );
+
+          res.json({
+            success: true,
+            data: updatedResult.rows[0],
+            message: 'Advanced authorization cancelled successfully',
+            taskStatus: nphiesResponse.taskStatus,
+            nphiesResponse: nphiesResponse.data,
+            requestBundle: cancelBundle
+          });
+        } else {
+          await client.query(`
+            UPDATE advanced_authorizations
+            SET cancel_outcome = 'error',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [id]);
+
+          res.status(502).json({
+            success: false,
+            error: nphiesResponse.error || nphiesResponse.errors,
+            taskStatus: nphiesResponse.taskStatus,
+            message: 'Failed to cancel advanced authorization',
+            nphiesResponse: nphiesResponse.data,
+            requestBundle: cancelBundle
+          });
+        }
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('[AdvancedAuth] Error cancelling:', error);
+      res.status(500).json({ error: error.message || 'Failed to cancel advanced authorization' });
     }
   }
 
@@ -573,6 +753,53 @@ class AdvancedAuthorizationsController {
     } catch (error) {
       console.error('[AdvancedAuth] Error getting communication requests:', error);
       res.status(500).json({ error: error.message || 'Failed to get communication requests' });
+    }
+  }
+
+  /**
+   * Download an attachment from a CommunicationRequest payload
+   */
+  async downloadCommunicationRequestAttachment(req, res) {
+    try {
+      const { requestId, payloadIndex } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      const client = await pool.connect();
+      try {
+        await client.query(`SET search_path TO ${schemaName}`);
+        const result = await client.query(
+          'SELECT request_bundle FROM nphies_communication_requests WHERE id = $1',
+          [parseInt(requestId)]
+        );
+        if (result.rows.length === 0) {
+          return res.status(404).json({ error: 'Communication request not found' });
+        }
+
+        const bundle = typeof result.rows[0].request_bundle === 'string'
+          ? JSON.parse(result.rows[0].request_bundle)
+          : result.rows[0].request_bundle;
+
+        const idx = parseInt(payloadIndex);
+        const payload = bundle?.payload?.[idx];
+        if (!payload?.contentAttachment?.data) {
+          return res.status(404).json({ error: 'Attachment not found at the specified payload index' });
+        }
+
+        const att = payload.contentAttachment;
+        const buffer = Buffer.from(att.data, 'base64');
+        const filename = att.title || `attachment_${idx}`;
+        const contentType = att.contentType || 'application/octet-stream';
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Length', buffer.length);
+        res.send(buffer);
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Error downloading communication request attachment:', error);
+      res.status(500).json({ error: error.message || 'Failed to download attachment' });
     }
   }
 

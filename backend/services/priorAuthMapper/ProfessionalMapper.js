@@ -68,21 +68,14 @@ class ProfessionalMapper extends BaseMapper {
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
     
-    // NOTE: Observation resources for lab tests are NOT part of standard NPHIES Professional PA
-    // Per official example at: https://portal.nphies.sa/ig/Claim-173086.json.html
-    // The official example does NOT include lab-test supportingInfo or Observation resources.
-    // Commenting out to avoid RE-00165 and RE-00170 errors.
-    //
-    // console.log('[ProfessionalMapper] priorAuth.lab_observations:', priorAuth.lab_observations);
-    // const observationResources = this.buildLabObservationResources(priorAuth, bundleResourceIds);
-    // console.log('[ProfessionalMapper] Built observation resources:', observationResources.length);
-    const observationResources = []; // Empty - not used in standard Professional PA
+    const observationResources = this.buildLabObservationResources(priorAuth, bundleResourceIds);
+    console.log('[ProfessionalMapper] Built observation resources:', observationResources.length);
     
-    // Build Claim resource (no observation IDs since they're not used)
+    const observationIds = (bundleResourceIds.observations || []);
     const claimResource = this.buildClaimResource(
       priorAuth, patient, provider, insurer, coverage, 
       encounterResource?.resource, practitioner, bundleResourceIds,
-      [] // No observation IDs - not part of standard Professional PA
+      observationIds
     );
     
     // Build MessageHeader (must be first)
@@ -683,37 +676,28 @@ class ProfessionalMapper extends BaseMapper {
       sequenceCounter++;
     });
     
-    // NOTE: lab-test supportingInfo with Observation references is NOT part of standard
-    // NPHIES Professional Prior Authorization per official example at:
-    // https://portal.nphies.sa/ig/Claim-173086.json.html
-    // The official example only uses: vital signs, chief-complaint, investigation-result,
-    // patient-history, treatment-plan, physical-examination, history-of-present-illness
-    // 
-    // Lab observations may be required for specific Communication test cases, not standard PA.
-    // Commenting out to avoid RE-00165 and RE-00170 errors.
-    //
-    // if (observationIds && observationIds.length > 0) {
-    //   observationIds.forEach(obsId => {
-    //     const labSupportingInfo = {
-    //       sequence: sequenceCounter,
-    //       category: {
-    //         coding: [
-    //           {
-    //             system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-    //             code: 'lab-test',
-    //             display: 'Laboratory Test'
-    //           }
-    //         ]
-    //       },
-    //       valueReference: {
-    //         reference: `Observation/${obsId}`
-    //       }
-    //     };
-    //     supportingInfoSequences.push(sequenceCounter);
-    //     supportingInfoArray.push(labSupportingInfo);
-    //     sequenceCounter++;
-    //   });
-    // }
+    if (observationIds && observationIds.length > 0) {
+      observationIds.forEach(obsId => {
+        const labSupportingInfo = {
+          sequence: sequenceCounter,
+          category: {
+            coding: [
+              {
+                system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+                code: 'lab-test',
+                display: 'Laboratory Test'
+              }
+            ]
+          },
+          valueReference: {
+            reference: `Observation/${obsId}`
+          }
+        };
+        supportingInfoSequences.push(sequenceCounter);
+        supportingInfoArray.push(labSupportingInfo);
+        sequenceCounter++;
+      });
+    }
     
     if (supportingInfoArray.length > 0) {
       claim.supportingInfo = supportingInfoArray;

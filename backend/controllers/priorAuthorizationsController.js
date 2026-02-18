@@ -1623,6 +1623,48 @@ class PriorAuthorizationsController extends BaseController {
   }
 
   /**
+   * Download an attachment from a CommunicationRequest payload
+   */
+  async downloadCommunicationRequestAttachment(req, res) {
+    try {
+      const { requestId, payloadIndex } = req.params;
+      const schemaName = req.schemaName || 'public';
+
+      await query(`SET search_path TO ${schemaName}`);
+      const result = await query(
+        'SELECT request_bundle FROM nphies_communication_requests WHERE id = $1',
+        [parseInt(requestId)]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Communication request not found' });
+      }
+
+      const bundle = typeof result.rows[0].request_bundle === 'string'
+        ? JSON.parse(result.rows[0].request_bundle)
+        : result.rows[0].request_bundle;
+
+      const idx = parseInt(payloadIndex);
+      const payload = bundle?.payload?.[idx];
+      if (!payload?.contentAttachment?.data) {
+        return res.status(404).json({ error: 'Attachment not found at the specified payload index' });
+      }
+
+      const att = payload.contentAttachment;
+      const buffer = Buffer.from(att.data, 'base64');
+      const filename = att.title || `attachment_${idx}`;
+      const contentType = att.contentType || 'application/octet-stream';
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.send(buffer);
+    } catch (error) {
+      console.error('Error downloading communication request attachment:', error);
+      res.status(500).json({ error: error.message || 'Failed to download attachment' });
+    }
+  }
+
+  /**
    * Get Communications sent for a Prior Authorization
    */
   async getCommunications(req, res) {

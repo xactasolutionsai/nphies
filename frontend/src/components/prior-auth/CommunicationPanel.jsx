@@ -33,7 +33,8 @@ import {
   X,
   Copy,
   Eye,
-  Code
+  Code,
+  Download
 } from 'lucide-react';
 import api from '../../services/api';
 import { selectStyles } from './styles';
@@ -890,11 +891,44 @@ const CommunicationPanel = ({
                       <p className="text-sm text-gray-600 mt-1">
                         Received: {formatDate(request.received_at)}
                       </p>
-                      {request.payload_content_string && (
+                      {request.payloads && request.payloads.length > 0 ? (
+                        <div className="mt-2 space-y-2">
+                          {request.payloads.map((payload, pIdx) => (
+                            <div key={pIdx}>
+                              {payload.content_type === 'string' && payload.content_string && (
+                                <div className="p-2 bg-gray-50 rounded text-sm text-gray-700">
+                                  <strong>Message:</strong> {payload.content_string}
+                                </div>
+                              )}
+                              {payload.content_type === 'attachment' && (
+                                <div className="p-2 bg-blue-50 rounded text-sm text-gray-700 flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Paperclip className="w-4 h-4 text-blue-500" />
+                                    <span className="font-medium">{payload.attachment_title}</span>
+                                    <span className="text-xs text-gray-500">
+                                      ({payload.attachment_content_type})
+                                      {payload.attachment_size && ` - ${(payload.attachment_size / 1024).toFixed(1)} KB`}
+                                    </span>
+                                  </div>
+                                  {payload.has_data && (
+                                    <button
+                                      onClick={() => api.downloadCommunicationRequestAttachment(priorAuthId, request.id, payload.index)}
+                                      className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                    >
+                                      <Download className="w-3 h-3" />
+                                      Download
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : request.payload_content_string ? (
                         <div className="mt-2 p-2 bg-gray-50 rounded text-sm text-gray-700">
                           <strong>Message:</strong> {request.payload_content_string}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                     <button
                       onClick={() => handleRespondToRequest(request)}

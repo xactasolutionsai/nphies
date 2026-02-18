@@ -8,8 +8,9 @@ import {
   ArrowLeft, Download, RefreshCw, ShieldAlert, ChevronDown, ChevronRight,
   FileJson, Building2, User, Stethoscope, ClipboardList, Pill,
   Receipt, FileText, Shield, AlertCircle, Clock, CheckCircle,
-  Calendar, DollarSign, MessageSquare, Activity, Code, Eye, Copy, X
+  Calendar, DollarSign, MessageSquare, Activity, Code, Eye, Copy, X, XCircle
 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
 
 import AdvancedAuthCommunicationPanel from '@/components/advanced-auth/AdvancedAuthCommunicationPanel';
 
@@ -43,6 +44,7 @@ const getOutcomeBadgeClass = (outcome) => ({
   'refused': 'bg-red-100 text-red-800',
   'queued': 'bg-blue-100 text-blue-800',
   'error': 'bg-red-100 text-red-800',
+  'cancelled': 'bg-gray-100 text-gray-600',
 }[outcome] || 'bg-gray-100 text-gray-800');
 
 const categoryDisplayMap = {
@@ -184,6 +186,9 @@ function formatFileSize(bytes) {
  */
 function getDisplayBundleFromPollResponse(pollResponseBundle) {
   if (!pollResponseBundle || pollResponseBundle.resourceType !== 'Bundle' || !pollResponseBundle.entry) return null;
+
+  // Case 1: poll_response_bundle is the outer poll response Bundle
+  // containing a nested inner message Bundle with ClaimResponse + Patient + Org + Coverage
   for (const entry of pollResponseBundle.entry) {
     const resource = entry?.resource;
     if (resource?.resourceType === 'Bundle' && resource.type === 'message' && resource.entry?.length) {
@@ -191,6 +196,14 @@ function getDisplayBundleFromPollResponse(pollResponseBundle) {
       if (hasClaimResponse) return resource;
     }
   }
+
+  // Case 2: poll_response_bundle IS the inner message Bundle directly
+  // (stored this way via systemPollService path)
+  if (pollResponseBundle.type === 'message') {
+    const hasClaimResponse = pollResponseBundle.entry.some(e => e.resource?.resourceType === 'ClaimResponse');
+    if (hasClaimResponse) return pollResponseBundle;
+  }
+
   return null;
 }
 
@@ -281,6 +294,39 @@ function extractBundleEntities(responseBundle, pollResponseBundle = null) {
 }
 
 // ============================================================================
+// MODAL COMPONENT
+// ============================================================================
+const Modal = ({ open, onClose, title, description, children, footer }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose}></div>
+      <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-hidden">
+        <div className="p-6 border-b">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">{title}</h2>
+              {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+        <div className="p-6 overflow-auto max-h-[60vh]">
+          {children}
+        </div>
+        {footer && (
+          <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
 // TAB BUTTON COMPONENT
 // ============================================================================
 
@@ -311,6 +357,11 @@ export default function AdvancedAuthorizationDetails() {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
   const [showRawJson, setShowRawJson] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -327,6 +378,31 @@ export default function AdvancedAuthorizationDetails() {
       setError(extractErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!cancelReason.trim()) {
+      setErrorMessage('Please provide a reason for cancellation');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      setErrorMessage(null);
+      const response = await api.cancelAdvancedAuthorization(id, cancelReason);
+      if (response.success) {
+        setSuccessMessage('Advanced authorization cancelled successfully');
+        setShowCancelDialog(false);
+        setCancelReason('');
+        loadData();
+      } else {
+        setErrorMessage(`Error: ${response.error?.message || response.message || 'Failed to cancel'}`);
+      }
+    } catch (err) {
+      console.error('Error cancelling:', err);
+      setErrorMessage(`Error: ${extractErrorMessage(err)}`);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -419,6 +495,12 @@ export default function AdvancedAuthorizationDetails() {
           </div>
         </div>
         <div className="flex gap-2">
+          {data.status !== 'cancelled' && !data.is_cancelled && (
+            <Button variant="outline" size="sm" onClick={() => setShowCancelDialog(true)} className="text-red-500 border-red-300 hover:bg-red-50">
+              <XCircle className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={loadData}>
             <RefreshCw className="h-4 w-4 mr-1" /> Refresh
           </Button>
@@ -427,6 +509,30 @@ export default function AdvancedAuthorizationDetails() {
           </Button>
         </div>
       </div>
+
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4" />
+            <span>{successMessage}</span>
+          </div>
+          <button onClick={() => setSuccessMessage(null)} className="text-green-600 hover:text-green-800">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            <span>{errorMessage}</span>
+          </div>
+          <button onClick={() => setErrorMessage(null)} className="text-red-600 hover:text-red-800">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Main Content - 2 column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -529,6 +635,50 @@ export default function AdvancedAuthorizationDetails() {
                       </InfoItem>
                     )}
                   </div>
+
+                  {data.is_cancelled && (
+                    <>
+                      <hr className="border-gray-200 mt-4" />
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <XCircle className="h-5 w-5 text-red-600" />
+                          <h3 className="font-semibold text-red-800">Cancellation Details</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-red-700">Cancellation Reason Code</Label>
+                            <p className="font-medium text-red-900">
+                              {data.cancellation_reason === 'WI' && 'WI - Wrong Information'}
+                              {data.cancellation_reason === 'NP' && 'NP - Service Not Performed'}
+                              {data.cancellation_reason === 'TAS' && 'TAS - Transaction Already Submitted'}
+                              {data.cancellation_reason === 'SU' && 'SU - Service Unavailable'}
+                              {data.cancellation_reason === 'resubmission' && 'Claim Re-submission'}
+                              {!['WI', 'NP', 'TAS', 'SU', 'resubmission'].includes(data.cancellation_reason) &&
+                                (data.cancellation_reason || 'Not specified')}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-red-700">Cancellation Status</Label>
+                            <p className="font-medium text-red-900">
+                              {data.cancel_outcome === 'complete'
+                                ? 'Confirmed by NPHIES'
+                                : data.cancel_outcome === 'error'
+                                ? 'Rejected by NPHIES'
+                                : 'Pending'}
+                            </p>
+                          </div>
+                          {data.cancelled_at && (
+                            <div>
+                              <Label className="text-red-700">Cancelled At</Label>
+                              <p className="font-medium text-red-900">
+                                {formatDateTime(data.cancelled_at)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1114,6 +1264,49 @@ export default function AdvancedAuthorizationDetails() {
           </Card>
         </div>
       </div>
+
+      {/* Cancel Modal */}
+      <Modal
+        open={showCancelDialog}
+        onClose={() => setShowCancelDialog(false)}
+        title="Cancel Advanced Authorization"
+        description="Are you sure you want to cancel this advanced authorization? This action will be sent to NPHIES."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancel}
+              disabled={actionLoading || !cancelReason}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {actionLoading ? 'Cancelling...' : 'Confirm Cancellation'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="cancelReason">Cancellation Reason (NPHIES Required)</Label>
+            <select
+              id="cancelReason"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+            >
+              <option value="">-- Select Reason --</option>
+              <option value="NP">Service Not Performed - Service was not performed</option>
+              <option value="WI">Wrong Information - Wrong information submitted</option>
+              <option value="TAS">Transaction Already Submitted - Duplicate transaction</option>
+              <option value="SU">Service Unavailable - Product/Service is unavailable</option>
+              <option value="resubmission">Claim Re-submission - Need to re-submit claim</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Select the appropriate reason code as required by NPHIES
+            </p>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -1148,11 +1148,42 @@ class ClaimCommunicationService {
         ORDER BY cr.received_at DESC
       `, [claimId]);
 
+      for (const row of result.rows) {
+        row.payloads = this._extractPayloadsFromBundle(row.request_bundle);
+      }
+
       return result.rows;
 
     } finally {
       client.release();
     }
+  }
+
+  _extractPayloadsFromBundle(requestBundle) {
+    if (!requestBundle) return [];
+    const bundle = typeof requestBundle === 'string' ? JSON.parse(requestBundle) : requestBundle;
+    const fhirPayloads = bundle.payload || [];
+    return fhirPayloads.map((p, idx) => {
+      if (p.contentString) {
+        return { index: idx, content_type: 'string', content_string: p.contentString };
+      }
+      if (p.contentAttachment) {
+        const att = p.contentAttachment;
+        return {
+          index: idx,
+          content_type: 'attachment',
+          attachment_title: att.title || 'Attachment',
+          attachment_content_type: att.contentType || 'application/octet-stream',
+          attachment_size: att.data ? Math.round((att.data.length * 3) / 4) : att.size || null,
+          attachment_creation: att.creation || null,
+          has_data: !!att.data
+        };
+      }
+      if (p.contentReference) {
+        return { index: idx, content_type: 'reference', reference: p.contentReference.reference || p.contentReference };
+      }
+      return { index: idx, content_type: 'unknown' };
+    });
   }
 
   /**

@@ -100,6 +100,7 @@ router.post('/:id/communication/solicited', (req, res) => claimSubmissionsContro
  * Query: ?pending=true to get only pending (unanswered) requests
  */
 router.get('/:id/communication-requests', (req, res) => claimSubmissionsController.getCommunicationRequests(req, res));
+router.get('/:id/communication-requests/:requestId/attachment/:payloadIndex', (req, res) => claimSubmissionsController.downloadCommunicationRequestAttachment(req, res));
 
 /**
  * Get Communications

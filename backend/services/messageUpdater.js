@@ -65,6 +65,15 @@ class MessageUpdater {
           break;
       }
 
+      // The adjudication extension is the authoritative verdict from NPHIES;
+      // override the disposition-based status when the extension is present.
+      if (adjudicationOutcome) {
+        if (adjudicationOutcome === 'rejected') status = 'denied';
+        else if (adjudicationOutcome === 'approved') status = 'approved';
+        else if (adjudicationOutcome === 'partial') status = 'partial';
+        else if (adjudicationOutcome === 'pended') status = 'queued';
+      }
+
       // Extract financial totals
       const totals = claimResponse.total?.map(total => ({
         category: total.category?.coding?.[0]?.code,
@@ -370,6 +379,7 @@ class MessageUpdater {
       const claimId = correlationResult?.table === 'claim_submissions' ? correlationResult.recordId : null;
       const advancedAuthId = correlationResult?.table === 'advanced_authorizations' ? correlationResult.recordId : null;
 
+      const attachment = parsed.payloadAttachment || {};
       const result = await client.query(`
         INSERT INTO nphies_communication_requests (
           request_id, prior_auth_id, claim_id, advanced_authorization_id,
@@ -377,8 +387,10 @@ class MessageUpdater {
           about_reference, about_type, about_identifier, about_identifier_system,
           cr_identifier, cr_identifier_system,
           payload_content_type, payload_content_string,
+          payload_attachment_content_type, payload_attachment_data,
+          payload_attachment_url, payload_attachment_title,
           sender_identifier, recipient_identifier, authored_on, request_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
         RETURNING *
       `, [
         commRequest.id,
@@ -396,6 +408,10 @@ class MessageUpdater {
         parsed.identifierSystem || null,
         parsed.payloadContentType,
         parsed.payloadContentString,
+        attachment.contentType || null,
+        attachment.data || null,
+        attachment.url || null,
+        attachment.title || null,
         parsed.senderIdentifier,
         parsed.recipientIdentifier,
         parsed.authoredOn,

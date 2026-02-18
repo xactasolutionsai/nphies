@@ -782,6 +782,10 @@ class ApiService {
     return this.request(`/prior-authorizations/${priorAuthId}/communication-requests${params}`);
   }
 
+  downloadCommunicationRequestAttachment(priorAuthId, requestId, payloadIndex) {
+    window.open(`${API_BASE_URL}/prior-authorizations/${priorAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, '_blank');
+  }
+
   /**
    * Get sent Communications for a Prior Authorization
    * 
@@ -959,6 +963,10 @@ class ApiService {
   async getClaimCommunicationRequests(claimId, pendingOnly = false) {
     const params = pendingOnly ? '?pending=true' : '';
     return this.request(`/claim-submissions/${claimId}/communication-requests${params}`);
+  }
+
+  downloadClaimCommunicationRequestAttachment(claimId, requestId, payloadIndex) {
+    window.open(`${API_BASE_URL}/claim-submissions/${claimId}/communication-requests/${requestId}/attachment/${payloadIndex}`, '_blank');
   }
 
   /**
@@ -1412,6 +1420,18 @@ class ApiService {
   }
 
   /**
+   * Cancel an Advanced Authorization
+   * @param {number} id - Advanced Authorization ID
+   * @param {string} reason - Cancellation reason code
+   */
+  async cancelAdvancedAuthorization(id, reason) {
+    return this.request(`/advanced-authorizations/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    });
+  }
+
+  /**
    * Delete an Advanced Authorization
    * @param {number} id - Advanced Authorization ID
    */
@@ -1461,6 +1481,10 @@ class ApiService {
   async getAdvancedAuthCommunicationRequests(advAuthId, pendingOnly = false) {
     const params = pendingOnly ? '?pending=true' : '';
     return this.request(`/advanced-authorizations/${advAuthId}/communication-requests${params}`);
+  }
+
+  downloadAdvancedAuthCommunicationRequestAttachment(advAuthId, requestId, payloadIndex) {
+    window.open(`${API_BASE_URL}/advanced-authorizations/${advAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, '_blank');
   }
 
   /**

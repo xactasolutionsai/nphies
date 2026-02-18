@@ -31,23 +31,52 @@ class AdvancedAuthCommunicationService {
   // ============================================================================
 
   /**
-   * Extract patient/provider/insurer data from the advanced auth's response_bundle.
-   * The response_bundle stores the raw FHIR ClaimResponse which is part of an inner Bundle
-   * that contains embedded Patient, Organization, Coverage resources.
+   * Find the inner message Bundle containing ClaimResponse + Patient + Org + Coverage
+   * from poll_response_bundle, handling both storage shapes.
+   */
+  _getMessageBundleEntries(advAuth) {
+    const pollBundle = advAuth.poll_response_bundle;
+    if (pollBundle && pollBundle.resourceType === 'Bundle' && pollBundle.entry) {
+      // Case 1: outer poll response - find the nested inner message Bundle
+      for (const entry of pollBundle.entry) {
+        const r = entry?.resource;
+        if (r?.resourceType === 'Bundle' && r.type === 'message' && r.entry?.length) {
+          if (r.entry.some(e => e.resource?.resourceType === 'ClaimResponse')) {
+            return r.entry.map(e => e.resource).filter(Boolean);
+          }
+        }
+      }
+      // Case 2: poll_response_bundle IS the inner message Bundle directly
+      if (pollBundle.type === 'message') {
+        if (pollBundle.entry.some(e => e.resource?.resourceType === 'ClaimResponse')) {
+          return pollBundle.entry.map(e => e.resource).filter(Boolean);
+        }
+      }
+    }
+    return [];
+  }
+
+  /**
+   * Extract patient/provider/insurer/coverage data from the advanced auth's stored bundles.
+   * Primarily uses poll_response_bundle (which contains the full message Bundle with embedded
+   * Patient, Organization, Coverage). Falls back to response_bundle if needed.
    */
   extractBundleData(advAuth) {
-    const bundle = advAuth.response_bundle;
-    if (!bundle) return { patient: null, provider: null, insurer: null };
+    let entries = this._getMessageBundleEntries(advAuth);
 
-    // The response_bundle could be the ClaimResponse itself or an inner Bundle
-    // Check if it's a Bundle with entries
-    let entries = [];
-    if (bundle.resourceType === 'Bundle' && bundle.entry) {
-      entries = bundle.entry.map(e => e.resource).filter(Boolean);
-    } else if (bundle.resourceType === 'ClaimResponse') {
-      // The bundle IS the ClaimResponse - no embedded resources
-      entries = [bundle];
+    // Fallback: try response_bundle (usually just the raw ClaimResponse with no embedded entities)
+    if (entries.length === 0) {
+      const bundle = advAuth.response_bundle;
+      if (bundle) {
+        if (bundle.resourceType === 'Bundle' && bundle.entry) {
+          entries = bundle.entry.map(e => e.resource).filter(Boolean);
+        } else if (bundle.resourceType === 'ClaimResponse') {
+          entries = [bundle];
+        }
+      }
     }
+
+    if (entries.length === 0) return { patient: null, provider: null, insurer: null, coverage: null };
 
     // Find Patient resource
     const patientResource = entries.find(r => r.resourceType === 'Patient');
@@ -101,7 +130,23 @@ class AdvancedAuthCommunicationService {
       };
     }
 
-    return { patient, provider, insurer };
+    // Find Coverage resource
+    const coverageRes = entries.find(r => r.resourceType === 'Coverage');
+    let coverage = null;
+    if (coverageRes) {
+      const covId = coverageRes.identifier?.[0];
+      coverage = {
+        coverage_id: coverageRes.id,
+        identifier_value: covId?.value || null,
+        identifier_system: covId?.system || null,
+        status: coverageRes.status || 'active',
+        relationship: coverageRes.relationship?.coding?.[0]?.code || 'self',
+        class_value: coverageRes.class?.[0]?.value || null,
+        type_code: coverageRes.type?.coding?.[0]?.code || null
+      };
+    }
+
+    return { patient, provider, insurer, coverage };
   }
 
   /**
@@ -119,7 +164,7 @@ class AdvancedAuthCommunicationService {
     }
 
     const advAuth = result.rows[0];
-    const { patient, provider, insurer } = this.extractBundleData(advAuth);
+    const { patient, provider, insurer, coverage } = this.extractBundleData(advAuth);
 
     // Fallback provider from DB config
     let finalProvider = provider;
@@ -173,7 +218,7 @@ class AdvancedAuthCommunicationService {
       };
     }
 
-    return { advAuth, patient: finalPatient, provider: finalProvider, insurer: finalInsurer };
+    return { advAuth, patient: finalPatient, provider: finalProvider, insurer: finalInsurer, coverage };
   }
 
   // ============================================================================
@@ -185,23 +230,25 @@ class AdvancedAuthCommunicationService {
 
     try {
       await client.query(`SET search_path TO ${schemaName}`);
-      const { advAuth, patient, provider, insurer } = await this.getAdvancedAuthWithEntities(client, advAuthId);
+      const { advAuth, patient, provider, insurer, coverage } = await this.getAdvancedAuthWithEntities(client, advAuthId);
 
       const authIdentifier = advAuth.identifier_value || advAuth.pre_auth_ref;
+      const claimResponse = advAuth.response_bundle;
+      const requestIdentifier = claimResponse?.request?.identifier?.value || authIdentifier;
 
       let communicationBundle;
 
       if (type === 'unsolicited') {
         communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
           priorAuth: {
-            nphies_request_id: advAuth.identifier_value,
-            request_number: advAuth.identifier_value,
+            nphies_request_id: requestIdentifier,
+            request_number: requestIdentifier,
             pre_auth_ref: advAuth.pre_auth_ref || authIdentifier
           },
           patient,
           provider,
           insurer,
-          coverage: null,
+          coverage,
           payloads
         });
       } else if (type === 'solicited' && communicationRequestId) {
@@ -227,14 +274,14 @@ class AdvancedAuthCommunicationService {
             cr_identifier_system: commRequest.cr_identifier_system
           },
           priorAuth: {
-            nphies_request_id: advAuth.identifier_value,
-            request_number: advAuth.identifier_value,
+            nphies_request_id: requestIdentifier,
+            request_number: requestIdentifier,
             pre_auth_ref: advAuth.pre_auth_ref || authIdentifier
           },
           patient,
           provider,
           insurer,
-          coverage: null,
+          coverage,
           payloads
         });
       } else {
@@ -246,7 +293,7 @@ class AdvancedAuthCommunicationService {
         provider: { id: provider.provider_id, name: provider.provider_name, nphies_id: provider.nphies_id },
         insurer: { id: insurer.insurer_id, name: insurer.insurer_name, nphies_id: insurer.nphies_id },
         patient: { id: patient.patient_id, name: patient.name, identifier: patient.identifier },
-        coverage: null
+        coverage
       };
     } finally {
       client.release();
@@ -264,19 +311,21 @@ class AdvancedAuthCommunicationService {
       await client.query('BEGIN');
       await client.query(`SET search_path TO ${schemaName}`);
 
-      const { advAuth, patient, provider, insurer } = await this.getAdvancedAuthWithEntities(client, advAuthId);
+      const { advAuth, patient, provider, insurer, coverage } = await this.getAdvancedAuthWithEntities(client, advAuthId);
       const authIdentifier = advAuth.identifier_value || advAuth.pre_auth_ref;
+      const claimResponse = advAuth.response_bundle;
+      const requestIdentifier = claimResponse?.request?.identifier?.value || authIdentifier;
 
       const communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
         priorAuth: {
-          nphies_request_id: advAuth.identifier_value,
-          request_number: advAuth.identifier_value,
+          nphies_request_id: requestIdentifier,
+          request_number: requestIdentifier,
           pre_auth_ref: advAuth.pre_auth_ref || authIdentifier
         },
         patient,
         provider,
         insurer,
-        coverage: null,
+        coverage,
         payloads
       });
 
@@ -357,8 +406,8 @@ class AdvancedAuthCommunicationService {
         nphiesResponse.success ? 'completed' : 'entered-in-error',
         'alert',
         'routine',
-        `http://provider.com/ClaimResponse/${authIdentifier}`,
-        'ClaimResponse',
+        `http://provider.com/Claim/${requestIdentifier}`,
+        'Claim',
         provider.nphies_id,
         insurer.nphies_id,
         new Date(),
@@ -448,12 +497,13 @@ class AdvancedAuthCommunicationService {
       const advAuthId = commRequest.aa_id || commRequest.advanced_authorization_id;
 
       // Extract entity data from the advanced auth
-      let patient, provider, insurer;
+      let patient, provider, insurer, coverage;
       if (advAuthId) {
         const entities = await this.getAdvancedAuthWithEntities(client, advAuthId);
         patient = entities.patient;
         provider = entities.provider;
         insurer = entities.insurer;
+        coverage = entities.coverage;
       } else {
         // Fallback if no advanced auth linked
         provider = {
@@ -476,6 +526,8 @@ class AdvancedAuthCommunicationService {
       }
 
       const authIdentifier = commRequest.identifier_value || commRequest.pre_auth_ref;
+      const claimResponseBundle = commRequest.response_bundle;
+      const requestIdentifier = claimResponseBundle?.request?.identifier?.value || authIdentifier;
 
       const communicationBundle = this.mapper.buildSolicitedCommunicationBundle({
         communicationRequest: {
@@ -488,14 +540,14 @@ class AdvancedAuthCommunicationService {
           cr_identifier_system: commRequest.cr_identifier_system
         },
         priorAuth: {
-          nphies_request_id: commRequest.identifier_value,
-          request_number: commRequest.identifier_value,
+          nphies_request_id: requestIdentifier,
+          request_number: requestIdentifier,
           pre_auth_ref: commRequest.pre_auth_ref || authIdentifier
         },
         patient,
         provider,
         insurer,
-        coverage: null,
+        coverage,
         payloads
       });
 
@@ -662,10 +714,42 @@ class AdvancedAuthCommunicationService {
         WHERE cr.advanced_authorization_id = $1
         ORDER BY cr.received_at DESC
       `, [advAuthId]);
+
+      for (const row of result.rows) {
+        row.payloads = this._extractPayloadsFromBundle(row.request_bundle);
+      }
+
       return result.rows;
     } finally {
       client.release();
     }
+  }
+
+  _extractPayloadsFromBundle(requestBundle) {
+    if (!requestBundle) return [];
+    const bundle = typeof requestBundle === 'string' ? JSON.parse(requestBundle) : requestBundle;
+    const fhirPayloads = bundle.payload || [];
+    return fhirPayloads.map((p, idx) => {
+      if (p.contentString) {
+        return { index: idx, content_type: 'string', content_string: p.contentString };
+      }
+      if (p.contentAttachment) {
+        const att = p.contentAttachment;
+        return {
+          index: idx,
+          content_type: 'attachment',
+          attachment_title: att.title || 'Attachment',
+          attachment_content_type: att.contentType || 'application/octet-stream',
+          attachment_size: att.data ? Math.round((att.data.length * 3) / 4) : att.size || null,
+          attachment_creation: att.creation || null,
+          has_data: !!att.data
+        };
+      }
+      if (p.contentReference) {
+        return { index: idx, content_type: 'reference', reference: p.contentReference.reference || p.contentReference };
+      }
+      return { index: idx, content_type: 'unknown' };
+    });
   }
 
   async getCommunications(advAuthId, schemaName) {

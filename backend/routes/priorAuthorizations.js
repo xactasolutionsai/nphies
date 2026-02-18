@@ -80,6 +80,11 @@ router.get('/:id/communication-requests', (req, res) =>
   priorAuthorizationsController.getCommunicationRequests(req, res)
 );
 
+// Download attachment from a CommunicationRequest payload
+router.get('/:id/communication-requests/:requestId/attachment/:payloadIndex', (req, res) =>
+  priorAuthorizationsController.downloadCommunicationRequestAttachment(req, res)
+);
+
 // Get sent Communications
 router.get('/:id/communications', (req, res) => 
   priorAuthorizationsController.getCommunications(req, res)
