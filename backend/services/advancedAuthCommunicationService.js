@@ -401,7 +401,7 @@ class AdvancedAuthCommunicationService {
         null, // prior_auth_id
         null, // claim_id
         advAuthId,
-        patient.patient_id,
+        null, // patient_id - advanced auth patients don't have local DB records
         'unsolicited',
         nphiesResponse.success ? 'completed' : 'entered-in-error',
         'alert',
@@ -617,7 +617,7 @@ class AdvancedAuthCommunicationService {
         null, // prior_auth_id
         null, // claim_id
         advAuthId,
-        patient.patient_id,
+        null, // patient_id - advanced auth patients don't have local DB records
         'solicited',
         communicationRequestId,
         nphiesResponse.success ? 'completed' : 'entered-in-error',

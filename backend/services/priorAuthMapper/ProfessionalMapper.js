@@ -161,7 +161,7 @@ class ProfessionalMapper extends BaseMapper {
         meta: {
           profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/observation|1.0.0']
         },
-        status: labObs.status || 'registered', // registered = ordered but not yet performed
+        status: labObs.status || 'final',
         category: [
           {
             coding: [
@@ -186,28 +186,23 @@ class ProfessionalMapper extends BaseMapper {
         subject: {
           reference: `Patient/${patientRef}`
         },
-        // NPHIES Fix: Use timezone-aware datetime format (+03:00) instead of UTC (Z)
-        // Per NPHIES examples: "2024-12-16T10:30:00+03:00" format is required
-        effectiveDateTime: this.formatDateTimeWithTimezone(labObs.effective_date || priorAuth.encounter_start || new Date())
+        encounter: {
+          reference: `Encounter/${bundleResourceIds.encounter}`
+        },
+        effectiveDateTime: this.formatDateTimeWithTimezone(labObs.effective_date || priorAuth.encounter_start || new Date()),
+        performer: [{
+          reference: `Practitioner/${bundleResourceIds.practitioner}`
+        }]
       };
 
-      // Add value if provided (for pre-existing results)
-      // NPHIES Fix: Only add value if it's actually provided and non-empty
-      // Per NPHIES: Observations with status='registered' should NOT have value fields
-      // Error RE-00170 occurs if valueString is empty string ""
-      // IMPORTANT: For status='registered' (pending tests), do NOT include any value
+      // NPHIES Observation profile requires value[x] OR dataAbsentReason (never neither)
       const hasValue = labObs.value !== undefined && labObs.value !== null && labObs.value !== '';
-      const isPendingTest = observation.status === 'registered';
       
-      // Only add value for completed observations (status != 'registered')
-      // NPHIES rejects observations with values when status is 'registered'
-      if (hasValue && !isPendingTest) {
-        // Check if value is numeric - if so, use valueQuantity (NPHIES prefers this for lab results)
+      if (hasValue) {
         const numericValue = parseFloat(labObs.value);
         const isNumeric = !isNaN(numericValue);
         
         if (isNumeric && labObs.unit) {
-          // Numeric value with units - use valueQuantity
           observation.valueQuantity = {
             value: numericValue,
             unit: labObs.unit,
@@ -215,14 +210,23 @@ class ProfessionalMapper extends BaseMapper {
             code: labObs.unit_code || labObs.unit
           };
         } else if (isNumeric) {
-          // Numeric value without units - still use valueQuantity
           observation.valueQuantity = {
             value: numericValue
           };
         } else {
-          // Non-numeric value - use valueString
           observation.valueString = String(labObs.value);
         }
+      }
+
+      // Fallback: if no value[x] was set, NPHIES requires dataAbsentReason
+      if (!observation.valueQuantity && !observation.valueString && !observation.valueCodeableConcept) {
+        observation.dataAbsentReason = {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/data-absent-reason',
+            code: 'not-performed',
+            display: 'Not Performed'
+          }]
+        };
       }
 
       // Add note if provided
