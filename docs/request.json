@@ -1,5 +1,5 @@
 {
-  "id": "da3cfc7d-06b7-4bca-be7a-38f4b6e55dfd",
+  "id": "262e3c5e-5d73-4589-8ccd-0fc5c4dadbb2",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "urn:uuid:9e8b35e5-dc83-4c4c-a4c6-7177fb3e9947",
+      "fullUrl": "urn:uuid:caca06b1-6f00-47ab-a4cd-55beb7316e7d",
       "resource": {
-        "id": "9e8b35e5-dc83-4c4c-a4c6-7177fb3e9947",
+        "id": "caca06b1-6f00-47ab-a4cd-55beb7316e7d",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -18,7 +18,7 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/9694dcf2-b957-4577-899f-5178d9d022a6"
+            "reference": "http://provider.com/Claim/598f8b2c-a959-468b-b36f-b413497f8502"
           }
         ],
         "sender": {
@@ -157,9 +157,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/9694dcf2-b957-4577-899f-5178d9d022a6",
+      "fullUrl": "http://provider.com/Claim/598f8b2c-a959-468b-b36f-b413497f8502",
       "resource": {
-        "id": "9694dcf2-b957-4577-899f-5178d9d022a6",
+        "id": "598f8b2c-a959-468b-b36f-b413497f8502",
         "use": "preauthorization",
         "item": [
           {
@@ -215,7 +215,7 @@
               "value": 350,
               "currency": "SAR"
             },
-            "servicedDate": "2026-02-18",
+            "servicedDate": "2026-02-24",
             "careTeamSequence": [
               1
             ],
@@ -279,7 +279,7 @@
           "currency": "SAR"
         },
         "status": "active",
-        "created": "2026-02-18T22:28:36.427Z",
+        "created": "2026-02-22T19:19:06.516Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -305,7 +305,7 @@
               ]
             },
             "provider": {
-              "reference": "Practitioner/6d474fc0-fa5e-4677-9e1f-30208026c72b"
+              "reference": "Practitioner/bae1c6d0-18ce-4f5d-979c-63890ffffc5e"
             },
             "sequence": 1,
             "qualification": {
@@ -357,7 +357,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/2d511299-a4ae-47c6-b613-6753235ac702"
+              "reference": "Encounter/864b0384-68a9-4c31-8a8f-842934453561"
             }
           },
           {
@@ -381,7 +381,7 @@
         ],
         "identifier": [
           {
-            "value": "DUP-1771453716260",
+            "value": "DUP-1771787946059",
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
           }
         ],
@@ -630,6 +630,16 @@
             "sequence": 14
           },
           {
+            "code": {
+              "text": "Urine sediment comments by Light microscopy",
+              "coding": [
+                {
+                  "code": "55951-8",
+                  "system": "http://loinc.org",
+                  "display": "Urine sediment comments by Light microscopy"
+                }
+              ]
+            },
             "category": {
               "coding": [
                 {
@@ -640,11 +650,27 @@
               ]
             },
             "sequence": 15,
-            "valueReference": {
-              "reference": "Observation/ba3591bd-2e1f-4849-ad9b-7404f7571b6d"
+            "timingPeriod": {
+              "end": "2026-02-17T03:00:00+03:00",
+              "start": "2026-02-17T03:00:00+03:00"
+            },
+            "valueQuantity": {
+              "code": "1",
+              "value": 4,
+              "system": "http://unitsofmeasure.org"
             }
           },
           {
+            "code": {
+              "text": "Urine specimen collection method",
+              "coding": [
+                {
+                  "code": "43863-0",
+                  "system": "http://loinc.org",
+                  "display": "Urine specimen collection method"
+                }
+              ]
+            },
             "category": {
               "coding": [
                 {
@@ -655,17 +681,23 @@
               ]
             },
             "sequence": 16,
-            "valueReference": {
-              "reference": "Observation/258b3312-ea89-43f4-a16f-52c6fcb854ad"
+            "timingPeriod": {
+              "end": "2026-02-17T03:00:00+03:00",
+              "start": "2026-02-17T03:00:00+03:00"
+            },
+            "valueQuantity": {
+              "code": "1",
+              "value": 2,
+              "system": "http://unitsofmeasure.org"
             }
           }
         ]
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/2d511299-a4ae-47c6-b613-6753235ac702",
+      "fullUrl": "http://provider.com/Encounter/864b0384-68a9-4c31-8a8f-842934453561",
       "resource": {
-        "id": "2d511299-a4ae-47c6-b613-6753235ac702",
+        "id": "864b0384-68a9-4c31-8a8f-842934453561",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -725,7 +757,7 @@
         ],
         "identifier": [
           {
-            "value": "DUP-1771453716260",
+            "value": "DUP-1771787946059",
             "system": "http://PR-FHIR.com.sa/identifiers/encounter"
           }
         ],
@@ -814,9 +846,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/6d474fc0-fa5e-4677-9e1f-30208026c72b",
+      "fullUrl": "http://provider.com/Practitioner/bae1c6d0-18ce-4f5d-979c-63890ffffc5e",
       "resource": {
-        "id": "6d474fc0-fa5e-4677-9e1f-30208026c72b",
+        "id": "bae1c6d0-18ce-4f5d-979c-63890ffffc5e",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -844,7 +876,7 @@
                 }
               ]
             },
-            "value": "PRACT-6d474fc0",
+            "value": "PRACT-bae1c6d0",
             "system": "http://nphies.sa/license/practitioner-license"
           }
         ],
@@ -962,9 +994,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Observation/ba3591bd-2e1f-4849-ad9b-7404f7571b6d",
+      "fullUrl": "http://provider.com/Observation/91739669-06d8-4c5b-9e62-0cafa1300d22",
       "resource": {
-        "id": "ba3591bd-2e1f-4849-ad9b-7404f7571b6d",
+        "id": "91739669-06d8-4c5b-9e62-0cafa1300d22",
         "code": {
           "text": "Urine sediment comments by Light microscopy",
           "coding": [
@@ -980,6 +1012,7 @@
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/observation|1.0.0"
           ]
         },
+        "issued": "2026-02-17T03:00:00+03:00",
         "status": "registered",
         "subject": {
           "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
@@ -995,14 +1028,27 @@
             ]
           }
         ],
+        "encounter": {
+          "reference": "Encounter/864b0384-68a9-4c31-8a8f-842934453561"
+        },
+        "performer": [
+          {
+            "reference": "Practitioner/bae1c6d0-18ce-4f5d-979c-63890ffffc5e"
+          }
+        ],
         "resourceType": "Observation",
+        "valueQuantity": {
+          "code": "1",
+          "value": 4,
+          "system": "http://unitsofmeasure.org"
+        },
         "effectiveDateTime": "2026-02-17T03:00:00+03:00"
       }
     },
     {
-      "fullUrl": "http://provider.com/Observation/258b3312-ea89-43f4-a16f-52c6fcb854ad",
+      "fullUrl": "http://provider.com/Observation/2e8a402a-8bfd-4a81-8b78-d1b7da758f71",
       "resource": {
-        "id": "258b3312-ea89-43f4-a16f-52c6fcb854ad",
+        "id": "2e8a402a-8bfd-4a81-8b78-d1b7da758f71",
         "code": {
           "text": "Urine specimen collection method",
           "coding": [
@@ -1018,6 +1064,7 @@
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/observation|1.0.0"
           ]
         },
+        "issued": "2026-02-17T03:00:00+03:00",
         "status": "registered",
         "subject": {
           "reference": "Patient/1a72f430-d5b2-4402-91f3-59ee1ed73161"
@@ -1033,11 +1080,24 @@
             ]
           }
         ],
+        "encounter": {
+          "reference": "Encounter/864b0384-68a9-4c31-8a8f-842934453561"
+        },
+        "performer": [
+          {
+            "reference": "Practitioner/bae1c6d0-18ce-4f5d-979c-63890ffffc5e"
+          }
+        ],
         "resourceType": "Observation",
+        "valueQuantity": {
+          "code": "1",
+          "value": 2,
+          "system": "http://unitsofmeasure.org"
+        },
         "effectiveDateTime": "2026-02-17T03:00:00+03:00"
       }
     }
   ],
-  "timestamp": "2026-02-18T22:29:03.760Z",
+  "timestamp": "2026-02-22T19:19:35.197Z",
   "resourceType": "Bundle"
 }

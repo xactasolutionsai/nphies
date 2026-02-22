@@ -168,9 +168,9 @@ class ProfessionalMapper extends BaseMapper {
         resourceType: 'Observation',
         id: observationId,
         meta: {
-          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/observation|1.0.0']
+          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/lab-observation|1.0.0']
         },
-        status: labObs.status || 'final',
+        status: 'final',
         category: [
           {
             coding: [
@@ -684,56 +684,6 @@ class ProfessionalMapper extends BaseMapper {
       supportingInfoArray.push(this.buildSupportingInfo({ ...info, sequence: sequenceCounter }));
       sequenceCounter++;
     });
-    
-    if (observationData && observationData.length > 0) {
-      observationData.forEach(obs => {
-        const effectiveDt = this.formatDateTimeWithTimezone(obs.effective_date);
-        const labSupportingInfo = {
-          sequence: sequenceCounter,
-          category: {
-            coding: [
-              {
-                system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-                code: 'lab-test',
-                display: 'Laboratory Test'
-              }
-            ]
-          },
-          code: {
-            text: obs.test_name || obs.loinc_display,
-            coding: [
-              {
-                system: 'http://loinc.org',
-                code: obs.loinc_code,
-                display: obs.loinc_display || obs.test_name
-              }
-            ]
-          },
-          timingPeriod: {
-            start: effectiveDt,
-            end: effectiveDt
-          }
-        };
-
-        const hasVal = obs.value !== undefined && obs.value !== null && obs.value !== '';
-        if (hasVal) {
-          const numVal = parseFloat(obs.value);
-          if (!isNaN(numVal)) {
-            labSupportingInfo.valueQuantity = {
-              value: numVal,
-              system: 'http://unitsofmeasure.org',
-              code: obs.unit_code || obs.unit || '1'
-            };
-          } else {
-            labSupportingInfo.valueString = String(obs.value);
-          }
-        }
-
-        supportingInfoSequences.push(sequenceCounter);
-        supportingInfoArray.push(labSupportingInfo);
-        sequenceCounter++;
-      });
-    }
     
     if (supportingInfoArray.length > 0) {
       claim.supportingInfo = supportingInfoArray;
