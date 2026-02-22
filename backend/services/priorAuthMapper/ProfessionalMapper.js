@@ -71,11 +71,11 @@ class ProfessionalMapper extends BaseMapper {
     const observationResources = this.buildLabObservationResources(priorAuth, bundleResourceIds);
     console.log('[ProfessionalMapper] Built observation resources:', observationResources.length);
     
-    const observationIds = (bundleResourceIds.observations || []);
+    const observationData = (bundleResourceIds.observations || []);
     const claimResource = this.buildClaimResource(
       priorAuth, patient, provider, insurer, coverage, 
       encounterResource?.resource, practitioner, bundleResourceIds,
-      observationIds
+      observationData
     );
     
     // Build MessageHeader (must be first)
@@ -147,11 +147,20 @@ class ProfessionalMapper extends BaseMapper {
     labObservations.forEach((labObs, index) => {
       const observationId = this.generateId();
       
-      // Store observation ID for later reference in supportingInfo
+      // Store observation metadata for supportingInfo and bundle entry references
       if (!bundleResourceIds.observations) {
         bundleResourceIds.observations = [];
       }
-      bundleResourceIds.observations.push(observationId);
+      bundleResourceIds.observations.push({
+        id: observationId,
+        loinc_code: labObs.loinc_code,
+        loinc_display: labObs.loinc_display || labObs.test_name,
+        test_name: labObs.test_name || labObs.loinc_display,
+        value: labObs.value,
+        unit: labObs.unit,
+        unit_code: labObs.unit_code,
+        effective_date: labObs.effective_date || priorAuth.encounter_start || new Date()
+      });
       
       // NPHIES requires the observation profile, NOT generic HL7 profile
       // Error RE-00170: "Referenced SHALL point to a valid profile"
@@ -190,6 +199,7 @@ class ProfessionalMapper extends BaseMapper {
           reference: `Encounter/${bundleResourceIds.encounter}`
         },
         effectiveDateTime: this.formatDateTimeWithTimezone(labObs.effective_date || priorAuth.encounter_start || new Date()),
+        issued: this.formatDateTimeWithTimezone(labObs.effective_date || priorAuth.encounter_start || new Date()),
         performer: [{
           reference: `Practitioner/${bundleResourceIds.practitioner}`
         }]
@@ -202,16 +212,11 @@ class ProfessionalMapper extends BaseMapper {
         const numericValue = parseFloat(labObs.value);
         const isNumeric = !isNaN(numericValue);
         
-        if (isNumeric && labObs.unit) {
+        if (isNumeric) {
           observation.valueQuantity = {
             value: numericValue,
-            unit: labObs.unit,
             system: 'http://unitsofmeasure.org',
-            code: labObs.unit_code || labObs.unit
-          };
-        } else if (isNumeric) {
-          observation.valueQuantity = {
-            value: numericValue
+            code: labObs.unit_code || labObs.unit || '1'
           };
         } else {
           observation.valueString = String(labObs.value);
@@ -253,9 +258,9 @@ class ProfessionalMapper extends BaseMapper {
    * @param {Object} encounter - Encounter resource
    * @param {Object} practitioner - Practitioner data
    * @param {Object} bundleResourceIds - Resource IDs for bundle references
-   * @param {Array} observationIds - Array of Observation resource IDs for lab tests
+   * @param {Array} observationData - Array of Observation metadata objects for lab tests
    */
-  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds, observationIds = []) {
+  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds, observationData = []) {
     const claimId = bundleResourceIds.claim;
     const patientRef = bundleResourceIds.patient;
     const providerRef = bundleResourceIds.provider;
@@ -680,8 +685,9 @@ class ProfessionalMapper extends BaseMapper {
       sequenceCounter++;
     });
     
-    if (observationIds && observationIds.length > 0) {
-      observationIds.forEach(obsId => {
+    if (observationData && observationData.length > 0) {
+      observationData.forEach(obs => {
+        const effectiveDt = this.formatDateTimeWithTimezone(obs.effective_date);
         const labSupportingInfo = {
           sequence: sequenceCounter,
           category: {
@@ -693,10 +699,36 @@ class ProfessionalMapper extends BaseMapper {
               }
             ]
           },
-          valueReference: {
-            reference: `Observation/${obsId}`
+          code: {
+            text: obs.test_name || obs.loinc_display,
+            coding: [
+              {
+                system: 'http://loinc.org',
+                code: obs.loinc_code,
+                display: obs.loinc_display || obs.test_name
+              }
+            ]
+          },
+          timingPeriod: {
+            start: effectiveDt,
+            end: effectiveDt
           }
         };
+
+        const hasVal = obs.value !== undefined && obs.value !== null && obs.value !== '';
+        if (hasVal) {
+          const numVal = parseFloat(obs.value);
+          if (!isNaN(numVal)) {
+            labSupportingInfo.valueQuantity = {
+              value: numVal,
+              system: 'http://unitsofmeasure.org',
+              code: obs.unit_code || obs.unit || '1'
+            };
+          } else {
+            labSupportingInfo.valueString = String(obs.value);
+          }
+        }
+
         supportingInfoSequences.push(sequenceCounter);
         supportingInfoArray.push(labSupportingInfo);
         sequenceCounter++;
