@@ -249,7 +249,9 @@ class AdvancedAuthCommunicationService {
           provider,
           insurer,
           coverage,
-          payloads
+          payloads,
+          messageEventCode: 'priorauth-request',
+          communicationStatus: 'completed'
         });
       } else if (type === 'solicited' && communicationRequestId) {
         const crResult = await client.query(
@@ -282,7 +284,9 @@ class AdvancedAuthCommunicationService {
           provider,
           insurer,
           coverage,
-          payloads
+          payloads,
+          messageEventCode: 'priorauth-request',
+          communicationStatus: 'completed'
         });
       } else {
         throw new Error('Invalid communication type or missing communicationRequestId for solicited');
@@ -326,7 +330,9 @@ class AdvancedAuthCommunicationService {
         provider,
         insurer,
         coverage,
-        payloads
+        payloads,
+        messageEventCode: 'priorauth-request',
+        communicationStatus: 'completed'
       });
 
       const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
@@ -548,7 +554,9 @@ class AdvancedAuthCommunicationService {
         provider,
         insurer,
         coverage,
-        payloads
+        payloads,
+        messageEventCode: 'priorauth-request',
+        communicationStatus: 'completed'
       });
 
       const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);

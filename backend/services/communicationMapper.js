@@ -579,7 +579,7 @@ class CommunicationMapper {
    * @param {Array} options.payloads - Array of payload objects
    * @returns {Object} FHIR Bundle
    */
-  buildUnsolicitedCommunicationBundle({ priorAuth, patient, provider, insurer, coverage, location, payloads }) {
+  buildUnsolicitedCommunicationBundle({ priorAuth, patient, provider, insurer, coverage, location, payloads, messageEventCode, communicationStatus }) {
     const bundleId = this.generateId();
     const communicationId = this.generateId();
     
@@ -605,7 +605,8 @@ class CommunicationMapper {
       aboutReference: aboutReference,
       aboutType: 'Claim',
       payloads,
-      basedOn: null // Unsolicited has no basedOn
+      basedOn: null,
+      ...(communicationStatus && { communicationStatus })
     });
 
     const communicationEntry = {
@@ -613,11 +614,11 @@ class CommunicationMapper {
       resource: communicationResource
     };
 
-    // Build MessageHeader with correct event code ('communication' for sending Communication)
     const messageHeader = this.buildCommunicationMessageHeader({
       provider,
       insurer,
-      focusFullUrl: communicationEntry.fullUrl
+      focusFullUrl: communicationEntry.fullUrl,
+      ...(messageEventCode && { eventCode: messageEventCode })
     });
 
     // Build full resources per NPHIES standard
@@ -682,7 +683,7 @@ class CommunicationMapper {
    * @param {Array} options.payloads - Array of payload objects (typically attachments)
    * @returns {Object} FHIR Bundle
    */
-  buildSolicitedCommunicationBundle({ communicationRequest, priorAuth, patient, provider, insurer, coverage, location, payloads }) {
+  buildSolicitedCommunicationBundle({ communicationRequest, priorAuth, patient, provider, insurer, coverage, location, payloads, messageEventCode, communicationStatus }) {
     const bundleId = this.generateId();
     const communicationId = this.generateId();
     
@@ -721,7 +722,8 @@ class CommunicationMapper {
       aboutReference: aboutReference,
       aboutType: communicationRequest.about_type || 'Claim',
       payloads,
-      basedOn: { identifier: basedOnIdentifier }
+      basedOn: { identifier: basedOnIdentifier },
+      ...(communicationStatus && { communicationStatus })
     });
 
     const communicationEntry = {
@@ -729,11 +731,11 @@ class CommunicationMapper {
       resource: communicationResource
     };
 
-    // Build MessageHeader with correct event code ('communication' for sending Communication)
     const messageHeader = this.buildCommunicationMessageHeader({
       provider,
       insurer,
-      focusFullUrl: communicationEntry.fullUrl
+      focusFullUrl: communicationEntry.fullUrl,
+      ...(messageEventCode && { eventCode: messageEventCode })
     });
 
     // Build full resources per NPHIES standard
@@ -803,7 +805,7 @@ class CommunicationMapper {
    * @param {string|null} options.basedOn - CommunicationRequest reference (for solicited)
    * @returns {Object} FHIR Communication resource
    */
-  buildCommunicationResource({ id, type, patient, provider, insurer, aboutReference, aboutType, payloads, basedOn }) {
+  buildCommunicationResource({ id, type, patient, provider, insurer, aboutReference, aboutType, payloads, basedOn, communicationStatus = 'in-progress' }) {
     const patientId = patient.patient_id?.toString() || patient.id;
     const providerId = provider.provider_id?.toString() || provider.id;
     const insurerId = insurer.insurer_id?.toString() || insurer.id;
@@ -841,8 +843,7 @@ class CommunicationMapper {
         system: `http://${providerDomain}/identifiers/communication`,
         value: `Communication_${id.replace(/-/g, '')}`
       }],
-      // Status: 'in-progress' when sending (per NPHIES standard)
-      status: 'in-progress',
+      status: communicationStatus,
       // Category - Using HL7 standard codes: alert, notification, reminder, instruction
       // See: https://terminology.hl7.org/CodeSystem-communication-category.html
       category: [{
@@ -997,7 +998,7 @@ class CommunicationMapper {
    * @param {string} options.focusFullUrl - Full URL of the Communication resource
    * @returns {Object} MessageHeader entry
    */
-  buildCommunicationMessageHeader({ provider, insurer, focusFullUrl }) {
+  buildCommunicationMessageHeader({ provider, insurer, focusFullUrl, eventCode = 'communication' }) {
     const messageHeaderId = this.generateId();
     const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     const destinationNphiesId = insurer.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID;
@@ -1012,9 +1013,7 @@ class CommunicationMapper {
         },
         eventCoding: {
           system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
-          // NPHIES FIX: Use 'communication' when HCP sends Communication (not 'communication-request')
-          // 'communication-request' is for when HIC requests information FROM HCP
-          code: 'communication'
+          code: eventCode
         },
         destination: [{
           endpoint: `http://nphies.sa/license/payer-license/${destinationNphiesId}`,
