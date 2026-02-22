@@ -68,14 +68,9 @@ class ProfessionalMapper extends BaseMapper {
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
     
-    const observationResources = this.buildLabObservationResources(priorAuth, bundleResourceIds);
-    console.log('[ProfessionalMapper] Built observation resources:', observationResources.length);
-    
-    const observationData = (bundleResourceIds.observations || []);
     const claimResource = this.buildClaimResource(
       priorAuth, patient, provider, insurer, coverage, 
-      encounterResource?.resource, practitioner, bundleResourceIds,
-      observationData
+      encounterResource?.resource, practitioner, bundleResourceIds
     );
     
     // Build MessageHeader (must be first)
@@ -84,9 +79,8 @@ class ProfessionalMapper extends BaseMapper {
     // Assemble bundle per NPHIES spec order
     // RE-00005 fix: Organization resources (Provider and Insurer) must come BEFORE Claim
     // to ensure facility reference validation passes
-    // Observation resources are included after patient
     // For newborn cases, add both newborn and mother patient resources
-    // Note: Attachments are now embedded in supportingInfo as valueAttachment, not as separate Binary resources
+    // Lab tests are represented only in Claim.supportingInfo (not as standalone Observation resources)
     const entries = [
       messageHeader,
       providerResource,      // Must be before Claim for facility reference validation
@@ -96,8 +90,7 @@ class ProfessionalMapper extends BaseMapper {
       coverageResource,
       practitionerResource,
       newbornPatientResource, // Newborn patient
-      ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present
-      ...observationResources
+      ...(motherPatientResource ? [motherPatientResource] : []) // Mother patient if present
     ];
 
     return {
@@ -113,142 +106,6 @@ class ProfessionalMapper extends BaseMapper {
   }
 
   /**
-   * Build Observation resources for laboratory tests
-   * Per NPHIES IG: Lab test details (LOINC codes) MUST be in Observation resources
-   * These are referenced via Claim.supportingInfo with category = "laboratory"
-   * 
-   * @param {Object} priorAuth - Prior authorization data
-   * @param {Object} bundleResourceIds - Resource IDs for bundle references
-   * @returns {Array} Array of Observation bundle entries
-   */
-  buildLabObservationResources(priorAuth, bundleResourceIds) {
-    const observations = [];
-    const patientRef = bundleResourceIds.patient;
-    
-    // Check for lab_observations in priorAuth (new field for LOINC test details)
-    // Handle both string (from DB) and array formats
-    let labObservations = priorAuth.lab_observations || [];
-    if (typeof labObservations === 'string') {
-      try {
-        labObservations = JSON.parse(labObservations);
-      } catch (e) {
-        console.error('[ProfessionalMapper] Failed to parse lab_observations:', e);
-        labObservations = [];
-      }
-    }
-    
-    // Ensure it's an array
-    if (!Array.isArray(labObservations)) {
-      labObservations = [];
-    }
-    
-    console.log('[ProfessionalMapper] Building lab observations, count:', labObservations.length);
-    
-    labObservations.forEach((labObs, index) => {
-      const observationId = this.generateId();
-      
-      // Store observation metadata for supportingInfo and bundle entry references
-      if (!bundleResourceIds.observations) {
-        bundleResourceIds.observations = [];
-      }
-      bundleResourceIds.observations.push({
-        id: observationId,
-        loinc_code: labObs.loinc_code,
-        loinc_display: labObs.loinc_display || labObs.test_name,
-        test_name: labObs.test_name || labObs.loinc_display,
-        value: labObs.value,
-        unit: labObs.unit,
-        unit_code: labObs.unit_code,
-        effective_date: labObs.effective_date || priorAuth.encounter_start || new Date()
-      });
-      
-      // NPHIES requires the observation profile, NOT generic HL7 profile
-      // Error RE-00170: "Referenced SHALL point to a valid profile"
-      const observation = {
-        resourceType: 'Observation',
-        id: observationId,
-        meta: {
-          profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/lab-observation|1.0.0']
-        },
-        status: 'final',
-        category: [
-          {
-            coding: [
-              {
-                system: 'http://terminology.hl7.org/CodeSystem/observation-category',
-                code: 'laboratory',
-                display: 'Laboratory'
-              }
-            ]
-          }
-        ],
-        code: {
-          coding: [
-            {
-              system: 'http://loinc.org',
-              code: labObs.loinc_code,
-              display: labObs.loinc_display || labObs.test_name
-            }
-          ],
-          text: labObs.test_name || labObs.loinc_display
-        },
-        subject: {
-          reference: `Patient/${patientRef}`
-        },
-        encounter: {
-          reference: `Encounter/${bundleResourceIds.encounter}`
-        },
-        effectiveDateTime: this.formatDateTimeWithTimezone(labObs.effective_date || priorAuth.encounter_start || new Date()),
-        issued: this.formatDateTimeWithTimezone(labObs.effective_date || priorAuth.encounter_start || new Date()),
-        performer: [{
-          reference: `Practitioner/${bundleResourceIds.practitioner}`
-        }]
-      };
-
-      // NPHIES Observation profile requires value[x] OR dataAbsentReason (never neither)
-      const hasValue = labObs.value !== undefined && labObs.value !== null && labObs.value !== '';
-      
-      if (hasValue) {
-        const numericValue = parseFloat(labObs.value);
-        const isNumeric = !isNaN(numericValue);
-        
-        if (isNumeric) {
-          observation.valueQuantity = {
-            value: numericValue,
-            system: 'http://unitsofmeasure.org',
-            code: labObs.unit_code || labObs.unit || '1'
-          };
-        } else {
-          observation.valueString = String(labObs.value);
-        }
-      }
-
-      // Fallback: if no value[x] was set, NPHIES requires dataAbsentReason
-      if (!observation.valueQuantity && !observation.valueString && !observation.valueCodeableConcept) {
-        observation.dataAbsentReason = {
-          coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/data-absent-reason',
-            code: 'not-performed',
-            display: 'Not Performed'
-          }]
-        };
-      }
-
-      // Add note if provided
-      if (labObs.note) {
-        observation.note = [{ text: labObs.note }];
-      }
-
-      observations.push({
-        fullUrl: `http://provider.com/Observation/${observationId}`,
-        resource: observation
-      });
-    });
-
-    return observations;
-  }
-
-  /**
    * Build FHIR Claim resource for Professional Prior Authorization
    * @param {Object} priorAuth - Prior authorization data
    * @param {Object} patient - Patient data
@@ -258,9 +115,8 @@ class ProfessionalMapper extends BaseMapper {
    * @param {Object} encounter - Encounter resource
    * @param {Object} practitioner - Practitioner data
    * @param {Object} bundleResourceIds - Resource IDs for bundle references
-   * @param {Array} observationData - Array of Observation metadata objects for lab tests
    */
-  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds, observationData = []) {
+  buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds) {
     const claimId = bundleResourceIds.claim;
     const patientRef = bundleResourceIds.patient;
     const providerRef = bundleResourceIds.provider;
@@ -682,6 +538,58 @@ class ProfessionalMapper extends BaseMapper {
     supportingInfoList.forEach(info => {
       supportingInfoSequences.push(sequenceCounter);
       supportingInfoArray.push(this.buildSupportingInfo({ ...info, sequence: sequenceCounter }));
+      sequenceCounter++;
+    });
+
+    // Add lab-test supportingInfo entries from priorAuth.lab_observations
+    // Per NPHIES Professional PriorAuth IG: lab results are represented only in Claim.supportingInfo
+    let labObservations = priorAuth.lab_observations || [];
+    if (typeof labObservations === 'string') {
+      try { labObservations = JSON.parse(labObservations); } catch (e) { labObservations = []; }
+    }
+    if (!Array.isArray(labObservations)) { labObservations = []; }
+
+    labObservations.forEach(obs => {
+      const effectiveDt = this.formatDateTimeWithTimezone(obs.effective_date || priorAuth.encounter_start || new Date());
+      const labSupportingInfo = {
+        sequence: sequenceCounter,
+        category: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+            code: 'lab-test',
+            display: 'Laboratory Test'
+          }]
+        },
+        code: {
+          text: obs.test_name || obs.loinc_display,
+          coding: [{
+            system: 'http://loinc.org',
+            code: obs.loinc_code,
+            display: obs.loinc_display || obs.test_name
+          }]
+        },
+        timingPeriod: {
+          start: effectiveDt,
+          end: effectiveDt
+        }
+      };
+
+      const hasVal = obs.value !== undefined && obs.value !== null && obs.value !== '';
+      if (hasVal) {
+        const numVal = parseFloat(obs.value);
+        if (!isNaN(numVal)) {
+          labSupportingInfo.valueQuantity = {
+            value: numVal,
+            system: 'http://unitsofmeasure.org',
+            code: obs.unit_code || obs.unit || '1'
+          };
+        } else {
+          labSupportingInfo.valueString = String(obs.value);
+        }
+      }
+
+      supportingInfoSequences.push(sequenceCounter);
+      supportingInfoArray.push(labSupportingInfo);
       sequenceCounter++;
     });
     
