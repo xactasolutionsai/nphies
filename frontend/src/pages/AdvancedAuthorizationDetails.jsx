@@ -28,6 +28,12 @@ const getAuthReasonDisplay = (r) => ({
   'transfer': 'Transfer',
 }[r] || r || '-');
 
+const getReissueReasonDisplay = (r) => ({
+  'cancel': 'Cancel',
+  'modify': 'Modify',
+  'other': 'Other',
+}[r] || r || '-');
+
 const getClaimTypeDisplay = (t) => ({
   'institutional': 'Institutional',
   'oral': 'Oral/Dental',
@@ -631,7 +637,7 @@ export default function AdvancedAuthorizationDetails() {
                     </InfoItem>
                     {data.reissue_reason && (
                       <InfoItem label="Reissue Reason">
-                        <Badge variant="outline">{data.reissue_reason}</Badge>
+                        <Badge variant="outline">{getReissueReasonDisplay(data.reissue_reason)}</Badge>
                       </InfoItem>
                     )}
                   </div>

@@ -297,6 +297,7 @@ class NphiesService {
           status: response.status,
           data: response.data,
           taskStatus: parsedResponse.taskStatus,
+          reissueReason: parsedResponse.reissueReason,
           errors: parsedResponse.errors
         };
 
@@ -364,10 +365,23 @@ class NphiesService {
         }
       }
 
+      // Extract reissue_reason from ClaimResponse if present
+      let reissueReason = null;
+      const claimResponseResource = responseBundle?.entry?.find(
+        e => e.resource?.resourceType === 'ClaimResponse'
+      )?.resource;
+      if (claimResponseResource?.extension) {
+        const reissueExt = claimResponseResource.extension.find(
+          e => e.url?.includes('extension-adjudication-reissue')
+        );
+        reissueReason = reissueExt?.valueCodeableConcept?.coding?.[0]?.code || null;
+      }
+
       return {
         success: isSuccess,
         taskStatus,
         taskId: taskResource.id,
+        reissueReason,
         errors: errors.length > 0 ? errors : undefined
       };
 

@@ -618,10 +618,11 @@ class AdvancedAuthorizationsController {
                 is_cancelled = true,
                 cancellation_reason = $1,
                 cancel_outcome = $2,
+                reissue_reason = COALESCE($4, reissue_reason),
                 cancelled_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = $3
-          `, [reason, dbOutcome, id]);
+          `, [reason, dbOutcome, id, nphiesResponse.reissueReason || null]);
 
           const updatedResult = await client.query(
             'SELECT * FROM advanced_authorizations WHERE id = $1',
