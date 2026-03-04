@@ -617,6 +617,13 @@ export default function ClaimDetails() {
       }
     }
 
+    // Extract process notes
+    const processNotes = claimResponse.processNote?.map(note => ({
+      number: note.number,
+      type: note.type,
+      text: note.text
+    })) || [];
+
     // Extract batch extensions
     const batchIdentifier = claimResponse.extension?.find(
       ext => ext.url?.includes('extension-batch-identifier')
@@ -656,6 +663,7 @@ export default function ClaimDetails() {
       adjudicationOutcome: adjudicationOutcome, // Pended, approved, rejected, partial
       created: claimResponse.created,
       disposition: claimResponse.disposition,
+      processNotes: processNotes,
       // Pre-Authorization Reference (from response)
       preAuthRef: claimResponse.preAuthRef,
       preAuthPeriod: claimResponse.preAuthPeriod,
@@ -1344,6 +1352,7 @@ export default function ClaimDetails() {
 
           {/* Items Tab */}
           {activeTab === 'items' && (
+            <>
             <Card>
               <CardHeader>
                 <CardTitle>Service Items</CardTitle>
@@ -1453,7 +1462,35 @@ export default function ClaimDetails() {
                             </div>
                           )}
                           
-                          {/* Adjudication Reason if present */}
+                          {/* NPHIES Adjudication Reasons from response bundle */}
+                          {(() => {
+                            const reasons = itemAdjudications
+                              .filter(adj => adj.reason)
+                              .map(adj => ({
+                                category: extractCodeValue(adj.category),
+                                code: adj.reason?.coding?.[0]?.code,
+                                display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                              }));
+                            if (reasons.length === 0) return null;
+                            return (
+                              <div className="mt-3 space-y-2">
+                                {reasons.map((r, i) => (
+                                  <div key={i} className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm">
+                                    <div className="flex items-start gap-2">
+                                      <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                                      <div>
+                                        <span className="font-semibold text-orange-800">{r.code}</span>
+                                        <span className="text-orange-700 ml-1">({r.category})</span>
+                                        <p className="text-orange-700 mt-1">{r.display}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Adjudication Reason if present (from database) */}
                           {item.adjudication_reason && (
                             <div className="mt-3 p-2 bg-yellow-50 rounded text-sm text-yellow-800">
                               <span className="font-medium">Reason:</span> {item.adjudication_reason}
@@ -1556,6 +1593,201 @@ export default function ClaimDetails() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Additional NPHIES Response Items - items returned by payer not in original request */}
+            {(() => {
+              const claimResponseForAdditional = getClaimResponseFromBundle();
+              
+              const allResponseItems = claimResponseForAdditional?.item || [];
+              const requestSequences = new Set((claim.items || []).map(i => i.sequence));
+              const unmatchedItems = allResponseItems.filter(ri => !requestSequences.has(ri.itemSequence));
+              
+              const relevantUnmatched = unmatchedItems.filter(ri => {
+                const outcome = ri.extension?.find(
+                  ext => ext.url?.includes('extension-adjudication-outcome')
+                )?.valueCodeableConcept?.coding?.[0]?.code;
+                const hasReasons = ri.adjudication?.some(adj => adj.reason);
+                return outcome !== 'approved' || hasReasons;
+              });
+              
+              if (relevantUnmatched.length === 0) return null;
+              
+              const outcomeColors = {
+                approved: 'bg-green-500',
+                partial: 'bg-orange-500',
+                rejected: 'bg-red-500',
+                denied: 'bg-red-500'
+              };
+              const borderColors = {
+                approved: 'border-green-200',
+                partial: 'border-orange-200',
+                rejected: 'border-red-200',
+                denied: 'border-red-200'
+              };
+              
+              return (
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-orange-500" />
+                      Additional Payer Response Items
+                    </CardTitle>
+                    <CardDescription>
+                      Items added by the payer in the response that were not in your original request
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {relevantUnmatched.map((ri, idx) => {
+                        const itemOutcome = ri.extension?.find(
+                          ext => ext.url?.includes('extension-adjudication-outcome')
+                        )?.valueCodeableConcept?.coding?.[0];
+                        const outcomeCode = itemOutcome?.code;
+                        const outcomeDisplay = itemOutcome?.display || outcomeCode;
+                        
+                        const submitted = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'submitted')?.amount?.value;
+                        const benefit = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+                        const approvedQty = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'approved-quantity')?.value;
+                        
+                        const reasons = ri.adjudication
+                          ?.filter(adj => adj.reason)
+                          .map(adj => ({
+                            category: adj.category?.coding?.[0]?.code,
+                            code: adj.reason?.coding?.[0]?.code,
+                            display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                          })) || [];
+                        
+                        return (
+                          <div key={idx} className={`p-4 border rounded-lg ${borderColors[outcomeCode] || 'border-gray-200'}`}>
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gray-600 text-white flex items-center justify-center text-sm font-medium">
+                                  {ri.itemSequence}
+                                </div>
+                                <div>
+                                  <p className="font-medium">Item {ri.itemSequence}</p>
+                                  <p className="text-xs text-blue-600">Added by Payer</p>
+                                </div>
+                              </div>
+                              <Badge className={`${outcomeColors[outcomeCode] || 'bg-gray-500'} text-white`}>
+                                {outcomeDisplay || 'Unknown'}
+                              </Badge>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-4 text-sm mb-3">
+                              <div>
+                                <p className="text-gray-500">Submitted</p>
+                                <p className="font-medium">{formatAmount(submitted)}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500">Benefit</p>
+                                <p className={`font-medium ${benefit !== undefined && submitted !== undefined && benefit < submitted ? 'text-orange-600' : 'text-green-600'}`}>
+                                  {formatAmount(benefit)}
+                                </p>
+                              </div>
+                              {approvedQty !== undefined && (
+                                <div>
+                                  <p className="text-gray-500">Approved Qty</p>
+                                  <p className="font-medium text-purple-600">{approvedQty}</p>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {reasons.length > 0 && (
+                              <div className="space-y-2">
+                                {reasons.map((r, rIdx) => (
+                                  <div key={rIdx} className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm">
+                                    <div className="flex items-start gap-2">
+                                      <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                                      <div>
+                                        <span className="font-semibold text-orange-800">{r.code}</span>
+                                        <span className="text-orange-700 ml-1">({r.category})</span>
+                                        <p className="text-orange-700 mt-1">{r.display}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* Lab Observations Section - Only for Professional claim type */}
+            {extractCodeValue(claim.claim_type) === 'professional' && claim.lab_observations && claim.lab_observations.length > 0 && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-emerald-600" />
+                    Lab Observations (LOINC)
+                  </CardTitle>
+                  <CardDescription>
+                    Laboratory test details linked via supportingInfo
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {(Array.isArray(claim.lab_observations) 
+                      ? claim.lab_observations 
+                      : JSON.parse(claim.lab_observations || '[]')
+                    ).map((obs, index) => (
+                      <div key={index} className="p-4 border rounded-lg bg-emerald-50/50">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-medium">
+                              {obs.sequence || index + 1}
+                            </div>
+                            <div>
+                              <p className="font-medium">{obs.loinc_code}</p>
+                              <p className="text-sm text-gray-600">{obs.loinc_display || obs.test_name || 'Lab Test'}</p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="capitalize">
+                            {obs.status || 'registered'}
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
+                          {obs.value && (
+                            <div>
+                              <p className="text-gray-500">Value</p>
+                              <p className="font-medium">
+                                {obs.value} {obs.unit || obs.unit_code || ''}
+                              </p>
+                            </div>
+                          )}
+                          {obs.effective_date && (
+                            <div>
+                              <p className="text-gray-500">Effective Date</p>
+                              <p className="font-medium">{formatDate(obs.effective_date)}</p>
+                            </div>
+                          )}
+                          {obs.interpretation && (
+                            <div>
+                              <p className="text-gray-500">Interpretation</p>
+                              <p className="font-medium capitalize">{obs.interpretation}</p>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {(obs.note || obs.notes) && (
+                          <div className="mt-3 pt-3 border-t text-sm">
+                            <p className="text-gray-500">Notes</p>
+                            <p className="text-gray-700">{obs.note || obs.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            </>
           )}
 
           {/* Clinical Tab */}
@@ -2043,6 +2275,105 @@ export default function ClaimDetails() {
                           </div>
                         </>
                       )}
+
+                      {/* Pre-Auth Period */}
+                      {claimResponseDetails.preAuthPeriod && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <Label className="text-blue-700">Authorization Validity Period</Label>
+                            <div className="flex items-center gap-4 mt-2">
+                              <div>
+                                <p className="text-xs text-gray-500">Start Date</p>
+                                <p className="font-medium text-lg">
+                                  {formatDate(claimResponseDetails.preAuthPeriod.start)}
+                                </p>
+                              </div>
+                              <div className="text-gray-400">→</div>
+                              <div>
+                                <p className="text-xs text-gray-500">End Date</p>
+                                <p className="font-medium text-lg">
+                                  {formatDate(claimResponseDetails.preAuthPeriod.end)}
+                                </p>
+                              </div>
+                              <div className="ml-auto">
+                                <Badge variant="outline" className="text-blue-600 border-blue-300">
+                                  {(() => {
+                                    const end = new Date(claimResponseDetails.preAuthPeriod.end);
+                                    const now = new Date();
+                                    const days = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+                                    if (days < 0) return 'Expired';
+                                    if (days === 0) return 'Expires Today';
+                                    return `${days} days remaining`;
+                                  })()}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Adjudication Outcome */}
+                      {claimResponseDetails.adjudicationOutcome && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className={`p-4 rounded-lg border ${
+                            extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'approved' ? 'bg-green-50 border-green-200' :
+                            extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'rejected' ? 'bg-red-50 border-red-200' :
+                            extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'pended' ? 'bg-yellow-50 border-yellow-200' :
+                            'bg-gray-50 border-gray-200'
+                          }`}>
+                            <Label className={`${
+                              extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'approved' ? 'text-green-700' :
+                              extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'rejected' ? 'text-red-700' :
+                              extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'pended' ? 'text-yellow-700' :
+                              'text-gray-700'
+                            }`}>Adjudication Outcome</Label>
+                            <Badge 
+                              className={`mt-2 text-lg px-3 py-1 ${
+                                extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'approved' ? 'bg-green-500' :
+                                extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'rejected' ? 'bg-red-500' :
+                                extractCodeValue(claimResponseDetails.adjudicationOutcome) === 'pended' ? 'bg-yellow-500 text-yellow-900' :
+                                'bg-gray-500'
+                              }`}
+                            >
+                              {extractCodeValue(claimResponseDetails.adjudicationOutcome).toUpperCase()}
+                            </Badge>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Process Notes */}
+                      {claimResponseDetails.processNotes && claimResponseDetails.processNotes.length > 0 && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500 flex items-center gap-2">
+                              <MessageSquare className="h-4 w-4" />
+                              Process Notes
+                            </Label>
+                            <div className="mt-2 space-y-2">
+                              {claimResponseDetails.processNotes.map((note, idx) => (
+                                <div key={idx} className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    {note.number && (
+                                      <Badge variant="outline" className="text-amber-700 border-amber-400">
+                                        #{note.number}
+                                      </Badge>
+                                    )}
+                                    {note.type && (
+                                      <Badge variant="outline" className="text-amber-600 border-amber-300 capitalize">
+                                        {note.type}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-amber-800">{note.text}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -2087,6 +2418,422 @@ export default function ClaimDetails() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Item Adjudication Details */}
+              {(() => {
+                const claimResponseForItems = getClaimResponseFromBundle();
+                
+                const responseItems = claimResponseForItems?.item;
+                if (!responseItems || responseItems.length === 0) return null;
+
+                const requestSequences = new Set((claim.items || []).map(i => i.sequence));
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Receipt className="h-5 w-5" />
+                        Item Adjudication Details
+                      </CardTitle>
+                      <CardDescription>
+                        Per-item outcomes and reasons from NPHIES response
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {responseItems.map((ri, idx) => {
+                          const isPayerAdded = !requestSequences.has(ri.itemSequence);
+                          const itemOutcome = ri.extension?.find(
+                            ext => ext.url?.includes('extension-adjudication-outcome')
+                          )?.valueCodeableConcept?.coding?.[0];
+                          const outcomeCode = itemOutcome?.code;
+                          const outcomeDisplay = itemOutcome?.display || outcomeCode;
+                          
+                          const submitted = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'submitted')?.amount?.value;
+                          const benefit = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+                          const approvedQty = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'approved-quantity')?.value;
+                          
+                          const reasons = ri.adjudication
+                            ?.filter(adj => adj.reason)
+                            .map(adj => ({
+                              category: adj.category?.coding?.[0]?.code,
+                              code: adj.reason?.coding?.[0]?.code,
+                              display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                            })) || [];
+
+                          const requestItem = claim.items?.find(it => it.sequence === ri.itemSequence);
+
+                          const outcomeColors = {
+                            approved: 'bg-green-500',
+                            partial: 'bg-orange-500',
+                            rejected: 'bg-red-500',
+                            denied: 'bg-red-500'
+                          };
+
+                          const borderColors = {
+                            approved: 'border-green-200',
+                            partial: 'border-orange-200',
+                            rejected: 'border-red-200',
+                            denied: 'border-red-200'
+                          };
+
+                          return (
+                            <div key={idx} className={`p-4 border rounded-lg ${borderColors[outcomeCode] || 'border-gray-200'}`}>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-gray-600 text-white flex items-center justify-center text-sm font-medium">
+                                    {ri.itemSequence}
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">
+                                      {requestItem?.product_or_service_code || `Item ${ri.itemSequence}`}
+                                    </p>
+                                    {requestItem?.product_or_service_display && (
+                                      <p className="text-sm text-gray-500">{requestItem.product_or_service_display}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {isPayerAdded && (
+                                    <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">
+                                      Added by Payer
+                                    </Badge>
+                                  )}
+                                  <Badge className={`${outcomeColors[outcomeCode] || 'bg-gray-500'} text-white`}>
+                                    {outcomeDisplay || 'Unknown'}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-4 text-sm mb-3">
+                                <div>
+                                  <p className="text-gray-500">Submitted</p>
+                                  <p className="font-medium">{formatAmount(submitted)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-500">Benefit</p>
+                                  <p className={`font-medium ${benefit !== undefined && submitted !== undefined && benefit < submitted ? 'text-orange-600' : 'text-green-600'}`}>
+                                    {formatAmount(benefit)}
+                                  </p>
+                                </div>
+                                {approvedQty !== undefined && (
+                                  <div>
+                                    <p className="text-gray-500">Approved Qty</p>
+                                    <p className="font-medium text-purple-600">{approvedQty}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {reasons.length > 0 && (
+                                <div className="space-y-2">
+                                  {reasons.map((r, rIdx) => (
+                                    <div key={rIdx} className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm">
+                                      <div className="flex items-start gap-2">
+                                        <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <span className="font-semibold text-orange-800">{r.code}</span>
+                                          <span className="text-orange-700 ml-1">({r.category})</span>
+                                          <p className="text-orange-700 mt-1">{r.display}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Coverage Details */}
+              {(() => {
+                const coverage = getCoverageDetails();
+                if (!coverage) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Coverage Information
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Member ID</Label>
+                          <p className="font-mono font-medium">{coverage.memberId || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Status</Label>
+                          <Badge variant={coverage.status === 'active' ? 'default' : 'secondary'} 
+                                 className={coverage.status === 'active' ? 'bg-green-500 mt-1' : 'mt-1'}>
+                            {coverage.status || '-'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Coverage Type</Label>
+                          <p className="font-medium">{coverage.type || '-'}</p>
+                          {coverage.typeCode && coverage.typeCode !== coverage.type && (
+                            <p className="text-xs text-gray-500 font-mono">{coverage.typeCode}</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Subscriber Relationship</Label>
+                          <p className="font-medium capitalize">{coverage.relationship || '-'}</p>
+                        </div>
+                      </div>
+                      
+                      <hr className="border-gray-200" />
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Plan Name</Label>
+                          <p className="font-medium">{coverage.planName || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Plan ID</Label>
+                          <p className="font-mono text-sm">{coverage.planValue || '-'}</p>
+                        </div>
+                        {coverage.policyPeriod && (
+                          <>
+                            <div>
+                              <Label className="text-gray-500">Policy Start</Label>
+                              <p className="font-medium">{formatDate(coverage.policyPeriod.start)}</p>
+                            </div>
+                            <div>
+                              <Label className="text-gray-500">Policy End</Label>
+                              <p className="font-medium">{formatDate(coverage.policyPeriod.end)}</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      
+                      {(coverage.policyHolderId || coverage.subscriberId || coverage.beneficiaryId || coverage.payorId) && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500 text-xs uppercase tracking-wider mb-3 block">Coverage References</Label>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              {coverage.policyHolderId && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Policy Holder</p>
+                                  <p className="font-mono text-xs break-all">{coverage.policyHolderId}</p>
+                                </div>
+                              )}
+                              {coverage.subscriberId && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Subscriber</p>
+                                  <p className="font-mono text-xs break-all">{coverage.subscriberId}</p>
+                                </div>
+                              )}
+                              {coverage.beneficiaryId && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Beneficiary</p>
+                                  <p className="font-mono text-xs break-all">{coverage.beneficiaryId}</p>
+                                </div>
+                              )}
+                              {coverage.payorId && (
+                                <div className="p-2 bg-gray-50 rounded">
+                                  <p className="text-xs text-gray-500">Payor</p>
+                                  <p className="font-mono text-xs break-all">{coverage.payorId}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      
+                      {coverage.memberIdSystem && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">Member ID System</Label>
+                            <p className="font-mono text-xs text-gray-500 mt-1">{coverage.memberIdSystem}</p>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Patient Details from Response */}
+              {(() => {
+                const patient = getPatientFromResponse();
+                if (!patient) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <User className="h-5 w-5" />
+                        Patient (from Response)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Name</Label>
+                          <p className="font-medium">{patient.name || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Identifier</Label>
+                          <p className="font-mono">{patient.identifier || '-'}</p>
+                          {patient.identifierType && (
+                            <p className="text-xs text-gray-500">{patient.identifierType}</p>
+                          )}
+                          {patient.identifierCountry && (
+                            <p className="text-xs text-gray-500">{patient.identifierCountry}</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Gender</Label>
+                          <p className="font-medium capitalize">{patient.gender || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Date of Birth</Label>
+                          <p className="font-medium">{formatDate(patient.birthDate)}</p>
+                        </div>
+                      </div>
+                      
+                      <hr className="border-gray-200" />
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Occupation</Label>
+                          <p className="font-medium capitalize">{patient.occupation || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Marital Status</Label>
+                          <p className="font-medium">{patient.maritalStatusDisplay || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Status</Label>
+                          <Badge variant={patient.active ? 'default' : 'secondary'} 
+                                 className={patient.active ? 'bg-green-500' : ''}>
+                            {patient.active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Deceased</Label>
+                          <p className="font-medium">{patient.deceased === true ? 'Yes' : patient.deceased === false ? 'No' : '-'}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Provider Organization Details from Response */}
+              {(() => {
+                const provider = getProviderFromResponse();
+                if (!provider) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Building className="h-5 w-5" />
+                        Provider Organization (from Response)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Name</Label>
+                          <p className="font-medium">{provider.name || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">License ID</Label>
+                          <p className="font-mono">{provider.identifier || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Provider Type</Label>
+                          <p className="font-medium">{provider.providerType || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Status</Label>
+                          <Badge variant={provider.active ? 'default' : 'secondary'} 
+                                 className={provider.active ? 'bg-green-500' : ''}>
+                            {provider.active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {provider.address && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">Address</Label>
+                            <p className="font-medium mt-1">{provider.address.text || provider.address.line?.join(', ') || '-'}</p>
+                            <p className="text-sm text-gray-500">
+                              {[provider.address.city, provider.address.state, provider.address.country].filter(Boolean).join(', ')}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Insurer Organization Details from Response */}
+              {(() => {
+                const insurer = getInsurerFromResponse();
+                if (!insurer) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Insurer Organization (from Response)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-gray-500">Name</Label>
+                          <p className="font-medium">{insurer.name || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">License ID</Label>
+                          <p className="font-mono">{insurer.identifier || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Organization Type</Label>
+                          <p className="font-medium">{insurer.organizationType || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500">Status</Label>
+                          <Badge variant={insurer.active ? 'default' : 'secondary'} 
+                                 className={insurer.active ? 'bg-green-500' : ''}>
+                            {insurer.active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {insurer.address && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div>
+                            <Label className="text-gray-500">Address</Label>
+                            <p className="font-medium mt-1">{insurer.address.text || insurer.address.line?.join(', ') || '-'}</p>
+                            <p className="text-sm text-gray-500">
+                              {[insurer.address.city, insurer.address.state, insurer.address.country].filter(Boolean).join(', ')}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
             </div>
           )}
 
@@ -2161,6 +2908,203 @@ export default function ClaimDetails() {
                               </ul>
                             </div>
                           )}
+
+                          {/* Adjudication Details from bundle_json */}
+                          {(() => {
+                            const bundle = typeof resp.bundle_json === 'string' 
+                              ? (() => { try { return JSON.parse(resp.bundle_json); } catch { return null; } })() 
+                              : resp.bundle_json;
+                            if (!bundle) return null;
+
+                            let claimResp = null;
+                            if (bundle?.resourceType === 'Bundle') {
+                              claimResp = bundle?.entry?.find(
+                                e => e.resource?.resourceType === 'ClaimResponse'
+                              )?.resource;
+                            } else if (bundle?.resourceType === 'ClaimResponse') {
+                              claimResp = bundle;
+                            }
+                            if (!claimResp) return null;
+
+                            const overallOutcome = claimResp.extension?.find(
+                              ext => ext.url?.includes('extension-adjudication-outcome')
+                            )?.valueCodeableConcept?.coding?.[0];
+                            const overallCode = overallOutcome?.code;
+                            const overallDisplay = overallOutcome?.display || overallCode;
+
+                            const outcomeColors = {
+                              approved: 'bg-green-500',
+                              partial: 'bg-orange-500',
+                              rejected: 'bg-red-500',
+                              denied: 'bg-red-500',
+                              queued: 'bg-blue-500'
+                            };
+
+                            const totals = claimResp.total || [];
+                            const getTotal = (code) => totals.find(t => t.category?.coding?.[0]?.code === code)?.amount?.value;
+                            const totalSubmitted = getTotal('submitted');
+                            const totalBenefit = getTotal('benefit');
+                            const totalCopay = getTotal('copay');
+                            const totalTax = getTotal('tax');
+                            const totalPatientShare = getTotal('patientShare');
+
+                            const respItems = claimResp.item || [];
+
+                            return (
+                              <div className="mt-4 pt-4 border-t border-gray-200">
+                                {overallCode && (
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <span className="text-sm text-gray-500">Adjudication Outcome:</span>
+                                    <Badge className={`${outcomeColors[overallCode] || 'bg-gray-500'} text-white`}>
+                                      {overallDisplay}
+                                    </Badge>
+                                  </div>
+                                )}
+
+                                {totals.length > 0 && (
+                                  <div className="mb-4">
+                                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                                      Financial Summary
+                                    </p>
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                                      {totalSubmitted !== undefined && (
+                                        <div className="p-2 bg-gray-50 rounded">
+                                          <p className="text-gray-500 text-xs">Submitted</p>
+                                          <p className="font-medium">{formatAmount(totalSubmitted)}</p>
+                                        </div>
+                                      )}
+                                      {totalBenefit !== undefined && (
+                                        <div className="p-2 bg-green-50 rounded">
+                                          <p className="text-gray-500 text-xs">Benefit</p>
+                                          <p className="font-medium text-green-600">{formatAmount(totalBenefit)}</p>
+                                        </div>
+                                      )}
+                                      {totalCopay !== undefined && (
+                                        <div className="p-2 bg-gray-50 rounded">
+                                          <p className="text-gray-500 text-xs">Copay</p>
+                                          <p className="font-medium">{formatAmount(totalCopay)}</p>
+                                        </div>
+                                      )}
+                                      {totalTax !== undefined && (
+                                        <div className="p-2 bg-gray-50 rounded">
+                                          <p className="text-gray-500 text-xs">Tax</p>
+                                          <p className="font-medium">{formatAmount(totalTax)}</p>
+                                        </div>
+                                      )}
+                                      {totalPatientShare !== undefined && (
+                                        <div className="p-2 bg-gray-50 rounded">
+                                          <p className="text-gray-500 text-xs">Patient Share</p>
+                                          <p className="font-medium">{formatAmount(totalPatientShare)}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {respItems.length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                                      Item Adjudication ({respItems.length} item{respItems.length !== 1 ? 's' : ''})
+                                    </p>
+                                    <div className="space-y-3">
+                                      {respItems.map((ri, riIdx) => {
+                                        const itemOutcome = ri.extension?.find(
+                                          ext => ext.url?.includes('extension-adjudication-outcome')
+                                        )?.valueCodeableConcept?.coding?.[0];
+                                        const itemOutcomeCode = itemOutcome?.code;
+                                        const itemOutcomeDisplay = itemOutcome?.display || itemOutcomeCode;
+
+                                        const itemSubmitted = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'submitted')?.amount?.value;
+                                        const itemBenefit = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+                                        const itemApprovedQty = ri.adjudication?.find(a => a.category?.coding?.[0]?.code === 'approved-quantity')?.value;
+
+                                        const reasons = ri.adjudication
+                                          ?.filter(adj => adj.reason)
+                                          .map(adj => ({
+                                            category: adj.category?.coding?.[0]?.code,
+                                            code: adj.reason?.coding?.[0]?.code,
+                                            display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                                          })) || [];
+
+                                        const requestItem = claim.items?.find(it => it.sequence === ri.itemSequence);
+                                        const isPayerAdded = !requestItem;
+
+                                        const itemBorderColors = {
+                                          approved: 'border-green-200',
+                                          partial: 'border-orange-200',
+                                          rejected: 'border-red-200',
+                                          denied: 'border-red-200'
+                                        };
+
+                                        return (
+                                          <div key={riIdx} className={`p-3 border rounded-lg text-sm ${itemBorderColors[itemOutcomeCode] || 'border-gray-200'}`}>
+                                            <div className="flex items-center justify-between mb-2">
+                                              <div className="flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs font-medium">
+                                                  {ri.itemSequence}
+                                                </div>
+                                                <span className="font-medium">
+                                                  {requestItem?.product_or_service_code || `Item ${ri.itemSequence}`}
+                                                </span>
+                                                {isPayerAdded && (
+                                                  <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">
+                                                    Added by Payer
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                              <Badge className={`${outcomeColors[itemOutcomeCode] || 'bg-gray-500'} text-white text-xs`}>
+                                                {itemOutcomeDisplay || 'Unknown'}
+                                              </Badge>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-3 text-xs">
+                                              {itemSubmitted !== undefined && (
+                                                <div>
+                                                  <p className="text-gray-500">Submitted</p>
+                                                  <p className="font-medium">{formatAmount(itemSubmitted)}</p>
+                                                </div>
+                                              )}
+                                              {itemBenefit !== undefined && (
+                                                <div>
+                                                  <p className="text-gray-500">Benefit</p>
+                                                  <p className={`font-medium ${itemBenefit !== undefined && itemSubmitted !== undefined && itemBenefit < itemSubmitted ? 'text-orange-600' : 'text-green-600'}`}>
+                                                    {formatAmount(itemBenefit)}
+                                                  </p>
+                                                </div>
+                                              )}
+                                              {itemApprovedQty !== undefined && (
+                                                <div>
+                                                  <p className="text-gray-500">Approved Qty</p>
+                                                  <p className="font-medium text-purple-600">{itemApprovedQty}</p>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {reasons.length > 0 && (
+                                              <div className="mt-2 space-y-1">
+                                                {reasons.map((r, rIdx) => (
+                                                  <div key={rIdx} className="p-2 bg-orange-50 border border-orange-200 rounded text-xs">
+                                                    <div className="flex items-start gap-1.5">
+                                                      <AlertCircle className="h-3.5 w-3.5 text-orange-500 mt-0.5 flex-shrink-0" />
+                                                      <div>
+                                                        <span className="font-semibold text-orange-800">{r.code}</span>
+                                                        <span className="text-orange-700 ml-1">({r.category})</span>
+                                                        <p className="text-orange-700 mt-0.5">{r.display}</p>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}
