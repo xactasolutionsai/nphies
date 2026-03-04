@@ -799,8 +799,28 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       productOrServiceCoding.display = productDisplay;
     }
     
+    // Support shadow billing (dual coding) for unlisted/non-standard codes
+    // When shadow_code is present, add a secondary provider-specific coding
+    // HIC requires the shadow code .display to be the actual medication/service description
+    const productOrServiceCodings = [productOrServiceCoding];
+    if (item.shadow_code && item.shadow_code_system) {
+      const shadowCoding = {
+        system: item.shadow_code_system,
+        code: item.shadow_code
+      };
+      if (item.shadow_code_display && item.shadow_code_display.trim().toUpperCase() !== 'UNLISTED CODE') {
+        shadowCoding.display = item.shadow_code_display;
+      } else {
+        console.warn(`[PharmacyClaimMapper] WARNING: Item ${sequence} shadow code '${item.shadow_code}' is missing a proper display name. The .display must describe the actual medication/service, not 'UNLISTED CODE'.`);
+        if (item.shadow_code_display) {
+          shadowCoding.display = item.shadow_code_display;
+        }
+      }
+      productOrServiceCodings.push(shadowCoding);
+    }
+    
     claimItem.productOrService = {
-      coding: [productOrServiceCoding]
+      coding: productOrServiceCodings
     };
 
     // Serviced date

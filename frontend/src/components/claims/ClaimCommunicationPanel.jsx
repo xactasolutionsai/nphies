@@ -177,6 +177,13 @@ const ClaimCommunicationPanel = ({
   const [lastPollResponse, setLastPollResponse] = useState(null);
   const [pollRequestJsonCopied, setPollRequestJsonCopied] = useState(false);
   const [pollPreviewCopied, setPollPreviewCopied] = useState(false);
+  
+  // Poll bundle preview state
+  const [showPollPreview, setShowPollPreview] = useState(false);
+  const [pollBundle, setPollBundle] = useState(null);
+  const [pollMetadata, setPollMetadata] = useState(null);
+  const [isLoadingPollPreview, setIsLoadingPollPreview] = useState(false);
+  const [pollBundleCopied, setPollBundleCopied] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -202,6 +209,71 @@ const ClaimCommunicationPanel = ({
       setError('Failed to load communication data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Refresh data from database
+  const handleRefresh = async () => {
+    setIsPolling(true);
+    setError(null);
+    try {
+      await loadData();
+    } catch (err) {
+      console.error('Error refreshing data:', err);
+      setError('Failed to refresh data');
+    } finally {
+      setIsPolling(false);
+    }
+  };
+
+  // Preview poll bundle (without sending) - uses claim-specific API if available, falls back to local generation
+  const handlePreviewPollBundle = async () => {
+    setIsLoadingPollPreview(true);
+    setError(null);
+    try {
+      if (api.previewClaimPollBundle) {
+        const result = await api.previewClaimPollBundle(claimId);
+        setPollBundle(result.bundle);
+        setPollMetadata(result.metadata);
+      } else {
+        const bundle = generatePollRequestBundle();
+        setPollBundle(bundle);
+        setPollMetadata({ claimId, nphiesClaimId, status: claimStatus });
+      }
+      setShowPollPreview(true);
+    } catch (err) {
+      console.error('Error fetching poll bundle preview:', err);
+      const bundle = generatePollRequestBundle();
+      setPollBundle(bundle);
+      setPollMetadata({ claimId, nphiesClaimId, status: claimStatus });
+      setShowPollPreview(true);
+    } finally {
+      setIsLoadingPollPreview(false);
+    }
+  };
+
+  // Copy poll bundle to clipboard
+  const copyPollBundleToClipboard = async () => {
+    setIsLoadingPollPreview(true);
+    try {
+      let bundle;
+      if (api.previewClaimPollBundle) {
+        const result = await api.previewClaimPollBundle(claimId);
+        bundle = result.bundle;
+      } else {
+        bundle = generatePollRequestBundle();
+      }
+      await navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+      setPollBundleCopied(true);
+      setTimeout(() => setPollBundleCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy poll bundle:', err);
+      const bundle = generatePollRequestBundle();
+      await navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+      setPollBundleCopied(true);
+      setTimeout(() => setPollBundleCopied(false), 2000);
+    } finally {
+      setIsLoadingPollPreview(false);
     }
   };
 
@@ -929,6 +1001,49 @@ const ClaimCommunicationPanel = ({
                 )}
               </button>
             )}
+            {/* Preview Poll Bundle Button */}
+            <button
+              onClick={handlePreviewPollBundle}
+              disabled={isLoadingPollPreview}
+              className="flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              title="Preview Poll Bundle"
+            >
+              <Eye className="w-4 h-4 mr-1" />
+              Preview
+            </button>
+            {/* Copy Poll Bundle Button */}
+            <button
+              onClick={copyPollBundleToClipboard}
+              disabled={isLoadingPollPreview}
+              className={`flex items-center px-3 py-2 border rounded-lg transition-colors disabled:opacity-50 ${
+                pollBundleCopied 
+                  ? 'border-green-500 text-green-700 bg-green-50' 
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+              title="Copy Poll Bundle JSON"
+            >
+              {pollBundleCopied ? (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 mr-1" />
+                  Copy Bundle
+                </>
+              )}
+            </button>
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefresh}
+              disabled={isPolling}
+              className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Refresh data from database"
+            >
+              <RefreshCw className={`w-4 h-4 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
           </div>
         </div>
       </div>
@@ -955,6 +1070,18 @@ const ClaimCommunicationPanel = ({
           </div>
         </div>
       )}
+
+      {/* System Poll Info */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <div className="flex items-center">
+          <RefreshCw className="w-4 h-4 text-blue-600 mr-2 flex-shrink-0" />
+          <p className="text-blue-800 text-sm">
+            Polling is also available via the{' '}
+            <a href="/system-poll" className="font-semibold underline hover:text-blue-900">System Poll</a> service.
+            After sending a communication, use System Poll or the "Poll for Updates" button above to retrieve responses. Click "Refresh" below to reload data from the database.
+          </p>
+        </div>
+      </div>
 
       {/* Error Display */}
       {error && (
@@ -1803,58 +1930,73 @@ const ClaimCommunicationPanel = ({
                     )}
 
                     {/* Response Summary - Show key info from response_bundle */}
-                    {comm.response_bundle && (
+                    {comm.response_bundle ? (
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <p className="text-xs font-medium text-gray-500 mb-2">NPHIES Response:</p>
-                        <div className="bg-white rounded border p-3 space-y-2">
-                          {/* Extract MessageHeader response info */}
-                          {(() => {
-                            const responseBundle = typeof comm.response_bundle === 'string' 
-                              ? JSON.parse(comm.response_bundle) 
-                              : comm.response_bundle;
-                            const messageHeader = responseBundle.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
-                            const responseCode = messageHeader?.response?.code;
-                            const eventCode = messageHeader?.eventCoding?.code;
-                            
-                            return (
-                              <>
-                                <div className="flex items-center gap-3">
-                                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                    responseCode === 'ok' 
-                                      ? 'bg-green-100 text-green-800' 
-                                      : responseCode === 'fatal-error' 
-                                        ? 'bg-red-100 text-red-800'
-                                        : 'bg-yellow-100 text-yellow-800'
-                                  }`}>
-                                    {responseCode === 'ok' ? (
-                                      <CheckCircle className="w-3 h-3 mr-1" />
-                                    ) : (
-                                      <AlertCircle className="w-3 h-3 mr-1" />
-                                    )}
-                                    {responseCode?.toUpperCase() || 'PENDING'}
-                                  </span>
-                                  {eventCode && (
-                                    <span className="text-xs text-gray-500">
-                                      Event: {eventCode}
+                        {comm.response_bundle._fallback ? (
+                          <div className="bg-red-50 rounded border border-red-200 p-2">
+                            <p className="text-xs text-red-700 flex items-center">
+                              <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
+                              No response bundle received
+                              {comm.response_bundle.status && <span className="ml-1">(HTTP {comm.response_bundle.status})</span>}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-white rounded border p-3 space-y-2">
+                            {(() => {
+                              const responseBundle = typeof comm.response_bundle === 'string' 
+                                ? JSON.parse(comm.response_bundle) 
+                                : comm.response_bundle;
+                              const messageHeader = responseBundle.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+                              const responseCode = messageHeader?.response?.code;
+                              const eventCode = messageHeader?.eventCoding?.code;
+                              
+                              return (
+                                <>
+                                  <div className="flex items-center gap-3">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                      responseCode === 'ok' 
+                                        ? 'bg-green-100 text-green-800' 
+                                        : responseCode === 'fatal-error' 
+                                          ? 'bg-red-100 text-red-800'
+                                          : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {responseCode === 'ok' ? (
+                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                      ) : (
+                                        <AlertCircle className="w-3 h-3 mr-1" />
+                                      )}
+                                      {responseCode?.toUpperCase() || 'PENDING'}
                                     </span>
+                                    {eventCode && (
+                                      <span className="text-xs text-gray-500">
+                                        Event: {eventCode}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {messageHeader?.response?.identifier && (
+                                    <p className="text-xs text-gray-600">
+                                      Response to: {messageHeader.response.identifier}
+                                    </p>
                                   )}
-                                </div>
-                                {messageHeader?.response?.identifier && (
-                                  <p className="text-xs text-gray-600">
-                                    Response to: {messageHeader.response.identifier}
-                                  </p>
-                                )}
-                                {/* Check for queued-messages tag */}
-                                {messageHeader?.meta?.tag?.some(t => t.code === 'queued-messages') && (
-                                  <p className="text-xs text-blue-600 flex items-center">
-                                    <Clock className="w-3 h-3 mr-1" />
-                                    Message queued for processing
-                                  </p>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
+                                  {messageHeader?.meta?.tag?.some(t => t.code === 'queued-messages') && (
+                                    <p className="text-xs text-blue-600 flex items-center">
+                                      <Clock className="w-3 h-3 mr-1" />
+                                      Message queued for processing
+                                    </p>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-xs text-gray-400 flex items-center">
+                          <AlertCircle className="w-3 h-3 mr-1" />
+                          No NPHIES response bundle received
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1902,6 +2044,14 @@ const ClaimCommunicationPanel = ({
                     <p className="font-mono text-gray-900 break-all text-xs">{selectedCommunication.communication_id}</p>
                   </div>
                   <div>
+                    <span className="text-gray-500">NPHIES Communication ID:</span>
+                    <p className="font-mono text-gray-900 break-all text-xs">
+                      {selectedCommunication.nphies_communication_id || 
+                        <span className="text-gray-400 italic">Not assigned</span>
+                      }
+                    </p>
+                  </div>
+                  <div>
                     <span className="text-gray-500">Type:</span>
                     <p className="font-medium">
                       <span className={`px-2 py-0.5 rounded text-xs ${
@@ -1918,8 +2068,144 @@ const ClaimCommunicationPanel = ({
                     <p>{getStatusBadge(selectedCommunication.status, selectedCommunication.acknowledgment_received, selectedCommunication.acknowledgment_status)}</p>
                   </div>
                   <div>
+                    <span className="text-gray-500">Category:</span>
+                    <p className="font-medium capitalize">{selectedCommunication.category || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Priority:</span>
+                    <p className="font-medium capitalize">{selectedCommunication.priority || 'routine'}</p>
+                  </div>
+                  <div>
                     <span className="text-gray-500">Sent At:</span>
                     <p className="font-medium">{formatDate(selectedCommunication.sent_at)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Acknowledgment Received:</span>
+                    <p className="font-medium">
+                      {selectedCommunication.acknowledgment_received ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                          ✓ Yes
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
+                          No
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Acknowledgment Status:</span>
+                    <p className="font-medium">
+                      {selectedCommunication.acknowledgment_status ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
+                          selectedCommunication.acknowledgment_status === 'ok' 
+                            ? 'bg-green-100 text-green-800'
+                            : selectedCommunication.acknowledgment_status === 'transient-error'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {selectedCommunication.acknowledgment_status === 'ok' ? '✓ OK' : selectedCommunication.acknowledgment_status?.toUpperCase()}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </p>
+                  </div>
+                  {selectedCommunication.acknowledgment_at && (
+                    <div>
+                      <span className="text-gray-500">Acknowledged At:</span>
+                      <p className="font-medium text-green-600">{formatDate(selectedCommunication.acknowledgment_at)}</p>
+                    </div>
+                  )}
+                  {selectedCommunication.created_at && (
+                    <div>
+                      <span className="text-gray-500">Created At:</span>
+                      <p className="font-medium text-gray-600">{formatDate(selectedCommunication.created_at)}</p>
+                    </div>
+                  )}
+                  {selectedCommunication.updated_at && (
+                    <div>
+                      <span className="text-gray-500">Updated At:</span>
+                      <p className="font-medium text-gray-600">{formatDate(selectedCommunication.updated_at)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Related References */}
+              {(selectedCommunication.claim_id || selectedCommunication.patient_id || selectedCommunication.based_on_request_id || selectedCommunication.based_on_request_nphies_id) && (
+                <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                  <h4 className="text-sm font-semibold text-purple-700 mb-3 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Related References
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    {selectedCommunication.claim_id && (
+                      <div>
+                        <span className="text-gray-500">Claim ID:</span>
+                        <p className="font-mono text-purple-800 break-all text-xs">{selectedCommunication.claim_id}</p>
+                      </div>
+                    )}
+                    {selectedCommunication.patient_id && (
+                      <div>
+                        <span className="text-gray-500">Patient ID:</span>
+                        <p className="font-mono text-purple-800 break-all text-xs">{selectedCommunication.patient_id}</p>
+                      </div>
+                    )}
+                    {selectedCommunication.based_on_request_id && (
+                      <div>
+                        <span className="text-gray-500">Based On Request ID:</span>
+                        <p className="font-mono text-purple-800 break-all text-xs">{selectedCommunication.based_on_request_id}</p>
+                      </div>
+                    )}
+                    {selectedCommunication.based_on_request_nphies_id && (
+                      <div>
+                        <span className="text-gray-500">Based On Request NPHIES ID:</span>
+                        <p className="font-mono text-purple-800 break-all text-xs">{selectedCommunication.based_on_request_nphies_id}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* About Reference */}
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <h4 className="text-sm font-semibold text-blue-700 mb-3 flex items-center">
+                  <FileText className="w-4 h-4 mr-2" />
+                  About Reference (Claim)
+                </h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Reference Type:</span>
+                    <p className="font-medium">{selectedCommunication.about_type || 'Claim'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Reference Value:</span>
+                    <p className="font-mono text-blue-800 break-all">{selectedCommunication.about_reference || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sender & Recipient */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                  <h4 className="text-sm font-semibold text-green-700 mb-2 flex items-center">
+                    <Send className="w-4 h-4 mr-2" />
+                    Sender (Provider)
+                  </h4>
+                  <div className="text-sm space-y-1">
+                    <p><span className="text-gray-500">Type:</span> {selectedCommunication.sender_type}</p>
+                    <p><span className="text-gray-500">ID:</span> <span className="font-mono">{selectedCommunication.sender_identifier}</span></p>
+                  </div>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                  <h4 className="text-sm font-semibold text-orange-700 mb-2 flex items-center">
+                    <Inbox className="w-4 h-4 mr-2" />
+                    Recipient (Insurer)
+                  </h4>
+                  <div className="text-sm space-y-1">
+                    <p><span className="text-gray-500">Type:</span> {selectedCommunication.recipient_type}</p>
+                    <p><span className="text-gray-500">ID:</span> <span className="font-mono">{selectedCommunication.recipient_identifier}</span></p>
                   </div>
                 </div>
               </div>
@@ -1950,10 +2236,51 @@ const ClaimCommunicationPanel = ({
                           </p>
                         )}
                         {payload.content_type === 'attachment' && (
-                          <div className="flex items-center text-sm text-gray-700">
-                            <Paperclip className="w-4 h-4 mr-2 text-gray-400" />
-                            <span>{payload.attachment_title || 'Attachment'}</span>
+                          <div className="space-y-2">
+                            <div className="flex items-center text-sm text-gray-700">
+                              <Paperclip className="w-4 h-4 mr-2 text-gray-400" />
+                              <span>{payload.attachment_title || 'Attachment'}</span>
+                              {payload.attachment_content_type && (
+                                <span className="ml-2 text-xs text-gray-500">({payload.attachment_content_type})</span>
+                              )}
+                            </div>
+                            {payload.attachment_size && (
+                              <p className="text-xs text-gray-500">
+                                Size: {(payload.attachment_size / 1024).toFixed(2)} KB
+                              </p>
+                            )}
+                            {payload.attachment_url && (
+                              <p className="text-xs text-gray-500 break-all">
+                                URL: <a href={payload.attachment_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{payload.attachment_url}</a>
+                              </p>
+                            )}
+                            {payload.attachment_hash && (
+                              <p className="text-xs text-gray-500 font-mono">
+                                Hash: {payload.attachment_hash}
+                              </p>
+                            )}
                           </div>
+                        )}
+                        {(payload.reference_value || payload.reference_type) && (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-xs text-gray-500 mb-1">Reference:</p>
+                            {payload.reference_type && (
+                              <p className="text-xs text-gray-600">Type: {payload.reference_type}</p>
+                            )}
+                            {payload.reference_value && (
+                              <p className="text-xs text-gray-600 font-mono break-all">Value: {payload.reference_value}</p>
+                            )}
+                          </div>
+                        )}
+                        {payload.claim_item_sequences && payload.claim_item_sequences.length > 0 && (
+                          <p className="text-xs text-gray-500 mt-2">
+                            Related items: #{payload.claim_item_sequences.join(', #')}
+                          </p>
+                        )}
+                        {payload.created_at && (
+                          <p className="text-xs text-gray-400 mt-2">
+                            Created: {formatDate(payload.created_at)}
+                          </p>
                         )}
                       </div>
                     ))}
@@ -1961,22 +2288,180 @@ const ClaimCommunicationPanel = ({
                 </div>
               )}
 
-              {/* Response Bundle */}
-              {selectedCommunication.response_bundle && (
+              {/* NPHIES Response Details */}
+              {selectedCommunication.response_bundle ? (
                 <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
                   <h4 className="text-sm font-semibold text-indigo-700 mb-3 flex items-center">
                     <CheckCircle className="w-4 h-4 mr-2" />
                     NPHIES Response
                   </h4>
+                  {(() => {
+                    const response = selectedCommunication.response_bundle;
+                    
+                    if (response._fallback) {
+                      return (
+                        <div className="bg-white rounded-lg p-3 border border-red-200">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-sm font-medium text-red-800">NPHIES did not return a response bundle</p>
+                              <p className="text-xs text-red-600 mt-1">{response.message}</p>
+                              {response.status && (
+                                <p className="text-xs text-gray-600 mt-1">HTTP Status: <code className="bg-gray-100 px-1 rounded">{response.status}</code></p>
+                              )}
+                              {response.error && (
+                                <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-700 font-mono break-all">
+                                  {typeof response.error === 'string' ? response.error : JSON.stringify(response.error, null, 2)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    
+                    const messageHeader = response.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+                    
+                    return (
+                      <div className="space-y-3">
+                        <div className="bg-white rounded-lg p-3 border border-indigo-200">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-gray-500">Response Code:</span>
+                              <p className="font-medium">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
+                                  messageHeader?.response?.code === 'ok' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {messageHeader?.response?.code === 'ok' ? (
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                  ) : (
+                                    <AlertCircle className="w-3 h-3 mr-1" />
+                                  )}
+                                  {messageHeader?.response?.code?.toUpperCase() || 'N/A'}
+                                </span>
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Event:</span>
+                              <p className="font-mono text-sm">{messageHeader?.eventCoding?.code || '-'}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Response To:</span>
+                              <p className="font-mono text-sm break-all">{messageHeader?.response?.identifier || '-'}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Timestamp:</span>
+                              <p className="text-sm">{formatDate(response.timestamp)}</p>
+                            </div>
+                          </div>
+                          
+                          {messageHeader?.meta?.tag && messageHeader.meta.tag.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-gray-200">
+                              <span className="text-xs text-gray-500">Tags:</span>
+                              <div className="flex flex-wrap gap-2 mt-1">
+                                {messageHeader.meta.tag.map((tag, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
+                                    {tag.code}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-white rounded-lg p-3 border border-gray-200">
+                            <span className="text-xs text-gray-500">Response From:</span>
+                            <p className="font-mono text-sm">{messageHeader?.sender?.identifier?.value || '-'}</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 border border-gray-200">
+                            <span className="text-xs text-gray-500">Response To:</span>
+                            <p className="font-mono text-sm">{messageHeader?.destination?.[0]?.receiver?.identifier?.value || '-'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <h4 className="text-sm font-semibold text-gray-500 mb-2 flex items-center">
+                    <AlertCircle className="w-4 h-4 mr-2 text-gray-400" />
+                    NPHIES Response
+                  </h4>
+                  <p className="text-sm text-gray-500">
+                    No response bundle was received from NPHIES for this communication.
+                    This can happen if NPHIES returned a server error (5xx) or the request timed out.
+                  </p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Try sending the communication again or check the server logs for more details.
+                  </p>
+                </div>
+              )}
+
+              {/* Acknowledgment Bundle */}
+              {selectedCommunication.acknowledgment_bundle && (
+                <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                  <h4 className="text-sm font-semibold text-amber-700 mb-3 flex items-center">
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Acknowledgment Bundle
+                  </h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Full acknowledgment bundle received from NPHIES
+                  </p>
                   <button
-                    onClick={() => handleViewJson(selectedCommunication.response_bundle, 'Communication Response Bundle')}
+                    onClick={() => {
+                      setPreviewJson(selectedCommunication.acknowledgment_bundle);
+                      setPreviewMetadata(null);
+                      setPreviewJsonTitle('Acknowledgment Bundle');
+                      setShowJsonPreview(true);
+                    }}
+                    className="flex items-center px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors text-sm"
+                  >
+                    <Code className="w-4 h-4 mr-2" />
+                    View Acknowledgment Bundle JSON
+                  </button>
+                </div>
+              )}
+
+              {/* View Raw JSON Buttons */}
+              <div className="flex justify-center gap-3">
+                {selectedCommunication.request_bundle && (
+                  <button
+                    onClick={() => {
+                      setPreviewJson(selectedCommunication.request_bundle);
+                      setPreviewMetadata(null);
+                      setPreviewJsonTitle('Communication Request Bundle');
+                      setShowJsonPreview(true);
+                    }}
+                    className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                  >
+                    <Code className="w-4 h-4 mr-2" />
+                    View Request Bundle JSON
+                  </button>
+                )}
+                {selectedCommunication.response_bundle ? (
+                  <button
+                    onClick={() => {
+                      setPreviewJson(selectedCommunication.response_bundle);
+                      setPreviewMetadata(null);
+                      setPreviewJsonTitle('Communication Response Bundle');
+                      setShowJsonPreview(true);
+                    }}
                     className="flex items-center px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm"
                   >
                     <Code className="w-4 h-4 mr-2" />
                     View Response Bundle JSON
                   </button>
-                </div>
-              )}
+                ) : (
+                  <span className="flex items-center px-4 py-2 bg-gray-50 text-gray-400 rounded-lg text-sm border border-dashed border-gray-300 cursor-not-allowed">
+                    <Code className="w-4 h-4 mr-2" />
+                    No Response Bundle
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Modal Footer */}
@@ -2002,7 +2487,9 @@ const ClaimCommunicationPanel = ({
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center">
                 <Code className="w-5 h-5 text-blue-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900">{previewJsonTitle || 'JSON Preview'}</h3>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {previewJsonTitle || (previewMetadata ? 'FHIR Communication Bundle (Server Preview)' : 'JSON Preview')}
+                </h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -2041,6 +2528,34 @@ const ClaimCommunicationPanel = ({
                 </button>
               </div>
             </div>
+
+            {/* Metadata Panel (if from server) */}
+            {previewMetadata && (
+              <div className="p-4 bg-blue-50 border-b border-blue-200">
+                <h4 className="text-sm font-semibold text-blue-800 mb-2">Bundle Metadata (from database)</h4>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Provider:</span>
+                    <span className="ml-2 font-medium text-gray-900">{previewMetadata.provider?.name || 'N/A'}</span>
+                    <span className="ml-1 text-xs text-blue-600">({previewMetadata.provider?.nphies_id || 'No NPHIES ID'})</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Insurer:</span>
+                    <span className="ml-2 font-medium text-gray-900">{previewMetadata.insurer?.name || 'N/A'}</span>
+                    <span className="ml-1 text-xs text-blue-600">({previewMetadata.insurer?.nphies_id || 'No NPHIES ID'})</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Patient:</span>
+                    <span className="ml-2 font-medium text-gray-900">{previewMetadata.patient?.name || 'N/A'}</span>
+                  </div>
+                </div>
+                {(!previewMetadata.provider?.nphies_id || !previewMetadata.insurer?.nphies_id) && (
+                  <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-yellow-800 text-xs">
+                    Warning: Missing NPHIES IDs may cause errors like BV-00176 or GE-00010
+                  </div>
+                )}
+              </div>
+            )}
             
             <div className="flex-1 overflow-auto p-4 bg-gray-900">
               <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">
@@ -2048,9 +2563,125 @@ const ClaimCommunicationPanel = ({
               </pre>
             </div>
             
-            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+              <div className="text-sm text-gray-500">
+                {previewMetadata ? (
+                  <span className="text-green-600">This is the actual bundle that will be sent to NPHIES</span>
+                ) : previewJsonTitle ? null : (
+                  <span className="text-yellow-600">Local preview. Server preview unavailable.</span>
+                )}
+              </div>
               <button
                 onClick={() => setShowJsonPreview(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Poll Bundle Preview Modal */}
+      {showPollPreview && pollBundle && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center">
+                <Code className="w-5 h-5 text-purple-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  NPHIES Poll Request Bundle
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(JSON.stringify(pollBundle, null, 2));
+                      setPollBundleCopied(true);
+                      setTimeout(() => setPollBundleCopied(false), 2000);
+                    } catch (err) {
+                      console.error('Failed to copy:', err);
+                    }
+                  }}
+                  className={`flex items-center px-3 py-1.5 rounded-lg transition-colors ${
+                    pollBundleCopied 
+                      ? 'bg-green-100 text-green-700' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {pollBundleCopied ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-1" />
+                      Copy
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowPollPreview(false)}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Metadata Panel */}
+            {pollMetadata && (
+              <div className="p-4 bg-purple-50 border-b border-purple-200">
+                <h4 className="text-sm font-semibold text-purple-800 mb-2">Poll Request Details</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Claim ID:</span>
+                    <span className="ml-2 font-medium text-gray-900">{pollMetadata.claimId || claimId}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">NPHIES Claim ID:</span>
+                    <span className="ml-2 font-medium text-gray-900">{pollMetadata.nphiesClaimId || nphiesClaimId || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Status:</span>
+                    <span className="ml-2 font-medium text-gray-900">{pollMetadata.status || claimStatus}</span>
+                  </div>
+                  {pollMetadata.provider && (
+                    <div>
+                      <span className="text-gray-600">Provider:</span>
+                      <span className="ml-2 font-medium text-gray-900">{pollMetadata.provider?.name || 'N/A'}</span>
+                      <span className="ml-1 text-xs text-purple-600">({pollMetadata.provider?.nphiesId || 'No NPHIES ID'})</span>
+                    </div>
+                  )}
+                  {pollMetadata.requestNumber && (
+                    <div>
+                      <span className="text-gray-600">Request Number:</span>
+                      <span className="ml-2 font-medium text-gray-900">{pollMetadata.requestNumber}</span>
+                    </div>
+                  )}
+                  {pollMetadata.messageTypes && (
+                    <div>
+                      <span className="text-gray-600">Message Types:</span>
+                      <span className="ml-2 font-medium text-gray-900">{pollMetadata.messageTypes?.join(', ')}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex-1 overflow-auto p-4 bg-gray-900">
+              <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">
+                {JSON.stringify(pollBundle, null, 2)}
+              </pre>
+            </div>
+            
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+              <div className="text-sm text-gray-500">
+                <span className="text-purple-600">This is the poll bundle that will be sent to NPHIES when you click "Poll for Updates"</span>
+              </div>
+              <button
+                onClick={() => setShowPollPreview(false)}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Close

@@ -1244,6 +1244,9 @@ class ClaimBatchesController extends BaseController {
       product_or_service_display: item.product_or_service_display,
       quantity: item.quantity || 1,
       unit_price: item.unit_price,
+      factor: item.factor || 1,
+      tax: item.tax || 0,
+      patient_share: item.patient_share || 0,
       net_amount: item.adjudication_amount || item.net_amount,
       serviced_date: item.serviced_date,
       body_site_code: item.body_site_code,
@@ -1253,8 +1256,19 @@ class ClaimBatchesController extends BaseController {
       eye: item.eye,
       medication_code: item.medication_code,
       medication_system: item.medication_system,
+      medication_name: item.medication_name,
       days_supply: item.days_supply,
-      information_sequences: item.information_sequences
+      information_sequences: item.information_sequences,
+      item_type: item.item_type || 'medication',
+      is_package: item.is_package || false,
+      is_maternity: item.is_maternity || false,
+      patient_invoice: item.patient_invoice,
+      shadow_code: item.shadow_code,
+      shadow_code_system: item.shadow_code_system,
+      shadow_code_display: item.shadow_code_display,
+      prescribed_medication_code: item.prescribed_medication_code,
+      pharmacist_selection_reason: item.pharmacist_selection_reason,
+      pharmacist_substitute: item.pharmacist_substitute
     }];
 
     // Build coverage object
