@@ -969,170 +969,53 @@ export default function ClaimDetails() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 items-start">
-          {/* Primary Actions Group */}
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={handleLoadBundle} disabled={actionLoading} size="sm">
-              <Code className="h-4 w-4 mr-1.5" />
-              <span className="hidden sm:inline">View FHIR Bundle</span>
-              <span className="sm:hidden">Bundle</span>
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button variant="outline" size="sm" onClick={handleLoadBundle} disabled={actionLoading}>
+            <Code className="h-4 w-4 mr-1" />
+            FHIR Bundle
+          </Button>
+          
+          {(claim.status === 'draft' || claim.status === 'error') && (
+            <Button size="sm" onClick={handleSendToNphies} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
+              <Send className="h-4 w-4 mr-1" />
+              Send
             </Button>
-            
-            {(claim.status === 'draft' || claim.status === 'error') && (
-              <Button onClick={handleSendToNphies} disabled={actionLoading} size="sm" className="bg-blue-500 hover:bg-blue-600">
-                <Send className="h-4 w-4 mr-1.5" />
-                <span className="hidden sm:inline">Send to NPHIES</span>
-                <span className="sm:hidden">Send</span>
-              </Button>
-            )}
-            
-            {claim.status === 'queued' && (
-              <Button onClick={loadClaim} disabled={actionLoading} size="sm">
-                <RefreshCw className={`h-4 w-4 mr-1.5 ${actionLoading ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">Refresh Status</span>
-                <span className="sm:hidden">Refresh</span>
-              </Button>
-            )}
-            
-            {/* Cancel button */}
-            {(claim.status === 'approved' || claim.status === 'queued' || claim.status === 'pended' || claim.adjudication_outcome === 'approved') && 
-             claim.status !== 'cancelled' && claim.status !== 'paid' && (
-              <Button 
-                variant="outline" 
-                onClick={() => setShowCancelDialog(true)} 
-                disabled={actionLoading}
-                size="sm"
-                className="text-red-500 border-red-300 hover:bg-red-50"
-              >
-                <XCircle className="h-4 w-4 mr-1.5" />
-                Cancel
-              </Button>
-            )}
-          </div>
-
-          {/* Separator */}
-          <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
-
-          {/* Payment Actions Group */}
-          <div className="flex gap-2 flex-wrap">
-            {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
-              <Button 
-                onClick={handleSimulatePayment} 
-                disabled={simulatingPayment}
-                variant="outline"
-                size="sm"
-                className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
-              >
-                {simulatingPayment ? (
-                  <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
-                ) : (
-                  <Banknote className="h-4 w-4 mr-1.5" />
-                )}
-                <span className="hidden sm:inline">Simulate Payment</span>
-                <span className="sm:hidden">Simulate</span>
-              </Button>
-            )}
-            
+          )}
+          
+          <Button size="sm" variant="outline" onClick={() => navigate('/system-poll')}>
+            <RefreshCw className="h-4 w-4 mr-1" />
+            System Poll
+          </Button>
+          
+          {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
             <Button 
-              onClick={() => navigate('/system-poll')}
+              onClick={handleSimulatePayment} 
+              disabled={simulatingPayment}
               variant="outline"
               size="sm"
-              className="border-purple-500 text-purple-600 hover:bg-purple-50"
+              className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
             >
-              <RefreshCw className="h-4 w-4 mr-1.5" />
-              <span className="hidden sm:inline">System Poll</span>
-              <span className="sm:hidden">Poll</span>
+              {simulatingPayment ? (
+                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Banknote className="h-4 w-4 mr-1" />
+              )}
+              Simulate Payment
             </Button>
-          </div>
-
-          {/* Preview/Copy Actions - Dropdown Menu */}
-          {((claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') || lastSimulateBundle || lastPollBundle) && (
-            <>
-              <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
-              <div className="relative">
-                <Button 
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPreviewMenu(!showPreviewMenu)}
-                  className="border-gray-300"
-                >
-                  <MoreVertical className="h-4 w-4 mr-1.5" />
-                  <span className="hidden sm:inline">More</span>
-                  <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showPreviewMenu ? 'rotate-180' : ''}`} />
-                </Button>
-                
-                {/* Dropdown Menu */}
-                {showPreviewMenu && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-10" 
-                      onClick={() => setShowPreviewMenu(false)}
-                    ></div>
-                    <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
-                      {/* Preview Actions */}
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                        Preview JSON
-                      </div>
-                      {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
-                        <button
-                          onClick={() => {
-                            handlePreviewSimulate();
-                            setShowPreviewMenu(false);
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 flex items-center gap-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          Preview Simulate
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          handlePreviewPoll();
-                          setShowPreviewMenu(false);
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-cyan-600 hover:bg-cyan-50 flex items-center gap-2"
-                      >
-                        <Eye className="h-4 w-4" />
-                        Preview Poll
-                      </button>
-                      
-                      {/* Copy Actions */}
-                      {(lastSimulateBundle || lastPollBundle) && (
-                        <>
-                          <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-t border-gray-100 mt-1">
-                            Copy JSON
-                          </div>
-                          {lastSimulateBundle && (
-                            <button
-                              onClick={() => {
-                                handleCopySimulateBundle();
-                                setShowPreviewMenu(false);
-                              }}
-                              className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center gap-2"
-                            >
-                              <Copy className="h-4 w-4" />
-                              Copy Simulate JSON
-                            </button>
-                          )}
-                          {lastPollBundle && (
-                            <button
-                              onClick={() => {
-                                handleCopyPollBundle();
-                                setShowPreviewMenu(false);
-                              }}
-                              className="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2"
-                            >
-                              <Copy className="h-4 w-4" />
-                              Copy Poll JSON
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
+          )}
+          
+          {(claim.status === 'approved' || claim.status === 'queued' || claim.status === 'pended' || claim.adjudication_outcome === 'approved') && 
+           claim.status !== 'cancelled' && claim.status !== 'paid' && (
+            <Button 
+              variant="outline" 
+              onClick={() => setShowCancelDialog(true)} 
+              disabled={actionLoading}
+              size="sm"
+              className="text-red-500 border-red-300 hover:bg-red-50"
+            >
+              <XCircle className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
           )}
         </div>
       </div>
@@ -1165,8 +1048,8 @@ export default function ClaimDetails() {
               <Wallet className="h-4 w-4 mr-1 inline" />
               Payments {payments.length > 0 && `(${payments.length})`}
             </TabButton>
-            {/* Communications Tab - Show for queued, pended, or approved claims */}
-            {(claim.status === 'queued' || claim.status === 'pended' || claim.status === 'approved' || claim.adjudication_outcome === 'approved') && (
+            {/* Communications Tab - Show for queued, pended, approved, or partial claims */}
+            {(claim.status === 'queued' || claim.status === 'pended' || claim.status === 'approved' || claim.status === 'partial' || claim.adjudication_outcome === 'approved') && (
               <TabButton active={activeTab === 'communications'} onClick={() => setActiveTab('communications')}>
                 <MessageSquare className="h-4 w-4 mr-1 inline" />
                 Communications
@@ -3497,6 +3380,88 @@ export default function ClaimDetails() {
               </CardContent>
             </Card>
           )}
+
+          {/* Authorization Validity */}
+          {(() => {
+            const claimResponseDetails = getClaimResponseDetails();
+            if (!claimResponseDetails?.preAuthPeriod) return null;
+
+            const endDate = new Date(claimResponseDetails.preAuthPeriod.end);
+            const now = new Date();
+            const daysRemaining = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+            const isExpired = daysRemaining < 0;
+            const isExpiringSoon = daysRemaining >= 0 && daysRemaining <= 7;
+
+            return (
+              <Card className={isExpired ? 'border-red-300 bg-red-50' : isExpiringSoon ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'}>
+                <CardHeader>
+                  <CardTitle className={`text-lg flex items-center gap-2 ${isExpired ? 'text-red-700' : isExpiringSoon ? 'text-orange-700' : 'text-green-700'}`}>
+                    <Calendar className="h-5 w-5" />
+                    Authorization Validity
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Valid From</span>
+                    <span className="font-medium">{formatDate(claimResponseDetails.preAuthPeriod.start)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Valid Until</span>
+                    <span className="font-medium">{formatDate(claimResponseDetails.preAuthPeriod.end)}</span>
+                  </div>
+                  <hr className={isExpired ? 'border-red-200' : isExpiringSoon ? 'border-orange-200' : 'border-green-200'} />
+                  <div className="text-center">
+                    <Badge 
+                      variant={isExpired ? 'destructive' : isExpiringSoon ? 'secondary' : 'default'}
+                      className={`text-sm py-1 px-3 ${
+                        isExpired ? '' : 
+                        isExpiringSoon ? 'bg-orange-500 text-white' : 
+                        'bg-green-500'
+                      }`}
+                    >
+                      {isExpired 
+                        ? 'Expired' 
+                        : daysRemaining === 0 
+                          ? 'Expires Today' 
+                          : `${daysRemaining} days remaining`}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Timeline */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Timeline
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Created</span>
+                <span>{formatDateTime(claim.created_at)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Updated</span>
+                <span>{formatDateTime(claim.updated_at)}</span>
+              </div>
+              {claim.request_date && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Sent to NPHIES</span>
+                  <span>{formatDateTime(claim.request_date)}</span>
+                </div>
+              )}
+              {claim.response_date && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Response Received</span>
+                  <span>{formatDateTime(claim.response_date)}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 

@@ -993,6 +993,10 @@ class ApiService {
     });
   }
 
+  async previewClaimPollBundle(claimId) {
+    return this.request(`/claim-submissions/${claimId}/poll/preview`);
+  }
+
   /**
    * Poll for acknowledgment of a specific claim Communication
    * Use when communication has acknowledgment_status = 'queued'
