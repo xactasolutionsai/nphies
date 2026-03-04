@@ -905,7 +905,7 @@ class ClaimSubmissionsController extends BaseController {
 
       res.json({
         success: true,
-        communicationRequests: requests,
+        data: requests,
         count: requests.length,
         pendingCount: requests.filter(r => !r.responded_at).length
       });
@@ -976,7 +976,7 @@ class ClaimSubmissionsController extends BaseController {
 
       res.json({
         success: true,
-        communications: communications,
+        data: communications,
         count: communications.length
       });
 

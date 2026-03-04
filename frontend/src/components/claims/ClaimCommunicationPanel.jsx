@@ -1375,19 +1375,26 @@ const ClaimCommunicationPanel = ({
       {showResponsePreview && selectedCommunication && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50">
               <div className="flex items-center">
                 <MessageSquare className="w-5 h-5 text-indigo-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900">Communication Details</h3>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Communication Details
+                </h3>
               </div>
               <button
-                onClick={() => { setShowResponsePreview(false); setSelectedCommunication(null); }}
+                onClick={() => {
+                  setShowResponsePreview(false);
+                  setSelectedCommunication(null);
+                }}
                 className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
+            {/* Modal Body */}
             <div className="flex-1 overflow-auto p-4 space-y-6">
               {/* Communication Summary */}
               <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -1403,14 +1410,18 @@ const ClaimCommunicationPanel = ({
                   <div>
                     <span className="text-gray-500">NPHIES Communication ID:</span>
                     <p className="font-mono text-gray-900 break-all text-xs">
-                      {selectedCommunication.nphies_communication_id || <span className="text-gray-400 italic">Not assigned</span>}
+                      {selectedCommunication.nphies_communication_id || 
+                        <span className="text-gray-400 italic">Not assigned</span>
+                      }
                     </p>
                   </div>
                   <div>
                     <span className="text-gray-500">Type:</span>
                     <p className="font-medium">
                       <span className={`px-2 py-0.5 rounded text-xs ${
-                        selectedCommunication.communication_type === 'unsolicited' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                        selectedCommunication.communication_type === 'unsolicited' 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-purple-100 text-purple-800'
                       }`}>
                         {selectedCommunication.communication_type === 'unsolicited' ? 'Unsolicited' : 'Solicited'}
                       </span>
@@ -1433,43 +1444,64 @@ const ClaimCommunicationPanel = ({
                     <p className="font-medium">{formatDate(selectedCommunication.sent_at)}</p>
                   </div>
                   <div>
-                    <span className="text-gray-500">Acknowledgment:</span>
+                    <span className="text-gray-500">Acknowledgment Received:</span>
                     <p className="font-medium">
                       {selectedCommunication.acknowledgment_received ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">Yes</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                          ✓ Yes
+                        </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">No</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
+                          No
+                        </span>
                       )}
                     </p>
                   </div>
-                  {selectedCommunication.acknowledgment_status && (
-                    <div>
-                      <span className="text-gray-500">Acknowledgment Status:</span>
-                      <p className="font-medium">
+                  <div>
+                    <span className="text-gray-500">Acknowledgment Status:</span>
+                    <p className="font-medium">
+                      {selectedCommunication.acknowledgment_status ? (
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
-                          selectedCommunication.acknowledgment_status === 'ok' ? 'bg-green-100 text-green-800'
-                          : selectedCommunication.acknowledgment_status === 'transient-error' ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
+                          selectedCommunication.acknowledgment_status === 'ok' 
+                            ? 'bg-green-100 text-green-800'
+                            : selectedCommunication.acknowledgment_status === 'transient-error'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
                         }`}>
-                          {selectedCommunication.acknowledgment_status === 'ok' ? 'OK' : selectedCommunication.acknowledgment_status?.toUpperCase()}
+                          {selectedCommunication.acknowledgment_status === 'ok' ? '✓ OK' : selectedCommunication.acknowledgment_status?.toUpperCase()}
                         </span>
-                      </p>
-                    </div>
-                  )}
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </p>
+                  </div>
                   {selectedCommunication.acknowledgment_at && (
                     <div>
                       <span className="text-gray-500">Acknowledged At:</span>
                       <p className="font-medium text-green-600">{formatDate(selectedCommunication.acknowledgment_at)}</p>
                     </div>
                   )}
+                  {selectedCommunication.created_at && (
+                    <div>
+                      <span className="text-gray-500">Created At:</span>
+                      <p className="font-medium text-gray-600">{formatDate(selectedCommunication.created_at)}</p>
+                    </div>
+                  )}
+                  {selectedCommunication.updated_at && (
+                    <div>
+                      <span className="text-gray-500">Updated At:</span>
+                      <p className="font-medium text-gray-600">{formatDate(selectedCommunication.updated_at)}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Related References */}
-              {(selectedCommunication.claim_id || selectedCommunication.patient_id || selectedCommunication.based_on_request_id) && (
+              {(selectedCommunication.claim_id || selectedCommunication.patient_id || selectedCommunication.based_on_request_id || selectedCommunication.based_on_request_nphies_id) && (
                 <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                   <h4 className="text-sm font-semibold text-purple-700 mb-3 flex items-center">
-                    <FileText className="w-4 h-4 mr-2" />Related References
+                    <FileText className="w-4 h-4 mr-2" />
+                    Related References
                   </h4>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     {selectedCommunication.claim_id && (
@@ -1500,11 +1532,30 @@ const ClaimCommunicationPanel = ({
                 </div>
               )}
 
+              {/* About Reference */}
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <h4 className="text-sm font-semibold text-blue-700 mb-3 flex items-center">
+                  <FileText className="w-4 h-4 mr-2" />
+                  About Reference (Claim)
+                </h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Reference Type:</span>
+                    <p className="font-medium">{selectedCommunication.about_type || 'Claim'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Reference Value:</span>
+                    <p className="font-mono text-blue-800 break-all">{selectedCommunication.about_reference || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Sender & Recipient */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-green-50 rounded-lg p-4 border border-green-200">
                   <h4 className="text-sm font-semibold text-green-700 mb-2 flex items-center">
-                    <Send className="w-4 h-4 mr-2" />Sender (Provider)
+                    <Send className="w-4 h-4 mr-2" />
+                    Sender (Provider)
                   </h4>
                   <div className="text-sm space-y-1">
                     <p><span className="text-gray-500">Type:</span> {selectedCommunication.sender_type}</p>
@@ -1513,7 +1564,8 @@ const ClaimCommunicationPanel = ({
                 </div>
                 <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
                   <h4 className="text-sm font-semibold text-orange-700 mb-2 flex items-center">
-                    <Inbox className="w-4 h-4 mr-2" />Recipient (Insurer)
+                    <Inbox className="w-4 h-4 mr-2" />
+                    Recipient (Insurer)
                   </h4>
                   <div className="text-sm space-y-1">
                     <p><span className="text-gray-500">Type:</span> {selectedCommunication.recipient_type}</p>
@@ -1526,7 +1578,8 @@ const ClaimCommunicationPanel = ({
               {selectedCommunication.payloads && selectedCommunication.payloads.length > 0 && (
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                   <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                    <FileText className="w-4 h-4 mr-2" />Payloads ({selectedCommunication.payloads.length})
+                    <FileText className="w-4 h-4 mr-2" />
+                    Payloads ({selectedCommunication.payloads.length})
                   </h4>
                   <div className="space-y-3">
                     {selectedCommunication.payloads.map((payload, idx) => (
@@ -1534,13 +1587,17 @@ const ClaimCommunicationPanel = ({
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-medium text-gray-500">Payload #{payload.sequence || idx + 1}</span>
                           <span className={`px-2 py-0.5 rounded text-xs ${
-                            payload.content_type === 'string' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                            payload.content_type === 'string' 
+                              ? 'bg-blue-100 text-blue-700' 
+                              : 'bg-purple-100 text-purple-700'
                           }`}>
                             {payload.content_type === 'string' ? 'Text' : 'Attachment'}
                           </span>
                         </div>
                         {payload.content_type === 'string' && payload.content_string && (
-                          <p className="text-sm text-gray-800 bg-gray-50 p-2 rounded border">{payload.content_string}</p>
+                          <p className="text-sm text-gray-800 bg-gray-50 p-2 rounded border">
+                            {payload.content_string}
+                          </p>
                         )}
                         {payload.content_type === 'attachment' && (
                           <div className="space-y-2">
@@ -1552,12 +1609,42 @@ const ClaimCommunicationPanel = ({
                               )}
                             </div>
                             {payload.attachment_size && (
-                              <p className="text-xs text-gray-500">Size: {(payload.attachment_size / 1024).toFixed(2)} KB</p>
+                              <p className="text-xs text-gray-500">
+                                Size: {(payload.attachment_size / 1024).toFixed(2)} KB
+                              </p>
+                            )}
+                            {payload.attachment_url && (
+                              <p className="text-xs text-gray-500 break-all">
+                                URL: <a href={payload.attachment_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{payload.attachment_url}</a>
+                              </p>
+                            )}
+                            {payload.attachment_hash && (
+                              <p className="text-xs text-gray-500 font-mono">
+                                Hash: {payload.attachment_hash}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {(payload.reference_value || payload.reference_type) && (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-xs text-gray-500 mb-1">Reference:</p>
+                            {payload.reference_type && (
+                              <p className="text-xs text-gray-600">Type: {payload.reference_type}</p>
+                            )}
+                            {payload.reference_value && (
+                              <p className="text-xs text-gray-600 font-mono break-all">Value: {payload.reference_value}</p>
                             )}
                           </div>
                         )}
                         {payload.claim_item_sequences && payload.claim_item_sequences.length > 0 && (
-                          <p className="text-xs text-gray-500 mt-2">Related items: #{payload.claim_item_sequences.join(', #')}</p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            Related items: #{payload.claim_item_sequences.join(', #')}
+                          </p>
+                        )}
+                        {payload.created_at && (
+                          <p className="text-xs text-gray-400 mt-2">
+                            Created: {formatDate(payload.created_at)}
+                          </p>
                         )}
                       </div>
                     ))}
@@ -1565,14 +1652,16 @@ const ClaimCommunicationPanel = ({
                 </div>
               )}
 
-              {/* NPHIES Response */}
+              {/* NPHIES Response Details */}
               {selectedCommunication.response_bundle ? (
                 <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
                   <h4 className="text-sm font-semibold text-indigo-700 mb-3 flex items-center">
-                    <CheckCircle className="w-4 h-4 mr-2" />NPHIES Response
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    NPHIES Response
                   </h4>
                   {(() => {
                     const response = selectedCommunication.response_bundle;
+                    
                     if (response._fallback) {
                       return (
                         <div className="bg-white rounded-lg p-3 border border-red-200">
@@ -1581,6 +1670,14 @@ const ClaimCommunicationPanel = ({
                             <div>
                               <p className="text-sm font-medium text-red-800">NPHIES did not return a response bundle</p>
                               <p className="text-xs text-red-600 mt-1">{response.message}</p>
+                              {response.status && (
+                                <p className="text-xs text-gray-600 mt-1">HTTP Status: <code className="bg-gray-100 px-1 rounded">{response.status}</code></p>
+                              )}
+                              {response.error && (
+                                <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-700 font-mono break-all">
+                                  {typeof response.error === 'string' ? response.error : JSON.stringify(response.error, null, 2)}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1591,15 +1688,22 @@ const ClaimCommunicationPanel = ({
                     
                     return (
                       <div className="space-y-3">
+                        {/* Response Status */}
                         <div className="bg-white rounded-lg p-3 border border-indigo-200">
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
                               <span className="text-gray-500">Response Code:</span>
                               <p className="font-medium">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
-                                  messageHeader?.response?.code === 'ok' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  messageHeader?.response?.code === 'ok' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-red-100 text-red-800'
                                 }`}>
-                                  {messageHeader?.response?.code === 'ok' ? <CheckCircle className="w-3 h-3 mr-1" /> : <AlertCircle className="w-3 h-3 mr-1" />}
+                                  {messageHeader?.response?.code === 'ok' ? (
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                  ) : (
+                                    <AlertCircle className="w-3 h-3 mr-1" />
+                                  )}
                                   {messageHeader?.response?.code?.toUpperCase() || 'N/A'}
                                 </span>
                               </p>
@@ -1617,7 +1721,23 @@ const ClaimCommunicationPanel = ({
                               <p className="text-sm">{formatDate(response.timestamp)}</p>
                             </div>
                           </div>
+                          
+                          {/* Tags */}
+                          {messageHeader?.meta?.tag && messageHeader.meta.tag.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-gray-200">
+                              <span className="text-xs text-gray-500">Tags:</span>
+                              <div className="flex flex-wrap gap-2 mt-1">
+                                {messageHeader.meta.tag.map((tag, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
+                                    {tag.code}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
+
+                        {/* Sender/Receiver Info */}
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-white rounded-lg p-3 border border-gray-200">
                             <span className="text-xs text-gray-500">Response From:</span>
@@ -1635,9 +1755,16 @@ const ClaimCommunicationPanel = ({
               ) : (
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                   <h4 className="text-sm font-semibold text-gray-500 mb-2 flex items-center">
-                    <AlertCircle className="w-4 h-4 mr-2 text-gray-400" />NPHIES Response
+                    <AlertCircle className="w-4 h-4 mr-2 text-gray-400" />
+                    NPHIES Response
                   </h4>
-                  <p className="text-sm text-gray-500">No response bundle was received from NPHIES for this communication.</p>
+                  <p className="text-sm text-gray-500">
+                    No response bundle was received from NPHIES for this communication.
+                    This can happen if NPHIES returned a server error (5xx) or the request timed out.
+                  </p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Try sending the communication again or check the server logs for more details.
+                  </p>
                 </div>
               )}
 
@@ -1645,8 +1772,12 @@ const ClaimCommunicationPanel = ({
               {selectedCommunication.acknowledgment_bundle && (
                 <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
                   <h4 className="text-sm font-semibold text-amber-700 mb-3 flex items-center">
-                    <CheckCircle className="w-4 h-4 mr-2" />Acknowledgment Bundle
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Acknowledgment Bundle
                   </h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Full acknowledgment bundle received from NPHIES
+                  </p>
                   <button
                     onClick={() => {
                       setPreviewJson(selectedCommunication.acknowledgment_bundle);
@@ -1655,7 +1786,8 @@ const ClaimCommunicationPanel = ({
                     }}
                     className="flex items-center px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors text-sm"
                   >
-                    <Code className="w-4 h-4 mr-2" />View Acknowledgment Bundle JSON
+                    <Code className="w-4 h-4 mr-2" />
+                    View Acknowledgment Bundle JSON
                   </button>
                 </div>
               )}
@@ -1664,30 +1796,45 @@ const ClaimCommunicationPanel = ({
               <div className="flex justify-center gap-3">
                 {selectedCommunication.request_bundle && (
                   <button
-                    onClick={() => { setPreviewJson(selectedCommunication.request_bundle); setPreviewMetadata(null); setShowJsonPreview(true); }}
+                    onClick={() => {
+                      setPreviewJson(selectedCommunication.request_bundle);
+                      setPreviewMetadata(null);
+                      setShowJsonPreview(true);
+                    }}
                     className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
                   >
-                    <Code className="w-4 h-4 mr-2" />View Request Bundle JSON
+                    <Code className="w-4 h-4 mr-2" />
+                    View Request Bundle JSON
                   </button>
                 )}
                 {selectedCommunication.response_bundle ? (
                   <button
-                    onClick={() => { setPreviewJson(selectedCommunication.response_bundle); setPreviewMetadata(null); setShowJsonPreview(true); }}
+                    onClick={() => {
+                      setPreviewJson(selectedCommunication.response_bundle);
+                      setPreviewMetadata(null);
+                      setShowJsonPreview(true);
+                    }}
                     className="flex items-center px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm"
                   >
-                    <Code className="w-4 h-4 mr-2" />View Response Bundle JSON
+                    <Code className="w-4 h-4 mr-2" />
+                    View Response Bundle JSON
                   </button>
                 ) : (
                   <span className="flex items-center px-4 py-2 bg-gray-50 text-gray-400 rounded-lg text-sm border border-dashed border-gray-300 cursor-not-allowed">
-                    <Code className="w-4 h-4 mr-2" />No Response Bundle
+                    <Code className="w-4 h-4 mr-2" />
+                    No Response Bundle
                   </span>
                 )}
               </div>
             </div>
 
+            {/* Modal Footer */}
             <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
               <button
-                onClick={() => { setShowResponsePreview(false); setSelectedCommunication(null); }}
+                onClick={() => {
+                  setShowResponsePreview(false);
+                  setSelectedCommunication(null);
+                }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Close
