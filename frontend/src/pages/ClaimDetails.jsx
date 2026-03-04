@@ -1081,6 +1081,12 @@ export default function ClaimDetails() {
                     <Label className="text-gray-500">Outcome</Label>
                     <p className="font-medium capitalize">{extractCodeValue(claim.outcome) || extractCodeValue(claim.adjudication_outcome) || '-'}</p>
                   </div>
+                  {claim.practice_code && (
+                    <div>
+                      <Label className="text-gray-500">Practice Code</Label>
+                      <p className="font-medium font-mono">{claim.practice_code}</p>
+                    </div>
+                  )}
                 </div>
 
                 <hr className="border-gray-200" />
@@ -1295,10 +1301,34 @@ export default function ClaimDetails() {
                               <p className="text-gray-500">Unit Price</p>
                               <p className="font-medium">{formatAmount(item.unit_price, item.currency)}</p>
                             </div>
+                            {item.factor && item.factor !== '1.00' && item.factor !== 1 && (
+                              <div>
+                                <p className="text-gray-500">Factor</p>
+                                <p className="font-medium">{item.factor}</p>
+                              </div>
+                            )}
                             <div>
                               <p className="text-gray-500">Net Amount</p>
                               <p className="font-medium">{formatAmount(item.net_amount, item.currency)}</p>
                             </div>
+                            {item.tax != null && parseFloat(item.tax) > 0 && (
+                              <div>
+                                <p className="text-gray-500">Tax</p>
+                                <p className="font-medium text-purple-600">{formatAmount(item.tax, item.currency)}</p>
+                              </div>
+                            )}
+                            {item.patient_share != null && parseFloat(item.patient_share) > 0 && (
+                              <div>
+                                <p className="text-gray-500">Patient Share</p>
+                                <p className="font-medium text-orange-600">{formatAmount(item.patient_share, item.currency)}</p>
+                              </div>
+                            )}
+                            {item.payer_share != null && parseFloat(item.payer_share) > 0 && (
+                              <div>
+                                <p className="text-gray-500">Payer Share</p>
+                                <p className="font-medium text-green-600">{formatAmount(item.payer_share, item.currency)}</p>
+                              </div>
+                            )}
                             {item.serviced_date && (
                               <div>
                                 <p className="text-gray-500">Service Date</p>
@@ -1380,6 +1410,20 @@ export default function ClaimDetails() {
                             </div>
                           )}
                           
+                          {/* Item type badge */}
+                          {item.item_type && (
+                            <div className="mt-3">
+                              <Badge variant="outline" className="capitalize text-xs">
+                                {item.item_type}
+                              </Badge>
+                              {item.is_maternity && (
+                                <Badge className="ml-2 bg-pink-100 text-pink-700 border-pink-300 text-xs">
+                                  Maternity
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+
                           {/* Additional item details - Show only relevant fields based on claim type */}
                           {(() => {
                             const claimType = extractCodeValue(claim.claim_type);
@@ -1408,6 +1452,59 @@ export default function ClaimDetails() {
                               </div>
                             );
                           })()}
+
+                          {/* Shadow Code (Payer-specific code) */}
+                          {item.shadow_code && (
+                            <div className="mt-3 pt-3 border-t text-sm">
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                <div>
+                                  <p className="text-gray-500">Payer Code</p>
+                                  <p className="font-medium font-mono">{item.shadow_code}</p>
+                                  {item.shadow_code_display && (
+                                    <p className="text-xs text-gray-500">{item.shadow_code_display}</p>
+                                  )}
+                                </div>
+                                {item.shadow_code_system && (
+                                  <div className="col-span-full">
+                                    <p className="text-gray-500">System</p>
+                                    <p className="font-mono text-xs text-gray-600">{item.shadow_code_system}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Pharmacy-specific details */}
+                          {(item.pharmacist_selection_reason || item.pharmacist_substitute || item.medication_code || item.prescribed_medication_code) && (
+                            <div className="mt-3 pt-3 border-t text-sm">
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                {item.medication_code && item.medication_code !== item.product_or_service_code && (
+                                  <div>
+                                    <p className="text-gray-500">Medication Code</p>
+                                    <p className="font-medium font-mono">{item.medication_code}</p>
+                                  </div>
+                                )}
+                                {item.prescribed_medication_code && (
+                                  <div>
+                                    <p className="text-gray-500">Prescribed Medication</p>
+                                    <p className="font-medium font-mono">{item.prescribed_medication_code}</p>
+                                  </div>
+                                )}
+                                {item.pharmacist_selection_reason && (
+                                  <div>
+                                    <p className="text-gray-500">Selection Reason</p>
+                                    <p className="font-medium capitalize">{item.pharmacist_selection_reason.replace(/-/g, ' ')}</p>
+                                  </div>
+                                )}
+                                {item.pharmacist_substitute && (
+                                  <div>
+                                    <p className="text-gray-500">Substitute</p>
+                                    <p className="font-medium">{item.pharmacist_substitute}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                           
                           {/* Package Item Details (Sub-items) */}
                           {item.is_package === true && item.details && Array.isArray(item.details) && item.details.length > 0 && (
@@ -1689,10 +1786,20 @@ export default function ClaimDetails() {
                   {claim.diagnoses && claim.diagnoses.length > 0 ? (
                     <div className="space-y-2">
                       {claim.diagnoses.map((diag, index) => (
-                        <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <div key={index} className="flex flex-wrap items-center gap-3 p-3 bg-gray-50 rounded-lg">
                           <Badge variant="outline">{diag.diagnosis_type}</Badge>
                           <span className="font-mono text-sm">{diag.diagnosis_code}</span>
                           <span className="text-gray-600">{diag.diagnosis_display}</span>
+                          {diag.on_admission && (
+                            <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">
+                              On Admission: {diag.on_admission}
+                            </Badge>
+                          )}
+                          {diag.condition_onset && (
+                            <Badge variant="outline" className="text-xs text-gray-500">
+                              Onset: {diag.condition_onset}
+                            </Badge>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1712,11 +1819,28 @@ export default function ClaimDetails() {
                   {claim.supporting_info && claim.supporting_info.length > 0 ? (
                     <div className="space-y-2">
                       {claim.supporting_info.map((info, index) => (
-                        <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <div key={index} className="flex flex-wrap items-center gap-3 p-3 bg-gray-50 rounded-lg">
                           <Badge variant="outline">{info.category}</Badge>
-                          {info.code && <span className="font-mono text-sm">{info.code}</span>}
+                          {info.code && (
+                            <span className="font-mono text-sm" title={info.code_display || ''}>
+                              {info.code}
+                              {info.code_display && (
+                                <span className="text-gray-500 font-sans text-xs ml-1">({info.code_display})</span>
+                              )}
+                            </span>
+                          )}
                           <span className="text-gray-600">
-                            {info.value_string || info.code_text || info.value_quantity || info.value_reference || '-'}
+                            {info.value_string || info.code_text || (
+                              info.value_quantity != null
+                                ? `${info.value_quantity}${info.value_quantity_unit ? ` ${info.value_quantity_unit}` : ''}`
+                                : null
+                            ) || info.value_reference || (
+                              info.value_boolean != null ? (info.value_boolean ? 'Yes' : 'No') : null
+                            ) || (
+                              info.value_date ? formatDate(info.value_date) : null
+                            ) || (
+                              info.value_period_start ? `${formatDate(info.value_period_start)} - ${formatDate(info.value_period_end)}` : null
+                            ) || '-'}
                           </span>
                         </div>
                       ))}
