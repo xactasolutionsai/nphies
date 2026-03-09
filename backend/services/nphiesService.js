@@ -1422,6 +1422,41 @@ class NphiesService {
   }
 
   /**
+   * Extract ClaimResponses paired with their containing message bundles from poll response.
+   * Returns { claimResponse, messageBundle } pairs so callers can store the full bundle
+   * (which includes Patient, Coverage, Organization resources alongside ClaimResponse).
+   * 
+   * @param {Object} responseData - Poll response data
+   * @returns {Array<{claimResponse: Object, messageBundle: Object|null}>}
+   */
+  extractClaimResponsesWithBundlesFromPoll(responseData) {
+    const results = [];
+
+    if (!responseData || responseData.resourceType !== 'Bundle') {
+      return results;
+    }
+
+    for (const entry of responseData.entry || []) {
+      const resource = entry.resource;
+
+      if (resource?.resourceType === 'ClaimResponse') {
+        results.push({ claimResponse: resource, messageBundle: null });
+      }
+
+      if (resource?.resourceType === 'Bundle' && resource.type === 'message') {
+        const nestedCR = resource.entry?.find(
+          e => e.resource?.resourceType === 'ClaimResponse'
+        )?.resource;
+        if (nestedCR) {
+          results.push({ claimResponse: nestedCR, messageBundle: resource });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Extract CommunicationRequests from poll response
    * 
    * @param {Object} responseData - Poll response data

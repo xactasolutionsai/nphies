@@ -342,12 +342,12 @@ class ClaimCommunicationService {
         };
       }
 
-      // 4. Extract and categorize responses
-      const claimResponses = nphiesService.extractClaimResponsesFromPoll(pollResponse.data);
+      // 4. Extract and categorize responses (paired with their message bundles)
+      const claimResponsePairs = nphiesService.extractClaimResponsesWithBundlesFromPoll(pollResponse.data);
       const communicationRequests = nphiesService.extractCommunicationRequestsFromPoll(pollResponse.data);
       const communications = nphiesService.extractCommunicationsFromPoll(pollResponse.data);
 
-      console.log(`[ClaimCommunicationService] Poll returned: ${claimResponses.length} ClaimResponse(s), ${communicationRequests.length} CommunicationRequest(s), ${communications.length} Communication(s)`);
+      console.log(`[ClaimCommunicationService] Poll returned: ${claimResponsePairs.length} ClaimResponse(s), ${communicationRequests.length} CommunicationRequest(s), ${communications.length} Communication(s)`);
 
       const results = {
         success: true,
@@ -357,14 +357,14 @@ class ClaimCommunicationService {
         pollBundle,
         responseBundle: pollResponse.data,
         hasCommunicationRequests: communicationRequests.length > 0,
-        hasClaimResponse: claimResponses.length > 0,
+        hasClaimResponse: claimResponsePairs.length > 0,
         errors: pollResponse.errors || [],
         responseCode: pollResponse.responseCode
       };
 
-      // 5. Process ClaimResponses (final adjudicated responses)
-      for (const cr of claimResponses) {
-        const processed = await this.processClaimResponse(client, claimId, cr);
+      // 5. Process ClaimResponses (final adjudicated responses) with their full message bundles
+      for (const { claimResponse, messageBundle } of claimResponsePairs) {
+        const processed = await this.processClaimResponse(client, claimId, claimResponse, messageBundle);
         results.claimResponses.push(processed);
       }
 
@@ -403,31 +403,52 @@ class ClaimCommunicationService {
 
   /**
    * Process ClaimResponse from poll
-   * Updates Claim status based on outcome
+   * Updates Claim status based on outcome, extracts financial totals,
+   * stores the full message bundle, and updates item-level adjudication.
+   * 
+   * @param {Object} client - Database client
+   * @param {number} claimId - Claim submission ID
+   * @param {Object} claimResponse - The FHIR ClaimResponse resource
+   * @param {Object|null} messageBundle - The full message bundle containing related resources
    */
-  async processClaimResponse(client, claimId, claimResponse) {
+  async processClaimResponse(client, claimId, claimResponse, messageBundle = null) {
     const outcome = claimResponse.outcome;
     let status = 'pending';
     let adjudicationOutcome = null;
-    
+
+    // Extract adjudication outcome from extension (authoritative)
+    const adjudicationExt = claimResponse.extension?.find(
+      ext => ext.url?.includes('extension-adjudication-outcome')
+    );
+    adjudicationOutcome = adjudicationExt?.valueCodeableConcept?.coding?.[0]?.code;
+
     switch (outcome) {
-      case 'complete':
-        // Check disposition for approval/denial
-        const disposition = claimResponse.disposition?.toLowerCase() || '';
-        if (disposition.includes('approved') || disposition.includes('accept')) {
+      case 'complete': {
+        if (adjudicationOutcome === 'approved') {
           status = 'approved';
-          adjudicationOutcome = 'approved';
-        } else if (disposition.includes('denied') || disposition.includes('reject')) {
+        } else if (adjudicationOutcome === 'rejected') {
           status = 'denied';
-          adjudicationOutcome = 'rejected';
+        } else if (adjudicationOutcome === 'partial') {
+          status = 'partial';
         } else {
-          status = 'approved';
-          adjudicationOutcome = 'approved';
+          // Fall back to disposition if no extension
+          const disposition = claimResponse.disposition?.toLowerCase() || '';
+          if (disposition.includes('approved') || disposition.includes('accept')) {
+            status = 'approved';
+            if (!adjudicationOutcome) adjudicationOutcome = 'approved';
+          } else if (disposition.includes('denied') || disposition.includes('reject')) {
+            status = 'denied';
+            if (!adjudicationOutcome) adjudicationOutcome = 'rejected';
+          } else {
+            status = 'approved';
+            if (!adjudicationOutcome) adjudicationOutcome = 'approved';
+          }
         }
         break;
+      }
       case 'partial':
         status = 'partial';
-        adjudicationOutcome = 'partial';
+        if (!adjudicationOutcome) adjudicationOutcome = 'partial';
         break;
       case 'queued':
         status = 'queued';
@@ -437,9 +458,17 @@ class ClaimCommunicationService {
         break;
     }
 
-    // Extract financial amounts from ClaimResponse
-    const totalAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'submitted')?.amount?.value;
-    const approvedAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+    // Extract all financial totals from ClaimResponse
+    const benefitAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+    const eligibleAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'eligible')?.amount?.value;
+    const approvedAmount = benefitAmount || eligibleAmount;
+    const copayAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'copay')?.amount?.value;
+    const taxAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'tax')?.amount?.value;
+
+    const nphiesClaimId = claimResponse.identifier?.[0]?.value || claimResponse.id;
+
+    // Store the full message bundle when available (includes Patient, Coverage, Organizations)
+    const bundleToStore = messageBundle || claimResponse;
 
     // Update Claim
     await client.query(`
@@ -450,22 +479,65 @@ class ClaimCommunicationService {
           disposition = $4,
           nphies_claim_id = COALESCE($5, nphies_claim_id),
           approved_amount = COALESCE($6, approved_amount),
-          response_bundle = $7,
+          eligible_amount = COALESCE($7, eligible_amount),
+          benefit_amount = COALESCE($8, benefit_amount),
+          copay_amount = COALESCE($9, copay_amount),
+          tax_amount = COALESCE($10, tax_amount),
+          response_bundle = $11,
           response_date = NOW(),
           updated_at = NOW()
-      WHERE id = $8
+      WHERE id = $12
     `, [
       status,
       outcome,
       adjudicationOutcome,
       claimResponse.disposition,
-      claimResponse.id,
-      approvedAmount,
-      JSON.stringify(claimResponse),
+      nphiesClaimId,
+      approvedAmount || null,
+      eligibleAmount || null,
+      benefitAmount || null,
+      copayAmount || null,
+      taxAmount || null,
+      JSON.stringify(bundleToStore),
       claimId
     ]);
 
-    // Store in responses table for history
+    // Update item-level adjudication
+    const items = claimResponse.item || [];
+    for (const item of items) {
+      const itemOutcome = item.extension?.find(
+        ext => ext.url?.includes('extension-adjudication-outcome')
+      )?.valueCodeableConcept?.coding?.[0]?.code;
+
+      const adjudicationStatus = itemOutcome === 'approved' ? 'approved' :
+                                 itemOutcome === 'rejected' ? 'denied' :
+                                 itemOutcome === 'partial' ? 'partial' : 'pending';
+
+      const itemBenefitAmount = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+      const itemEligibleAmount = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'eligible')?.amount?.value;
+      const itemCopayAmount = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'copay')?.amount?.value;
+      const itemApprovedQty = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'approved-quantity')?.value;
+
+      await client.query(`
+        UPDATE claim_submission_items
+        SET adjudication_status = $1,
+            adjudication_amount = $2,
+            adjudication_eligible_amount = $3,
+            adjudication_copay_amount = $4,
+            adjudication_approved_quantity = $5
+        WHERE claim_id = $6 AND sequence = $7
+      `, [
+        adjudicationStatus,
+        itemBenefitAmount || itemEligibleAmount || null,
+        itemEligibleAmount || null,
+        itemCopayAmount || null,
+        itemApprovedQty || null,
+        claimId,
+        item.itemSequence
+      ]);
+    }
+
+    // Store in responses table for history (full bundle)
     await client.query(`
       INSERT INTO claim_submission_responses (
         claim_id,
@@ -481,8 +553,8 @@ class ClaimCommunicationService {
       'final',
       outcome,
       claimResponse.disposition,
-      claimResponse.id,
-      JSON.stringify(claimResponse)
+      nphiesClaimId,
+      JSON.stringify(bundleToStore)
     ]);
 
     return {

@@ -692,7 +692,13 @@ export default function ClaimDetails() {
       // Insurance details
       insuranceSequence: insurance?.sequence,
       insuranceFocal: insurance?.focal,
-      coverageReference: insurance?.coverage?.reference
+      coverageReference: insurance?.coverage?.reference,
+      // Payment information (claim-specific)
+      paymentType: extractCode(claimResponse.payment?.type),
+      paymentTypeDisplay: claimResponse.payment?.type?.coding?.[0]?.display,
+      paymentDate: claimResponse.payment?.date,
+      paymentAmount: claimResponse.payment?.amount?.value,
+      paymentCurrency: claimResponse.payment?.amount?.currency || 'SAR'
     };
   };
 
@@ -1288,6 +1294,10 @@ export default function ClaimDetails() {
                           itemOutcome = value.code;
                         }
                       }
+
+                      const patientInvoice = responseItem?.extension?.find(
+                        ext => ext.url?.includes('extension-patientInvoice')
+                      )?.valueIdentifier?.value;
                       
                       return (
                         <div key={index} className="p-4 border rounded-lg bg-gray-50">
@@ -1354,6 +1364,15 @@ export default function ClaimDetails() {
                               </div>
                             )}
                           </div>
+
+                          {/* Patient Invoice from NPHIES response */}
+                          {patientInvoice && (
+                            <div className="mt-3 p-2 bg-indigo-50 rounded border border-indigo-200 text-sm flex items-center gap-2">
+                              <Receipt className="h-3.5 w-3.5 text-indigo-600 flex-shrink-0" />
+                              <span className="text-indigo-600 font-medium">Patient Invoice:</span>
+                              <span className="font-mono text-indigo-900">{patientInvoice}</span>
+                            </div>
+                          )}
                           
                           {/* Response Adjudication Details */}
                           {itemAdjudications.length > 0 && (
@@ -2603,6 +2622,37 @@ export default function ClaimDetails() {
                             >
                               {extractCodeValue(claimResponseDetails.adjudicationOutcome).toUpperCase()}
                             </Badge>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Payment Information (claim-specific) */}
+                      {(claimResponseDetails.paymentAmount != null || claimResponseDetails.paymentDate || claimResponseDetails.paymentType) && (
+                        <>
+                          <hr className="border-gray-200" />
+                          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                            <Label className="text-emerald-700 text-xs uppercase tracking-wider flex items-center gap-2">
+                              <Banknote className="h-4 w-4" />
+                              Payment Information
+                            </Label>
+                            <div className="mt-3 grid grid-cols-3 gap-4">
+                              <div>
+                                <p className="text-xs text-emerald-600">Payment Type</p>
+                                <Badge variant="outline" className="mt-1 border-emerald-300 text-emerald-700 capitalize">
+                                  {claimResponseDetails.paymentTypeDisplay || claimResponseDetails.paymentType || '-'}
+                                </Badge>
+                              </div>
+                              <div>
+                                <p className="text-xs text-emerald-600">Payment Date</p>
+                                <p className="font-medium text-emerald-900 mt-1">{formatDate(claimResponseDetails.paymentDate)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-emerald-600">Payment Amount</p>
+                                <p className="font-bold text-lg text-emerald-900 mt-0.5">
+                                  {formatAmount(claimResponseDetails.paymentAmount, claimResponseDetails.paymentCurrency)}
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         </>
                       )}

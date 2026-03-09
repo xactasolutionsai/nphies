@@ -186,6 +186,24 @@ class MessageUpdater {
 
       const nphiesClaimId = claimResponse.identifier?.[0]?.value || claimResponse.id;
 
+      // Extract financial totals from ClaimResponse
+      const totals = claimResponse.total?.map(total => ({
+        category: total.category?.coding?.[0]?.code,
+        amount: total.amount?.value,
+        currency: total.amount?.currency || 'SAR'
+      })) || [];
+
+      const approvedAmount = totals.find(t => t.category === 'benefit')?.amount ||
+                             totals.find(t => t.category === 'eligible')?.amount;
+      const eligibleAmount = totals.find(t => t.category === 'eligible')?.amount;
+      const benefitAmount = totals.find(t => t.category === 'benefit')?.amount;
+      const copayAmount = totals.find(t => t.category === 'copay')?.amount;
+      const taxAmount = totals.find(t => t.category === 'tax')?.amount;
+
+      // Store the full message bundle (with all related resources) when available,
+      // otherwise fall back to just the ClaimResponse
+      const bundleToStore = responseBundle || claimResponse;
+
       await client.query(`
         UPDATE claim_submissions
         SET status = $1,
@@ -193,18 +211,63 @@ class MessageUpdater {
             disposition = $3,
             nphies_claim_id = COALESCE($4, nphies_claim_id),
             adjudication_outcome = $5,
-            response_bundle = $6,
+            approved_amount = COALESCE($6, approved_amount),
+            eligible_amount = COALESCE($7, eligible_amount),
+            benefit_amount = COALESCE($8, benefit_amount),
+            copay_amount = COALESCE($9, copay_amount),
+            tax_amount = COALESCE($10, tax_amount),
+            response_bundle = $11,
             response_date = NOW(),
             updated_at = NOW()
-        WHERE id = $7
+        WHERE id = $12
       `, [
         newStatus, outcome, claimResponse.disposition,
         nphiesClaimId, adjudicationOutcome,
-        JSON.stringify(claimResponse),
+        approvedAmount || null,
+        eligibleAmount || null,
+        benefitAmount || null,
+        copayAmount || null,
+        taxAmount || null,
+        JSON.stringify(bundleToStore),
         recordId
       ]);
 
-      // Store in responses table
+      // Update item-level adjudication
+      const items = claimResponse.item || [];
+      for (const item of items) {
+        const itemOutcome = item.extension?.find(
+          ext => ext.url?.includes('extension-adjudication-outcome')
+        )?.valueCodeableConcept?.coding?.[0]?.code;
+
+        const adjudicationStatus = itemOutcome === 'approved' ? 'approved' :
+                                   itemOutcome === 'rejected' ? 'denied' :
+                                   itemOutcome === 'partial' ? 'partial' : 'pending';
+
+        const itemBenefitAmount = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
+        const itemEligibleAmount = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'eligible')?.amount?.value;
+        const itemCopayAmount = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'copay')?.amount?.value;
+        const itemApprovedQty = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'approved-quantity')?.value;
+
+        await client.query(`
+          UPDATE claim_submission_items
+          SET adjudication_status = $1,
+              adjudication_amount = $2,
+              adjudication_eligible_amount = $3,
+              adjudication_copay_amount = $4,
+              adjudication_approved_quantity = $5
+          WHERE claim_id = $6 AND sequence = $7
+        `, [
+          adjudicationStatus,
+          itemBenefitAmount || itemEligibleAmount || null,
+          itemEligibleAmount || null,
+          itemCopayAmount || null,
+          itemApprovedQty || null,
+          recordId,
+          item.itemSequence
+        ]);
+      }
+
+      // Store in responses table (full bundle for response history)
       await client.query(`
         INSERT INTO claim_submission_responses
         (claim_id, response_type, outcome, disposition, nphies_claim_id,
@@ -214,7 +277,7 @@ class MessageUpdater {
         recordId, 'poll', outcome,
         claimResponse.disposition || null,
         nphiesClaimId,
-        JSON.stringify(claimResponse),
+        JSON.stringify(bundleToStore),
         false, true,
         claimResponse.id || null
       ]);
