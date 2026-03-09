@@ -67,6 +67,7 @@ class VisionClaimMapper extends VisionPAMapper {
       insurer: insurer.insurer_id || this.generateId(),
       coverage: coverage?.id || coverage?.coverage_id || this.generateId(),
       practitioner: practitioner?.practitioner_id || this.generateId(),
+      visionPrescription: this.generateId(),
       policyHolder: policyHolder?.id || this.generateId(),
       motherPatient: (claim.is_newborn && motherPatient) ? (motherPatient.patient_id || this.generateId()) : null
     };
@@ -95,14 +96,30 @@ class VisionClaimMapper extends VisionPAMapper {
       practitioner || { name: 'Default Practitioner', specialty_code: claim.practice_code || '11.09' }, // Ophthalmology
       bundleResourceIds.practitioner
     );
+
+    // VisionPrescription resource (required for vision claims, same as PA)
+    const visionPrescriptionData = typeof claim.vision_prescription === 'string'
+      ? JSON.parse(claim.vision_prescription)
+      : (claim.vision_prescription || {});
+    let visionPrescriptionResource = null;
+    if (visionPrescriptionData && (visionPrescriptionData.right_eye || visionPrescriptionData.left_eye || visionPrescriptionData.lens_specifications)) {
+      visionPrescriptionResource = this.buildVisionPrescriptionResource(
+        visionPrescriptionData,
+        bundleResourceIds.patient,
+        bundleResourceIds.practitioner,
+        bundleResourceIds.visionPrescription,
+        provider
+      );
+    }
     
     const claimResource = this.buildVisionClaimResource(claim, patient, provider, insurer, coverage, practitioner, bundleResourceIds);
     const messageHeader = this.buildClaimMessageHeader(provider, insurer, claimResource.fullUrl);
 
-    // Vision bundle: NO Encounter resource
+    // Vision bundle: NO Encounter resource, but includes VisionPrescription
     const entries = [
       messageHeader,
       claimResource,
+      visionPrescriptionResource,
       coverageResource,
       practitionerResource,
       providerResource,
@@ -201,7 +218,17 @@ class VisionClaimMapper extends VisionPAMapper {
       valueDate: accountingPeriodDate
     });
     
-    // 2. Episode extension (required)
+    // 2. VisionPrescription reference extension
+    if (bundleResourceIds.visionPrescription) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescription',
+        valueReference: {
+          reference: `VisionPrescription/${bundleResourceIds.visionPrescription}`
+        }
+      });
+    }
+
+    // 3. Episode extension (required)
     const episodeId = claim.episode_identifier || `EpisodeID_${this.formatDate(new Date()).replace(/-/g, '')}_${claim.claim_number || Date.now()}`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
@@ -211,8 +238,31 @@ class VisionClaimMapper extends VisionPAMapper {
       }
     });
 
-    // 3. Newborn extension - for newborn patient claims
-    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    // 4. Eligibility response (online) - identifier-based reference to CoverageEligibilityResponse
+    if (claim.eligibility_response_id) {
+      const identifierSystem = claim.eligibility_response_system || 
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+        valueReference: {
+          identifier: { system: identifierSystem, value: claim.eligibility_response_id }
+        }
+      });
+    } else if (claim.eligibility_ref && !claim.eligibility_offline_ref) {
+      const refValue = claim.eligibility_ref.includes('/')
+        ? claim.eligibility_ref.split('/').pop()
+        : claim.eligibility_ref;
+      const identifierSystem = claim.eligibility_response_system || 
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+        valueReference: {
+          identifier: { system: identifierSystem, value: refValue }
+        }
+      });
+    }
+
+    // 5. Newborn extension - for newborn patient claims
     if (claim.is_newborn) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-newborn',
@@ -263,6 +313,11 @@ class VisionClaimMapper extends VisionPAMapper {
         } 
       }
     };
+
+    // Prescription reference for vision claims (links to VisionPrescription resource)
+    if (bundleResourceIds.visionPrescription) {
+      claimResource.prescription = { reference: `VisionPrescription/${bundleResourceIds.visionPrescription}` };
+    }
 
     // CareTeam
     const pract = practitioner || claim.practitioner || {};
@@ -346,11 +401,15 @@ class VisionClaimMapper extends VisionPAMapper {
     // If no supporting info exists, don't add any - per NPHIES example
 
     // Insurance
-    claimResource.insurance = [{ 
+    const insuranceEntry = { 
       sequence: 1, 
       focal: true, 
       coverage: { reference: `Coverage/${bundleResourceIds.coverage}` } 
-    }];
+    };
+    if (claim.pre_auth_ref) {
+      insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+    }
+    claimResource.insurance = [insuranceEntry];
 
     // Items with vision-specific extensions
     const claimServicedDate = claim.service_date || claim.request_date || new Date();

@@ -278,6 +278,30 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       });
     }
 
+    // 7b. Eligibility response (online) - identifier-based reference to CoverageEligibilityResponse
+    if (claim.eligibility_response_id) {
+      const identifierSystem = claim.eligibility_response_system || 
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+        valueReference: {
+          identifier: { system: identifierSystem, value: claim.eligibility_response_id }
+        }
+      });
+    } else if (claim.eligibility_ref && !claim.eligibility_offline_ref) {
+      const refValue = claim.eligibility_ref.includes('/')
+        ? claim.eligibility_ref.split('/').pop()
+        : claim.eligibility_ref;
+      const identifierSystem = claim.eligibility_response_system || 
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+        valueReference: {
+          identifier: { system: identifierSystem, value: refValue }
+        }
+      });
+    }
+
     // 8. Newborn extension - for newborn patient claims
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     if (claim.is_newborn) {

@@ -225,6 +225,30 @@ class OralClaimMapper extends DentalMapper {
         }
       });
     }
+
+    // 3b. Eligibility response (online) - identifier-based reference to CoverageEligibilityResponse
+    if (claim.eligibility_response_id) {
+      const identifierSystem = claim.eligibility_response_system || 
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+        valueReference: {
+          identifier: { system: identifierSystem, value: claim.eligibility_response_id }
+        }
+      });
+    } else if (claim.eligibility_ref && !claim.eligibility_offline_ref) {
+      const refValue = claim.eligibility_ref.includes('/')
+        ? claim.eligibility_ref.split('/').pop()
+        : claim.eligibility_ref;
+      const identifierSystem = claim.eligibility_response_system || 
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+        valueReference: {
+          identifier: { system: identifierSystem, value: refValue }
+        }
+      });
+    }
     
     // 4. Episode extension (required)
     const episodeId = claim.episode_identifier || `${provider.nphies_id || 'SDC'}_EpisodeID_${claim.claim_number || Date.now()}`;

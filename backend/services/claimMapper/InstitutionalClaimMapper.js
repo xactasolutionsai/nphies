@@ -212,6 +212,30 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       });
     }
 
+    // 4b. Eligibility response (online) - identifier-based reference to CoverageEligibilityResponse
+    if (claim.eligibility_response_id) {
+      const identifierSystem = claim.eligibility_response_system || 
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+        valueReference: {
+          identifier: { system: identifierSystem, value: claim.eligibility_response_id }
+        }
+      });
+    } else if (claim.eligibility_ref && !claim.eligibility_offline_ref) {
+      const refValue = claim.eligibility_ref.includes('/')
+        ? claim.eligibility_ref.split('/').pop()
+        : claim.eligibility_ref;
+      const identifierSystem = claim.eligibility_response_system || 
+        `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/coverageeligibilityresponse`;
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
+        valueReference: {
+          identifier: { system: identifierSystem, value: refValue }
+        }
+      });
+    }
+
     // 5. Episode extension (required for institutional claims)
     const episodeId = claim.episode_identifier || `provider_EpisodeID_${claim.claim_number || Date.now()}`;
     extensions.push({
@@ -418,11 +442,15 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     }
 
     // Insurance
-    claimResource.insurance = [{ 
+    const insuranceEntry = { 
       sequence: 1, 
       focal: true, 
       coverage: { reference: `Coverage/${bundleResourceIds.coverage}` } 
-    }];
+    };
+    if (claim.pre_auth_ref) {
+      insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+    }
+    claimResource.insurance = [insuranceEntry];
 
     // Items with claim-specific extensions (patientInvoice required)
     const encounterPeriod = { 

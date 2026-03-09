@@ -298,6 +298,8 @@ class ClaimSubmissionsController extends BaseController {
         eligibility_ref: pa.eligibility_ref,
         eligibility_offline_ref: pa.eligibility_offline_ref,
         eligibility_offline_date: pa.eligibility_offline_date,
+        eligibility_response_id: pa.eligibility_response_id || null,
+        eligibility_response_system: pa.eligibility_response_system || null,
         mother_patient_id: pa.mother_patient_id, // Copy mother_patient_id from prior auth for newborn claims
         practice_code: pa.practice_code,
         priority: priority || pa.priority || 'normal', // Use provided priority, fallback to PA priority, then 'normal'
@@ -324,6 +326,8 @@ class ClaimSubmissionsController extends BaseController {
         claimData.eligibility_ref = null;
         claimData.eligibility_offline_ref = null;
         claimData.eligibility_offline_date = null;
+        claimData.eligibility_response_id = null;
+        claimData.eligibility_response_system = null;
       }
 
       const columns = Object.keys(claimData).filter(key => claimData[key] !== undefined && claimData[key] !== null);
