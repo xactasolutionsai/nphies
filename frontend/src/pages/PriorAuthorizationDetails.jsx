@@ -179,6 +179,7 @@ export default function PriorAuthorizationDetails() {
   // Priority selection modal state
   const [showPriorityModal, setShowPriorityModal] = useState(false);
   const [selectedPriority, setSelectedPriority] = useState('normal');
+  const [excludeReferences, setExcludeReferences] = useState(false);
   
   // Error/Success/Confirm modal states
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -862,6 +863,7 @@ export default function PriorAuthorizationDetails() {
   const handleSubmitAsClaimWithResponse = async () => {
     // Set default priority from prior auth
     setSelectedPriority(priorAuth?.priority || 'normal');
+    setExcludeReferences(false);
     
     // For professional claims, show the service code dialog first, then priority modal
     if (priorAuth?.auth_type === 'professional') {
@@ -903,18 +905,19 @@ export default function PriorAuthorizationDetails() {
   // Handle priority modal submission
   const handleSubmitWithPriority = async (priority, itemOverrides = null) => {
     setShowPriorityModal(false);
-    await submitClaimToNphies(priority, itemOverrides);
+    await submitClaimToNphies(priority, itemOverrides, excludeReferences);
   };
 
   // Core claim submission logic
-  const submitClaimToNphies = async (priority, itemOverrides = null) => {
+  const submitClaimToNphies = async (priority, itemOverrides = null, stripReferences = false) => {
     try {
       setActionLoading(true);
       
       // Step 1: Create the claim from the prior authorization with priority and optional overrides
       const createResponse = await api.createClaimFromPriorAuth(id, { 
         priority: priority || priorAuth?.priority || 'normal',
-        itemOverrides: itemOverrides || null
+        itemOverrides: itemOverrides || null,
+        excludeReferences: stripReferences || false
       });
       const claimId = createResponse.data?.id;
       
@@ -4067,6 +4070,25 @@ export default function PriorAuthorizationDetails() {
               placeholder="Select priority..."
             />
           </div>
+          <div className="flex items-center space-x-2 pt-2">
+            <input
+              type="checkbox"
+              id="excludeReferences"
+              checked={excludeReferences}
+              onChange={(e) => setExcludeReferences(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+            />
+            <Label htmlFor="excludeReferences" className="text-sm text-gray-700 cursor-pointer">
+              Send without auth/eligibility references
+            </Label>
+          </div>
+          {excludeReferences && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <p className="text-sm text-orange-800">
+                <strong>Warning:</strong> The claim will be sent without any prior authorization or eligibility references. This is expected to result in an error response from NPHIES.
+              </p>
+            </div>
+          )}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <p className="text-sm text-blue-800">
               <strong>Note:</strong> Setting priority to "Deferred" will result in a pended response from NPHIES that requires polling to retrieve the final response.

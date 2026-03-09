@@ -224,7 +224,7 @@ class ClaimSubmissionsController extends BaseController {
   async createFromPriorAuth(req, res) {
     try {
       const { paId } = req.params;
-      const { itemOverrides, priority } = req.body || {}; // Optional service code overrides and priority
+      const { itemOverrides, priority, excludeReferences } = req.body || {}; // Optional service code overrides, priority, and reference stripping
 
       const paResult = await query(`
         SELECT pa.*, p.name as patient_name, pr.provider_name, i.insurer_name
@@ -317,6 +317,14 @@ class ClaimSubmissionsController extends BaseController {
         drug_interaction_justification: pa.drug_interaction_justification || null,
         drug_interaction_justification_date: pa.drug_interaction_justification_date || null
       };
+
+      if (excludeReferences) {
+        claimData.prior_auth_id = null;
+        claimData.pre_auth_ref = null;
+        claimData.eligibility_ref = null;
+        claimData.eligibility_offline_ref = null;
+        claimData.eligibility_offline_date = null;
+      }
 
       const columns = Object.keys(claimData).filter(key => claimData[key] !== undefined && claimData[key] !== null);
       const values = columns.map(col => claimData[col]);
