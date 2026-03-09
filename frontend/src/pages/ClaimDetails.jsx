@@ -618,11 +618,11 @@ export default function ClaimDetails() {
       }
     }
 
-    // Extract process notes
+    // Extract process notes - note.type can be a CodeableConcept in some NPHIES responses
     const processNotes = claimResponse.processNote?.map(note => ({
       number: note.number,
-      type: note.type,
-      text: note.text
+      type: typeof note.type === 'object' ? (note.type?.coding?.[0]?.code || note.type?.code || JSON.stringify(note.type)) : note.type,
+      text: typeof note.text === 'object' ? JSON.stringify(note.text) : note.text
     })) || [];
 
     // Extract batch extensions
@@ -638,14 +638,18 @@ export default function ClaimDetails() {
       ext => ext.url?.includes('extension-batch-period')
     )?.valuePeriod;
 
-    // Helper to safely extract code from CodeableConcept
+    // Helper to safely extract code from CodeableConcept or string
     const extractCode = (codeableConcept) => {
       if (!codeableConcept) return null;
       if (typeof codeableConcept === 'string') return codeableConcept;
+      if (typeof codeableConcept === 'number') return String(codeableConcept);
+      if (typeof codeableConcept !== 'object') return null;
       if (codeableConcept.coding && Array.isArray(codeableConcept.coding)) {
-        return codeableConcept.coding[0]?.code || null;
+        return codeableConcept.coding[0]?.code || codeableConcept.coding[0]?.display || null;
       }
       if (codeableConcept.code) return codeableConcept.code;
+      if (codeableConcept.display) return codeableConcept.display;
+      if (codeableConcept.text) return codeableConcept.text;
       return null;
     };
 
@@ -656,17 +660,17 @@ export default function ClaimDetails() {
       metaTagDisplay: claimResponse.meta?.tag?.[0]?.display,
       identifier: claimResponse.identifier?.[0]?.value,
       identifierSystem: claimResponse.identifier?.[0]?.system,
-      status: claimResponse.status,
+      status: extractCode(claimResponse.status) || (typeof claimResponse.status === 'string' ? claimResponse.status : null),
       type: extractCode(claimResponse.type),
       subType: extractCode(claimResponse.subType),
-      use: claimResponse.use,
-      outcome: claimResponse.outcome,
-      adjudicationOutcome: adjudicationOutcome, // Pended, approved, rejected, partial
+      use: extractCode(claimResponse.use) || (typeof claimResponse.use === 'string' ? claimResponse.use : null),
+      outcome: extractCode(claimResponse.outcome) || (typeof claimResponse.outcome === 'string' ? claimResponse.outcome : null),
+      adjudicationOutcome: adjudicationOutcome,
       created: claimResponse.created,
-      disposition: claimResponse.disposition,
+      disposition: typeof claimResponse.disposition === 'object' ? (claimResponse.disposition?.coding?.[0]?.display || claimResponse.disposition?.text || JSON.stringify(claimResponse.disposition)) : claimResponse.disposition,
       processNotes: processNotes,
       // Pre-Authorization Reference (from response)
-      preAuthRef: claimResponse.preAuthRef,
+      preAuthRef: Array.isArray(claimResponse.preAuthRef) ? claimResponse.preAuthRef.join(', ') : claimResponse.preAuthRef,
       preAuthPeriod: claimResponse.preAuthPeriod,
       // Batch information
       batchIdentifier: batchIdentifier?.value,
@@ -681,7 +685,7 @@ export default function ClaimDetails() {
       requestorReference: claimResponse.requestor?.reference,
       requestorId: extractIdFromRef(claimResponse.requestor?.reference),
       // Original request details
-      requestType: claimResponse.request?.type,
+      requestType: extractCode(claimResponse.request?.type),
       requestIdentifier: claimResponse.request?.identifier?.value,
       requestIdentifierSystem: claimResponse.request?.identifier?.system,
       // Insurance details
@@ -1395,7 +1399,7 @@ export default function ClaimDetails() {
                               .map(adj => ({
                                 category: extractCodeValue(adj.category),
                                 code: adj.reason?.coding?.[0]?.code,
-                                display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                                display: adj.reason?.coding?.[0]?.display || (typeof adj.reason?.text === 'string' ? adj.reason.text : extractCodeValue(adj.reason?.text))
                               }));
                             if (reasons.length === 0) return null;
                             return (
@@ -1647,7 +1651,7 @@ export default function ClaimDetails() {
                           .map(adj => ({
                             category: adj.category?.coding?.[0]?.code,
                             code: adj.reason?.coding?.[0]?.code,
-                            display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                            display: adj.reason?.coding?.[0]?.display || (typeof adj.reason?.text === 'string' ? adj.reason.text : extractCodeValue(adj.reason?.text))
                           })) || [];
                         
                         return (
@@ -2717,7 +2721,7 @@ export default function ClaimDetails() {
                             .map(adj => ({
                               category: adj.category?.coding?.[0]?.code,
                               code: adj.reason?.coding?.[0]?.code,
-                              display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                              display: adj.reason?.coding?.[0]?.display || (typeof adj.reason?.text === 'string' ? adj.reason.text : extractCodeValue(adj.reason?.text))
                             })) || [];
 
                           const requestItem = claim.items?.find(it => it.sequence === ri.itemSequence);
@@ -3282,7 +3286,7 @@ export default function ClaimDetails() {
                                           .map(adj => ({
                                             category: adj.category?.coding?.[0]?.code,
                                             code: adj.reason?.coding?.[0]?.code,
-                                            display: adj.reason?.coding?.[0]?.display || adj.reason?.text
+                                            display: adj.reason?.coding?.[0]?.display || (typeof adj.reason?.text === 'string' ? adj.reason.text : extractCodeValue(adj.reason?.text))
                                           })) || [];
 
                                         const requestItem = claim.items?.find(it => it.sequence === ri.itemSequence);
