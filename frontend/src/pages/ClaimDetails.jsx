@@ -146,10 +146,10 @@ const Modal = ({ open, onClose, title, description, children, footer }) => {
 const TabButton = ({ active, onClick, children }) => (
   <button
     onClick={onClick}
-    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap flex-shrink-0 flex items-center ${
       active 
-        ? 'bg-primary-purple text-white' 
-        : 'text-gray-600 hover:bg-gray-100'
+        ? 'bg-primary-purple text-white shadow-sm' 
+        : 'text-gray-600 hover:bg-gray-200'
     }`}
   >
     {children}
@@ -1026,7 +1026,7 @@ export default function ClaimDetails() {
         {/* Left Column - Main Details */}
         <div className="lg:col-span-2 space-y-6">
           {/* Tabs */}
-          <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
+          <div className="flex gap-1.5 bg-gray-100 p-1 rounded-lg overflow-x-auto scrollbar-hide">
             <TabButton active={activeTab === 'details'} onClick={() => setActiveTab('details')}>
               Details
             </TabButton>
