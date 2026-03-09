@@ -545,6 +545,7 @@ export default function ClaimDetails() {
   // Extract Bundle-level details from response bundle
   const getBundleDetails = () => {
     if (!claim.response_bundle) return null;
+    if (claim.response_bundle.resourceType !== 'Bundle') return null;
     
     return {
       id: claim.response_bundle.id,
