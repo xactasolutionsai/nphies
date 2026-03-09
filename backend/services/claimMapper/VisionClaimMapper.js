@@ -259,7 +259,20 @@ class VisionClaimMapper extends VisionPAMapper {
       });
     }
 
-    // 5. Newborn extension - for newborn patient claims
+    // 5. Prior Auth Response (required when preAuthRef is used per BV-00462)
+    if (claim.pre_auth_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
+        valueReference: {
+          identifier: {
+            system: 'http://nphies.sa/authorization',
+            value: claim.pre_auth_ref
+          }
+        }
+      });
+    }
+
+    // 6. Newborn extension - for newborn patient claims
     if (claim.is_newborn) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-newborn',
