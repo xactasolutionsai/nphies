@@ -101,16 +101,13 @@ class VisionClaimMapper extends VisionPAMapper {
     const visionPrescriptionData = typeof claim.vision_prescription === 'string'
       ? JSON.parse(claim.vision_prescription)
       : (claim.vision_prescription || {});
-    let visionPrescriptionResource = null;
-    if (visionPrescriptionData && (visionPrescriptionData.right_eye || visionPrescriptionData.left_eye || visionPrescriptionData.lens_specifications)) {
-      visionPrescriptionResource = this.buildVisionPrescriptionResource(
-        visionPrescriptionData,
-        bundleResourceIds.patient,
-        bundleResourceIds.practitioner,
-        bundleResourceIds.visionPrescription,
-        provider
-      );
-    }
+    const visionPrescriptionResource = this.buildVisionPrescriptionResource(
+      visionPrescriptionData,
+      bundleResourceIds.patient,
+      bundleResourceIds.practitioner,
+      bundleResourceIds.visionPrescription,
+      provider
+    );
     
     const claimResource = this.buildVisionClaimResource(claim, patient, provider, insurer, coverage, practitioner, bundleResourceIds);
     const messageHeader = this.buildClaimMessageHeader(provider, insurer, claimResource.fullUrl);
