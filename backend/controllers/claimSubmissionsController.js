@@ -309,7 +309,13 @@ class ClaimSubmissionsController extends BaseController {
         birth_weight: pa.birth_weight || null,
         mother_patient_id: pa.mother_patient_id || null, // Copy mother_patient_id from prior auth for newborn claims
         // Copy ICU hours for institutional claims
-        icu_hours: pa.icu_hours || null
+        icu_hours: pa.icu_hours || null,
+        // Copy vision prescription for vision claims
+        vision_prescription: pa.vision_prescription ? JSON.stringify(pa.vision_prescription) : null,
+        // Copy AI medication safety analysis for pharmacy claims
+        medication_safety_analysis: pa.medication_safety_analysis ? JSON.stringify(pa.medication_safety_analysis) : null,
+        drug_interaction_justification: pa.drug_interaction_justification || null,
+        drug_interaction_justification_date: pa.drug_interaction_justification_date || null
       };
 
       const columns = Object.keys(claimData).filter(key => claimData[key] !== undefined && claimData[key] !== null);
@@ -616,6 +622,13 @@ class ClaimSubmissionsController extends BaseController {
     
     ['patient_id', 'provider_id', 'insurer_id', 'practitioner_id'].forEach(field => { if (cleanedData[field] === '') cleanedData[field] = null; });
     Object.keys(cleanedData).forEach(key => { if (typeof cleanedData[key] === 'string' && cleanedData[key].trim() === '') cleanedData[key] = null; });
+    
+    const jsonbFields = ['vision_prescription', 'medication_safety_analysis'];
+    jsonbFields.forEach(field => {
+      if (cleanedData[field] && typeof cleanedData[field] === 'object') {
+        cleanedData[field] = JSON.stringify(cleanedData[field]);
+      }
+    });
     return cleanedData;
   }
 

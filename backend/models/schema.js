@@ -801,7 +801,15 @@ export const validationSchemas = {
       title: Joi.string().max(255).allow(null, '').optional(),
       description: Joi.string().allow(null, '').optional(),
       category: Joi.string().max(50).allow(null, '').optional()
-    })).optional()
+    })).optional(),
+
+    // Vision Prescription (copied from prior auth for vision claims)
+    vision_prescription: Joi.object().allow(null).optional(),
+
+    // AI Medication Safety Analysis (copied from prior auth for pharmacy claims)
+    medication_safety_analysis: Joi.object().allow(null).optional(),
+    drug_interaction_justification: Joi.string().allow(null, '').optional(),
+    drug_interaction_justification_date: Joi.date().allow(null, '').optional()
   })
 };
 

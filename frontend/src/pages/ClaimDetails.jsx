@@ -13,6 +13,7 @@ import {
   Wallet, Banknote, ArrowRight, MessageSquare, ChevronDown, MoreVertical, Download, Package
 } from 'lucide-react';
 import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
+import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
 
 // Helper functions
 const getClaimTypeDisplay = (claimType) => {
@@ -1035,6 +1036,18 @@ export default function ClaimDetails() {
             <TabButton active={activeTab === 'clinical'} onClick={() => setActiveTab('clinical')}>
               Clinical
             </TabButton>
+            {extractCodeValue(claim.claim_type) === 'vision' && claim.vision_prescription && (
+              <TabButton active={activeTab === 'vision'} onClick={() => setActiveTab('vision')}>
+                <Eye className="h-4 w-4 mr-1 inline" />
+                Vision Rx
+              </TabButton>
+            )}
+            {extractCodeValue(claim.claim_type) === 'pharmacy' && claim.medication_safety_analysis && (
+              <TabButton active={activeTab === 'safety'} onClick={() => setActiveTab('safety')}>
+                <Shield className="h-4 w-4 mr-1 inline" />
+                AI Safety Analysis
+              </TabButton>
+            )}
             {claim.response_bundle && (
               <TabButton active={activeTab === 'nphies'} onClick={() => setActiveTab('nphies')}>
                 <CheckCircle className="h-4 w-4 mr-1 inline" />
@@ -1922,6 +1935,245 @@ export default function ClaimDetails() {
                       </div>
                     </div>
                   </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* AI Medication Safety Analysis Tab */}
+          {activeTab === 'safety' && extractCodeValue(claim.claim_type) === 'pharmacy' && (
+            <div className="space-y-6">
+              <Card className="border-blue-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-blue-600" />
+                    AI Medication Safety Analysis
+                  </CardTitle>
+                  <CardDescription>
+                    AI-powered analysis of drug interactions, side effects, and safety warnings for this pharmacy claim
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {claim.medication_safety_analysis ? (
+                    <MedicationSafetyPanel
+                      analysis={claim.medication_safety_analysis}
+                      isLoading={false}
+                      error={null}
+                    />
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Shield className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                      <p>No medication safety analysis available</p>
+                      <p className="text-sm mt-1">Safety analysis is generated when medications are added in the pharmacy authorization form</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {claim.drug_interaction_justification && (
+                <Card className="border-amber-200 bg-amber-50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-amber-900">
+                      <FileText className="h-5 w-5 text-amber-600" />
+                      Clinical Justification for Drug Safety Override
+                    </CardTitle>
+                    <CardDescription className="text-amber-700">
+                      This claim was approved with the following justification for proceeding despite safety warnings
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="bg-white border border-amber-200 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
+                          <AlertCircle className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-gray-900 whitespace-pre-wrap">{claim.drug_interaction_justification}</p>
+                          {claim.drug_interaction_justification_date && (
+                            <p className="text-sm text-gray-500 mt-3 flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              Provided on: {new Date(claim.drug_interaction_justification_date).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 p-3 bg-amber-100 border border-amber-200 rounded-lg">
+                      <p className="text-sm text-amber-800">
+                        <strong>Note:</strong> This claim contains medications with potential safety concerns. 
+                        The prescriber has provided the above clinical justification for proceeding with this prescription.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Vision Prescription Tab */}
+          {activeTab === 'vision' && extractCodeValue(claim.claim_type) === 'vision' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="h-5 w-5" />
+                  Vision Prescription Details
+                </CardTitle>
+                <CardDescription>
+                  Lens specifications for the vision claim
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {claim.vision_prescription && (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <Label className="text-gray-500">Product Type</Label>
+                        <p className="font-medium capitalize">
+                          {claim.vision_prescription.product_type || '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-gray-500">Lens Type</Label>
+                        <p className="font-medium capitalize">
+                          {claim.vision_prescription.lens_type || '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-gray-500">Date Written</Label>
+                        <p className="font-medium">
+                          {formatDate(claim.vision_prescription.date_written) || '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-gray-500">Prescription Status</Label>
+                        <Badge variant="outline" className="mt-1">
+                          {claim.vision_prescription.status || 'Active'}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <hr className="border-gray-200" />
+
+                    {/* Right Eye */}
+                    <div className="p-4 border rounded-lg bg-blue-50/50">
+                      <h4 className="font-medium mb-4 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">R</div>
+                        Right Eye (OD)
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500">Sphere (SPH)</p>
+                          <p className="font-medium text-lg">
+                            {claim.vision_prescription.right_eye?.sphere 
+                              ? (parseFloat(claim.vision_prescription.right_eye.sphere) >= 0 ? '+' : '') + claim.vision_prescription.right_eye.sphere 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Cylinder (CYL)</p>
+                          <p className="font-medium text-lg">
+                            {claim.vision_prescription.right_eye?.cylinder 
+                              ? (parseFloat(claim.vision_prescription.right_eye.cylinder) >= 0 ? '+' : '') + claim.vision_prescription.right_eye.cylinder 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Axis</p>
+                          <p className="font-medium text-lg">
+                            {claim.vision_prescription.right_eye?.axis 
+                              ? claim.vision_prescription.right_eye.axis + '°' 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Add Power</p>
+                          <p className="font-medium text-lg">
+                            {claim.vision_prescription.right_eye?.add 
+                              ? '+' + claim.vision_prescription.right_eye.add 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Prism</p>
+                          <p className="font-medium">
+                            {claim.vision_prescription.right_eye?.prism_amount 
+                              ? `${claim.vision_prescription.right_eye.prism_amount} ${claim.vision_prescription.right_eye.prism_base || ''}` 
+                              : '-'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Left Eye */}
+                    <div className="p-4 border rounded-lg bg-green-50/50">
+                      <h4 className="font-medium mb-4 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">L</div>
+                        Left Eye (OS)
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500">Sphere (SPH)</p>
+                          <p className="font-medium text-lg">
+                            {claim.vision_prescription.left_eye?.sphere 
+                              ? (parseFloat(claim.vision_prescription.left_eye.sphere) >= 0 ? '+' : '') + claim.vision_prescription.left_eye.sphere 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Cylinder (CYL)</p>
+                          <p className="font-medium text-lg">
+                            {claim.vision_prescription.left_eye?.cylinder 
+                              ? (parseFloat(claim.vision_prescription.left_eye.cylinder) >= 0 ? '+' : '') + claim.vision_prescription.left_eye.cylinder 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Axis</p>
+                          <p className="font-medium text-lg">
+                            {claim.vision_prescription.left_eye?.axis 
+                              ? claim.vision_prescription.left_eye.axis + '°' 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Add Power</p>
+                          <p className="font-medium text-lg">
+                            {claim.vision_prescription.left_eye?.add 
+                              ? '+' + claim.vision_prescription.left_eye.add 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Prism</p>
+                          <p className="font-medium">
+                            {claim.vision_prescription.left_eye?.prism_amount 
+                              ? `${claim.vision_prescription.left_eye.prism_amount} ${claim.vision_prescription.left_eye.prism_base || ''}` 
+                              : '-'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Additional Notes */}
+                    {claim.vision_prescription.notes && (
+                      <>
+                        <hr className="border-gray-200" />
+                        <div>
+                          <Label className="text-gray-500">Prescriber Notes</Label>
+                          <p className="mt-1 p-3 bg-gray-50 rounded-lg">
+                            {claim.vision_prescription.notes}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {!claim.vision_prescription && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p>No vision prescription data available</p>
+                  </div>
                 )}
               </CardContent>
             </Card>
