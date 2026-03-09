@@ -267,7 +267,20 @@ class VisionClaimMapper extends VisionPAMapper {
       });
     }
 
-    // 6. Newborn extension - for newborn patient claims
+    // 6. Prior Auth Response extension (authorization response reference)
+    if (claim.pre_auth_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
+        valueReference: {
+          identifier: {
+            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
+            value: claim.pre_auth_ref
+          }
+        }
+      });
+    }
+
+    // 7. Newborn extension - for newborn patient claims
     if (claim.is_newborn) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-newborn',
