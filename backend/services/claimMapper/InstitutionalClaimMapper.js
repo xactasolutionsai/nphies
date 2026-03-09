@@ -236,20 +236,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       });
     }
 
-    // 5. Prior Auth Response (required when preAuthRef is used per BV-00462)
-    if (claim.pre_auth_ref) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
-        valueReference: {
-          identifier: {
-            system: 'http://nphies.sa/authorization',
-            value: claim.pre_auth_ref
-          }
-        }
-      });
-    }
-
-    // 6. Episode extension (required for institutional claims)
+    // 5. Episode extension (required for institutional claims)
     const episodeId = claim.episode_identifier || `provider_EpisodeID_${claim.claim_number || Date.now()}`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode',
@@ -462,6 +449,12 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     };
     if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+      insuranceEntry.priorAuthResponse = {
+        identifier: {
+          system: 'http://nphies.sa/authorization',
+          value: claim.pre_auth_ref
+        }
+      };
     }
     claimResource.insurance = [insuranceEntry];
 
