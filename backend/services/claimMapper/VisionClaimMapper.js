@@ -259,7 +259,15 @@ class VisionClaimMapper extends VisionPAMapper {
       });
     }
 
-    // 5. Newborn extension - for newborn patient claims
+    // 5. Authorization offline date (required when preAuthRef is used per BV-00462)
+    if (claim.authorization_offline_date || claim.pre_auth_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      });
+    }
+
+    // 6. Newborn extension - for newborn patient claims
     if (claim.is_newborn) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-newborn',
@@ -405,12 +413,6 @@ class VisionClaimMapper extends VisionPAMapper {
     };
     if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
-      insuranceEntry.priorAuthResponse = {
-        identifier: {
-          system: 'http://nphies.sa/authorization',
-          value: claim.pre_auth_ref
-        }
-      };
     }
     claimResource.insurance = [insuranceEntry];
 
