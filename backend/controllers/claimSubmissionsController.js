@@ -362,6 +362,35 @@ class ClaimSubmissionsController extends BaseController {
       }
 
       if (paDiagnosesResult.rows.length > 0) await this.insertDiagnoses(claimId, paDiagnosesResult.rows);
+
+      // Convert lab_observations (stored as JSONB on PA, not in supporting_info table) into
+      // supporting_info entries so they are persisted in claim_submission_supporting_info
+      // and included in the FHIR bundle by the claim mapper.
+      if (pa.auth_type === 'professional') {
+        let labObservations = pa.lab_observations || [];
+        if (typeof labObservations === 'string') {
+          try { labObservations = JSON.parse(labObservations); } catch (e) { labObservations = []; }
+        }
+        if (Array.isArray(labObservations) && labObservations.length > 0) {
+          const maxSeq = paSupportingInfoResult.rows.reduce((max, r) => Math.max(max, r.sequence || 0), 0);
+          labObservations.forEach((obs, idx) => {
+            const numericValue = obs.value != null && obs.value !== '' && !isNaN(parseFloat(obs.value))
+              ? parseFloat(obs.value) : null;
+            paSupportingInfoResult.rows.push({
+              category: 'lab-test',
+              code: obs.loinc_code,
+              code_system: 'http://loinc.org',
+              code_display: obs.loinc_display || obs.test_name,
+              timing_date: obs.effective_date || pa.encounter_start,
+              value_quantity: numericValue,
+              value_quantity_unit: numericValue != null ? (obs.unit_code || obs.unit || '1') : null,
+              value_string: (obs.value != null && obs.value !== '' && numericValue == null) ? String(obs.value) : null,
+              sequence: maxSeq + idx + 1
+            });
+          });
+        }
+      }
+
       if (paSupportingInfoResult.rows.length > 0) await this.insertSupportingInfo(claimId, paSupportingInfoResult.rows);
       
       // Copy attachments from prior authorization

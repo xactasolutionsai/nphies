@@ -896,6 +896,22 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       }
     }
 
+    // Pass through any remaining supporting info categories not explicitly handled above
+    // (e.g., onset, lab-test, reason-for-visit, attachment, etc.) so they are not silently dropped.
+    const handledCategories = new Set([
+      'vital-sign-systolic', 'vital-sign-diastolic', 'vital-sign-height', 'vital-sign-weight',
+      'pulse', 'temperature', 'chief-complaint', 'oxygen-saturation', 'respiratory-rate',
+      'patient-history', 'investigation-result', 'treatment-plan',
+      'physical-examination', 'history-of-present-illness', 'birth-weight'
+    ]);
+    existingSupportingInfo.forEach(info => {
+      const cat = (info.category || '').toLowerCase();
+      if (!handledCategories.has(cat)) {
+        supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence: sequenceNum }));
+        sequences.push(sequenceNum++);
+      }
+    });
+
     return {
       supportingInfo: supportingInfoList,
       sequences: sequences
