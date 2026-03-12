@@ -762,7 +762,23 @@ export default function PriorAuthorizationDetails() {
           };
         }) || [],
         diagnoses: priorAuth.diagnoses || [],
-        supporting_info: priorAuth.supporting_info || []
+        supporting_info: [
+          ...(priorAuth.supporting_info || []),
+          ...((priorAuth.lab_observations || []).map((obs, idx) => ({
+            category: 'lab-test',
+            code: obs.loinc_code,
+            code_system: 'http://loinc.org',
+            code_display: obs.loinc_display || obs.test_name,
+            timing_date: obs.effective_date || priorAuth.encounter_start,
+            value_quantity: obs.value != null && obs.value !== '' && !isNaN(parseFloat(obs.value))
+              ? parseFloat(obs.value) : null,
+            value_quantity_unit: obs.value != null && obs.value !== '' && !isNaN(parseFloat(obs.value))
+              ? (obs.unit_code || obs.unit || '1') : null,
+            value_string: obs.value != null && obs.value !== '' && isNaN(parseFloat(obs.value))
+              ? String(obs.value) : null,
+            sequence: (priorAuth.supporting_info || []).length + idx + 1
+          })))
+        ]
       };
       
       const response = await api.previewClaimSubmissionBundle(claimPreviewData);
