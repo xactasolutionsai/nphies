@@ -1320,7 +1320,7 @@ class ClaimBatchesController extends BaseController {
         service_event_type: item.service_event_type || 'ICSE',
         items: itemsArray,
         diagnoses: diagnosesArray,
-        supportingInfo: supportingInfoResult.rows,
+        supporting_info: supportingInfoResult.rows,
         attachments: []
       },
       patient: {
@@ -1353,7 +1353,7 @@ class ClaimBatchesController extends BaseController {
       },
       items: itemsArray,
       diagnoses: diagnosesArray,
-      supportingInfo: supportingInfoResult.rows,
+      supporting_info: supportingInfoResult.rows,
       attachments: [],
       preAuthRef: item.pre_auth_ref
     };
