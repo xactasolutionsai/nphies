@@ -410,6 +410,11 @@ class SystemPollService {
         return await messageUpdater.storeCommunication(
           resource, correlationResult, schemaName
         );
+
+      case 'PaymentReconciliation':
+        return await messageUpdater.storePaymentReconciliation(
+          responseBundle, schemaName
+        );
     }
 
     return null;
@@ -428,8 +433,8 @@ class SystemPollService {
       if (resource.resourceType === 'MessageHeader') continue;
       if (resource.resourceType === 'Bundle') continue;
 
-      // Check for direct ClaimResponse, CommunicationRequest, Communication
-      if (['ClaimResponse', 'CommunicationRequest', 'Communication'].includes(resource.resourceType)) {
+      // Check for direct ClaimResponse, CommunicationRequest, Communication, PaymentReconciliation
+      if (['ClaimResponse', 'CommunicationRequest', 'Communication', 'PaymentReconciliation'].includes(resource.resourceType)) {
         try {
           // Wrap in a fake message bundle for consistent processing
           const fakeBundle = {

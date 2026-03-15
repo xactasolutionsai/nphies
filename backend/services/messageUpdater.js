@@ -9,6 +9,7 @@
 import pool from '../db.js';
 import advancedAuthParser from './advancedAuthParser.js';
 import CommunicationMapper from './communicationMapper.js';
+import PaymentReconciliationService from './paymentReconciliationService.js';
 
 const mapper = new CommunicationMapper();
 
@@ -752,6 +753,41 @@ class MessageUpdater {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Store a PaymentReconciliation received via system poll.
+   * Delegates to PaymentReconciliationService.processBundle() which handles
+   * validation, extraction, duplicate checking, and DB storage.
+   *
+   * @param {Object} messageBundle - The full FHIR message Bundle containing the PaymentReconciliation
+   * @param {string} schemaName
+   * @returns {Object} { table, recordId, isNew }
+   */
+  async storePaymentReconciliation(messageBundle, schemaName) {
+    const result = await PaymentReconciliationService.processBundle(messageBundle);
+
+    if (result.success) {
+      console.log(`[MessageUpdater] Stored PaymentReconciliation #${result.reconciliationId} from system poll`);
+      return {
+        table: 'payment_reconciliations',
+        recordId: result.reconciliationId,
+        isNew: true
+      };
+    }
+
+    if (result.duplicate) {
+      console.log(`[MessageUpdater] PaymentReconciliation duplicate skipped`);
+      return {
+        table: 'payment_reconciliations',
+        recordId: null,
+        isNew: false,
+        alreadyStored: true
+      };
+    }
+
+    console.error(`[MessageUpdater] Failed to process PaymentReconciliation:`, result.errors);
+    return null;
   }
 }
 

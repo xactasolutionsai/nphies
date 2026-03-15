@@ -174,11 +174,7 @@ export default function ClaimDetails() {
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
   const [payments, setPayments] = useState([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
-  const [simulatingPayment, setSimulatingPayment] = useState(false);
   const [pollingPayments, setPollingPayments] = useState(false);
-  const [lastSimulateBundle, setLastSimulateBundle] = useState(null);
-  const [lastPollBundle, setLastPollBundle] = useState(null);
-  const [showPreviewMenu, setShowPreviewMenu] = useState(false);
   const [priorAuthComms, setPriorAuthComms] = useState([]);
   const [priorAuthCommsLoading, setPriorAuthCommsLoading] = useState(false);
 
@@ -267,80 +263,36 @@ export default function ClaimDetails() {
     }
   };
 
-  // Simulate payment for testing (generates a mock PaymentReconciliation)
-  const handleSimulatePayment = async () => {
-    if (!claim) return;
-    
-    const isApproved = claim.status === 'approved' || 
-                       claim.status === 'complete' || 
-                       claim.adjudication_outcome === 'approved';
-    
-    if (!isApproved) {
-      alert('Cannot simulate payment: Claim must be approved first.');
-      return;
-    }
-    
-    if (!window.confirm('This will generate a simulated PaymentReconciliation for testing purposes. Continue?')) {
-      return;
-    }
-    
-    try {
-      setSimulatingPayment(true);
-      const response = await api.simulatePaymentReconciliation(id);
-      
-      if (response.success) {
-        // Store the generated bundle for copying
-        if (response.data?.generatedBundle) {
-          setLastSimulateBundle(response.data.generatedBundle);
-        }
-        alert(`Payment simulated successfully!\n\nAmount: ${response.data.paymentAmount} SAR\nPayment ID: ${response.data.paymentIdentifier}\n\nClick "Copy Simulate JSON" to copy the generated FHIR bundle.`);
-        // Refresh payments list
-        await loadPayments();
-        // Switch to payments tab
-        setActiveTab('payments');
-      } else {
-        alert(`Failed to simulate payment: ${response.error}`);
-      }
-    } catch (error) {
-      console.error('Error simulating payment:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-      alert(`Error simulating payment: ${errorMessage}`);
-    } finally {
-      setSimulatingPayment(false);
-    }
-  };
-
-  // Poll NPHIES for pending payment reconciliations
+  // Poll NPHIES for pending messages (including PaymentReconciliation) via system poll
   const handlePollPayments = async () => {
-    if (!window.confirm('This will poll NPHIES for any pending PaymentReconciliation messages. Continue?')) {
+    if (!window.confirm('This will trigger a system poll to NPHIES for all pending messages (including PaymentReconciliation). Continue?')) {
       return;
     }
     
     try {
       setPollingPayments(true);
-      const response = await api.pollPaymentReconciliations();
-      
-      // Store the poll request bundle for copying
-      if (response.data?.pollRequestBundle) {
-        setLastPollBundle(response.data.pollRequestBundle);
-      }
+      const response = await api.triggerSystemPoll();
       
       if (response.success) {
-        const { processed, failed, total } = response.data;
+        const { stats, summary } = response;
+        const prCount = summary?.PaymentReconciliation;
+        const totalReceived = stats?.received || 0;
         
-        if (total === 0) {
-          alert('No pending payment reconciliations found on NPHIES.\n\nClick "Copy Poll JSON" to copy the poll request bundle.');
+        if (totalReceived === 0) {
+          alert('No pending messages found on NPHIES.');
         } else {
-          alert(`Poll complete!\n\nTotal found: ${total}\nProcessed: ${processed}\nFailed: ${failed}\n\nClick "Copy Poll JSON" to copy the poll request bundle.`);
+          const prInfo = prCount 
+            ? `\nPaymentReconciliation: ${(prCount.matched || 0) + (prCount.newRecords || 0)} processed`
+            : '\nNo PaymentReconciliation messages in this poll.';
+          alert(`System poll complete!\n\nTotal messages: ${totalReceived}\nMatched: ${stats?.matched || 0}\nUnmatched: ${stats?.unmatched || 0}${prInfo}`);
           // Refresh payments list
           await loadPayments();
-          // Switch to payments tab if we got new payments
-          if (processed > 0) {
+          if (prCount && (prCount.matched > 0 || prCount.newRecords > 0)) {
             setActiveTab('payments');
           }
         }
       } else {
-        alert(`Poll failed: ${response.message}\n\nClick "Copy Poll JSON" to copy the poll request bundle.`);
+        alert(`Poll failed: ${response.message}`);
       }
     } catch (error) {
       console.error('Error polling NPHIES:', error);
@@ -348,85 +300,6 @@ export default function ClaimDetails() {
       alert(`Error polling NPHIES: ${errorMessage}`);
     } finally {
       setPollingPayments(false);
-    }
-  };
-
-  // Copy simulate bundle to clipboard
-  const handleCopySimulateBundle = async () => {
-    if (!lastSimulateBundle) {
-      alert('No simulate bundle available. Run "Simulate Payment" first.');
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(lastSimulateBundle, null, 2));
-      alert('Simulate bundle copied to clipboard!');
-    } catch (error) {
-      console.error('Failed to copy:', error);
-      alert('Failed to copy to clipboard');
-    }
-  };
-
-  // Copy poll bundle to clipboard
-  const handleCopyPollBundle = async () => {
-    if (!lastPollBundle) {
-      alert('No poll bundle available. Run "Poll NPHIES Payments" first.');
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(lastPollBundle, null, 2));
-      alert('Poll bundle copied to clipboard!');
-    } catch (error) {
-      console.error('Failed to copy:', error);
-      alert('Failed to copy to clipboard');
-    }
-  };
-
-  // Preview simulate bundle (copy JSON before sending)
-  const handlePreviewSimulate = async () => {
-    if (!claim) return;
-    
-    const isApproved = claim.status === 'approved' || 
-                       claim.status === 'complete' || 
-                       claim.adjudication_outcome === 'approved';
-    
-    if (!isApproved) {
-      alert('Cannot preview: Claim must be approved first.');
-      return;
-    }
-    
-    try {
-      const response = await api.previewSimulatePaymentReconciliation(id);
-      
-      if (response.success && response.data?.bundle) {
-        await navigator.clipboard.writeText(JSON.stringify(response.data.bundle, null, 2));
-        setLastSimulateBundle(response.data.bundle);
-        alert(`Simulate bundle copied to clipboard!\n\nPayment Amount: ${response.data.paymentAmount} SAR\nBenefit Amount: ${response.data.benefitAmount} SAR\nnphies Fee: ${response.data.nphiesFee} SAR`);
-      } else {
-        alert(`Failed to preview: ${response.error}`);
-      }
-    } catch (error) {
-      console.error('Error previewing simulate:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-      alert(`Error previewing: ${errorMessage}`);
-    }
-  };
-
-  // Preview poll bundle (copy JSON before sending)
-  const handlePreviewPoll = async () => {
-    try {
-      const response = await api.previewPollPaymentReconciliation();
-      
-      if (response.success && response.data?.bundle) {
-        await navigator.clipboard.writeText(JSON.stringify(response.data.bundle, null, 2));
-        setLastPollBundle(response.data.bundle);
-        alert(`Poll bundle copied to clipboard!\n\nProvider ID: ${response.data.providerId}`);
-      } else {
-        alert(`Failed to preview: ${response.error}`);
-      }
-    } catch (error) {
-      console.error('Error previewing poll:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-      alert(`Error previewing: ${errorMessage}`);
     }
   };
 
@@ -1021,23 +894,6 @@ export default function ClaimDetails() {
             <RefreshCw className="h-4 w-4 mr-1" />
             System Poll
           </Button>
-          
-          {(claim.status === 'approved' || claim.status === 'complete' || claim.adjudication_outcome === 'approved') && (
-            <Button 
-              onClick={handleSimulatePayment} 
-              disabled={simulatingPayment}
-              variant="outline"
-              size="sm"
-              className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
-            >
-              {simulatingPayment ? (
-                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Banknote className="h-4 w-4 mr-1" />
-              )}
-              Simulate Payment
-            </Button>
-          )}
           
           {(claim.status === 'approved' || claim.status === 'queued' || claim.status === 'pended' || claim.adjudication_outcome === 'approved') && 
            claim.status !== 'cancelled' && claim.status !== 'paid' && (
@@ -3487,14 +3343,29 @@ export default function ClaimDetails() {
           {/* Payments Tab */}
           {activeTab === 'payments' && (
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Wallet className="h-5 w-5 text-emerald-600" />
-                  Payment History
-                </CardTitle>
-                <CardDescription>
-                  Payment reconciliations received from insurers for this claim
-                </CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wallet className="h-5 w-5 text-emerald-600" />
+                    Payment History
+                  </CardTitle>
+                  <CardDescription>
+                    Payment reconciliations received from insurers for this claim
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={handlePollPayments}
+                  disabled={pollingPayments}
+                  variant="outline"
+                  size="sm"
+                >
+                  {pollingPayments ? (
+                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                  )}
+                  Poll NPHIES
+                </Button>
               </CardHeader>
               <CardContent>
                 {paymentsLoading ? (
@@ -3588,13 +3459,31 @@ export default function ClaimDetails() {
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No Payments Yet</h3>
                     <p className="text-gray-500 max-w-md mx-auto">
                       Payment reconciliation records will appear here when the insurer sends payment notifications for this claim.
+                      Use System Poll to check for pending payment reconciliations from NPHIES.
                     </p>
                     {claim.adjudication_outcome === 'approved' || claim.outcome === 'complete' ? (
-                      <div className="mt-4 p-3 bg-blue-50 rounded-lg inline-block">
-                        <p className="text-sm text-blue-700">
-                          <CheckCircle className="h-4 w-4 inline mr-1" />
-                          This claim has been approved. Payment notification is pending from the insurer.
-                        </p>
+                      <div className="mt-4 space-y-3">
+                        <div className="p-3 bg-blue-50 rounded-lg inline-block">
+                          <p className="text-sm text-blue-700">
+                            <CheckCircle className="h-4 w-4 inline mr-1" />
+                            This claim has been approved. Payment notification is pending from the insurer.
+                          </p>
+                        </div>
+                        <div className="flex justify-center gap-2">
+                          <Button
+                            onClick={handlePollPayments}
+                            disabled={pollingPayments}
+                            variant="outline"
+                            size="sm"
+                          >
+                            {pollingPayments ? (
+                              <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4 mr-1" />
+                            )}
+                            Poll NPHIES for Payments
+                          </Button>
+                        </div>
                       </div>
                     ) : claim.status === 'queued' || claim.status === 'pending' ? (
                       <div className="mt-4 p-3 bg-yellow-50 rounded-lg inline-block">

@@ -17,6 +17,7 @@
  *   - Advanced Authorizations → create new record
  *   - CommunicationRequests → match via about reference
  *   - Communications → match via about reference
+ *   - PaymentReconciliation → store as new record (always payer-initiated)
  */
 
 import pool from '../db.js';
@@ -56,7 +57,7 @@ class MessageCorrelator {
   extractPayloadResource(messageBundle) {
     if (!messageBundle?.entry) return null;
     
-    const payloadTypes = ['ClaimResponse', 'CommunicationRequest', 'Communication', 'Task'];
+    const payloadTypes = ['ClaimResponse', 'CommunicationRequest', 'Communication', 'Task', 'PaymentReconciliation'];
     for (const entry of messageBundle.entry) {
       if (entry.resource && payloadTypes.includes(entry.resource.resourceType)) {
         return entry.resource;
@@ -175,6 +176,16 @@ class MessageCorrelator {
             unmatched: true,
             resourceType: 'Communication',
             reason: 'Could not match Communication.about to any existing request'
+          };
+        }
+
+        case 'PaymentReconciliation': {
+          return {
+            type: 'unsolicited',
+            table: 'payment_reconciliations',
+            strategy: 'new_payment_reconciliation',
+            resourceType: 'PaymentReconciliation',
+            isNew: true
           };
         }
 

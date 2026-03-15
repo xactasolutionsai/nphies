@@ -12,14 +12,8 @@ const router = express.Router();
 // POST /api/payment-reconciliation - Receive FHIR Bundle from insurer
 router.post('/', paymentReconciliationController.receiveBundle.bind(paymentReconciliationController));
 
-// POST /api/payment-reconciliation/simulate/:claimId - Simulate payment from approved claim (for testing)
-router.post('/simulate/:claimId', paymentReconciliationController.simulatePayment.bind(paymentReconciliationController));
-
 // POST /api/payment-reconciliation/poll - Poll NPHIES for pending payment messages
 router.post('/poll', paymentReconciliationController.pollNphies.bind(paymentReconciliationController));
-
-// GET /api/payment-reconciliation/preview-simulate/:claimId - Preview simulate bundle (without saving)
-router.get('/preview-simulate/:claimId', paymentReconciliationController.previewSimulate.bind(paymentReconciliationController));
 
 // GET /api/payment-reconciliation/preview-poll - Preview poll bundle (without sending)
 router.get('/preview-poll', paymentReconciliationController.previewPoll.bind(paymentReconciliationController));

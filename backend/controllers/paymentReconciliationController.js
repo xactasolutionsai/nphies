@@ -254,47 +254,6 @@ class PaymentReconciliationController {
   }
   
   /**
-   * POST /api/payment-reconciliation/simulate/:claimId
-   * Generate a simulated PaymentReconciliation from an approved claim
-   * Used for testing/development purposes
-   */
-  async simulatePayment(req, res) {
-    try {
-      const { claimId } = req.params;
-      
-      if (!claimId) {
-        return res.status(400).json({ error: 'Claim ID is required' });
-      }
-      
-      console.log(`[PaymentReconciliation] Simulating payment for claim: ${claimId}`);
-      
-      const result = await paymentReconciliationService.generateSimulatedPaymentReconciliation(claimId);
-      
-      return res.status(201).json({
-        success: true,
-        data: result,
-        message: result.message
-      });
-      
-    } catch (error) {
-      console.error('[PaymentReconciliation] Error simulating payment:', error);
-      
-      // Determine appropriate status code based on error
-      let statusCode = 500;
-      if (error.message.includes('not found')) {
-        statusCode = 404;
-      } else if (error.message.includes('not approved') || error.message.includes('already exists')) {
-        statusCode = 400;
-      }
-      
-      return res.status(statusCode).json({ 
-        success: false,
-        error: error.message
-      });
-    }
-  }
-  
-  /**
    * POST /api/payment-reconciliation/poll
    * Poll NPHIES for pending PaymentReconciliation messages
    */
@@ -324,44 +283,6 @@ class PaymentReconciliationController {
         success: false,
         error: 'Failed to poll NPHIES for payment reconciliations',
         details: error.message
-      });
-    }
-  }
-  
-  /**
-   * GET /api/payment-reconciliation/preview-simulate/:claimId
-   * Preview the PaymentReconciliation bundle that would be generated (without saving)
-   */
-  async previewSimulate(req, res) {
-    try {
-      const { claimId } = req.params;
-      
-      if (!claimId) {
-        return res.status(400).json({ error: 'Claim ID is required' });
-      }
-      
-      console.log(`[PaymentReconciliation] Previewing simulate bundle for claim: ${claimId}`);
-      
-      const result = await paymentReconciliationService.previewSimulatedPaymentReconciliation(claimId);
-      
-      return res.json({
-        success: true,
-        data: result
-      });
-      
-    } catch (error) {
-      console.error('[PaymentReconciliation] Error previewing simulate:', error);
-      
-      let statusCode = 500;
-      if (error.message.includes('not found')) {
-        statusCode = 404;
-      } else if (error.message.includes('not approved')) {
-        statusCode = 400;
-      }
-      
-      return res.status(statusCode).json({ 
-        success: false,
-        error: error.message
       });
     }
   }

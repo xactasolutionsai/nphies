@@ -326,44 +326,6 @@ class ApiService {
     return this.request(`/payment-reconciliation/${id}/bundle`);
   }
 
-  /**
-   * Simulate a payment reconciliation from an approved claim (for testing)
-   * @param {number|string} claimId - The claim ID to simulate payment for
-   */
-  async simulatePaymentReconciliation(claimId) {
-    return this.request(`/payment-reconciliation/simulate/${claimId}`, {
-      method: 'POST'
-    });
-  }
-
-  /**
-   * Poll NPHIES for pending PaymentReconciliation messages
-   * @param {string} providerId - Optional provider ID to poll for
-   */
-  async pollPaymentReconciliations(providerId = null) {
-    return this.request('/payment-reconciliation/poll', {
-      method: 'POST',
-      body: JSON.stringify({ providerId })
-    });
-  }
-
-  /**
-   * Preview the PaymentReconciliation bundle that would be generated (without saving)
-   * @param {number|string} claimId - The claim ID to preview payment for
-   */
-  async previewSimulatePaymentReconciliation(claimId) {
-    return this.request(`/payment-reconciliation/preview-simulate/${claimId}`);
-  }
-
-  /**
-   * Preview the poll request bundle (without sending)
-   * @param {string} providerId - Optional provider ID
-   */
-  async previewPollPaymentReconciliation(providerId = null) {
-    const params = providerId ? `?providerId=${providerId}` : '';
-    return this.request(`/payment-reconciliation/preview-poll${params}`);
-  }
-
   // Send Payment Notice acknowledgement to NPHIES
   async sendPaymentNoticeAcknowledgement(reconciliationId) {
     return this.request(`/payment-reconciliation/${reconciliationId}/acknowledge`, {
