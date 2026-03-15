@@ -134,17 +134,19 @@ class BatchClaimMapper {
   // ============================================
 
   /**
-   * Transform all fullUrl and reference values in a claim bundle from
-   * absolute URL format (http://provider.com/Patient/xxx) to urn:uuid:xxx.
+   * Rewrite all fullUrl and reference values in a claim bundle from the
+   * hardcoded http://provider.com domain to the actual registered provider
+   * endpoint (e.g. http://PR-FHIR.com.sa).  Relative references like
+   * "Patient/xxx" are converted to absolute "http://PR-FHIR.com.sa/Patient/xxx"
+   * so that every reference exactly matches a fullUrl entry.
    *
-   * NPHIES cannot resolve relative references (Patient/xxx) against
-   * absolute fullUrls (http://provider.com/Patient/xxx) inside nested
-   * bundles. Using urn:uuid: throughout avoids RE-00169 errors.
+   * Entries that already use urn:uuid: (e.g. MessageHeader) are left untouched.
    *
    * @param {Object} bundle - A FHIR Bundle built by an individual claim mapper
-   * @returns {Object} - The same bundle with all refs rewritten to urn:uuid:
+   * @param {string} providerEndpoint - e.g. "http://PR-FHIR.com.sa"
+   * @returns {Object} - The same bundle, mutated in place
    */
-  transformBundleRefsToUrnUuid(bundle) {
+  transformBundleRefsToProviderUrl(bundle, providerEndpoint) {
     if (!bundle?.entry) return bundle;
 
     const refMap = new Map();
@@ -153,15 +155,17 @@ class BatchClaimMapper {
       const oldFullUrl = entry.fullUrl;
       const resourceId = entry.resource?.id;
       const resourceType = entry.resource?.resourceType;
-      if (!oldFullUrl || !resourceId) continue;
+      if (!oldFullUrl || !resourceId || !resourceType) continue;
 
       if (oldFullUrl.startsWith('urn:uuid:')) continue;
 
-      const newFullUrl = `urn:uuid:${resourceId}`;
-      refMap.set(oldFullUrl, newFullUrl);
-      if (resourceType) {
-        refMap.set(`${resourceType}/${resourceId}`, newFullUrl);
+      const newFullUrl = `${providerEndpoint}/${resourceType}/${resourceId}`;
+
+      if (oldFullUrl !== newFullUrl) {
+        refMap.set(oldFullUrl, newFullUrl);
       }
+      refMap.set(`${resourceType}/${resourceId}`, newFullUrl);
+
       entry.fullUrl = newFullUrl;
     }
 
@@ -236,7 +240,7 @@ class BatchClaimMapper {
       const claimMapper = getClaimMapper(claimType);
       const claimBundle = claimMapper.buildClaimRequestBundle(claimData);
 
-      this.transformBundleRefsToUrnUuid(claimBundle);
+      this.transformBundleRefsToProviderUrl(claimBundle, providerEndpoint);
 
       const innerMsgHeader = claimBundle.entry?.find(e => e.resource?.resourceType === 'MessageHeader');
       if (innerMsgHeader?.resource?.source) {
