@@ -330,8 +330,10 @@ export const SERVICE_CODE_SYSTEM_OPTIONS = [
   { value: 'imaging', label: 'NPHIES Imaging', system: 'http://nphies.sa/terminology/CodeSystem/imaging' },
   { value: 'laboratory', label: 'NPHIES Laboratory', system: 'http://nphies.sa/terminology/CodeSystem/laboratory' },
   { value: 'services', label: 'NPHIES Services', system: 'http://nphies.sa/terminology/CodeSystem/services' },
-  { value: 'lens-type', label: 'NPHIES Lens Type', system: 'http://nphies.sa/terminology/CodeSystem/lens-type' },
-  { value: 'practice-codes', label: 'Practice Codes', system: 'http://nphies.sa/terminology/CodeSystem/practice-codes' }
+  // NPHIES IB-00030: lens-type is for VisionPrescription, not Claim.item.productOrService
+  // { value: 'lens-type', label: 'NPHIES Lens Type', system: 'http://nphies.sa/terminology/CodeSystem/lens-type' },
+  // NPHIES IB-00030: practice-codes is for careTeam.qualification, not billing items
+  // { value: 'practice-codes', label: 'Practice Codes', system: 'http://nphies.sa/terminology/CodeSystem/practice-codes' }
 ];
 
 // NPHIES Imaging Procedures
@@ -356,8 +358,8 @@ export const NPHIES_SERVICES_OPTIONS = [
 // NPHIES Lens Type (for vision claims)
 // Reference: http://nphies.sa/terminology/CodeSystem/lens-type
 export const NPHIES_LENS_TYPE_OPTIONS = [
-  { value: 'contact', label: 'contact - Contact Lens' },
-  { value: 'lens', label: 'lens - Spectacle Lens' }
+  { value: 'contact', label: 'contact - Contact' },
+  { value: 'lens', label: 'lens - Lens' }
 ];
 
 // Helper to reverse-lookup code system key from a system URL
@@ -374,12 +376,13 @@ export const getServiceCodeOptions = (codeSystemKey) => {
     'imaging': NPHIES_IMAGING_OPTIONS,
     'laboratory': NPHIES_LABORATORY_OPTIONS,
     'services': NPHIES_SERVICES_OPTIONS,
-    'lens-type': NPHIES_LENS_TYPE_OPTIONS,
-    'practice-codes': null, // computed below from PRACTICE_CODES_OPTIONS
+    // NPHIES IB-00030: commented out — not valid for Claim.item.productOrService
+    // 'lens-type': NPHIES_LENS_TYPE_OPTIONS,
+    // 'practice-codes': null,
   };
-  if (codeSystemKey === 'practice-codes') {
-    return PRACTICE_CODES_OPTIONS.flatMap(group => group.options);
-  }
+  // if (codeSystemKey === 'practice-codes') {
+  //   return PRACTICE_CODES_OPTIONS.flatMap(group => group.options);
+  // }
   return map[codeSystemKey] || NPHIES_PROCEDURE_OPTIONS;
 };
 
