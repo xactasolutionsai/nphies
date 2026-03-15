@@ -1173,6 +1173,24 @@ export default function ClaimDetails() {
                           </p>
                         </div>
                       )}
+                      {extractCodeValue(claim.encounter_class) === 'emergency' && claim.emergency_department_disposition && (
+                        <div>
+                          <Label className="text-gray-500">ED Disposition</Label>
+                          <p className="font-medium">{claim.emergency_department_disposition}</p>
+                        </div>
+                      )}
+                      {extractCodeValue(claim.encounter_class) === 'emergency' && claim.triage_category && (
+                        <div>
+                          <Label className="text-gray-500">Triage Category</Label>
+                          <p className="font-medium">{claim.triage_category}</p>
+                        </div>
+                      )}
+                      {extractCodeValue(claim.encounter_class) === 'emergency' && claim.encounter_priority && (
+                        <div>
+                          <Label className="text-gray-500">Encounter Priority</Label>
+                          <p className="font-medium">{claim.encounter_priority}</p>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}

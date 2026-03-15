@@ -1181,6 +1181,24 @@ export default function PriorAuthorizationDetails() {
                     <Label className="text-gray-500">Outcome</Label>
                     <p className="font-medium capitalize">{priorAuth.outcome || '-'}</p>
                   </div>
+                  {priorAuth.encounter_class === 'emergency' && priorAuth.emergency_department_disposition && (
+                    <div>
+                      <Label className="text-gray-500">ED Disposition</Label>
+                      <p className="font-medium">{priorAuth.emergency_department_disposition}</p>
+                    </div>
+                  )}
+                  {priorAuth.encounter_class === 'emergency' && priorAuth.triage_category && (
+                    <div>
+                      <Label className="text-gray-500">Triage Category</Label>
+                      <p className="font-medium">{priorAuth.triage_category}</p>
+                    </div>
+                  )}
+                  {priorAuth.encounter_class === 'emergency' && priorAuth.encounter_priority && (
+                    <div>
+                      <Label className="text-gray-500">Encounter Priority</Label>
+                      <p className="font-medium">{priorAuth.encounter_priority}</p>
+                    </div>
+                  )}
                 </div>
 
                 <hr className="border-gray-200" />
