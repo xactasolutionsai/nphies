@@ -111,6 +111,18 @@ const extractCodeValue = (value, fallback = '-') => {
   return fallback;
 };
 
+const ADJUDICATION_CATEGORY_DISPLAY = {
+  eligible: 'Eligible',
+  benefit: 'Benefit',
+  copay: 'Copay',
+  tax: 'Tax',
+  submitted: 'Submitted',
+  patientShare: 'Patient Share',
+  'approved-quantity': 'Approved Qty',
+  rejected: 'Rejected',
+  deductible: 'Deductible',
+};
+
 // Custom Modal Component
 const Modal = ({ open, onClose, title, description, children, footer }) => {
   if (!open) return null;
@@ -396,21 +408,38 @@ export default function ClaimDetails() {
   };
 
   /**
-   * Helper to extract ClaimResponse from response_bundle
-   * Handles both cases:
-   * 1. Bundle structure: { entry: [{ resource: { resourceType: 'ClaimResponse', ... } }] }
-   * 2. Direct ClaimResponse: { resourceType: 'ClaimResponse', ... }
+   * Returns the inner claim-response bundle, handling both cases:
+   * - response_bundle IS the inner bundle (has ClaimResponse directly)
+   * - response_bundle is the outer poll-response bundle wrapping an inner bundle
    */
+  const getEffectiveResponseBundle = () => {
+    if (!claim.response_bundle) return null;
+    if (claim.response_bundle.resourceType === 'ClaimResponse') return null;
+
+    const entries = claim.response_bundle?.entry || [];
+    if (entries.some(e => e.resource?.resourceType === 'ClaimResponse')) {
+      return claim.response_bundle;
+    }
+
+    const innerBundle = entries.find(
+      e => e.resource?.resourceType === 'Bundle' &&
+           e.resource?.entry?.some(ie => ie.resource?.resourceType === 'ClaimResponse')
+    )?.resource;
+
+    return innerBundle || claim.response_bundle;
+  };
+
   const getClaimResponseFromBundle = () => {
     if (!claim.response_bundle) return null;
-    
-    // Check if response_bundle is a direct ClaimResponse
+
     if (claim.response_bundle.resourceType === 'ClaimResponse') {
       return claim.response_bundle;
     }
-    
-    // Otherwise, look for it in bundle entries
-    return claim.response_bundle?.entry?.find(
+
+    const bundle = getEffectiveResponseBundle();
+    if (!bundle) return null;
+
+    return bundle.entry?.find(
       e => e.resource?.resourceType === 'ClaimResponse'
     )?.resource || null;
   };
@@ -438,25 +467,24 @@ export default function ClaimDetails() {
     )?.valueCodeableConcept?.coding?.[0]?.code;
   };
 
-  // Extract Bundle-level details from response bundle
   const getBundleDetails = () => {
-    if (!claim.response_bundle) return null;
-    if (claim.response_bundle.resourceType !== 'Bundle') return null;
+    const bundle = getEffectiveResponseBundle();
+    if (!bundle || bundle.resourceType !== 'Bundle') return null;
     
     return {
-      id: claim.response_bundle.id,
-      type: claim.response_bundle.type,
-      timestamp: claim.response_bundle.timestamp,
-      profile: claim.response_bundle.meta?.profile?.[0],
-      entryCount: claim.response_bundle.entry?.length
+      id: bundle.id,
+      type: bundle.type,
+      timestamp: bundle.timestamp,
+      profile: bundle.meta?.profile?.[0],
+      entryCount: bundle.entry?.length
     };
   };
 
-  // Extract MessageHeader details from response bundle
   const getMessageHeaderDetails = () => {
-    if (!claim.response_bundle) return null;
+    const bundle = getEffectiveResponseBundle();
+    if (!bundle) return null;
     
-    const messageHeader = claim.response_bundle?.entry?.find(
+    const messageHeader = bundle.entry?.find(
       e => e.resource?.resourceType === 'MessageHeader'
     )?.resource;
     
@@ -598,11 +626,11 @@ export default function ClaimDetails() {
     };
   };
 
-  // Extract Coverage details from response bundle
   const getCoverageDetails = () => {
-    if (!claim.response_bundle) return null;
+    const bundle = getEffectiveResponseBundle();
+    if (!bundle) return null;
     
-    const coverage = claim.response_bundle?.entry?.find(
+    const coverage = bundle.entry?.find(
       e => e.resource?.resourceType === 'Coverage'
     )?.resource;
     
@@ -639,11 +667,11 @@ export default function ClaimDetails() {
     };
   };
 
-  // Extract Patient details from response bundle
   const getPatientFromResponse = () => {
-    if (!claim.response_bundle) return null;
+    const bundle = getEffectiveResponseBundle();
+    if (!bundle) return null;
     
-    const patient = claim.response_bundle?.entry?.find(
+    const patient = bundle.entry?.find(
       e => e.resource?.resourceType === 'Patient'
     )?.resource;
     
@@ -670,15 +698,26 @@ export default function ClaimDetails() {
       'W': 'Widowed'
     };
 
+    const ksaGenderExt = patient._gender?.extension?.find(
+      ext => ext.url?.includes('extension-ksa-administrative-gender')
+    );
+    const ksaGender = ksaGenderExt?.valueCodeableConcept?.coding?.[0]?.code;
+
+    const identifierTypeCode = patient.identifier?.[0]?.type?.coding?.[0]?.code;
+    const identifierSystem = patient.identifier?.[0]?.system;
+
     return {
       id: patient.id,
       name: patient.name?.[0]?.text || `${patient.name?.[0]?.given?.join(' ')} ${patient.name?.[0]?.family}`,
       identifier: patient.identifier?.[0]?.value,
       identifierType: patient.identifier?.[0]?.type?.coding?.[0]?.display,
+      identifierTypeCode,
+      identifierSystem,
       identifierCountry: patient.identifier?.[0]?.extension?.find(
         ext => ext.url?.includes('extension-identifier-country')
       )?.valueCodeableConcept?.coding?.[0]?.display,
       gender: patient.gender,
+      ksaGender,
       birthDate: patient.birthDate,
       active: patient.active,
       occupation: occupation,
@@ -688,11 +727,11 @@ export default function ClaimDetails() {
     };
   };
 
-  // Extract Provider Organization details from response bundle
   const getProviderFromResponse = () => {
-    if (!claim.response_bundle) return null;
+    const bundle = getEffectiveResponseBundle();
+    if (!bundle) return null;
     
-    const provider = claim.response_bundle?.entry?.find(
+    const provider = bundle.entry?.find(
       e => e.resource?.resourceType === 'Organization' && 
            e.resource?.type?.some(t => t.coding?.some(c => c.code === 'prov'))
     )?.resource;
@@ -715,11 +754,11 @@ export default function ClaimDetails() {
     };
   };
 
-  // Extract Insurer Organization details from response bundle
   const getInsurerFromResponse = () => {
-    if (!claim.response_bundle) return null;
+    const bundle = getEffectiveResponseBundle();
+    if (!bundle) return null;
     
-    const insurer = claim.response_bundle?.entry?.find(
+    const insurer = bundle.entry?.find(
       e => e.resource?.resourceType === 'Organization' && 
            e.resource?.type?.some(t => t.coding?.some(c => c.code === 'ins'))
     )?.resource;
@@ -1293,12 +1332,15 @@ export default function ClaimDetails() {
                                     benefit: 'text-green-600',
                                     copay: 'text-orange-600',
                                     tax: 'text-purple-600',
-                                    'approved-quantity': 'text-purple-600'
+                                    'approved-quantity': 'text-indigo-600',
+                                    submitted: 'text-gray-700',
+                                    patientShare: 'text-amber-600',
+                                    rejected: 'text-red-600',
                                   };
                                   
                                   return (
                                     <div key={adjIdx}>
-                                      <p className="text-gray-500 capitalize">{category?.replace('-', ' ') || '-'}</p>
+                                      <p className="text-gray-500">{ADJUDICATION_CATEGORY_DISPLAY[category] || category?.replace('-', ' ') || '-'}</p>
                                       <p className={`font-medium ${categoryColors[category] || ''}`}>
                                         {displayValue}
                                       </p>
@@ -2623,14 +2665,18 @@ export default function ClaimDetails() {
                           benefit: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
                           copay: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
                           deductible: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
-                          tax: { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' }
+                          tax: { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' },
+                          submitted: { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' },
+                          patientShare: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+                          'approved-quantity': { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+                          rejected: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
                         };
                         const colors = categoryColors[total.category] || { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
                         
                         return (
                           <div key={idx} className={`p-4 rounded-lg border ${colors.bg} ${colors.border}`}>
                             <p className={`text-xs uppercase tracking-wider font-medium ${colors.text}`}>
-                              {total.categoryDisplay || total.category}
+                              {ADJUDICATION_CATEGORY_DISPLAY[total.category] || total.categoryDisplay || total.category}
                             </p>
                             <p className={`text-2xl font-bold mt-1 ${colors.text}`}>
                               {formatAmount(total.amount, total.currency)}
@@ -2909,7 +2955,15 @@ export default function ClaimDetails() {
                           <Label className="text-gray-500">Identifier</Label>
                           <p className="font-mono">{patient.identifier || '-'}</p>
                           {patient.identifierType && (
-                            <p className="text-xs text-gray-500">{patient.identifierType}</p>
+                            <p className="text-xs text-gray-500">
+                              {patient.identifierType}
+                              {patient.identifierTypeCode && ` (${patient.identifierTypeCode})`}
+                            </p>
+                          )}
+                          {patient.identifierSystem && (
+                            <p className="text-xs text-gray-400 font-mono truncate" title={patient.identifierSystem}>
+                              {patient.identifierSystem.replace('http://nphies.sa/identifier/', '')}
+                            </p>
                           )}
                           {patient.identifierCountry && (
                             <p className="text-xs text-gray-500">{patient.identifierCountry}</p>
@@ -2918,6 +2972,9 @@ export default function ClaimDetails() {
                         <div>
                           <Label className="text-gray-500">Gender</Label>
                           <p className="font-medium capitalize">{patient.gender || '-'}</p>
+                          {patient.ksaGender && patient.ksaGender !== patient.gender && (
+                            <p className="text-xs text-gray-500">KSA: {patient.ksaGender}</p>
+                          )}
                         </div>
                         <div>
                           <Label className="text-gray-500">Date of Birth</Label>
@@ -3639,12 +3696,24 @@ export default function ClaimDetails() {
                   <div>
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">NPHIES Adjudication</p>
                     <div className="space-y-2">
-                      {responseTotals.map((total, idx) => (
-                        <div key={idx} className="flex justify-between items-center">
-                          <span className="text-gray-500 capitalize">{total.category}</span>
-                          <span className="font-medium">{formatAmount(total.amount, total.currency)}</span>
-                        </div>
-                      ))}
+                      {responseTotals.map((total, idx) => {
+                        const sidebarColors = {
+                          eligible: 'text-blue-600',
+                          benefit: 'text-green-600',
+                          copay: 'text-orange-600',
+                          tax: 'text-purple-600',
+                          submitted: 'text-gray-700',
+                          patientShare: 'text-amber-600',
+                          'approved-quantity': 'text-indigo-600',
+                          rejected: 'text-red-600',
+                        };
+                        return (
+                          <div key={idx} className="flex justify-between items-center">
+                            <span className="text-gray-500">{ADJUDICATION_CATEGORY_DISPLAY[total.category] || total.category}</span>
+                            <span className={`font-medium ${sidebarColors[total.category] || ''}`}>{formatAmount(total.amount, total.currency)}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </>
