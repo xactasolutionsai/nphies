@@ -40,7 +40,14 @@ export default function ClaimBatches() {
     try {
       setLoading(true);
       const response = await api.getClaimBatches({ limit: 1000 });
-      const batchesData = response.data || response || [];
+      let batchesData = [];
+      if (Array.isArray(response.data)) {
+        batchesData = response.data;
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        batchesData = response.data.data;
+      } else if (Array.isArray(response)) {
+        batchesData = response;
+      }
       setClaimBatches(batchesData);
       processChartData(batchesData);
     } catch (error) {
@@ -275,13 +282,14 @@ export default function ClaimBatches() {
       header: 'Actions',
       render: (row) => (
         <div className="flex items-center space-x-2">
-          {row.status === 'Draft' && (
+          {(row.status === 'Draft' || row.status === 'Error') && (
             <>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={(e) => { e.stopPropagation(); handlePreviewBundle(row.id); }}
                 disabled={actionLoading === row.id}
+                title="Preview Bundle"
               >
                 <Eye className="h-4 w-4" />
               </Button>
@@ -289,17 +297,21 @@ export default function ClaimBatches() {
                 size="sm"
                 onClick={(e) => { e.stopPropagation(); handleSendToNphies(row.id); }}
                 disabled={actionLoading === row.id}
+                title={row.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
               >
                 <Send className="h-4 w-4" />
               </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={(e) => { e.stopPropagation(); handleDeleteBatch(row.id); }}
-                disabled={actionLoading === row.id}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {row.status === 'Draft' && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={(e) => { e.stopPropagation(); handleDeleteBatch(row.id); }}
+                  disabled={actionLoading === row.id}
+                  title="Delete Batch"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </>
           )}
           {['Submitted', 'Queued', 'Partial'].includes(row.status) && (
@@ -308,6 +320,7 @@ export default function ClaimBatches() {
               variant="outline"
               onClick={(e) => { e.stopPropagation(); handlePollResponses(row.id); }}
               disabled={actionLoading === row.id}
+              title="Poll Responses"
             >
               <RefreshCw className={`h-4 w-4 ${actionLoading === row.id ? 'animate-spin' : ''}`} />
             </Button>
@@ -636,7 +649,7 @@ export default function ClaimBatches() {
                 Created: {new Date(selectedBatch.created_at).toLocaleString()}
               </div>
               <div className="flex space-x-3">
-                {selectedBatch.status === 'Draft' && (
+                {(selectedBatch.status === 'Draft' || selectedBatch.status === 'Error') && (
                   <>
                     <Button variant="outline" onClick={() => handlePreviewBundle(selectedBatch.id)}>
                       <Eye className="h-4 w-4 mr-2" />
@@ -644,7 +657,7 @@ export default function ClaimBatches() {
                     </Button>
                     <Button onClick={() => handleSendToNphies(selectedBatch.id)} className="bg-gradient-to-r from-primary-purple to-accent-purple">
                       <Send className="h-4 w-4 mr-2" />
-                      Send to NPHIES
+                      {selectedBatch.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
                     </Button>
                   </>
                 )}

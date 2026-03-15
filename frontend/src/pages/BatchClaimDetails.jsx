@@ -57,15 +57,15 @@ export default function BatchClaimDetails() {
       setBundlesLoading(true);
       setBundlesError(null);
       
-      // If batch has been submitted and has stored request_bundle, use that
-      if (batch && batch.status !== 'Draft' && batch.request_bundle) {
+      if (batch && batch.status !== 'Draft' && batch.status !== 'Error' && batch.request_bundle) {
         const storedBundle = typeof batch.request_bundle === 'string' 
           ? JSON.parse(batch.request_bundle) 
           : batch.request_bundle;
         
-        // Extract bundles array from stored data
         let bundles = [];
-        if (storedBundle.bundles && Array.isArray(storedBundle.bundles)) {
+        if (storedBundle.batchBundle) {
+          bundles = [storedBundle.batchBundle];
+        } else if (storedBundle.bundles && Array.isArray(storedBundle.bundles)) {
           bundles = storedBundle.bundles;
         } else if (Array.isArray(storedBundle)) {
           bundles = storedBundle;
@@ -77,10 +77,15 @@ export default function BatchClaimDetails() {
         return;
       }
       
-      // For draft batches, generate preview from current data
       const response = await api.previewBatchBundle(id);
-      // response.data contains the array of bundles
-      setFreshBundles(response.data || response);
+      const individualBundles = response.data || [];
+      const batchBundle = response.batchBundle;
+      
+      if (batchBundle) {
+        setFreshBundles([batchBundle]);
+      } else {
+        setFreshBundles(individualBundles);
+      }
     } catch (error) {
       console.error('Error loading fresh bundles:', error);
       setBundlesError(error.response?.data?.error || error.message || 'Failed to load bundles');
@@ -370,7 +375,7 @@ export default function BatchClaimDetails() {
           </div>
 
           <div className="flex items-center space-x-3">
-            {batch.status === 'Draft' && (
+            {(batch.status === 'Draft' || batch.status === 'Error') && (
               <>
                 <Button variant="outline" onClick={handlePreviewBundle} disabled={actionLoading}>
                   <Eye className="h-4 w-4 mr-2" />
@@ -382,12 +387,14 @@ export default function BatchClaimDetails() {
                   className="bg-gradient-to-r from-primary-purple to-accent-purple"
                 >
                   <Send className="h-4 w-4 mr-2" />
-                  Send to NPHIES
+                  {batch.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
                 </Button>
-                <Button variant="destructive" onClick={handleDeleteBatch} disabled={actionLoading}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </Button>
+                {batch.status === 'Draft' && (
+                  <Button variant="destructive" onClick={handleDeleteBatch} disabled={actionLoading}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                )}
               </>
             )}
             {['Submitted', 'Queued', 'Partial'].includes(batch.status) && (
@@ -669,7 +676,8 @@ export default function BatchClaimDetails() {
                             <Button 
                               size="sm" 
                               variant="ghost"
-                              onClick={() => navigate(`/claim-submissions/${claim.id}`)}
+                              onClick={() => navigate(`/prior-authorizations/${claim.prior_auth_db_id || claim.prior_auth_id}`)}
+                              title="View Prior Authorization"
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -1027,61 +1035,163 @@ export default function BatchClaimDetails() {
         {/* Response Bundle Tab */}
         {batch.response_bundle && (
           <TabsContent value="response">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                <CardTitle className="flex items-center">
-                  <Activity className="h-5 w-5 mr-2" />
-                      Response Bundle
-                </CardTitle>
-                    <CardDescription>FHIR Bundle received from NPHIES</CardDescription>
+            <div className="space-y-6">
+              {/* Per-Claim Response Summary */}
+              {(() => {
+                const rb = typeof batch.response_bundle === 'string' ? JSON.parse(batch.response_bundle) : batch.response_bundle;
+                const responses = rb?.responses || [];
+                const polledResponses = rb?.polledResponses || [];
+                const allResponses = [...responses, ...polledResponses];
+                
+                if (allResponses.length > 0) {
+                  return (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center">
+                          <Activity className="h-5 w-5 mr-2" />
+                          Per-Claim Response Summary
+                        </CardTitle>
+                        <CardDescription>Individual outcomes for each claim in the batch</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="border rounded-lg overflow-hidden">
+                          <table className="w-full">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">#</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Outcome</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Adjudication</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Disposition</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Errors</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {responses.map((resp, idx) => {
+                                const cr = resp.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+                                const outcome = cr?.outcome || resp.outcome || '-';
+                                const adjudication = cr?.extension?.find(ext => ext.url?.includes('extension-adjudication-outcome'))?.valueCodeableConcept?.coding?.[0]?.code || resp.adjudicationOutcome || '-';
+                                const errorMsgs = resp.errors || [];
+                                
+                                return (
+                                  <tr key={`resp-${idx}`} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-sm">{resp.claimNumber || resp.batchNumber || idx + 1}</td>
+                                    <td className="px-4 py-3">
+                                      <Badge variant={resp.success ? 'default' : 'destructive'}>
+                                        {resp.success ? 'Success' : 'Failed'}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm">{outcome}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                      <Badge variant={
+                                        adjudication === 'approved' ? 'default' :
+                                        adjudication === 'rejected' ? 'destructive' : 'secondary'
+                                      }>
+                                        {adjudication}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm">{cr?.disposition || resp.disposition || '-'}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                      {errorMsgs.length > 0 ? (
+                                        <span className="text-red-600 text-xs">{errorMsgs.map(e => e.display || e.message || e.code).join('; ')}</span>
+                                      ) : '-'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {polledResponses.map((pr, idx) => (
+                                <tr key={`poll-${idx}`} className="hover:bg-gray-50 bg-blue-50/30">
+                                  <td className="px-4 py-3 text-sm">{pr.batchNumber || idx + 1}
+                                    <Badge variant="secondary" className="ml-1 text-xs">polled</Badge>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant={pr.outcome !== 'error' ? 'default' : 'destructive'}>
+                                      {pr.outcome !== 'error' ? 'Success' : 'Failed'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm">{pr.outcome}</td>
+                                  <td className="px-4 py-3 text-sm">
+                                    <Badge variant={
+                                      pr.adjudicationOutcome === 'approved' ? 'default' :
+                                      pr.adjudicationOutcome === 'rejected' ? 'destructive' : 'secondary'
+                                    }>
+                                      {pr.adjudicationOutcome || '-'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm">{pr.disposition || '-'}</td>
+                                  <td className="px-4 py-3 text-sm">
+                                    {pr.errors?.length > 0 ? (
+                                      <span className="text-red-600 text-xs">{pr.errors.map(e => e.message || e.code).join('; ')}</span>
+                                    ) : '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                }
+                return null;
+              })()}
+
+              {/* Raw Response Bundle */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center">
+                        <Activity className="h-5 w-5 mr-2" />
+                        Raw Response Bundle
+                      </CardTitle>
+                      <CardDescription>Full FHIR response received from NPHIES</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          const data = typeof batch.response_bundle === 'string' 
+                            ? batch.response_bundle 
+                            : JSON.stringify(batch.response_bundle, null, 2);
+                          navigator.clipboard.writeText(data);
+                        }}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          const data = typeof batch.response_bundle === 'string' 
+                            ? batch.response_bundle 
+                            : JSON.stringify(batch.response_bundle, null, 2);
+                          const blob = new Blob([data], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `batch-${batch.batch_identifier}-response.json`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        const data = typeof batch.response_bundle === 'string' 
-                          ? batch.response_bundle 
-                          : JSON.stringify(batch.response_bundle, null, 2);
-                        navigator.clipboard.writeText(data);
-                        alert('Response bundle copied to clipboard!');
-                      }}
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        const data = typeof batch.response_bundle === 'string' 
-                          ? batch.response_bundle 
-                          : JSON.stringify(batch.response_bundle, null, 2);
-                        const blob = new Blob([data], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `batch-${batch.batch_identifier}-response.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
-                  {typeof batch.response_bundle === 'string' 
-                    ? batch.response_bundle 
-                    : JSON.stringify(batch.response_bundle, null, 2)}
-                </pre>
-              </CardContent>
-            </Card>
+                </CardHeader>
+                <CardContent>
+                  <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
+                    {typeof batch.response_bundle === 'string' 
+                      ? batch.response_bundle 
+                      : JSON.stringify(batch.response_bundle, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         )}
       </Tabs>

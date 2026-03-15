@@ -10,8 +10,8 @@ import nphiesService from '../services/nphiesService.js';
  * Claim Batches Controller
  * 
  * Handles NPHIES Batch Claims use case:
- * - Create batch from selected claims
- * - Submit batch to NPHIES
+ * - Create batch from approved prior authorization items
+ * - Submit batch to NPHIES as a single batch-request bundle
  * - Poll for deferred responses
  * 
  * Reference: https://portal.nphies.sa/ig/usecase-claim-batch.html
@@ -25,9 +25,6 @@ class ClaimBatchesController extends BaseController {
   // GET METHODS
   // ============================================
 
-  /**
-   * Get all claim batches with joins
-   */
   async getAll(req, res) {
     try {
       const queries = await loadQueries();
@@ -41,21 +38,20 @@ class ClaimBatchesController extends BaseController {
       let queryParams = [];
       let paramIndex = 1;
 
-        if (search) {
+      if (search) {
         whereConditions.push(`(cb.batch_identifier ILIKE $${paramIndex} OR pr.provider_name ILIKE $${paramIndex} OR i.insurer_name ILIKE $${paramIndex})`);
-          queryParams.push(`%${search}%`);
-          paramIndex++;
-        }
+        queryParams.push(`%${search}%`);
+        paramIndex++;
+      }
 
-        if (status) {
+      if (status) {
         whereConditions.push(`cb.status = $${paramIndex}`);
-          queryParams.push(status);
-          paramIndex++;
+        queryParams.push(status);
+        paramIndex++;
       }
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
-      // Get total count
       const countQuery = `
         SELECT COUNT(*) as total 
         FROM claim_batches cb
@@ -66,15 +62,13 @@ class ClaimBatchesController extends BaseController {
       const countResult = await query(countQuery, queryParams);
       const total = parseInt(countResult.rows[0].total);
 
-      // Get paginated data with joins
       const dataQuery = `
         SELECT 
           cb.*,
           pr.provider_name as provider_name,
           pr.nphies_id as provider_nphies_id,
           i.insurer_name as insurer_name,
-          i.nphies_id as insurer_nphies_id,
-          (SELECT COUNT(*) FROM claim_submissions cs WHERE cs.batch_id = cb.id) as claim_count
+          i.nphies_id as insurer_nphies_id
         FROM claim_batches cb
         LEFT JOIN providers pr ON cb.provider_id = pr.provider_id
         LEFT JOIN insurers i ON cb.insurer_id = i.insurer_id
@@ -99,9 +93,6 @@ class ClaimBatchesController extends BaseController {
     }
   }
 
-  /**
-   * Get claim batch by ID with full details
-   */
   async getById(req, res) {
     try {
       const { id } = req.params;
@@ -118,49 +109,31 @@ class ClaimBatchesController extends BaseController {
     }
   }
 
-  /**
-   * Internal method to get batch with full details
-   */
   async getByIdInternal(id) {
-      // Get batch details
-      const batchResult = await query(`
-        SELECT 
-          cb.*,
+    const batchResult = await query(`
+      SELECT 
+        cb.*,
         pr.provider_name as provider_name,
-          pr.type as provider_type,
-          pr.nphies_id as provider_nphies_id,
+        pr.type as provider_type,
+        pr.nphies_id as provider_nphies_id,
         i.insurer_name as insurer_name,
-          i.nphies_id as insurer_nphies_id
-        FROM claim_batches cb
+        i.nphies_id as insurer_nphies_id
+      FROM claim_batches cb
       LEFT JOIN providers pr ON cb.provider_id = pr.provider_id
       LEFT JOIN insurers i ON cb.insurer_id = i.insurer_id
-        WHERE cb.id = $1
-      `, [id]);
+      WHERE cb.id = $1
+    `, [id]);
 
-      if (batchResult.rows.length === 0) {
+    if (batchResult.rows.length === 0) {
       return null;
     }
 
     const batch = batchResult.rows[0];
 
-    // Get item IDs from the batch's request_bundle metadata
-    // Check both direct item_ids and _metadata.item_ids (after submission the bundle structure changes)
-    let itemIds = [];
-    if (batch.request_bundle) {
-      const bundleData = typeof batch.request_bundle === 'string' 
-        ? JSON.parse(batch.request_bundle) 
-        : batch.request_bundle;
-      // Try direct item_ids first (before submission), then _metadata.item_ids (after submission)
-      itemIds = bundleData.item_ids || bundleData._metadata?.item_ids || [];
-      console.log(`[BatchClaims] Batch ${id} - request_bundle item_ids:`, itemIds);
-    } else {
-      console.log(`[BatchClaims] Batch ${id} - NO request_bundle found`);
-    }
+    const itemIds = this._extractItemIds(batch.request_bundle);
 
-    // Get prior authorization items in this batch
     let claims = [];
     if (itemIds.length > 0) {
-      console.log(`[BatchClaims] Fetching ${itemIds.length} items from prior_authorization_items`);
       const itemsResult = await query(`
         SELECT 
           pai.id,
@@ -177,6 +150,7 @@ class ClaimBatchesController extends BaseController {
           pa.request_number as claim_number,
           pa.auth_type as claim_type,
           pa.pre_auth_ref,
+          pa.id as prior_auth_db_id,
           p.name as patient_name,
           p.identifier as patient_identifier
         FROM prior_authorization_items pai
@@ -186,19 +160,13 @@ class ClaimBatchesController extends BaseController {
         ORDER BY pai.id
       `, [itemIds]);
 
-      console.log(`[BatchClaims] Found ${itemsResult.rows.length} items in database`);
-
-      // Add batch_number based on position in itemIds array
       claims = itemsResult.rows.map(item => ({
         ...item,
         batch_number: itemIds.indexOf(item.id) + 1,
         claim_number: `${item.claim_number}-${item.sequence}`
       }));
-    } else {
-      console.log(`[BatchClaims] Batch ${id} - itemIds is empty, no claims to fetch`);
     }
 
-    // Calculate batch statistics from items
     const statistics = {
       total_claims: claims.length,
       approved_claims: claims.filter(c => c.status === 'approved').length,
@@ -215,9 +183,14 @@ class ClaimBatchesController extends BaseController {
     };
   }
 
-  /**
-   * Get batch statistics
-   */
+  _extractItemIds(requestBundle) {
+    if (!requestBundle) return [];
+    const bundleData = typeof requestBundle === 'string'
+      ? JSON.parse(requestBundle)
+      : requestBundle;
+    return bundleData.item_ids || bundleData._metadata?.item_ids || [];
+  }
+
   async getStats(req, res) {
     try {
       const result = await query(`
@@ -239,27 +212,12 @@ class ClaimBatchesController extends BaseController {
     }
   }
 
-  /**
-   * Get available items for batch claim creation
-   * Returns APPROVED prior authorization items that can be submitted as claims
-   * 
-   * Per NPHIES workflow:
-   * 1. Prior Authorization is submitted and approved
-   * 2. Approved items can then be submitted as claims (individually or in batch)
-   * 
-   * Items available for batch claims:
-   * - From prior authorizations with status 'approved' or 'partial'
-   * - Items with adjudication_status 'approved'
-   * - Not already submitted as claims (or from failed batches for testing)
-   */
   async getAvailableClaims(req, res) {
     try {
-      const { insurer_id, provider_id, include_failed_batch } = req.query;
+      const { insurer_id, provider_id } = req.query;
 
       let whereConditions = [
-        // Prior auth must be approved or partial
         "pa.status IN ('approved', 'partial')",
-        // Item must be approved
         "pai.adjudication_status = 'approved'"
       ];
       let queryParams = [];
@@ -316,7 +274,6 @@ class ClaimBatchesController extends BaseController {
         LIMIT 500
       `, queryParams);
 
-      // Group items by prior authorization for better display
       const groupedData = result.rows.map(row => ({
         id: row.id,
         item_id: row.id,
@@ -353,31 +310,19 @@ class ClaimBatchesController extends BaseController {
   }
 
   // ============================================
-  // CREATE METHODS
+  // CREATE / MODIFY METHODS
   // ============================================
 
-  /**
-   * Create a new batch from selected APPROVED prior authorization items
-   * 
-   * Requirements:
-   * - All items must be from approved prior authorizations
-   * - All items must be for the same insurer
-   * - Maximum 200 items per batch
-   * - Items must have adjudication_status = 'approved'
-   */
   async createBatch(req, res) {
     try {
       const { 
         batch_identifier, 
-        claim_ids,  // These are actually prior_authorization_item IDs
-        provider_id, 
-        insurer_id,
+        claim_ids,
         batch_period_start,
         batch_period_end,
         description 
       } = req.body;
 
-      // Validate required fields
       if (!batch_identifier) {
         return res.status(400).json({ error: 'Batch identifier is required' });
       }
@@ -390,7 +335,6 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: 'Batch cannot exceed 200 items' });
       }
 
-      // Verify all items exist, are approved, and are for the same insurer
       const itemsResult = await query(`
         SELECT 
           pai.id,
@@ -425,7 +369,6 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: `Items not found: ${missingIds.join(', ')}` });
       }
 
-      // Check all items are approved
       const nonApprovedItems = itemsResult.rows.filter(item => 
         item.adjudication_status !== 'approved' || 
         !['approved', 'partial'].includes(item.auth_status)
@@ -436,24 +379,20 @@ class ClaimBatchesController extends BaseController {
         });
       }
 
-      // Check all items are for the same insurer (NPHIES requirement)
       const insurerIds = [...new Set(itemsResult.rows.map(c => c.insurer_id))];
       if (insurerIds.length > 1) {
         return res.status(400).json({ error: 'All items in a batch must be for the same insurer (payer)' });
       }
 
-      // Check all items are for the same provider (NPHIES requirement)
       const providerIds = [...new Set(itemsResult.rows.map(c => c.provider_id))];
       if (providerIds.length > 1) {
         return res.status(400).json({ error: 'All items in a batch must be for the same provider' });
       }
 
-      // Check all items are of the same claim type (NPHIES requirement)
       const claimTypes = [...new Set(itemsResult.rows.map(c => {
         const type = c.auth_type;
         if (!type) return null;
         const normalized = type.toLowerCase();
-        // Normalize similar types
         if (['institutional', 'inpatient', 'daycase'].includes(normalized)) return 'institutional';
         if (['dental', 'oral'].includes(normalized)) return 'oral';
         return normalized;
@@ -464,16 +403,13 @@ class ClaimBatchesController extends BaseController {
         });
       }
 
-      // Calculate total amount
       const totalAmount = itemsResult.rows.reduce((sum, item) => 
         sum + parseFloat(item.adjudication_amount || item.net_amount || 0), 0
       );
 
-      // Get provider and insurer UUIDs
       const actualInsurerId = itemsResult.rows[0].insurer_id;
       const actualProviderId = itemsResult.rows[0].provider_id;
 
-      // Create the batch
       const batchResult = await query(`
         INSERT INTO claim_batches (
           batch_identifier, 
@@ -502,8 +438,6 @@ class ClaimBatchesController extends BaseController {
 
       const batchId = batchResult.rows[0].id;
 
-      // Store batch items in a new linking table or update the batch with item references
-      // For now, we'll store the item IDs in the batch's request_bundle as metadata
       const batchItems = itemsResult.rows.map((item, index) => ({
         item_id: item.id,
         prior_auth_id: item.prior_auth_id,
@@ -516,14 +450,12 @@ class ClaimBatchesController extends BaseController {
         pre_auth_ref: item.pre_auth_ref
       }));
 
-      // Update batch with items metadata
       await query(`
         UPDATE claim_batches 
         SET request_bundle = $1
         WHERE id = $2
       `, [JSON.stringify({ items: batchItems, item_ids: claim_ids }), batchId]);
 
-      // Get the complete batch
       const completeBatch = await this.getByIdInternal(batchId);
 
       res.status(201).json({ 
@@ -540,14 +472,18 @@ class ClaimBatchesController extends BaseController {
   }
 
   /**
-   * Add claims to an existing draft batch
+   * Add prior authorization items to an existing draft batch.
+   * Works via the request_bundle item_ids array.
    */
   async addClaimsToBatch(req, res) {
     try {
       const { id } = req.params;
       const { claim_ids } = req.body;
 
-      // Get the batch
+      if (!claim_ids || !Array.isArray(claim_ids) || claim_ids.length === 0) {
+        return res.status(400).json({ error: 'claim_ids array is required' });
+      }
+
       const batchResult = await query('SELECT * FROM claim_batches WHERE id = $1', [id]);
       if (batchResult.rows.length === 0) {
         return res.status(404).json({ error: 'Batch not found' });
@@ -555,71 +491,78 @@ class ClaimBatchesController extends BaseController {
 
       const batch = batchResult.rows[0];
       if (batch.status !== 'Draft') {
-        return res.status(400).json({ error: 'Can only add claims to draft batches' });
+        return res.status(400).json({ error: 'Can only add items to draft batches' });
       }
 
-      // Get current claim count
-      const countResult = await query('SELECT COUNT(*) as count FROM claim_submissions WHERE batch_id = $1', [id]);
-      const currentCount = parseInt(countResult.rows[0].count);
-
-      if (currentCount + claim_ids.length > 200) {
-        return res.status(400).json({ error: `Cannot exceed 200 claims. Current: ${currentCount}, Adding: ${claim_ids.length}` });
+      const currentItemIds = this._extractItemIds(batch.request_bundle);
+      if (currentItemIds.length + claim_ids.length > 200) {
+        return res.status(400).json({ error: `Cannot exceed 200 items. Current: ${currentItemIds.length}, Adding: ${claim_ids.length}` });
       }
 
-      // Verify claims and add them
-      const claimsResult = await query(`
-        SELECT id, insurer_id, batch_id, total_amount FROM claim_submissions WHERE id = ANY($1::int[])
+      const duplicates = claim_ids.filter(cid => currentItemIds.includes(cid));
+      if (duplicates.length > 0) {
+        return res.status(400).json({ error: `Items already in batch: ${duplicates.join(', ')}` });
+      }
+
+      const itemsResult = await query(`
+        SELECT pai.id, pai.net_amount, pai.adjudication_amount,
+               pa.insurer_id, pa.provider_id, pa.auth_type
+        FROM prior_authorization_items pai
+        INNER JOIN prior_authorizations pa ON pai.prior_auth_id = pa.id
+        WHERE pai.id = ANY($1::int[])
       `, [claim_ids]);
 
-      // Get insurer UUID for this batch (batch.insurer_id is already UUID)
-      const batchInsurerId = batch.insurer_id;
+      if (itemsResult.rows.length !== claim_ids.length) {
+        return res.status(400).json({ error: 'Some items were not found' });
+      }
 
-      // Validate claims
-      for (const claim of claimsResult.rows) {
-        if (claim.batch_id !== null) {
-          return res.status(400).json({ error: `Claim ${claim.id} is already in a batch` });
+      for (const item of itemsResult.rows) {
+        if (item.insurer_id !== batch.insurer_id) {
+          return res.status(400).json({ error: `Item ${item.id} is for a different insurer` });
         }
-        if (claim.insurer_id !== batchInsurerId) {
-          return res.status(400).json({ error: `Claim ${claim.id} is for a different insurer` });
+        if (item.provider_id !== batch.provider_id) {
+          return res.status(400).json({ error: `Item ${item.id} is for a different provider` });
         }
       }
 
-      // Add claims to batch
-      for (let i = 0; i < claim_ids.length; i++) {
-        await query(`
-          UPDATE claim_submissions 
-          SET batch_id = $1, batch_number = $2, updated_at = CURRENT_TIMESTAMP
-          WHERE id = $3
-        `, [id, currentCount + i + 1, claim_ids[i]]);
-      }
+      const newItemIds = [...currentItemIds, ...claim_ids];
+      const bundleData = typeof batch.request_bundle === 'string'
+        ? JSON.parse(batch.request_bundle)
+        : (batch.request_bundle || {});
+      bundleData.item_ids = newItemIds;
 
-      // Update batch totals
-      const newTotalAmount = claimsResult.rows.reduce((sum, c) => sum + parseFloat(c.total_amount || 0), 0);
+      const addedAmount = itemsResult.rows.reduce((sum, c) => sum + parseFloat(c.adjudication_amount || c.net_amount || 0), 0);
+
       await query(`
         UPDATE claim_batches 
-        SET total_claims = COALESCE(total_claims, 0) + $1::int, 
-            total_amount = COALESCE(total_amount, 0) + $2::numeric,
+        SET request_bundle = $1,
+            total_claims = $2,
+            total_amount = COALESCE(total_amount, 0) + $3::numeric,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $3
-      `, [claim_ids.length, newTotalAmount, id]);
+        WHERE id = $4
+      `, [JSON.stringify(bundleData), newItemIds.length, addedAmount, id]);
 
       const completeBatch = await this.getByIdInternal(id);
       res.json({ data: completeBatch });
     } catch (error) {
-      console.error('Error adding claims to batch:', error);
-      res.status(500).json({ error: 'Failed to add claims to batch' });
+      console.error('Error adding items to batch:', error);
+      res.status(500).json({ error: 'Failed to add items to batch' });
     }
   }
 
   /**
-   * Remove claims from a draft batch
+   * Remove prior authorization items from a draft batch.
+   * Works via the request_bundle item_ids array.
    */
   async removeClaimsFromBatch(req, res) {
     try {
       const { id } = req.params;
       const { claim_ids } = req.body;
 
-      // Get the batch
+      if (!claim_ids || !Array.isArray(claim_ids) || claim_ids.length === 0) {
+        return res.status(400).json({ error: 'claim_ids array is required' });
+      }
+
       const batchResult = await query('SELECT * FROM claim_batches WHERE id = $1', [id]);
       if (batchResult.rows.length === 0) {
         return res.status(404).json({ error: 'Batch not found' });
@@ -627,47 +570,46 @@ class ClaimBatchesController extends BaseController {
 
       const batch = batchResult.rows[0];
       if (batch.status !== 'Draft') {
-        return res.status(400).json({ error: 'Can only remove claims from draft batches' });
+        return res.status(400).json({ error: 'Can only remove items from draft batches' });
       }
 
-      // Get the claims being removed
-      const claimsResult = await query(`
-        SELECT id, total_amount FROM claim_submissions WHERE id = ANY($1::int[]) AND batch_id = $2
-      `, [claim_ids, id]);
+      const currentItemIds = this._extractItemIds(batch.request_bundle);
+      const newItemIds = currentItemIds.filter(cid => !claim_ids.includes(cid));
 
-      // Remove claims from batch
-      await query(`
-        UPDATE claim_submissions 
-        SET batch_id = NULL, batch_number = NULL, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ANY($1::int[]) AND batch_id = $2
-      `, [claim_ids, id]);
+      if (newItemIds.length < 2) {
+        return res.status(400).json({ error: 'Batch must retain at least 2 items' });
+      }
 
-      // Update batch totals
-      const removedAmount = claimsResult.rows.reduce((sum, c) => sum + parseFloat(c.total_amount || 0), 0);
+      const removedItemsResult = await query(`
+        SELECT pai.id, pai.net_amount, pai.adjudication_amount
+        FROM prior_authorization_items pai
+        WHERE pai.id = ANY($1::int[])
+      `, [claim_ids]);
+
+      const removedAmount = removedItemsResult.rows.reduce((sum, c) => sum + parseFloat(c.adjudication_amount || c.net_amount || 0), 0);
+
+      const bundleData = typeof batch.request_bundle === 'string'
+        ? JSON.parse(batch.request_bundle)
+        : (batch.request_bundle || {});
+      bundleData.item_ids = newItemIds;
+      if (bundleData.items) {
+        bundleData.items = bundleData.items.filter(i => !claim_ids.includes(i.item_id));
+      }
+
       await query(`
         UPDATE claim_batches 
-        SET total_claims = total_claims - $1, 
-            total_amount = total_amount - $2,
+        SET request_bundle = $1,
+            total_claims = $2,
+            total_amount = GREATEST(COALESCE(total_amount, 0) - $3::numeric, 0),
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $3
-      `, [claimsResult.rows.length, removedAmount, id]);
-
-      // Renumber remaining claims
-      const remainingClaims = await query(`
-        SELECT id FROM claim_submissions WHERE batch_id = $1 ORDER BY batch_number ASC
-      `, [id]);
-
-      for (let i = 0; i < remainingClaims.rows.length; i++) {
-        await query(`
-          UPDATE claim_submissions SET batch_number = $1 WHERE id = $2
-        `, [i + 1, remainingClaims.rows[i].id]);
-      }
+        WHERE id = $4
+      `, [JSON.stringify(bundleData), newItemIds.length, removedAmount, id]);
 
       const completeBatch = await this.getByIdInternal(id);
       res.json({ data: completeBatch });
     } catch (error) {
-      console.error('Error removing claims from batch:', error);
-      res.status(500).json({ error: 'Failed to remove claims from batch' });
+      console.error('Error removing items from batch:', error);
+      res.status(500).json({ error: 'Failed to remove items from batch' });
     }
   }
 
@@ -676,10 +618,8 @@ class ClaimBatchesController extends BaseController {
   // ============================================
 
   /**
-   * Preview the FHIR bundles that will be sent to NPHIES
-   * 
-   * Note: Per NPHIES rules, each claim is sent in a separate bundle.
-   * This preview shows all bundles that will be submitted.
+   * Preview the FHIR bundle that will be sent to NPHIES.
+   * Returns both the full batch bundle and individual bundles for inspection.
    */
   async previewBundle(req, res) {
     try {
@@ -694,16 +634,17 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: 'Batch must have at least 2 claims' });
       }
 
-      // Build SEPARATE bundles for each claim (NPHIES requirement)
       const bundleData = await this.prepareBatchBundleData(batch);
-      const claimBundles = batchClaimMapper.buildBatchClaimBundles(bundleData);
+      const batchBundle = batchClaimMapper.buildBatchRequestBundle(bundleData);
+      const individualBundles = batchClaimMapper.buildIndividualClaimBundles(bundleData);
 
       res.json({ 
-        data: claimBundles,
-        bundleCount: claimBundles.length,
+        data: individualBundles,
+        batchBundle,
+        bundleCount: individualBundles.length,
         claimCount: batch.claims.length,
         totalAmount: batch.total_amount,
-        note: 'Each claim will be sent in a separate bundle per NPHIES requirements. Claims are logically grouped by batch extensions. Note: _batchMetadata shown here is for display only and will be removed before sending to NPHIES.'
+        note: 'batchBundle is the single outer bundle sent to NPHIES (event=batch-request). "data" shows individual claim bundles for easy inspection.'
       });
     } catch (error) {
       console.error('Error previewing batch bundles:', error);
@@ -712,11 +653,10 @@ class ClaimBatchesController extends BaseController {
   }
 
   /**
-   * Submit batch to NPHIES
-   * 
-   * IMPORTANT: Per NPHIES rules, each claim must be sent in a SEPARATE bundle.
-   * Claims are logically grouped by batch extensions only.
-   * This fixes error BV-00221: "Message Header Focus contains more than one main resource"
+   * Submit batch to NPHIES as a SINGLE batch-request bundle.
+   * Per NPHIES docs: outer bundle (batch-request) wraps nested claim bundles.
+   * NPHIES validates in real-time, then queues valid claims for background delivery.
+   * Deferred responses are retrieved via polling.
    */
   async sendToNphies(req, res) {
     try {
@@ -735,213 +675,133 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: 'Batch must have at least 2 claims' });
       }
 
-      // Update status to Pending
       await query(`
         UPDATE claim_batches 
         SET status = 'Pending', submission_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
       `, [id]);
 
-      // Build SEPARATE bundles for each claim (NPHIES requirement)
       const bundleData = await this.prepareBatchBundleData(batch);
-      const claimBundles = batchClaimMapper.buildBatchClaimBundles(bundleData);
+      const batchBundle = batchClaimMapper.buildBatchRequestBundle(bundleData);
 
-      console.log(`[BatchClaims] Submitting batch ${batch.batch_identifier} with ${claimBundles.length} separate bundles`);
+      console.log(`[BatchClaims] Submitting batch ${batch.batch_identifier} as single batch-request bundle with ${batch.claims.length} nested claims`);
 
-      // Get original item_ids from current request_bundle to preserve them
-      let itemIds = [];
-      if (batch.request_bundle) {
-        const currentBundle = typeof batch.request_bundle === 'string' 
-          ? JSON.parse(batch.request_bundle) 
-          : batch.request_bundle;
-        itemIds = currentBundle.item_ids || currentBundle._metadata?.item_ids || [];
-      }
+      const itemIds = this._extractItemIds(batch.request_bundle);
 
-      // Store all bundles with metadata
-      const bundlesWithMetadata = {
-        bundles: claimBundles,
+      const storedRequestBundle = {
+        batchBundle,
         _metadata: {
           item_ids: itemIds,
           batchIdentifier: bundleData.batchIdentifier,
-          totalClaims: claimBundles.length,
+          totalClaims: batch.claims.length,
           items: bundleData.claims?.map((c, i) => ({
-            item_id: c.itemId,
+            item_id: c.claim?.id || c.itemId,
             batch_number: i + 1
           })) || []
         }
       };
-      
+
       await query(`
         UPDATE claim_batches SET request_bundle = $1 WHERE id = $2
-      `, [JSON.stringify(bundlesWithMetadata), id]);
+      `, [JSON.stringify(storedRequestBundle), id]);
 
-      // Submit each bundle separately to NPHIES
-      const allResponses = [];
-      const allErrors = [];
-      let hasQueuedClaims = false;
-      let hasPendedClaims = false;
-      let successCount = 0;
-      let errorCount = 0;
+      const nphiesResponse = await nphiesService.submitBatchClaim(batchBundle);
 
-      for (let i = 0; i < claimBundles.length; i++) {
-        const bundle = claimBundles[i];
-        const claimNumber = i + 1;
-        
-        try {
-          console.log(`[BatchClaims] Submitting claim ${claimNumber}/${claimBundles.length} for batch ${batch.batch_identifier}`);
-          
-          // Remove _batchMetadata before sending to NPHIES (internal use only)
-          // NPHIES rejects unknown elements with error FR-00027
-          const { _batchMetadata, ...cleanBundle } = bundle;
-          
-          // Submit individual claim bundle (without internal metadata)
-          const nphiesResponse = await nphiesService.submitClaim(cleanBundle);
-          
-          // Check if response has error outcome (NPHIES returns HTTP 200 but with errors in ClaimResponse)
-          const claimResponse = nphiesResponse.claimResponse;
-          const hasErrorOutcome = claimResponse?.outcome === 'error';
-          const responseErrors = claimResponse?.error || [];
-          
-          // Extract error details from ClaimResponse.error array
-          const extractedErrors = responseErrors.map(err => {
-            const coding = err?.code?.coding?.[0] || {};
-            const expression = coding.extension?.find(e => 
-              e.url?.includes('extension-error-expression')
-            )?.valueString;
-            return {
-              code: coding.code,
-              display: coding.display,
-              expression: expression
-            };
-          });
-          
-          if (nphiesResponse.success && !hasErrorOutcome) {
-            // Actually successful - HTTP 200 AND outcome is not "error"
-            successCount++;
-            allResponses.push({
-              claimNumber,
-              success: true,
-              data: nphiesResponse.data,
-              claimResponse: nphiesResponse.claimResponse
-            });
-            
-            if (nphiesResponse.outcome === 'queued') {
-              hasQueuedClaims = true;
-            }
-            if (nphiesResponse.adjudicationOutcome === 'pended') {
-              hasPendedClaims = true;
-            }
+      let batchStatus;
+      let allErrors = [];
 
-            // Process individual claim response
-            if (nphiesResponse.claimResponse) {
-              await this.processSingleClaimResponse(id, claimNumber, nphiesResponse.claimResponse, bundle);
-            }
-          } else {
-            // Failed - either HTTP error OR outcome: "error" in ClaimResponse
-            errorCount++;
-            const errorMessage = hasErrorOutcome 
-              ? `NPHIES Error: ${extractedErrors.map(e => e.display || e.code).join(', ')}`
-              : (nphiesResponse.error?.message || 'Submission failed');
-            
-            allErrors.push({
-              claimNumber,
-              error: errorMessage,
-              errors: hasErrorOutcome ? extractedErrors : nphiesResponse.errors,
-              outcome: claimResponse?.outcome
-            });
-            allResponses.push({
-              claimNumber,
-              success: false,
-              data: nphiesResponse.data, // Include response data for debugging
-              error: errorMessage,
-              errors: hasErrorOutcome ? extractedErrors : nphiesResponse.errors,
-              outcome: claimResponse?.outcome
-            });
-          }
-        } catch (claimError) {
-          errorCount++;
-          console.error(`[BatchClaims] Error submitting claim ${claimNumber}:`, claimError.message);
-          allErrors.push({
-            claimNumber,
-            error: claimError.message
-          });
-          allResponses.push({
-            claimNumber,
+      if (nphiesResponse.success) {
+        const parsed = nphiesResponse.parsedResponse || nphiesResponse;
+        const claimResponses = parsed.claimResponses || nphiesResponse.claimResponses || [];
+
+        const successCount = claimResponses.filter(r => r.success).length;
+        const errorCount = claimResponses.filter(r => !r.success).length;
+        const hasQueuedClaims = parsed.hasQueuedClaims || claimResponses.some(r => r.outcome === 'queued');
+
+        allErrors = (parsed.errors || []).concat(
+          claimResponses.filter(r => !r.success).flatMap(r => r.errors || [])
+        );
+
+        if (errorCount === claimResponses.length && claimResponses.length > 0) {
+          batchStatus = 'Error';
+        } else if (errorCount > 0) {
+          batchStatus = 'Partial';
+        } else if (hasQueuedClaims) {
+          batchStatus = 'Queued';
+        } else {
+          batchStatus = 'Submitted';
+        }
+
+        await query(`
+          UPDATE claim_batches 
+          SET response_bundle = $1, 
+              status = $2,
+              errors = $3,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $4
+        `, [
+          JSON.stringify(nphiesResponse.data || nphiesResponse),
+          batchStatus,
+          allErrors.length > 0 ? JSON.stringify(allErrors) : null,
+          id
+        ]);
+
+        await this.updateBatchStatistics(id);
+        const updatedBatch = await this.getByIdInternal(id);
+
+        if (batchStatus === 'Error') {
+          res.status(400).json({
             success: false,
-            error: claimError.message
+            data: updatedBatch,
+            error: 'All claims in batch failed validation',
+            errors: allErrors,
+            results: { total: batch.claims.length, success: successCount, failed: errorCount }
+          });
+        } else {
+          res.json({
+            success: true,
+            data: updatedBatch,
+            nphiesResponse: {
+              hasQueuedClaims,
+              hasPendedClaims: parsed.hasPendedClaims || false,
+              claimResponseCount: claimResponses.length
+            },
+            results: { total: batch.claims.length, success: successCount, failed: errorCount },
+            message: batchStatus === 'Partial'
+              ? `Batch partially accepted. ${successCount}/${batch.claims.length} claims passed validation.`
+              : hasQueuedClaims 
+                ? 'Batch submitted. Claims are queued for insurer processing. Use polling to retrieve responses.'
+                : 'Batch submitted successfully.'
           });
         }
-      }
-
-      // Determine overall batch status
-      let batchStatus;
-      if (errorCount === claimBundles.length) {
-        batchStatus = 'Error';
-      } else if (errorCount > 0) {
-        batchStatus = 'Partial';
-      } else if (hasQueuedClaims) {
-        batchStatus = 'Queued';
       } else {
-        batchStatus = 'Submitted';
-      }
+        batchStatus = 'Error';
+        allErrors = nphiesResponse.errors || [{ message: nphiesResponse.error?.message || 'Batch submission failed' }];
 
-      // Store aggregated response
-      await query(`
-        UPDATE claim_batches 
-        SET response_bundle = $1, 
-            status = $2,
-            errors = $3,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $4
-      `, [
-        JSON.stringify({ responses: allResponses }),
-        batchStatus,
-        allErrors.length > 0 ? JSON.stringify(allErrors) : null,
-        id
-      ]);
+        await query(`
+          UPDATE claim_batches 
+          SET response_bundle = $1, 
+              status = 'Error',
+              errors = $2,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $3
+        `, [
+          JSON.stringify(nphiesResponse.data || nphiesResponse),
+          JSON.stringify(allErrors),
+          id
+        ]);
 
-      // Update batch statistics
-      await this.updateBatchStatistics(id);
-
-      const updatedBatch = await this.getByIdInternal(id);
-      
-      if (batchStatus === 'Error') {
+        const updatedBatch = await this.getByIdInternal(id);
         res.status(400).json({
           success: false,
           data: updatedBatch,
-          error: 'All claims in batch failed to submit',
-          errors: allErrors,
-          results: {
-            total: claimBundles.length,
-            success: successCount,
-            failed: errorCount
-          }
-        });
-      } else {
-        res.json({
-          success: true,
-          data: updatedBatch,
-          nphiesResponse: {
-            hasQueuedClaims,
-            hasPendedClaims,
-            claimResponseCount: successCount
-          },
-          results: {
-            total: claimBundles.length,
-            success: successCount,
-            failed: errorCount
-          },
-          message: batchStatus === 'Partial'
-            ? `Batch partially submitted. ${successCount}/${claimBundles.length} claims succeeded.`
-            : hasQueuedClaims 
-              ? 'Batch submitted. Claims are queued for insurer processing. Use polling to retrieve responses.'
-              : 'Batch submitted successfully.'
+          error: 'Batch submission failed',
+          errors: allErrors
         });
       }
     } catch (error) {
       console.error('Error submitting batch to NPHIES:', error);
-      
-      // Update batch status to Error
+
       await query(`
         UPDATE claim_batches 
         SET status = 'Error', 
@@ -955,76 +815,7 @@ class ClaimBatchesController extends BaseController {
   }
 
   /**
-   * Process a single claim response from NPHIES
-   */
-  async processSingleClaimResponse(batchId, claimNumber, claimResponse, originalBundle) {
-    try {
-      // Find the claim ID from the original bundle
-      const claimEntry = originalBundle.entry?.find(e => e.resource?.resourceType === 'Claim');
-      const claimIdentifier = claimEntry?.resource?.identifier?.[0]?.value;
-      
-      // Find the corresponding claim in our batch
-      const batch = await this.getByIdInternal(batchId);
-      const claim = batch.claims?.find((c, idx) => idx + 1 === claimNumber);
-      
-      if (!claim) {
-        console.warn(`[BatchClaims] Could not find claim ${claimNumber} in batch ${batchId}`);
-        return;
-      }
-
-      // Update claim status based on response
-      const outcome = claimResponse.outcome || 'complete';
-      const adjudicationOutcome = claimResponse.adjudicationOutcome || outcome;
-      
-      let status;
-      switch (outcome) {
-        case 'complete':
-          status = adjudicationOutcome === 'approved' ? 'Approved' : 
-                   adjudicationOutcome === 'rejected' ? 'Rejected' : 'Processed';
-          break;
-        case 'queued':
-          status = 'Queued';
-          break;
-        case 'error':
-          status = 'Error';
-          break;
-        default:
-          status = 'Processed';
-      }
-
-      // Store the claim response
-      await query(`
-        INSERT INTO claim_responses (
-          claim_id, response_type, outcome, disposition, 
-          nphies_claim_id, has_errors, errors, is_nphies_generated,
-          nphies_response_id, received_at
-        ) VALUES ($1, 'claim-response', $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
-        ON CONFLICT (claim_id, response_type) DO UPDATE SET
-          outcome = EXCLUDED.outcome,
-          disposition = EXCLUDED.disposition,
-          nphies_claim_id = EXCLUDED.nphies_claim_id,
-          has_errors = EXCLUDED.has_errors,
-          errors = EXCLUDED.errors,
-          received_at = CURRENT_TIMESTAMP
-      `, [
-        claim.id,
-        outcome,
-        claimResponse.disposition,
-        claimResponse.nphiesClaimId,
-        claimResponse.errors?.length > 0,
-        claimResponse.errors ? JSON.stringify(claimResponse.errors) : null,
-        claimResponse.isNphiesGenerated || false,
-        claimResponse.responseId
-      ]);
-
-      console.log(`[BatchClaims] Processed response for claim ${claimNumber} in batch ${batchId}: ${status}`);
-    } catch (error) {
-      console.error(`[BatchClaims] Error processing claim response for claim ${claimNumber}:`, error);
-    }
-  }
-
-  /**
-   * Poll NPHIES for deferred batch claim responses
+   * Poll NPHIES for deferred batch claim responses.
    */
   async pollResponses(req, res) {
     try {
@@ -1039,7 +830,6 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: `Cannot poll batch with status: ${batch.status}` });
       }
 
-      // Get provider info
       const providerResult = await query(`
         SELECT * FROM providers WHERE provider_id = $1
       `, [batch.provider_id]);
@@ -1050,15 +840,11 @@ class ClaimBatchesController extends BaseController {
 
       const provider = providerResult.rows[0];
 
-      // Poll for responses
       console.log(`[BatchClaims] Polling for batch ${batch.batch_identifier} responses`);
       const pollResponse = await nphiesService.pollBatchClaimResponses(provider, batch.batch_identifier);
 
       if (pollResponse.success && pollResponse.claimResponses?.length > 0) {
-        // Process the claim responses
-        await this.processClaimResponses(id, pollResponse.claimResponses);
-
-        // Update batch statistics
+        await this.processPolledClaimResponses(id, pollResponse.claimResponses, batch);
         await this.updateBatchStatistics(id);
 
         const updatedBatch = await this.getByIdInternal(id);
@@ -1088,35 +874,274 @@ class ClaimBatchesController extends BaseController {
   }
 
   // ============================================
-  // HELPER METHODS
+  // RESPONSE PROCESSING
   // ============================================
 
   /**
-   * Prepare data for building batch bundle from approved prior authorization items
+   * Process polled claim responses by correlating batch-number to item_ids.
+   * Updates the batch response_bundle with per-claim outcomes.
    */
+  async processPolledClaimResponses(batchId, claimResponses, batch) {
+    try {
+      const itemIds = this._extractItemIds(batch.request_bundle);
+
+      let existingResponseBundle = {};
+      if (batch.response_bundle) {
+        existingResponseBundle = typeof batch.response_bundle === 'string'
+          ? JSON.parse(batch.response_bundle)
+          : batch.response_bundle;
+      }
+
+      if (!existingResponseBundle.polledResponses) {
+        existingResponseBundle.polledResponses = [];
+      }
+
+      for (const response of claimResponses) {
+        const batchNumber = response.batchNumber;
+        if (!batchNumber) continue;
+
+        const itemId = itemIds[batchNumber - 1];
+        existingResponseBundle.polledResponses.push({
+          batchNumber,
+          itemId,
+          outcome: response.outcome,
+          adjudicationOutcome: response.adjudicationOutcome,
+          disposition: response.disposition,
+          nphiesClaimId: response.nphiesClaimId,
+          batchIdentifier: response.batchIdentifier,
+          errors: response.errors,
+          receivedAt: new Date().toISOString()
+        });
+      }
+
+      await query(`
+        UPDATE claim_batches 
+        SET response_bundle = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `, [JSON.stringify(existingResponseBundle), batchId]);
+
+    } catch (error) {
+      console.error(`[BatchClaims] Error processing polled responses for batch ${batchId}:`, error);
+    }
+  }
+
+  // ============================================
+  // STATISTICS
+  // ============================================
+
+  async updateBatchStatistics(batchId) {
+    const batchResult = await query(`
+      SELECT response_bundle, total_claims FROM claim_batches WHERE id = $1
+    `, [batchId]);
+
+    if (batchResult.rows.length === 0) {
+      return;
+    }
+
+    const batch = batchResult.rows[0];
+    const responseBundle = batch.response_bundle;
+    const totalClaims = batch.total_claims || 0;
+
+    let approved = 0;
+    let rejected = 0;
+    let pending = 0;
+    let queued = 0;
+
+    if (responseBundle) {
+      const responsesToAnalyze = responseBundle.responses || [];
+      const polledResponses = responseBundle.polledResponses || [];
+
+      for (const response of responsesToAnalyze) {
+        if (!response.success) {
+          rejected++;
+          continue;
+        }
+
+        const claimResponse = response.data?.entry?.find(
+          e => e.resource?.resourceType === 'ClaimResponse'
+        )?.resource;
+
+        if (!claimResponse) {
+          pending++;
+          continue;
+        }
+
+        const outcome = claimResponse.outcome;
+        const adjudicationOutcome = claimResponse.extension?.find(
+          ext => ext.url?.includes('extension-adjudication-outcome')
+        )?.valueCodeableConcept?.coding?.[0]?.code;
+
+        if (outcome === 'complete') {
+          if (adjudicationOutcome === 'approved' || adjudicationOutcome === 'partial') {
+            approved++;
+          } else if (adjudicationOutcome === 'rejected') {
+            rejected++;
+          } else {
+            pending++;
+          }
+        } else if (outcome === 'queued') {
+          queued++;
+        } else if (outcome === 'error') {
+          rejected++;
+        } else {
+          pending++;
+        }
+      }
+
+      if (responseBundle.entry) {
+        for (const entry of responseBundle.entry) {
+          if (entry.resource?.resourceType === 'Bundle' || entry.resource?.resourceType === 'ClaimResponse') {
+            const cr = entry.resource?.resourceType === 'ClaimResponse'
+              ? entry.resource
+              : entry.resource?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+
+            if (!cr) continue;
+            const outcome = cr.outcome;
+            const adj = cr.extension?.find(ext => ext.url?.includes('extension-adjudication-outcome'))?.valueCodeableConcept?.coding?.[0]?.code;
+
+            if (outcome === 'queued') queued++;
+            else if (outcome === 'error') rejected++;
+            else if (adj === 'approved' || adj === 'partial') approved++;
+            else if (adj === 'rejected') rejected++;
+            else pending++;
+          }
+        }
+      }
+
+      for (const pr of polledResponses) {
+        if (pr.outcome === 'complete') {
+          if (pr.adjudicationOutcome === 'approved' || pr.adjudicationOutcome === 'partial') approved++;
+          else if (pr.adjudicationOutcome === 'rejected') rejected++;
+          else pending++;
+        } else if (pr.outcome === 'queued') {
+          queued++;
+        } else if (pr.outcome === 'error') {
+          rejected++;
+        }
+      }
+    }
+
+    let batchStatus = 'Submitted';
+    const processedCount = approved + rejected;
+    
+    if (processedCount === totalClaims && totalClaims > 0) {
+      if (rejected === totalClaims) batchStatus = 'Rejected';
+      else if (approved === totalClaims) batchStatus = 'Processed';
+      else batchStatus = 'Partial';
+    } else if (queued > 0) {
+      batchStatus = 'Queued';
+    } else if (processedCount > 0) {
+      batchStatus = 'Partial';
+    }
+
+    console.log(`[BatchClaims] Statistics for batch ${batchId}: total=${totalClaims}, approved=${approved}, rejected=${rejected}, queued=${queued}, status=${batchStatus}`);
+
+    await query(`
+      UPDATE claim_batches 
+      SET processed_claims = $1::int,
+          approved_claims = $2::int,
+          rejected_claims = $3::int,
+          status = $4::text,
+          processed_date = CASE WHEN $4::text IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $5
+    `, [processedCount, approved, rejected, batchStatus, batchId]);
+  }
+
+  async recalculateStatistics(req, res) {
+    try {
+      const { id } = req.params;
+      
+      const batch = await this.getByIdInternal(id);
+      if (!batch) {
+        return res.status(404).json({ error: 'Batch not found' });
+      }
+
+      await this.updateBatchStatistics(id);
+      const updatedBatch = await this.getByIdInternal(id);
+      
+      res.json({
+        success: true,
+        message: 'Statistics recalculated successfully',
+        data: updatedBatch
+      });
+    } catch (error) {
+      console.error('Error recalculating statistics:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async updateStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status, description } = req.body;
+
+      const validStatuses = ['Draft', 'Pending', 'Submitted', 'Queued', 'Processed', 'Partial', 'Rejected', 'Error'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+      }
+
+      const result = await query(`
+        UPDATE claim_batches 
+        SET status = $1, 
+            description = COALESCE($2, description),
+            processed_date = CASE WHEN $1 IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+        RETURNING *
+      `, [status, description, id]);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Claim batch not found' });
+      }
+
+      res.json({ data: result.rows[0] });
+    } catch (error) {
+      console.error('Error updating claim batch status:', error);
+      res.status(500).json({ error: 'Failed to update claim batch status' });
+    }
+  }
+
+  async delete(req, res) {
+    try {
+      const { id } = req.params;
+
+      const batchResult = await query('SELECT * FROM claim_batches WHERE id = $1', [id]);
+      if (batchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Batch not found' });
+      }
+
+      const batch = batchResult.rows[0];
+      if (batch.status !== 'Draft') {
+        return res.status(400).json({ error: 'Can only delete draft batches' });
+      }
+
+      await query('DELETE FROM claim_batches WHERE id = $1', [id]);
+
+      res.json({ message: 'Batch deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting batch:', error);
+      res.status(500).json({ error: 'Failed to delete batch' });
+    }
+  }
+
+  // ============================================
+  // HELPER METHODS
+  // ============================================
+
   async prepareBatchBundleData(batch) {
-    // Get provider details
     const providerResult = await query(`
       SELECT * FROM providers WHERE provider_id = $1
     `, [batch.provider_id]);
     const provider = providerResult.rows[0];
 
-    // Get insurer details
     const insurerResult = await query(`
       SELECT * FROM insurers WHERE insurer_id = $1
     `, [batch.insurer_id]);
     const insurer = insurerResult.rows[0];
 
-    // Get item IDs from the batch's request_bundle metadata
-    let itemIds = [];
-    if (batch.request_bundle) {
-      const bundleData = typeof batch.request_bundle === 'string' 
-        ? JSON.parse(batch.request_bundle) 
-        : batch.request_bundle;
-      itemIds = bundleData.item_ids || [];
-    }
+    const itemIds = this._extractItemIds(batch.request_bundle);
 
-    // Get full claim data for each prior authorization item in the batch
     const claims = [];
     for (const itemId of itemIds) {
       const claimData = await this.getAuthItemDataForBundle(itemId);
@@ -1141,12 +1166,7 @@ class ClaimBatchesController extends BaseController {
     };
   }
 
-  /**
-   * Get full claim data from approved prior authorization item for building FHIR bundle
-   * This converts a prior authorization item into claim data format
-   */
   async getAuthItemDataForBundle(itemId) {
-    // Get the prior authorization item with its parent authorization data
     const itemResult = await query(`
       SELECT 
         pai.*,
@@ -1197,21 +1217,18 @@ class ClaimBatchesController extends BaseController {
 
     const item = itemResult.rows[0];
 
-    // Get related diagnoses from the prior authorization
     const diagnosesResult = await query(`
       SELECT * FROM prior_authorization_diagnoses 
       WHERE prior_auth_id = $1 
       ORDER BY sequence ASC
     `, [item.auth_id]);
 
-    // Get supporting info from the prior authorization
     const supportingInfoResult = await query(`
       SELECT * FROM prior_authorization_supporting_info 
       WHERE prior_auth_id = $1 
       ORDER BY sequence ASC
     `, [item.auth_id]);
 
-    // Get coverage data for the patient and insurer
     const coverageResult = await query(`
       SELECT * FROM patient_coverage 
       WHERE patient_id = $1 AND insurer_id = $2 AND is_active = true
@@ -1219,15 +1236,6 @@ class ClaimBatchesController extends BaseController {
       LIMIT 1
     `, [item.patient_id, item.insurer_id]);
 
-    // Practitioner data - use default if not available
-    // Note: practitioners table may not exist, so we use defaults based on claim type
-    let practitioner = null;
-
-    // Build the data structure expected by claim mappers
-    // Convert prior auth item to claim format
-    // IMPORTANT: items, diagnoses, supportingInfo MUST be inside the claim object
-    // The claim mappers access them as claim.items, claim.diagnoses, etc.
-    
     const diagnosesArray = diagnosesResult.rows.map(d => ({
       sequence: d.sequence,
       diagnosis_code: d.diagnosis_code,
@@ -1271,7 +1279,6 @@ class ClaimBatchesController extends BaseController {
       pharmacist_substitute: item.pharmacist_substitute
     }];
 
-    // Build coverage object
     const coverageData = coverageResult.rows.length > 0 ? coverageResult.rows[0] : null;
     const coverage = coverageData ? {
       id: coverageData.coverage_id,
@@ -1286,7 +1293,6 @@ class ClaimBatchesController extends BaseController {
       period_start: coverageData.start_date || coverageData.period_start,
       period_end: coverageData.end_date || coverageData.period_end
     } : {
-      // Default coverage if none found
       id: `cov-${item.patient_id}`,
       coverage_id: `cov-${item.patient_id}`,
       member_id: item.patient_identifier,
@@ -1312,7 +1318,6 @@ class ClaimBatchesController extends BaseController {
         primary_diagnosis: item.primary_diagnosis,
         practice_code: item.practice_code || '08.00',
         service_event_type: item.service_event_type || 'ICSE',
-        // CRITICAL: These must be inside claim object for mappers to find them
         items: itemsArray,
         diagnoses: diagnosesArray,
         supportingInfo: supportingInfoResult.rows,
@@ -1342,280 +1347,16 @@ class ClaimBatchesController extends BaseController {
         nphies_id: item.insurer_nphies_id
       },
       coverage,
-      // Practitioner - use default values, mappers will create default practitioner resource
       practitioner: {
         name: 'Default Practitioner',
         specialty_code: item.practice_code || '08.00'
       },
-      // Also include at root level for backwards compatibility with some mappers
       items: itemsArray,
       diagnoses: diagnosesArray,
       supportingInfo: supportingInfoResult.rows,
       attachments: [],
-      // Include pre-auth reference for claim submission
       preAuthRef: item.pre_auth_ref
     };
-  }
-
-  /**
-   * Process individual claim responses from NPHIES
-   */
-  async processClaimResponses(batchId, claimResponses) {
-    for (const response of claimResponses) {
-      if (!response.batchNumber) continue;
-
-      // Find the claim by batch number
-      const claimResult = await query(`
-        SELECT id FROM claim_submissions WHERE batch_id = $1 AND batch_number = $2
-      `, [batchId, response.batchNumber]);
-
-      if (claimResult.rows.length === 0) continue;
-
-      const claimId = claimResult.rows[0].id;
-
-      // Update claim status based on response
-      let status = 'pending';
-      if (response.outcome === 'complete' && response.adjudicationOutcome === 'approved') {
-        status = 'approved';
-      } else if (response.adjudicationOutcome === 'rejected') {
-        status = 'denied';
-      } else if (response.outcome === 'queued') {
-        status = 'queued';
-      } else if (response.outcome === 'error') {
-        status = 'error';
-      }
-
-      await query(`
-        UPDATE claim_submissions 
-        SET status = $1, 
-            outcome = $2,
-            adjudication_outcome = $3,
-            disposition = $4,
-            nphies_claim_id = $5,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $6
-      `, [
-        status,
-        response.outcome,
-        response.adjudicationOutcome,
-        response.disposition,
-        response.nphiesClaimId,
-        claimId
-      ]);
-
-      // Store the response
-      await query(`
-        INSERT INTO claim_submission_responses (
-          claim_id, response_type, outcome, disposition, 
-          nphies_claim_id, has_errors, errors, is_nphies_generated,
-          nphies_response_id, received_at
-        ) VALUES ($1, 'batch-response', $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
-      `, [
-        claimId,
-        response.outcome,
-        response.disposition,
-        response.nphiesClaimId,
-        response.errors?.length > 0,
-        response.errors ? JSON.stringify(response.errors) : null,
-        response.isNphiesGenerated || false,
-        response.nphiesClaimId
-      ]);
-    }
-  }
-
-  /**
-   * Update batch statistics after processing responses
-   */
-  async updateBatchStatistics(batchId) {
-    // Get the batch to analyze response_bundle
-    const batchResult = await query(`
-      SELECT response_bundle, total_claims FROM claim_batches WHERE id = $1
-    `, [batchId]);
-
-    if (batchResult.rows.length === 0) {
-      console.warn(`[BatchClaims] Batch ${batchId} not found for statistics update`);
-      return;
-    }
-
-    const batch = batchResult.rows[0];
-    const responseBundle = batch.response_bundle;
-    const totalClaims = batch.total_claims || 0;
-
-    // Calculate statistics from response_bundle
-    let approved = 0;
-    let rejected = 0;
-    let pending = 0;
-    let queued = 0;
-
-    if (responseBundle?.responses && Array.isArray(responseBundle.responses)) {
-      for (const response of responseBundle.responses) {
-        if (!response.success) {
-          rejected++;
-          continue;
-        }
-
-        // Extract outcome from ClaimResponse
-        const claimResponse = response.data?.entry?.find(
-          e => e.resource?.resourceType === 'ClaimResponse'
-        )?.resource;
-
-        if (!claimResponse) {
-          pending++;
-          continue;
-        }
-
-        const outcome = claimResponse.outcome;
-        const adjudicationOutcome = claimResponse.extension?.find(
-          ext => ext.url?.includes('extension-adjudication-outcome')
-        )?.valueCodeableConcept?.coding?.[0]?.code;
-
-        if (outcome === 'complete') {
-          if (adjudicationOutcome === 'approved') {
-            approved++;
-          } else if (adjudicationOutcome === 'rejected') {
-            rejected++;
-          } else if (adjudicationOutcome === 'partial') {
-            approved++; // Count partial as approved for statistics
-          } else {
-            pending++;
-          }
-        } else if (outcome === 'queued') {
-          queued++;
-        } else if (outcome === 'error') {
-          rejected++;
-        } else {
-          pending++;
-        }
-      }
-    }
-
-    // Determine batch status based on response outcomes
-    let batchStatus = 'Submitted';
-    const processedCount = approved + rejected;
-    
-    if (processedCount === totalClaims && totalClaims > 0) {
-      // All claims processed
-      if (rejected === totalClaims) {
-        batchStatus = 'Rejected';
-      } else if (approved === totalClaims) {
-        batchStatus = 'Processed';
-      } else {
-        batchStatus = 'Partial';
-      }
-    } else if (queued > 0) {
-      batchStatus = 'Queued';
-    } else if (processedCount > 0) {
-      batchStatus = 'Partial';
-    }
-
-    console.log(`[BatchClaims] Statistics for batch ${batchId}: total=${totalClaims}, approved=${approved}, rejected=${rejected}, queued=${queued}, status=${batchStatus}`);
-
-    await query(`
-      UPDATE claim_batches 
-      SET processed_claims = $1::int,
-          approved_claims = $2::int,
-          rejected_claims = $3::int,
-          status = $4::text,
-          processed_date = CASE WHEN $4::text IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = $5
-    `, [processedCount, approved, rejected, batchStatus, batchId]);
-  }
-
-  /**
-   * Recalculate batch statistics from response_bundle
-   */
-  async recalculateStatistics(req, res) {
-    try {
-      const { id } = req.params;
-      
-      const batch = await this.getByIdInternal(id);
-      if (!batch) {
-        return res.status(404).json({ error: 'Batch not found' });
-      }
-
-      await this.updateBatchStatistics(id);
-      
-      const updatedBatch = await this.getByIdInternal(id);
-      
-      res.json({
-        success: true,
-        message: 'Statistics recalculated successfully',
-        data: updatedBatch
-      });
-    } catch (error) {
-      console.error('Error recalculating statistics:', error);
-      res.status(500).json({ error: error.message });
-    }
-  }
-
-  /**
-   * Update batch status
-   */
-  async updateStatus(req, res) {
-    try {
-      const { id } = req.params;
-      const { status, description } = req.body;
-
-      const validStatuses = ['Draft', 'Pending', 'Submitted', 'Queued', 'Processed', 'Partial', 'Rejected', 'Error'];
-      if (!validStatuses.includes(status)) {
-        return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
-      }
-
-      const result = await query(`
-        UPDATE claim_batches 
-        SET status = $1, 
-            description = COALESCE($2, description),
-            processed_date = CASE WHEN $1 IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $3
-        RETURNING *
-      `, [status, description, id]);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Claim batch not found' });
-      }
-
-      res.json({ data: result.rows[0] });
-    } catch (error) {
-      console.error('Error updating claim batch status:', error);
-      res.status(500).json({ error: 'Failed to update claim batch status' });
-    }
-  }
-
-  /**
-   * Delete a draft batch (removes batch association from claims)
-   */
-  async delete(req, res) {
-    try {
-      const { id } = req.params;
-
-      // Get the batch
-      const batchResult = await query('SELECT * FROM claim_batches WHERE id = $1', [id]);
-      if (batchResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Batch not found' });
-      }
-
-      const batch = batchResult.rows[0];
-      if (batch.status !== 'Draft') {
-        return res.status(400).json({ error: 'Can only delete draft batches' });
-      }
-
-      // Remove batch association from claims
-      await query(`
-        UPDATE claim_submissions 
-        SET batch_id = NULL, batch_number = NULL, updated_at = CURRENT_TIMESTAMP
-        WHERE batch_id = $1
-      `, [id]);
-
-      // Delete the batch
-      await query('DELETE FROM claim_batches WHERE id = $1', [id]);
-
-      res.json({ message: 'Batch deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting batch:', error);
-      res.status(500).json({ error: 'Failed to delete batch' });
-    }
   }
 }
 
