@@ -20,7 +20,7 @@ import MedicationSafetyPanel from '@/components/general-request/shared/Medicatio
 
 // Import Communication Panel for NPHIES communications
 import { CommunicationPanel } from '@/components/prior-auth';
-import { PRIORITY_OPTIONS, SERVICE_CODE_SYSTEM_OPTIONS } from '@/components/prior-auth/constants';
+import { PRIORITY_OPTIONS } from '@/components/prior-auth/constants';
 import { selectStyles } from '@/components/prior-auth/styles';
 import Select from 'react-select';
 
@@ -873,10 +873,8 @@ export default function PriorAuthorizationDetails() {
       const overrides = priorAuth.items.map((item, idx) => ({
         sequence: idx + 1,
         original_code: item.product_or_service_code || item.service_code,
-        original_system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
         original_display: item.product_or_service_display || item.service_display,
-        service_code: '',
-        service_code_system: 'http://nphies.sa/terminology/CodeSystem/services',
+        service_code: '', // User will enter the new service code
         service_display: item.product_or_service_display || item.service_display || ''
       }));
       setServiceCodeOverrides(overrides);
@@ -3972,7 +3970,7 @@ export default function PriorAuthorizationDetails() {
         open={showServiceCodeDialog}
         onClose={() => setShowServiceCodeDialog(false)}
         title="Enter Service Codes for Professional Claim"
-        description="Enter the correct service code and code system for each item. Items can use different code systems (procedures, services, LOINC, CPT, etc.)."
+        description="Professional claims require service codes from the NPHIES Services CodeSystem. Please enter the correct service code for each item."
         footer={
           <>
             <Button variant="outline" onClick={() => setShowServiceCodeDialog(false)}>
@@ -4011,7 +4009,6 @@ export default function PriorAuthorizationDetails() {
                 <tr>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">Item #</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Original Code</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code System</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service Code (Required)</th>
                 </tr>
               </thead>
@@ -4028,17 +4025,6 @@ export default function PriorAuthorizationDetails() {
                           <p className="text-xs text-gray-500 mt-1">{item.original_display}</p>
                         )}
                       </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <Select
-                        value={SERVICE_CODE_SYSTEM_OPTIONS.find(o => o.value === item.service_code_system) || SERVICE_CODE_SYSTEM_OPTIONS[1]}
-                        onChange={(option) => handleServiceCodeChange(index, 'service_code_system', option?.value || 'http://nphies.sa/terminology/CodeSystem/services')}
-                        options={SERVICE_CODE_SYSTEM_OPTIONS}
-                        styles={selectStyles}
-                        menuPortalTarget={document.body}
-                        isSearchable={false}
-                        className="text-sm min-w-[180px]"
-                      />
                     </td>
                     <td className="px-3 py-3">
                       <div className="space-y-2">
@@ -4066,9 +4052,9 @@ export default function PriorAuthorizationDetails() {
 
           {/* Help Text */}
           <div className="text-xs text-gray-500 space-y-1">
-            <p>• Select the code system that matches each item's code</p>
-            <p>• NPHIES test cases may require items from multiple code systems</p>
-            <p>• Example: <code className="bg-gray-100 px-1 rounded">83600-00-10</code> (services), <code className="bg-gray-100 px-1 rounded">55951-8</code> (LOINC)</p>
+            <p>• Service codes are required for professional claims submitted to NPHIES</p>
+            <p>• The original procedure code from the prior auth will be replaced with the service code you enter</p>
+            <p>• Example format: <code className="bg-gray-100 px-1 rounded">83600-00-10</code></p>
           </div>
         </div>
       </Modal>

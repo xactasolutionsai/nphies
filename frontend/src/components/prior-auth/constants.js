@@ -305,15 +305,11 @@ export const LOINC_LAB_OPTIONS = [
 ];
 
 // Service Code System Options (for dropdown to select code system)
-// Used in claim submission to allow items from multiple code systems per NPHIES test case requirements
+// NOTE: For Claim.item.productOrService, ONLY NPHIES codes are valid
+// LOINC codes are for Observation resources, NOT for Claim items
 export const SERVICE_CODE_SYSTEM_OPTIONS = [
-  { value: 'http://nphies.sa/terminology/CodeSystem/procedures', label: 'NPHIES Procedures' },
-  { value: 'http://nphies.sa/terminology/CodeSystem/services', label: 'NPHIES Services' },
-  { value: 'http://nphies.sa/terminology/CodeSystem/scientific-codes', label: 'NPHIES Scientific Codes' },
-  { value: 'http://nphies.sa/terminology/CodeSystem/medication-codes', label: 'NPHIES Medication Codes' },
-  { value: 'http://loinc.org', label: 'LOINC' },
-  { value: 'http://www.ama-assn.org/go/cpt', label: 'CPT' },
-  { value: 'http://nphies.sa/terminology/CodeSystem/sfda', label: 'SFDA' }
+  { value: 'nphies', label: 'NPHIES Procedures', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: 'nphies-lab', label: 'NPHIES Lab Services', system: 'http://nphies.sa/terminology/CodeSystem/procedures' }
 ];
 
 // ============================================================================
