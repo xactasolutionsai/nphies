@@ -318,42 +318,70 @@ export const EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS = [
   { value: 'R', label: 'R - Registered, advised, left without being attended' }
 ];
 
+// ============================================================================
+// NPHIES BILLING CODE SYSTEMS
+// Each CodeSystem has its own URL used in Claim.item.productOrService.coding.system
+// Reference: NPHIES IG - ProfessionalBilling, InstitutionalBilling, VisionBilling, DentalBilling ValueSets
+// ============================================================================
+
 // Service Code System Options (for dropdown to select code system)
-// NOTE: For Claim.item.productOrService, ONLY NPHIES codes are valid
-// LOINC codes are for Observation resources, NOT for Claim items
 export const SERVICE_CODE_SYSTEM_OPTIONS = [
-  { value: 'nphies', label: 'NPHIES Procedures', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: 'nphies-lab', label: 'NPHIES Lab Services', system: 'http://nphies.sa/terminology/CodeSystem/procedures' }
+  { value: 'procedures', label: 'NPHIES Procedures', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
+  { value: 'imaging', label: 'NPHIES Imaging', system: 'http://nphies.sa/terminology/CodeSystem/imaging' },
+  { value: 'laboratory', label: 'NPHIES Laboratory', system: 'http://nphies.sa/terminology/CodeSystem/laboratory' },
+  { value: 'services', label: 'NPHIES Services', system: 'http://nphies.sa/terminology/CodeSystem/services' },
+  { value: 'lens-type', label: 'NPHIES Lens Type', system: 'http://nphies.sa/terminology/CodeSystem/lens-type' },
+  { value: 'practice-codes', label: 'Practice Codes', system: 'http://nphies.sa/terminology/CodeSystem/practice-codes' }
 ];
 
-// ============================================================================
-// NPHIES LAB SERVICE CODES (for Claim.item.productOrService)
-// Reference: http://nphies.sa/terminology/CodeSystem/procedures
-// IMPORTANT: These are SERVICE codes, NOT LOINC codes
-// LOINC codes go in Observation resources, referenced via supportingInfo
-// ============================================================================
-export const NPHIES_LAB_SERVICE_OPTIONS = [
-  // General Lab Services - Use these for Claim.item.productOrService
-  { value: '91.0', label: '91.0 - Laboratory investigation, unspecified', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.01', label: '91.01 - Blood chemistry panel', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.02', label: '91.02 - Complete blood count (CBC)', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.03', label: '91.03 - Urinalysis', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.04', label: '91.04 - Lipid panel', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.05', label: '91.05 - Liver function tests', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.06', label: '91.06 - Kidney function tests', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.07', label: '91.07 - Thyroid function tests', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.08', label: '91.08 - Glucose tolerance test', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.09', label: '91.09 - HbA1c test', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.10', label: '91.10 - Coagulation panel', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.11', label: '91.11 - Electrolyte panel', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '91.12', label: '91.12 - Urine microalbumin test', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  // Specific lab tests
-  { value: '90.59', label: '90.59 - Other microscopic examination', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '90.69', label: '90.69 - Other culture and sensitivity', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '90.79', label: '90.79 - Other serology', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '90.89', label: '90.89 - Other immunology', system: 'http://nphies.sa/terminology/CodeSystem/procedures' },
-  { value: '90.99', label: '90.99 - Other laboratory examination', system: 'http://nphies.sa/terminology/CodeSystem/procedures' }
+// NPHIES Imaging Procedures
+// Reference: http://nphies.sa/terminology/CodeSystem/imaging
+export const NPHIES_IMAGING_OPTIONS = [
+  { value: '55276-00-00', label: '55276-00-00 - Duplex ultrasound of intra-abdominal, aorta and iliac arteries and/or inferior vena cava and iliac veins' }
 ];
+
+// NPHIES Laboratory Tests
+// Reference: http://nphies.sa/terminology/CodeSystem/laboratory
+export const NPHIES_LABORATORY_OPTIONS = [
+  { value: '73050-54-40', label: '73050-54-40 - Detection of Herpes Simplex Virus (HSV) by nucleic acid (DNA or RNA) direct probe technique' }
+];
+
+// NPHIES Services (Room & Board, Consultations, Service codes)
+// Reference: http://nphies.sa/terminology/CodeSystem/services
+export const NPHIES_SERVICES_OPTIONS = [
+  { value: '83610-02-90', label: '83610-02-90 - Room and board charges, neonatal special care settings' },
+  { value: '83600-00-10', label: '83600-00-10 - Specialist Consultation' }
+];
+
+// NPHIES Lens Type (for vision claims)
+// Reference: http://nphies.sa/terminology/CodeSystem/lens-type
+export const NPHIES_LENS_TYPE_OPTIONS = [
+  { value: 'contact', label: 'contact - Contact Lens' },
+  { value: 'lens', label: 'lens - Spectacle Lens' }
+];
+
+// Helper to reverse-lookup code system key from a system URL
+export const getCodeSystemKeyFromUrl = (systemUrl) => {
+  if (!systemUrl) return 'procedures';
+  const match = SERVICE_CODE_SYSTEM_OPTIONS.find(opt => opt.system === systemUrl);
+  return match?.value || 'procedures';
+};
+
+// Helper to get the correct options array for a given code system key
+export const getServiceCodeOptions = (codeSystemKey) => {
+  const map = {
+    'procedures': NPHIES_PROCEDURE_OPTIONS,
+    'imaging': NPHIES_IMAGING_OPTIONS,
+    'laboratory': NPHIES_LABORATORY_OPTIONS,
+    'services': NPHIES_SERVICES_OPTIONS,
+    'lens-type': NPHIES_LENS_TYPE_OPTIONS,
+    'practice-codes': null, // computed below from PRACTICE_CODES_OPTIONS
+  };
+  if (codeSystemKey === 'practice-codes') {
+    return PRACTICE_CODES_OPTIONS.flatMap(group => group.options);
+  }
+  return map[codeSystemKey] || NPHIES_PROCEDURE_OPTIONS;
+};
 
 // Vision ICD-10 Codes for eye examinations and disorders
 // Reference: https://icd.who.int/browse10/2016/en

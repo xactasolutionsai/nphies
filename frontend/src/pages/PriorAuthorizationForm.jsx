@@ -54,7 +54,8 @@ import {
   NPHIES_PROCEDURE_OPTIONS,
   LOINC_LAB_OPTIONS,
   SERVICE_CODE_SYSTEM_OPTIONS,
-  NPHIES_LAB_SERVICE_OPTIONS
+  getServiceCodeOptions,
+  getCodeSystemKeyFromUrl
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -4203,14 +4204,12 @@ export default function PriorAuthorizationForm() {
                         <Label>Code System</Label>
                         <Select
                           value={SERVICE_CODE_SYSTEM_OPTIONS.find(opt => 
-                            opt.value === (item.is_lab_service ? 'nphies-lab' : 'nphies')
+                            opt.system === item.product_or_service_system
                           ) || SERVICE_CODE_SYSTEM_OPTIONS[0]}
                           onChange={(option) => {
-                            // Clear current code when switching systems
                             handleItemChange(index, 'product_or_service_code', '');
                             handleItemChange(index, 'product_or_service_display', '');
                             handleItemChange(index, 'product_or_service_system', option?.system || 'http://nphies.sa/terminology/CodeSystem/procedures');
-                            handleItemChange(index, 'is_lab_service', option?.value === 'nphies-lab');
                           }}
                           options={SERVICE_CODE_SYSTEM_OPTIONS}
                           styles={selectStyles}
@@ -4224,31 +4223,19 @@ export default function PriorAuthorizationForm() {
                         <Label>Service/Procedure Code *</Label>
                         <Select
                           value={
-                            item.is_lab_service
-                              ? NPHIES_LAB_SERVICE_OPTIONS.find(opt => opt.value === item.product_or_service_code)
-                              : NPHIES_PROCEDURE_OPTIONS.find(opt => opt.value === item.product_or_service_code)
+                            getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
+                              .find(opt => opt.value === item.product_or_service_code) || null
                           }
                           onChange={(option) => {
                             handleItemChange(index, 'product_or_service_code', option?.value || '');
-                            // Extract description from label (format: "CODE - Description")
                             const description = option?.label?.includes(' - ') 
                               ? option.label.split(' - ').slice(1).join(' - ')
                               : '';
                             handleItemChange(index, 'product_or_service_display', description);
-                            // Always use NPHIES system (not LOINC)
-                            handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/procedures');
                           }}
-                          options={
-                            item.is_lab_service
-                              ? NPHIES_LAB_SERVICE_OPTIONS
-                              : NPHIES_PROCEDURE_OPTIONS
-                          }
+                          options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
                           styles={selectStyles}
-                          placeholder={
-                            item.is_lab_service
-                              ? "Select NPHIES lab service..."
-                              : "Select procedure..."
-                          }
+                          placeholder="Select code..."
                           isClearable
                           isSearchable
                           menuPortalTarget={document.body}
@@ -4415,13 +4402,11 @@ export default function PriorAuthorizationForm() {
                                     <Label className="text-xs">Service Code *</Label>
                                     <Select
                                       value={
-                                        item.is_lab_service
-                                          ? NPHIES_LAB_SERVICE_OPTIONS.find(opt => opt.value === detail.product_or_service_code)
-                                          : NPHIES_PROCEDURE_OPTIONS.find(opt => opt.value === detail.product_or_service_code)
+                                        getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
+                                          .find(opt => opt.value === detail.product_or_service_code) || null
                                       }
                                       onChange={(option) => {
                                         const newDetails = [...item.details];
-                                        // Extract description from label (format: "CODE - Description")
                                         const description = option?.label?.includes(' - ') 
                                           ? option.label.split(' - ').slice(1).join(' - ')
                                           : '';
@@ -4429,21 +4414,13 @@ export default function PriorAuthorizationForm() {
                                           ...detail, 
                                           product_or_service_code: option?.value || '',
                                           product_or_service_display: description,
-                                          product_or_service_system: 'http://nphies.sa/terminology/CodeSystem/procedures'
+                                          product_or_service_system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures'
                                         };
                                         handleItemChange(index, 'details', newDetails);
                                       }}
-                                      options={
-                                        item.is_lab_service
-                                          ? NPHIES_LAB_SERVICE_OPTIONS
-                                          : NPHIES_PROCEDURE_OPTIONS
-                                      }
+                                      options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
                                       styles={selectStyles}
-                                      placeholder={
-                                        item.is_lab_service
-                                          ? "Select NPHIES lab service..."
-                                          : "Select procedure..."
-                                      }
+                                      placeholder="Select code..."
                                       isClearable
                                       isSearchable
                                       menuPortalTarget={document.body}

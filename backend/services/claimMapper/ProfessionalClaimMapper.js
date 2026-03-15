@@ -1039,14 +1039,9 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     }
     
     // Use provided system or default to services for professional claims
-    // Users should provide the correct service code when creating claims
+    // Valid systems: procedures, imaging, laboratory, services, lens-type, practice-codes
     const defaultSystem = 'http://nphies.sa/terminology/CodeSystem/services';
     const providedSystem = item.product_or_service_system;
-    
-    // Warn if using procedures system in a claim context (likely wrong)
-    if (providedSystem && providedSystem.includes('procedures')) {
-      console.warn(`[ProfessionalClaimMapper] WARNING: Item ${sequence} uses 'procedures' CodeSystem. Professional claims typically require 'services' CodeSystem. Code: ${productCode}`);
-    }
     
     const productOrServiceCoding = {
       system: providedSystem || defaultSystem,

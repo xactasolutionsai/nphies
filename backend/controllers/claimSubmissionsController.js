@@ -357,9 +357,9 @@ class ClaimSubmissionsController extends BaseController {
                                        item.product_or_service_display || 
                                        item.medication_name || 
                                        null,
-            product_or_service_system: override?.service_code
-              ? 'http://nphies.sa/terminology/CodeSystem/services'
-              : item.product_or_service_system
+            product_or_service_system: override?.service_system
+              ? override.service_system
+              : (item.product_or_service_system || null)
           };
         });
         await this.insertItems(claimId, items);
