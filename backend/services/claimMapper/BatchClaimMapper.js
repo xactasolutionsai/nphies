@@ -130,6 +130,68 @@ class BatchClaimMapper {
   }
 
   // ============================================
+  // REFERENCE TRANSFORMATION FOR NESTED BUNDLES
+  // ============================================
+
+  /**
+   * Transform all fullUrl and reference values in a claim bundle from
+   * absolute URL format (http://provider.com/Patient/xxx) to urn:uuid:xxx.
+   *
+   * NPHIES cannot resolve relative references (Patient/xxx) against
+   * absolute fullUrls (http://provider.com/Patient/xxx) inside nested
+   * bundles. Using urn:uuid: throughout avoids RE-00169 errors.
+   *
+   * @param {Object} bundle - A FHIR Bundle built by an individual claim mapper
+   * @returns {Object} - The same bundle with all refs rewritten to urn:uuid:
+   */
+  transformBundleRefsToUrnUuid(bundle) {
+    if (!bundle?.entry) return bundle;
+
+    const refMap = new Map();
+
+    for (const entry of bundle.entry) {
+      const oldFullUrl = entry.fullUrl;
+      const resourceId = entry.resource?.id;
+      const resourceType = entry.resource?.resourceType;
+      if (!oldFullUrl || !resourceId) continue;
+
+      if (oldFullUrl.startsWith('urn:uuid:')) continue;
+
+      const newFullUrl = `urn:uuid:${resourceId}`;
+      refMap.set(oldFullUrl, newFullUrl);
+      if (resourceType) {
+        refMap.set(`${resourceType}/${resourceId}`, newFullUrl);
+      }
+      entry.fullUrl = newFullUrl;
+    }
+
+    if (refMap.size === 0) return bundle;
+
+    const rewriteRefs = (obj) => {
+      if (obj == null || typeof obj !== 'object') return;
+      if (Array.isArray(obj)) {
+        for (const item of obj) rewriteRefs(item);
+        return;
+      }
+      if (typeof obj.reference === 'string') {
+        const mapped = refMap.get(obj.reference);
+        if (mapped) {
+          obj.reference = mapped;
+        }
+      }
+      for (const val of Object.values(obj)) {
+        if (val && typeof val === 'object') rewriteRefs(val);
+      }
+    };
+
+    for (const entry of bundle.entry) {
+      rewriteRefs(entry.resource);
+    }
+
+    return bundle;
+  }
+
+  // ============================================
   // BATCH BUNDLE BUILDER (CORRECT NPHIES STRUCTURE)
   // ============================================
 
@@ -173,6 +235,8 @@ class BatchClaimMapper {
       const claimType = claimData.claim?.claim_type || claimData.claim_type || 'institutional';
       const claimMapper = getClaimMapper(claimType);
       const claimBundle = claimMapper.buildClaimRequestBundle(claimData);
+
+      this.transformBundleRefsToUrnUuid(claimBundle);
 
       const claimEntry = claimBundle.entry?.find(e => e.resource?.resourceType === 'Claim');
       if (claimEntry?.resource) {

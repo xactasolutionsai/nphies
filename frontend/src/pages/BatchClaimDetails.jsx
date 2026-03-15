@@ -57,7 +57,7 @@ export default function BatchClaimDetails() {
       setBundlesLoading(true);
       setBundlesError(null);
       
-      if (batch && batch.status !== 'Draft' && batch.status !== 'Error' && batch.request_bundle) {
+      if (batch && batch.status !== 'Draft' && batch.request_bundle) {
         const storedBundle = typeof batch.request_bundle === 'string' 
           ? JSON.parse(batch.request_bundle) 
           : batch.request_bundle;
@@ -883,14 +883,14 @@ export default function BatchClaimDetails() {
                   <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <Badge className="bg-primary-purple text-white">
-                        {freshBundles.length} HTTP Requests
+                        Batch Bundle
                       </Badge>
                       <span className="text-sm text-gray-600">
                         Batch: <code className="bg-white px-2 py-0.5 rounded font-mono text-xs">{batch?.batch_identifier}</code>
                       </span>
                     </div>
                     <span className="text-xs text-gray-500">
-                      كل Bundle = HTTP Request منفصل
+                      Single HTTP POST to NPHIES (event=batch-request)
                     </span>
                   </div>
 
@@ -902,18 +902,13 @@ export default function BatchClaimDetails() {
                           <div>
                             <h3 className="font-bold text-lg">Complete Batch Request</h3>
                             <p className="text-white/80 text-sm">
-                              {freshBundles.length} HTTP Requests - Batch: {batch?.batch_identifier}
+                              Single batch-request bundle - Batch: {batch?.batch_identifier}
                             </p>
                           </div>
                           <Badge className="bg-white/20 text-white">
                             {(JSON.stringify(freshBundles.map(cleanBundleForCopy)).length / 1024).toFixed(1)} KB
                           </Badge>
                         </div>
-                      </div>
-                      <div className="bg-amber-50 border-b border-amber-200 px-4 py-2">
-                        <p className="text-sm text-amber-800">
-                          <strong>⚠️ ملاحظة:</strong> كل Bundle يُرسل في HTTP POST منفصل لـ NPHIES. الـ Comments تُظهر ترتيب الإرسال.
-                        </p>
                       </div>
                       <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
 {(() => {
@@ -946,21 +941,11 @@ export default function BatchClaimDetails() {
                   {/* Individual View Mode - Show each bundle separately */}
                   {viewMode === 'individual' && (
                     <>
-                      {/* Important Warning */}
-                      <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                          <AlertCircle className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="font-bold text-amber-800 text-base mb-2">
-                              ⚠️ هام جداً - كيفية إرسال Batch Claim لـ NPHIES
-                            </p>
-                            <ul className="text-sm text-amber-700 space-y-1 list-disc list-inside">
-                              <li><strong>كل Bundle يُرسل في HTTP Request منفصل</strong></li>
-                              <li>استخدم زر <strong>"Copy This Bundle"</strong> لكل Bundle</li>
-                              <li>الـ Bundles مرتبطة ببعض عبر <code className="bg-amber-200 px-1 rounded">batch-identifier</code></li>
-                            </ul>
-                          </div>
-                        </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-sm text-blue-700">
+                          This shows the batch bundle sent as a single HTTP POST to NPHIES. It contains nested claim bundles inside.
+                          Use <strong>"Copy This Bundle"</strong> to copy the full JSON payload.
+                        </p>
                       </div>
                   
                       {freshBundles.map((bundle, index) => {

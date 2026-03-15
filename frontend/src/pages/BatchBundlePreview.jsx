@@ -14,12 +14,13 @@ export default function BatchBundlePreview() {
   const navigate = useNavigate();
   
   const [bundlePreview, setBundlePreview] = useState(null);
+  const [batchBundle, setBatchBundle] = useState(null);
   const [batch, setBatch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [copiedBundleIndex, setCopiedBundleIndex] = useState(null);
-  const [viewMode, setViewMode] = useState('individual'); // 'individual' or 'full'
+  const [viewMode, setViewMode] = useState('batch'); // 'batch', 'individual', or 'full'
 
   useEffect(() => {
     loadBundlePreview();
@@ -30,18 +31,19 @@ export default function BatchBundlePreview() {
       setLoading(true);
       setError(null);
       
-      // First load batch details
       const batchResponse = await api.getClaimBatch(id);
       const batchData = batchResponse.data;
       setBatch(batchData);
       
-      // If batch has been submitted and has stored request_bundle, use that
       if (batchData && batchData.status !== 'Draft' && batchData.request_bundle) {
         const storedBundle = typeof batchData.request_bundle === 'string' 
           ? JSON.parse(batchData.request_bundle) 
           : batchData.request_bundle;
         
-        // Extract bundles array from stored data
+        if (storedBundle.batchBundle) {
+          setBatchBundle(storedBundle.batchBundle);
+        }
+
         let bundles = [];
         if (storedBundle.bundles && Array.isArray(storedBundle.bundles)) {
           bundles = storedBundle.bundles;
@@ -49,14 +51,20 @@ export default function BatchBundlePreview() {
           bundles = storedBundle;
         } else if (storedBundle.resourceType === 'Bundle') {
           bundles = [storedBundle];
+        } else if (storedBundle.batchBundle?.entry) {
+          bundles = storedBundle.batchBundle.entry
+            .filter(e => e.resource?.resourceType === 'Bundle')
+            .map(e => e.resource);
         }
         
         setBundlePreview({ data: bundles });
         return;
       }
       
-      // For draft batches, generate preview from current data
       const previewResponse = await api.previewBatchBundle(id);
+      if (previewResponse.batchBundle) {
+        setBatchBundle(previewResponse.batchBundle);
+      }
       setBundlePreview(previewResponse);
     } catch (err) {
       console.error('Error loading bundle preview:', err);
@@ -266,8 +274,17 @@ export default function BatchBundlePreview() {
             </div>
             
             <div className="flex items-center gap-3">
-              {/* View Mode Toggle */}
               <div className="flex items-center bg-white/20 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('batch')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    viewMode === 'batch' 
+                      ? 'bg-white text-primary-purple shadow-sm' 
+                      : 'text-white/80 hover:text-white'
+                  }`}
+                >
+                  Batch Bundle
+                </button>
                 <button
                   onClick={() => setViewMode('individual')}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
@@ -357,19 +374,18 @@ export default function BatchBundlePreview() {
               </div>
             </div>
             
-            {/* Important Warning */}
-            <div className="mt-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg">
+            <div className="mt-4 p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
               <div className="flex items-start gap-3">
-                <AlertCircle className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                <Info className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold text-amber-800 text-base mb-2">
-                    ⚠️ هام جداً - كيفية إرسال Batch Claim لـ NPHIES
+                  <p className="font-bold text-blue-800 text-base mb-2">
+                    How Batch Claims are sent to NPHIES
                   </p>
-                  <ul className="text-sm text-amber-700 space-y-1 list-disc list-inside">
-                    <li><strong>كل Bundle يُرسل في HTTP Request منفصل</strong></li>
-                    <li>استخدم زر <strong>"Copy This Bundle"</strong> لكل Bundle بشكل منفصل</li>
-                    <li>لا تنسخ الـ Array كامل - NPHIES لا يقبل Array!</li>
-                    <li>الـ Bundles مرتبطة ببعض عبر <code className="bg-amber-200 px-1 rounded">batch-identifier</code></li>
+                  <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+                    <li>The <strong>"Batch Bundle"</strong> tab shows the <strong>single JSON</strong> sent to NPHIES as one HTTP POST</li>
+                    <li>It is an outer bundle (event=<code className="bg-blue-200 px-1 rounded">batch-request</code>) containing nested claim bundles</li>
+                    <li>NPHIES validates all claims in real-time, then queues valid ones for the insurer</li>
+                    <li>The <strong>"Individual"</strong> tab shows each nested claim bundle separately for easier inspection</li>
                   </ul>
                 </div>
               </div>
@@ -384,6 +400,80 @@ export default function BatchBundlePreview() {
             )}
           </CardContent>
         </Card>
+
+        {/* Batch Bundle Mode - the actual JSON sent to NPHIES */}
+        {viewMode === 'batch' && (
+          <Card className="overflow-hidden border-2 border-primary-purple/30">
+            <CardHeader className="bg-gradient-to-r from-primary-purple to-accent-purple text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl text-white">Batch Request Bundle</CardTitle>
+                  <p className="text-white/80 text-sm mt-1">
+                    This is the single JSON payload sent to NPHIES via HTTP POST
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      const json = JSON.stringify(batchBundle || {}, null, 2);
+                      await navigator.clipboard.writeText(json);
+                      setCopySuccess(true);
+                      setTimeout(() => setCopySuccess(false), 2000);
+                    }}
+                    className={copySuccess ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                  >
+                    {copySuccess ? (
+                      <><CheckCircle2 className="h-4 w-4 mr-1" /> Copied!</>
+                    ) : (
+                      <><Copy className="h-4 w-4 mr-1" /> Copy</>
+                    )}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const blob = new Blob([JSON.stringify(batchBundle || {}, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `batch-${batch?.batch_identifier || id}-nphies-payload.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-1" /> Download
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            {batchBundle ? (
+              <>
+                <div className="bg-gray-100 border-b px-4 py-2 flex items-center justify-between text-sm text-gray-600">
+                  <span>
+                    event: <code className="bg-gray-200 px-1 rounded">{batchBundle.entry?.[0]?.resource?.eventCoding?.code || 'batch-request'}</code>
+                    {' | '}
+                    nested claims: <code className="bg-gray-200 px-1 rounded">{(batchBundle.entry?.length || 1) - 1}</code>
+                    {' | '}
+                    size: <code className="bg-gray-200 px-1 rounded">{(JSON.stringify(batchBundle).length / 1024).toFixed(1)} KB</code>
+                  </span>
+                </div>
+                <CardContent className="p-0">
+                  <pre className="bg-gray-900 text-green-400 p-6 overflow-x-auto text-sm font-mono leading-relaxed max-h-[700px] overflow-y-auto whitespace-pre-wrap break-all select-all">
+                    {JSON.stringify(batchBundle, null, 2)}
+                  </pre>
+                </CardContent>
+              </>
+            ) : (
+              <CardContent className="py-12 text-center text-gray-500">
+                <AlertCircle className="h-8 w-8 mx-auto mb-3 text-gray-400" />
+                <p>Batch bundle not available. This may be a draft batch that hasn't been previewed yet.</p>
+                <p className="text-sm mt-1">Try the "Individual" view instead, or submit the batch to see the full bundle.</p>
+              </CardContent>
+            )}
+          </Card>
+        )}
 
         {/* Full View Mode */}
         {viewMode === 'full' && Array.isArray(bundlePreview?.data) && (
@@ -532,7 +622,7 @@ export default function BatchBundlePreview() {
           
           <div className="flex items-center gap-3 text-sm text-gray-500">
             <Info className="h-4 w-4" />
-            استخدم "Copy This Bundle" لكل bundle بشكل منفصل
+            Use "Batch Bundle" tab to see the exact JSON sent to NPHIES
           </div>
         </div>
       </div>
