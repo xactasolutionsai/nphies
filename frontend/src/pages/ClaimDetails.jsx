@@ -1777,7 +1777,22 @@ export default function ClaimDetails() {
             })()}
 
             {/* Lab Observations Section - Only for Professional claim type */}
-            {extractCodeValue(claim.claim_type) === 'professional' && claim.lab_observations && claim.lab_observations.length > 0 && (
+            {(() => {
+              const labObservations = claim.lab_observations
+                ? (Array.isArray(claim.lab_observations) ? claim.lab_observations : JSON.parse(claim.lab_observations || '[]'))
+                : (claim.supporting_info || [])
+                    .filter(si => si.category === 'lab-test')
+                    .map((si, idx) => ({
+                      sequence: si.sequence || idx + 1,
+                      loinc_code: si.code,
+                      loinc_display: si.code_display,
+                      value: si.value_quantity != null ? si.value_quantity : si.value_string,
+                      unit: si.value_quantity_unit,
+                      effective_date: si.timing_date,
+                      status: 'final'
+                    }));
+              if (extractCodeValue(claim.claim_type) !== 'professional' || !labObservations.length) return null;
+              return (
               <Card className="mt-6">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1790,10 +1805,7 @@ export default function ClaimDetails() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {(Array.isArray(claim.lab_observations) 
-                      ? claim.lab_observations 
-                      : JSON.parse(claim.lab_observations || '[]')
-                    ).map((obs, index) => (
+                    {labObservations.map((obs, index) => (
                       <div key={index} className="p-4 border rounded-lg bg-emerald-50/50">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
@@ -1844,7 +1856,8 @@ export default function ClaimDetails() {
                   </div>
                 </CardContent>
               </Card>
-            )}
+              );
+            })()}
             </>
           )}
 
