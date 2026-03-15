@@ -3900,13 +3900,40 @@ export default function PriorAuthorizationDetails() {
             )}
           </div>
 
-          {/* Full Response JSON */}
-          <div className="space-y-2">
-            <h4 className="font-medium text-gray-700">Full NPHIES Response:</h4>
-            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-[400px] text-xs font-mono">
-              {JSON.stringify(claimResponse, null, 2)}
-            </pre>
-          </div>
+          {/* NPHIES Errors */}
+          {claimResponse?.nphiesResponse?.errors?.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="font-medium text-red-700">NPHIES Validation Errors:</h4>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+                {claimResponse.nphiesResponse.errors.map((err, i) => (
+                  <div key={i} className="text-sm">
+                    <span className="font-mono font-bold text-red-800">{err.code}</span>
+                    <span className="text-red-700 ml-2">{err.message || err.display}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Request Bundle */}
+          {claimResponse?.requestBundle && (
+            <details className="space-y-2">
+              <summary className="font-medium text-gray-700 cursor-pointer">Request Bundle (sent to NPHIES)</summary>
+              <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-[400px] text-xs font-mono">
+                {JSON.stringify(claimResponse.requestBundle, null, 2)}
+              </pre>
+            </details>
+          )}
+
+          {/* Response Bundle */}
+          {claimResponse?.responseBundle && (
+            <details className="space-y-2" open>
+              <summary className="font-medium text-gray-700 cursor-pointer">Response Bundle (from NPHIES)</summary>
+              <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-[400px] text-xs font-mono">
+                {JSON.stringify(claimResponse.responseBundle, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
       </Modal>
 

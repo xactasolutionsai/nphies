@@ -443,6 +443,7 @@ export const validationSchemas = {
     triage_category: Joi.string().valid('IR', 'VU', 'U', 'NU', 'SER').allow(null, '').optional(),
     triage_date: Joi.date().allow(null, '').optional(),
     encounter_priority: Joi.string().valid('EM', 'UR', 'S', 'A', 'R', 'EL', 'CR', 'CS', 'CSP', 'CSR', 'P', 'PRN', 'RR', 'T', 'UD').allow(null, '').optional(),
+    emergency_department_disposition: Joi.string().valid('AH', 'NAD', 'NAR', 'DNW', 'LAOR', 'DED', 'DOA', 'R').allow(null, '').optional(),
     
     // Eligibility Response Identifier (per NPHIES Claim-173086)
     eligibility_response_id: Joi.string().max(255).allow(null, '').optional(),
@@ -730,6 +731,10 @@ export const validationSchemas = {
     encounter_end: Joi.date().allow(null, '').optional(),
     encounter_identifier: Joi.string().max(255).allow(null, '').optional(),
     service_type: Joi.string().max(100).allow(null, '').optional(),
+    triage_category: Joi.string().valid('IR', 'VU', 'U', 'NU', 'SER').allow(null, '').optional(),
+    triage_date: Joi.date().allow(null, '').optional(),
+    encounter_priority: Joi.string().valid('EM', 'UR', 'S', 'A', 'R', 'EL', 'CR', 'CS', 'CSP', 'CSR', 'P', 'PRN', 'RR', 'T', 'UD').allow(null, '').optional(),
+    emergency_department_disposition: Joi.string().valid('AH', 'NAD', 'NAR', 'DNW', 'LAOR', 'DED', 'DOA', 'R').allow(null, '').optional(),
     
     // Eligibility Reference
     eligibility_ref: Joi.string().max(100).allow(null, '').optional(),

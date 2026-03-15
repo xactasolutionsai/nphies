@@ -726,6 +726,19 @@ class ProfessionalMapper extends BaseMapper {
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageDate',
         valueDateTime: this.formatDateTimeWithTimezone(triageDate)
       });
+
+      // Emergency Department Disposition (if available)
+      if (priorAuth.emergency_department_disposition) {
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-emergencyDepartmentDisposition',
+          valueCodeableConcept: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/emergency-department-disposition',
+              code: priorAuth.emergency_department_disposition
+            }]
+          }
+        });
+      }
     }
 
     // Service Event Type - REQUIRED for professional encounters (BV-00736)

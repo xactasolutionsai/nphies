@@ -896,14 +896,18 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       }
     }
 
-    // Handle onset supportingInfo explicitly: only category + timingDate, no code or value fields
+    // BV-00428: Onset requires both timingDate AND ICD-10 code for symptoms/illness
     const existingOnset = existingSupportingInfo.find(info =>
       (info.category || '').toLowerCase() === 'onset'
     );
     if (existingOnset) {
       const onsetDate = existingOnset.timing_date || claim.encounter_start || claim.service_date;
-      if (onsetDate) {
-        supportingInfoList.push({
+      const principalDiag = (claim.diagnoses || []).find(d =>
+        (d.diagnosis_type || 'principal').toLowerCase() === 'principal'
+      ) || (claim.diagnoses || [])[0];
+
+      if (onsetDate && principalDiag?.diagnosis_code) {
+        const onsetEntry = {
           sequence: sequenceNum,
           category: {
             coding: [{
@@ -911,8 +915,16 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
               code: 'onset'
             }]
           },
+          code: {
+            coding: [{
+              system: 'http://hl7.org/fhir/sid/icd-10-am',
+              code: principalDiag.diagnosis_code,
+              display: principalDiag.diagnosis_display
+            }]
+          },
           timingDate: this.formatDate(onsetDate)
-        });
+        };
+        supportingInfoList.push(onsetEntry);
         sequences.push(sequenceNum++);
       }
     }
@@ -1234,19 +1246,18 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
         }
       });
 
-      // Discharge Disposition for Emergency (optional but typically included)
-      const dischargeDisposition = claim.discharge_disposition || 'DED'; // Default to "Died in ED" if not provided, adjust as needed
-      if (claim.discharge_disposition) {
-        extensions.push({
-          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-dischargeDisposition',
-          valueCodeableConcept: {
-            coding: [{
-              system: 'http://nphies.sa/terminology/CodeSystem/discharge-disposition',
-              code: claim.discharge_disposition
-            }]
-          }
-        });
-      }
+      // BV-00728: Emergency Department Disposition (required when EMER + encounter end date)
+      const edDisposition = claim.emergency_department_disposition || 'NAD';
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-emergencyDepartmentDisposition',
+        valueCodeableConcept: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/emergency-department-disposition',
+            code: edDisposition,
+            display: this.getEDDispositionDisplay(edDisposition)
+          }]
+        }
+      });
 
       // Diagnosis on Discharge for Emergency (optional)
       if (claim.discharge_diagnosis_code) {
@@ -1393,6 +1404,20 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       'GEMSA': 'Ground EMS Ambulance',
       'GPA': 'Ground Private Ambulance',
       'POV': 'Police Vehicle'
+    };
+    return displays[code] || code;
+  }
+
+  getEDDispositionDisplay(code) {
+    const displays = {
+      'AH': 'Admitted to this hospital',
+      'NAD': 'Non-admitted, departed',
+      'NAR': 'Non-admitted, referred to another hospital',
+      'DNW': 'Did not wait',
+      'LAOR': 'Left at own risk',
+      'DED': 'Died in ED',
+      'DOA': 'Dead on arrival',
+      'R': 'Registered, advised, left without being attended'
     };
     return displays[code] || code;
   }

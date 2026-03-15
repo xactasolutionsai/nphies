@@ -49,6 +49,7 @@ import {
   TRIAGE_CATEGORY_OPTIONS,
   ENCOUNTER_SERVICE_TYPE_OPTIONS,
   ENCOUNTER_PRIORITY_OPTIONS,
+  EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS,
   DENTAL_PROCEDURE_OPTIONS,
   NPHIES_PROCEDURE_OPTIONS,
   LOINC_LAB_OPTIONS,
@@ -145,6 +146,7 @@ export default function PriorAuthorizationForm() {
     triage_date: '', // Required for EMER: datetime of triage assessment
     service_type: '', // Service type: acute-care, sub-acute-care, etc.
     encounter_priority: '', // For EMER: EM, UR, S, etc.
+    emergency_department_disposition: '', // BV-00728: Required for EMER when encounter end date is provided
     // Newborn extension fields (per NPHIES Test Case 8)
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     is_newborn: false, // Flag indicating if this is a newborn patient authorization
@@ -2753,6 +2755,20 @@ export default function PriorAuthorizationForm() {
                       </p>
                     </div>
                   )}
+                  <div className="space-y-2">
+                    <Label>ED Disposition *</Label>
+                    <Select
+                      value={EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS.find(opt => opt.value === formData.emergency_department_disposition)}
+                      onChange={(option) => handleChange('emergency_department_disposition', option?.value || '')}
+                      options={EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS}
+                      styles={selectStyles}
+                      menuPortalTarget={document.body}
+                      placeholder="Select ED disposition..."
+                    />
+                    <p className="text-xs text-gray-500">
+                      Required when encounter has an end date (BV-00728)
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

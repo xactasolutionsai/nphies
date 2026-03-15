@@ -304,6 +304,20 @@ export const LOINC_LAB_OPTIONS = [
   { value: '5811-5', label: '5811-5 - Specific gravity of Urine by Test strip', system: 'http://loinc.org', unit: '', unitSystem: '' }
 ];
 
+// Emergency Department Disposition Options (BV-00728)
+// Reference: http://nphies.sa/terminology/CodeSystem/emergency-department-disposition
+// Required when Encounter is EMER and encounter end date is provided
+export const EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS = [
+  { value: 'AH', label: 'AH - Admitted to this hospital' },
+  { value: 'NAD', label: 'NAD - Non-admitted, departed' },
+  { value: 'NAR', label: 'NAR - Non-admitted, referred to another hospital' },
+  { value: 'DNW', label: 'DNW - Did not wait' },
+  { value: 'LAOR', label: 'LAOR - Left at own risk' },
+  { value: 'DED', label: 'DED - Died in ED' },
+  { value: 'DOA', label: 'DOA - Dead on arrival' },
+  { value: 'R', label: 'R - Registered, advised, left without being attended' }
+];
+
 // Service Code System Options (for dropdown to select code system)
 // NOTE: For Claim.item.productOrService, ONLY NPHIES codes are valid
 // LOINC codes are for Observation resources, NOT for Claim items

@@ -317,7 +317,12 @@ class ClaimSubmissionsController extends BaseController {
         // Copy AI medication safety analysis for pharmacy claims
         medication_safety_analysis: pa.medication_safety_analysis ? JSON.stringify(pa.medication_safety_analysis) : null,
         drug_interaction_justification: pa.drug_interaction_justification || null,
-        drug_interaction_justification_date: pa.drug_interaction_justification_date || null
+        drug_interaction_justification_date: pa.drug_interaction_justification_date || null,
+        // Emergency encounter fields
+        triage_category: pa.triage_category || null,
+        triage_date: pa.triage_date || null,
+        encounter_priority: pa.encounter_priority || null,
+        emergency_department_disposition: pa.emergency_department_disposition || null
       };
 
       if (excludeReferences) {
