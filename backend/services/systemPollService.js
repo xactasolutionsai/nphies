@@ -349,6 +349,10 @@ class SystemPollService {
           return await messageUpdater.updateClaimSubmission(
             correlationResult.recordId, resource, responseBundle, schemaName
           );
+        } else if (correlationResult.table === 'claim_batches') {
+          return await messageUpdater.updateClaimBatch(
+            correlationResult.recordId, resource, correlationResult, schemaName
+          );
         }
         break;
 
@@ -388,6 +392,11 @@ class SystemPollService {
         if (correlationResult.table === 'claim_submissions') {
           return await messageUpdater.updateClaimSubmission(
             correlationResult.recordId, resource, responseBundle, schemaName
+          );
+        }
+        if (correlationResult.table === 'claim_batches') {
+          return await messageUpdater.updateClaimBatch(
+            correlationResult.recordId, resource, correlationResult, schemaName
           );
         }
         break;

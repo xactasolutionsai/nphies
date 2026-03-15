@@ -11,6 +11,7 @@
  * Correlation strategies for solicited messages:
  *   Strategy 1: Match MessageHeader.response.identifier → outbound_message_header_id
  *   Strategy 2: Match ClaimResponse.request.identifier → nphies_request_id / request_number
+ *   Strategy 3: Match batch ClaimResponse → claim_batches (via batch extension or claim identifier pattern)
  * 
  * For unsolicited messages:
  *   - Advanced Authorizations → create new record
@@ -89,6 +90,12 @@ class MessageCorrelator {
         if (match) return match;
       }
 
+      // Strategy 3: Match via batch claim identifier / extensions
+      if (resource?.resourceType === 'ClaimResponse') {
+        const match = await this.matchByBatchClaimIdentifier(client, resource);
+        if (match) return match;
+      }
+
       return null;
     } finally {
       client.release();
@@ -129,6 +136,12 @@ class MessageCorrelator {
           const match = await this.matchByClaimResponseIdentifier(client, resource);
           if (match) {
             return { ...match, type: 'unsolicited' };
+          }
+
+          // Try to match as a batch claim response
+          const batchMatch = await this.matchByBatchClaimIdentifier(client, resource);
+          if (batchMatch) {
+            return { ...batchMatch, type: 'unsolicited' };
           }
           
           return {
@@ -254,6 +267,83 @@ class MessageCorrelator {
         strategy: 'claim_response_identifier',
         type: 'solicited'
       };
+    }
+
+    return null;
+  }
+
+  /**
+   * Strategy 3: Match by batch claim extensions or claim identifier pattern.
+   *
+   * Detection methods:
+   *   a) extension-batch-identifier on ClaimResponse → claim_batches.batch_identifier
+   *   b) ClaimResponse.request.identifier.value in "{request_number}-{sequence}" format
+   *      → prior_authorization_items linked to a claim_batches entry
+   */
+  async matchByBatchClaimIdentifier(client, claimResponse) {
+    // Method (a): Match via extension-batch-identifier
+    const batchIdentifier = claimResponse.extension?.find(
+      ext => ext.url?.includes('extension-batch-identifier')
+    )?.valueIdentifier?.value;
+
+    const batchNumber = claimResponse.extension?.find(
+      ext => ext.url?.includes('extension-batch-number')
+    )?.valuePositiveInt;
+
+    if (batchIdentifier) {
+      const result = await client.query(
+        `SELECT id FROM claim_batches WHERE batch_identifier = $1 LIMIT 1`,
+        [batchIdentifier]
+      );
+      if (result.rows.length > 0) {
+        return {
+          table: 'claim_batches',
+          recordId: result.rows[0].id,
+          strategy: 'batch_claim_identifier',
+          batchNumber: batchNumber || null,
+          type: 'solicited'
+        };
+      }
+    }
+
+    // Method (b): Parse "{request_number}-{sequence}" from request.identifier.value
+    const requestIdentifier = claimResponse.request?.identifier?.value;
+    if (requestIdentifier) {
+      const lastDash = requestIdentifier.lastIndexOf('-');
+      if (lastDash > 0) {
+        const requestNumber = requestIdentifier.substring(0, lastDash);
+        const sequence = parseInt(requestIdentifier.substring(lastDash + 1), 10);
+
+        if (!isNaN(sequence) && requestNumber) {
+          const result = await client.query(
+            `SELECT cb.id
+             FROM claim_batches cb
+             WHERE cb.request_bundle IS NOT NULL
+               AND cb.id IN (
+                 SELECT cb2.id FROM claim_batches cb2
+                 CROSS JOIN LATERAL jsonb_array_elements_text(
+                   COALESCE(cb2.request_bundle->'_metadata'->'item_ids', cb2.request_bundle->'item_ids', '[]'::jsonb)
+                 ) AS item_id_text
+                 WHERE item_id_text::int IN (
+                   SELECT pai.id FROM prior_authorization_items pai
+                   INNER JOIN prior_authorizations pa ON pai.prior_auth_id = pa.id
+                   WHERE pa.request_number = $1 AND pai.sequence = $2
+                 )
+               )
+             LIMIT 1`,
+            [requestNumber, sequence]
+          );
+          if (result.rows.length > 0) {
+            return {
+              table: 'claim_batches',
+              recordId: result.rows[0].id,
+              strategy: 'batch_claim_identifier',
+              batchNumber: batchNumber || sequence,
+              type: 'solicited'
+            };
+          }
+        }
+      }
     }
 
     return null;

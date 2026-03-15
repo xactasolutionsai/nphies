@@ -299,6 +299,150 @@ class MessageUpdater {
   }
 
   /**
+   * Update a Claim Batch with a ClaimResponse received via system poll.
+   * Mirrors the logic from claimBatchesController.processPolledClaimResponses.
+   *
+   * @param {number} recordId - The claim_batches.id
+   * @param {Object} claimResponse - The FHIR ClaimResponse resource
+   * @param {Object} correlationResult - Includes batchNumber from the correlator
+   * @param {string} schemaName
+   */
+  async updateClaimBatch(recordId, claimResponse, correlationResult, schemaName) {
+    const client = await pool.connect();
+    try {
+      await client.query(`SET search_path TO ${schemaName}`);
+
+      const batchResult = await client.query(
+        `SELECT request_bundle, response_bundle, total_claims FROM claim_batches WHERE id = $1`,
+        [recordId]
+      );
+      if (batchResult.rows.length === 0) {
+        console.error(`[MessageUpdater] claim_batches #${recordId} not found`);
+        return null;
+      }
+
+      const batch = batchResult.rows[0];
+      const requestBundle = typeof batch.request_bundle === 'string'
+        ? JSON.parse(batch.request_bundle) : batch.request_bundle;
+      const itemIds = requestBundle?._metadata?.item_ids || requestBundle?.item_ids || [];
+
+      // Parse the ClaimResponse
+      const adjudicationOutcome = claimResponse.extension?.find(
+        ext => ext.url?.includes('extension-adjudication-outcome')
+      )?.valueCodeableConcept?.coding?.[0]?.code;
+
+      const batchIdentifier = claimResponse.extension?.find(
+        ext => ext.url?.includes('extension-batch-identifier')
+      )?.valueIdentifier?.value;
+
+      const batchNumber = correlationResult?.batchNumber ||
+        claimResponse.extension?.find(
+          ext => ext.url?.includes('extension-batch-number')
+        )?.valuePositiveInt;
+
+      const outcome = claimResponse.outcome || 'complete';
+      const nphiesClaimId = claimResponse.identifier?.[0]?.value || claimResponse.id;
+      const itemId = batchNumber ? itemIds[batchNumber - 1] : null;
+
+      let existingResponseBundle = {};
+      if (batch.response_bundle) {
+        existingResponseBundle = typeof batch.response_bundle === 'string'
+          ? JSON.parse(batch.response_bundle) : batch.response_bundle;
+      }
+      if (!existingResponseBundle.polledResponses) {
+        existingResponseBundle.polledResponses = [];
+      }
+
+      existingResponseBundle.polledResponses.push({
+        batchNumber,
+        itemId,
+        outcome,
+        adjudicationOutcome,
+        disposition: claimResponse.disposition,
+        nphiesClaimId,
+        batchIdentifier,
+        errors: [],
+        receivedAt: new Date().toISOString()
+      });
+
+      // Compute batch-level stats from all polledResponses
+      let approved = 0, rejected = 0;
+      for (const pr of existingResponseBundle.polledResponses) {
+        if (pr.outcome === 'complete' || pr.outcome === 'partial') {
+          if (pr.adjudicationOutcome === 'approved' || pr.adjudicationOutcome === 'partial') approved++;
+          else if (pr.adjudicationOutcome === 'rejected') rejected++;
+        } else if (pr.outcome === 'error') {
+          rejected++;
+        }
+      }
+
+      const totalClaims = batch.total_claims || 0;
+      const processedCount = approved + rejected;
+      let batchStatus = 'Submitted';
+      if (processedCount === totalClaims && totalClaims > 0) {
+        batchStatus = rejected === totalClaims ? 'Rejected'
+          : approved === totalClaims ? 'Processed' : 'Partial';
+      } else if (processedCount > 0) {
+        batchStatus = 'Partial';
+      }
+
+      await client.query(`
+        UPDATE claim_batches
+        SET response_bundle = $1,
+            status = $2,
+            processed_claims = $3,
+            approved_claims = $4,
+            rejected_claims = $5,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $6
+      `, [
+        JSON.stringify(existingResponseBundle),
+        batchStatus,
+        processedCount,
+        approved,
+        rejected,
+        recordId
+      ]);
+
+      // Also update the related prior_authorization_item adjudication if we can
+      if (itemId && batchNumber) {
+        const itemOutcome = claimResponse.item?.[0]?.extension?.find(
+          ext => ext.url?.includes('extension-adjudication-outcome')
+        )?.valueCodeableConcept?.coding?.[0]?.code;
+
+        const adjStatus = itemOutcome === 'approved' ? 'approved'
+          : itemOutcome === 'rejected' ? 'denied'
+          : adjudicationOutcome === 'approved' ? 'approved'
+          : adjudicationOutcome === 'rejected' ? 'denied' : 'pending';
+
+        const itemBenefitAmount = claimResponse.item?.[0]?.adjudication?.find(
+          a => a.category?.coding?.[0]?.code === 'benefit'
+        )?.amount?.value;
+
+        await client.query(`
+          UPDATE prior_authorization_items
+          SET adjudication_status = $1,
+              adjudication_amount = COALESCE($2, adjudication_amount)
+          WHERE id = $3
+        `, [adjStatus, itemBenefitAmount || null, itemId]);
+      }
+
+      console.log(`[MessageUpdater] Updated claim_batch #${recordId}: batchNumber=${batchNumber}, outcome=${outcome}, adjudication=${adjudicationOutcome}`);
+
+      return {
+        table: 'claim_batches',
+        recordId,
+        status: batchStatus,
+        outcome,
+        adjudicationOutcome,
+        batchNumber
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Save an Advanced Authorization (payer-initiated, no matching outbound request)
    * Reuses the parsing logic from advancedAuthParser
    */

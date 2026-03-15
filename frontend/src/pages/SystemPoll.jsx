@@ -14,6 +14,7 @@ const tableToRoute = {
   prior_authorizations: '/prior-authorizations',
   claim_submissions: '/claim-submissions',
   advanced_authorizations: '/advanced-authorizations',
+  claim_batches: '/claim-batches',
 };
 
 const tableDisplayName = {
@@ -22,6 +23,7 @@ const tableDisplayName = {
   advanced_authorizations: 'Advanced Auth',
   nphies_communications: 'Communication',
   nphies_communication_requests: 'Communication Request',
+  claim_batches: 'Batch Claim',
 };
 
 const RecordLink = ({ table, recordId, children }) => {
