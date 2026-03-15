@@ -227,6 +227,7 @@ class BatchClaimMapper {
     const batchIdentifierSystem = `${providerEndpoint}/identifiers/batch`;
 
     const nestedBundles = [];
+    const focusReferences = [];
 
     claims.forEach((claimData, index) => {
       const batchNumber = index + 1;
@@ -253,8 +254,11 @@ class BatchClaimMapper {
         });
       }
 
+      const nestedBundleFullUrl = `${providerEndpoint}/Bundle/${claimBundle.id}`;
+      focusReferences.push({ reference: nestedBundleFullUrl });
+
       nestedBundles.push({
-        fullUrl: `${providerEndpoint}/Bundle/${claimBundle.id}`,
+        fullUrl: nestedBundleFullUrl,
         resource: claimBundle
       });
     });
@@ -303,7 +307,8 @@ class BatchClaimMapper {
             },
             source: {
               endpoint: providerEndpoint
-            }
+            },
+            focus: focusReferences
           }
         },
         ...nestedBundles
