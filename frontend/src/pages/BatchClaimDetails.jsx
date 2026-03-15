@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Package, ArrowLeft, Send, RefreshCw, Eye, Trash2, CheckCircle2, 
   AlertCircle, Clock, Building2, Shield, Calendar, DollarSign,
-  FileText, Activity, Info, Copy, Download, Loader2, Calculator
+  FileText, Activity, Info, Copy, Download, Loader2, Calculator,
+  ChevronDown, ChevronUp, User, Hash
 } from 'lucide-react';
 import api from '@/services/api';
 
@@ -27,6 +28,7 @@ export default function BatchClaimDetails() {
   const [bundlesError, setBundlesError] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [viewMode, setViewMode] = useState('individual'); // 'individual' or 'full'
+  const [expandedClaims, setExpandedClaims] = useState({});
 
   useEffect(() => {
     loadBatchDetails();
@@ -1020,23 +1022,131 @@ export default function BatchClaimDetails() {
         {/* Response Bundle Tab */}
         {batch.response_bundle && (
           <TabsContent value="response">
-            <div className="space-y-6">
-              {/* Per-Claim Response Summary */}
-              {(() => {
-                const rb = typeof batch.response_bundle === 'string' ? JSON.parse(batch.response_bundle) : batch.response_bundle;
-                const responses = rb?.responses || [];
-                const polledResponses = rb?.polledResponses || [];
-                const allResponses = [...responses, ...polledResponses];
-                
-                if (allResponses.length > 0) {
-                  return (
+            {(() => {
+              const rb = typeof batch.response_bundle === 'string' ? JSON.parse(batch.response_bundle) : batch.response_bundle;
+              const isRawFhir = rb?.resourceType === 'Bundle' && Array.isArray(rb?.entry);
+              const outerMH = isRawFhir ? rb.entry?.[0]?.resource : null;
+              const responseCode = outerMH?.response?.code;
+              const eventCode = outerMH?.eventCoding?.code;
+              const metaTags = outerMH?.meta?.tag || [];
+              const hasQueuedTag = metaTags.some(t => t.code === 'queued-messages');
+
+              const nestedBundles = isRawFhir
+                ? rb.entry.filter(e => e.resource?.resourceType === 'Bundle').map(e => ({ ...e.resource, _fullUrl: e.fullUrl }))
+                : [];
+
+              const polledResponses = rb?.polledResponses || [];
+
+              return (
+                <div className="space-y-6">
+                  {/* Section 1: Batch Response Overview */}
+                  {isRawFhir && outerMH && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center">
                           <Activity className="h-5 w-5 mr-2" />
+                          Batch Response Overview
+                        </CardTitle>
+                        <CardDescription>High-level summary of the NPHIES batch response</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-500 mb-1">Response Code</p>
+                            <Badge variant={responseCode === 'ok' ? 'default' : 'destructive'} className="text-sm">
+                              {responseCode || '-'}
+                            </Badge>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-500 mb-1">Event</p>
+                            <p className="font-semibold text-sm">{eventCode || '-'}</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-500 mb-1">Claim Responses</p>
+                            <p className="font-semibold text-sm">{nestedBundles.length}</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-500 mb-1">Timestamp</p>
+                            <p className="font-semibold text-sm">{rb.timestamp ? new Date(rb.timestamp).toLocaleString() : '-'}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500">Response Bundle ID</p>
+                            <p className="text-sm font-mono break-all">{rb.id || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">MessageHeader ID</p>
+                            <p className="text-sm font-mono break-all">{outerMH.id || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Request Identifier</p>
+                            <p className="text-sm font-mono break-all">{outerMH.response?.identifier || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Sender</p>
+                            <p className="text-sm">{outerMH.sender?.identifier?.value || '-'} <span className="text-gray-400">({outerMH.sender?.type || '-'})</span></p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Source Endpoint</p>
+                            <p className="text-sm font-mono">{outerMH.source?.endpoint || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Destination</p>
+                            <p className="text-sm font-mono">{outerMH.destination?.[0]?.endpoint || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Receiver</p>
+                            <p className="text-sm">{outerMH.destination?.[0]?.receiver?.identifier?.value || '-'} <span className="text-gray-400">({outerMH.destination?.[0]?.receiver?.type || ''})</span></p>
+                          </div>
+                        </div>
+
+                        {metaTags.length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-xs text-gray-500 mb-2">Meta Tags</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {metaTags.map((tag, i) => (
+                                <Badge key={i} variant={tag.code === 'queued-messages' ? 'secondary' : 'outline'} className="text-xs">
+                                  {tag.display || tag.code}
+                                  {tag.system && <span className="ml-1 opacity-50">({tag.system.split('/').pop()})</span>}
+                                </Badge>
+                              ))}
+                            </div>
+                            {hasQueuedTag && (
+                              <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2 flex items-center gap-2">
+                                <Clock className="h-4 w-4 text-amber-600" />
+                                <p className="text-xs text-amber-700">
+                                  Claims are queued for async processing. Use <strong>"Poll Responses"</strong> to check for adjudication updates.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {outerMH.focus && outerMH.focus.length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-xs text-gray-500 mb-2">Focus References ({outerMH.focus.length})</p>
+                            <div className="space-y-1">
+                              {outerMH.focus.map((f, i) => (
+                                <p key={i} className="text-xs font-mono bg-gray-50 px-2 py-1 rounded break-all">{f.reference}</p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Section 2: Per-Claim Response Summary Table */}
+                  {nestedBundles.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center">
+                          <FileText className="h-5 w-5 mr-2" />
                           Per-Claim Response Summary
                         </CardTitle>
-                        <CardDescription>Individual outcomes for each claim in the batch</CardDescription>
+                        <CardDescription>Quick overview of each claim's outcome</CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="border rounded-lg overflow-hidden">
@@ -1044,7 +1154,773 @@ export default function BatchClaimDetails() {
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">#</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Claim ID</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">NPHIES ID</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Type</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Patient</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Response</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Outcome</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Created</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {nestedBundles.map((nested, idx) => {
+                                const innerMH = nested.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+                                const cr = nested.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+                                const patient = nested.entry?.find(e => e.resource?.resourceType === 'Patient')?.resource;
+                                const patientName = patient?.name?.[0]?.text || `${patient?.name?.[0]?.given?.join(' ') || ''} ${patient?.name?.[0]?.family || ''}`.trim() || '-';
+
+                                return (
+                                  <tr key={`claim-${idx}`} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-sm font-medium">{idx + 1}</td>
+                                    <td className="px-4 py-3 text-sm font-mono">{cr?.request?.identifier?.value || '-'}</td>
+                                    <td className="px-4 py-3 text-sm font-mono">{cr?.identifier?.[0]?.value || cr?.id || '-'}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                      <Badge variant="outline" className="text-xs">{cr?.type?.coding?.[0]?.code || '-'}</Badge>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm">{patientName}</td>
+                                    <td className="px-4 py-3">
+                                      <Badge variant={innerMH?.response?.code === 'ok' ? 'default' : 'destructive'} className="text-xs">
+                                        {innerMH?.response?.code || '-'}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <Badge variant={
+                                        cr?.outcome === 'queued' ? 'secondary' :
+                                        cr?.outcome === 'complete' ? 'default' :
+                                        cr?.outcome === 'error' ? 'destructive' : 'outline'
+                                      } className="text-xs">
+                                        {cr?.outcome || '-'}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <Badge variant={cr?.status === 'active' ? 'default' : 'outline'} className="text-xs">
+                                        {cr?.status || '-'}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-500">
+                                      {cr?.created ? new Date(cr.created).toLocaleString() : '-'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {polledResponses.map((pr, idx) => (
+                                <tr key={`poll-${idx}`} className="hover:bg-gray-50 bg-blue-50/30">
+                                  <td className="px-4 py-3 text-sm">
+                                    {pr.batchNumber || idx + 1}
+                                    <Badge variant="secondary" className="ml-1 text-xs">polled</Badge>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm font-mono">{pr.claimIdentifier || '-'}</td>
+                                  <td className="px-4 py-3 text-sm font-mono">{pr.nphiesClaimId || '-'}</td>
+                                  <td className="px-4 py-3 text-sm">-</td>
+                                  <td className="px-4 py-3 text-sm">-</td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant={pr.outcome !== 'error' ? 'default' : 'destructive'} className="text-xs">
+                                      {pr.outcome !== 'error' ? 'ok' : 'error'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant={
+                                      pr.outcome === 'queued' ? 'secondary' :
+                                      pr.outcome === 'complete' ? 'default' :
+                                      pr.outcome === 'error' ? 'destructive' : 'outline'
+                                    } className="text-xs">
+                                      {pr.outcome || '-'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant={
+                                      pr.adjudicationOutcome === 'approved' ? 'default' :
+                                      pr.adjudicationOutcome === 'rejected' ? 'destructive' : 'secondary'
+                                    } className="text-xs">
+                                      {pr.adjudicationOutcome || '-'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-500">{pr.disposition || '-'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Section 3: Detailed Per-Claim Responses (expandable) */}
+                  {nestedBundles.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="flex items-center">
+                              <Activity className="h-5 w-5 mr-2" />
+                              Detailed Claim Responses ({nestedBundles.length})
+                            </CardTitle>
+                            <CardDescription>Click each claim to expand full FHIR response details</CardDescription>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const allExpanded = nestedBundles.every((_, i) => expandedClaims[i]);
+                                const newState = {};
+                                nestedBundles.forEach((_, i) => { newState[i] = !allExpanded; });
+                                setExpandedClaims(newState);
+                              }}
+                            >
+                              {nestedBundles.every((_, i) => expandedClaims[i]) ? 'Collapse All' : 'Expand All'}
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {nestedBundles.map((nested, index) => {
+                          const innerMH = nested.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+                          const cr = nested.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+                          const patient = nested.entry?.find(e => e.resource?.resourceType === 'Patient')?.resource;
+                          const providerOrg = nested.entry?.find(e =>
+                            e.resource?.resourceType === 'Organization' &&
+                            e.resource?.type?.[0]?.coding?.[0]?.code === 'prov'
+                          )?.resource;
+                          const insurerOrg = nested.entry?.find(e =>
+                            e.resource?.resourceType === 'Organization' &&
+                            (e.resource?.type?.[0]?.coding?.[0]?.code === 'ins' ||
+                             e.resource?.meta?.profile?.[0]?.includes('insurer'))
+                          )?.resource;
+                          const coverage = nested.entry?.find(e => e.resource?.resourceType === 'Coverage')?.resource;
+                          const oo = nested.entry?.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
+
+                          const outcome = cr?.outcome || 'unknown';
+                          const adjOutcome = cr?.extension?.find(ext => ext.url?.includes('adjudication-outcome'))?.valueCodeableConcept?.coding?.[0]?.code;
+                          const claimType = cr?.type?.coding?.[0]?.code;
+                          const requestId = cr?.request?.identifier?.value;
+                          const patientName = patient?.name?.[0]?.text || `${patient?.name?.[0]?.given?.join(' ') || ''} ${patient?.name?.[0]?.family || ''}`.trim() || 'Unknown';
+                          const isExpanded = expandedClaims[index];
+
+                          return (
+                            <div key={index} className="border rounded-lg overflow-hidden">
+                              {/* Claim header row - clickable */}
+                              <div
+                                className="bg-gray-50 px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors"
+                                onClick={() => setExpandedClaims(prev => ({ ...prev, [index]: !prev[index] }))}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm text-white ${
+                                      outcome === 'queued' ? 'bg-blue-500' :
+                                      outcome === 'complete' ? 'bg-green-500' :
+                                      outcome === 'error' ? 'bg-red-500' : 'bg-gray-500'
+                                    }`}>
+                                      {index + 1}
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-semibold text-sm">{requestId || `Claim #${index + 1}`}</span>
+                                        <Badge variant="outline" className="text-xs">{claimType || '-'}</Badge>
+                                        <Badge variant={innerMH?.response?.code === 'ok' ? 'default' : 'destructive'} className="text-xs">
+                                          {innerMH?.response?.code || '-'}
+                                        </Badge>
+                                        <Badge variant={
+                                          outcome === 'queued' ? 'secondary' :
+                                          outcome === 'complete' ? 'default' :
+                                          outcome === 'error' ? 'destructive' : 'outline'
+                                        } className="text-xs">
+                                          {outcome}
+                                        </Badge>
+                                        {adjOutcome && (
+                                          <Badge variant={
+                                            adjOutcome === 'approved' ? 'default' :
+                                            adjOutcome === 'rejected' ? 'destructive' : 'secondary'
+                                          } className="text-xs">
+                                            {adjOutcome}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-gray-500 mt-0.5">
+                                        {patientName} &bull; NPHIES ID: {cr?.identifier?.[0]?.value || cr?.id || '-'} &bull; {nested.entry?.length || 0} resources
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {isExpanded
+                                    ? <ChevronUp className="h-5 w-5 text-gray-400" />
+                                    : <ChevronDown className="h-5 w-5 text-gray-400" />
+                                  }
+                                </div>
+                              </div>
+
+                              {/* Expanded details */}
+                              {isExpanded && (
+                                <div className="px-4 py-4 space-y-5 border-t bg-white">
+
+                                  {/* Inner MessageHeader */}
+                                  {innerMH && (
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        <Info className="h-4 w-4 mr-1.5" />
+                                        Message Header
+                                      </h4>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 rounded-lg p-3">
+                                        <div>
+                                          <p className="text-xs text-gray-500">Response Code</p>
+                                          <Badge variant={innerMH.response?.code === 'ok' ? 'default' : 'destructive'} className="text-xs mt-1">
+                                            {innerMH.response?.code || '-'}
+                                          </Badge>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Event</p>
+                                          <p className="text-sm font-medium">{innerMH.eventCoding?.code || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Request Identifier</p>
+                                          <p className="text-xs font-mono break-all">{innerMH.response?.identifier || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">MessageHeader ID</p>
+                                          <p className="text-xs font-mono break-all">{innerMH.id || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Sender</p>
+                                          <p className="text-sm">{innerMH.sender?.identifier?.value || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Source Endpoint</p>
+                                          <p className="text-xs font-mono">{innerMH.source?.endpoint || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Destination</p>
+                                          <p className="text-xs font-mono">{innerMH.destination?.[0]?.endpoint || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Receiver License</p>
+                                          <p className="text-sm">{innerMH.destination?.[0]?.receiver?.identifier?.value || '-'}</p>
+                                        </div>
+                                      </div>
+                                      {innerMH.focus && innerMH.focus.length > 0 && (
+                                        <div className="mt-2">
+                                          <p className="text-xs text-gray-500 mb-1">Focus</p>
+                                          {innerMH.focus.map((f, fi) => (
+                                            <p key={fi} className="text-xs font-mono bg-gray-50 px-2 py-1 rounded break-all">{f.reference}</p>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* ClaimResponse Details */}
+                                  {cr && (
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        <FileText className="h-4 w-4 mr-1.5" />
+                                        Claim Response
+                                      </h4>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-blue-50 rounded-lg p-3">
+                                        <div>
+                                          <p className="text-xs text-gray-500">ClaimResponse ID</p>
+                                          <p className="text-sm font-mono">{cr.id || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Use</p>
+                                          <p className="text-sm font-medium">{cr.use || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Type</p>
+                                          <Badge variant="outline" className="text-xs mt-1">{cr.type?.coding?.[0]?.code || '-'}</Badge>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Status</p>
+                                          <Badge variant={cr.status === 'active' ? 'default' : 'outline'} className="text-xs mt-1">
+                                            {cr.status || '-'}
+                                          </Badge>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Outcome</p>
+                                          <Badge variant={
+                                            cr.outcome === 'queued' ? 'secondary' :
+                                            cr.outcome === 'complete' ? 'default' :
+                                            cr.outcome === 'error' ? 'destructive' : 'outline'
+                                          } className="text-xs mt-1">
+                                            {cr.outcome || '-'}
+                                          </Badge>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Created</p>
+                                          <p className="text-sm">{cr.created ? new Date(cr.created).toLocaleString() : '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Request Identifier</p>
+                                          <p className="text-sm font-mono">{cr.request?.identifier?.value || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">NPHIES Identifier</p>
+                                          <p className="text-sm font-mono">{cr.identifier?.[0]?.value || '-'}</p>
+                                        </div>
+                                      </div>
+
+                                      {/* Request reference */}
+                                      {cr.request && (
+                                        <div className="mt-2 bg-blue-50 rounded-lg p-3">
+                                          <p className="text-xs text-gray-500 mb-1">Request Reference</p>
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                              <p className="text-xs text-gray-400">Type</p>
+                                              <p className="text-sm">{cr.request.type || '-'}</p>
+                                            </div>
+                                            <div>
+                                              <p className="text-xs text-gray-400">Identifier</p>
+                                              <p className="text-sm font-mono">{cr.request.identifier?.value || '-'}</p>
+                                              {cr.request.identifier?.system && (
+                                                <p className="text-xs text-gray-400 font-mono">{cr.request.identifier.system}</p>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* NPHIES Generated tag */}
+                                      {cr.meta?.tag && cr.meta.tag.length > 0 && (
+                                        <div className="mt-2 flex gap-2 flex-wrap">
+                                          {cr.meta.tag.map((tag, ti) => (
+                                            <Badge key={ti} variant="secondary" className="text-xs">
+                                              {tag.display || tag.code}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {adjOutcome && (
+                                        <div className="mt-2 bg-blue-50 rounded-lg p-3">
+                                          <p className="text-xs text-gray-500">Adjudication Outcome</p>
+                                          <Badge variant={
+                                            adjOutcome === 'approved' ? 'default' :
+                                            adjOutcome === 'rejected' ? 'destructive' : 'secondary'
+                                          } className="mt-1">
+                                            {adjOutcome}
+                                          </Badge>
+                                        </div>
+                                      )}
+
+                                      {cr.disposition && (
+                                        <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                                          <p className="text-xs text-gray-500">Disposition</p>
+                                          <p className="text-sm">{cr.disposition}</p>
+                                        </div>
+                                      )}
+
+                                      {cr.preAuthRef && (
+                                        <div className="mt-2">
+                                          <p className="text-xs text-gray-500">Pre-Authorization References</p>
+                                          <p className="text-sm font-mono">{Array.isArray(cr.preAuthRef) ? cr.preAuthRef.join(', ') : cr.preAuthRef}</p>
+                                        </div>
+                                      )}
+
+                                      {/* Totals */}
+                                      {cr.total && cr.total.length > 0 && (
+                                        <div className="mt-3">
+                                          <p className="text-xs text-gray-500 mb-2">Totals</p>
+                                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                            {cr.total.map((t, ti) => (
+                                              <div key={ti} className="bg-green-50 rounded-lg p-3 text-center">
+                                                <p className="text-xs text-gray-500 capitalize">{t.category?.coding?.[0]?.code || 'Total'}</p>
+                                                <p className="text-lg font-bold text-green-700">
+                                                  {t.amount?.currency || 'SAR'} {parseFloat(t.amount?.value || 0).toLocaleString()}
+                                                </p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Item-level adjudication */}
+                                      {cr.item && cr.item.length > 0 && (
+                                        <div className="mt-3">
+                                          <p className="text-xs text-gray-500 mb-2">Item Adjudication ({cr.item.length} items)</p>
+                                          <div className="border rounded-lg overflow-hidden">
+                                            <table className="w-full text-xs">
+                                              <thead className="bg-gray-100">
+                                                <tr>
+                                                  <th className="px-3 py-2 text-left">Sequence</th>
+                                                  <th className="px-3 py-2 text-left">Adjudication</th>
+                                                  <th className="px-3 py-2 text-left">Notes</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y">
+                                                {cr.item.map((item, ii) => (
+                                                  <tr key={ii} className="hover:bg-gray-50">
+                                                    <td className="px-3 py-2">{item.itemSequence}</td>
+                                                    <td className="px-3 py-2">
+                                                      {item.adjudication?.map((adj, ai) => (
+                                                        <span key={ai} className="inline-block mr-2 mb-1">
+                                                          <span className="text-gray-500">{adj.category?.coding?.[0]?.code}:</span>{' '}
+                                                          {adj.amount ? `${adj.amount.currency || 'SAR'} ${adj.amount.value}` : adj.value || '-'}
+                                                        </span>
+                                                      )) || '-'}
+                                                    </td>
+                                                    <td className="px-3 py-2">{item.noteNumber?.join(', ') || '-'}</td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Process Notes */}
+                                      {cr.processNote && cr.processNote.length > 0 && (
+                                        <div className="mt-3">
+                                          <p className="text-xs text-gray-500 mb-2">Process Notes ({cr.processNote.length})</p>
+                                          <div className="space-y-1">
+                                            {cr.processNote.map((note, ni) => (
+                                              <div key={ni} className="bg-gray-50 rounded p-2 text-sm">
+                                                <span className="text-gray-400 mr-2">#{note.number}</span>
+                                                <span className="text-gray-600">[{note.type}]</span> {note.text}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Insurance */}
+                                      {cr.insurance && cr.insurance.length > 0 && (
+                                        <div className="mt-3">
+                                          <p className="text-xs text-gray-500 mb-2">Insurance</p>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            {cr.insurance.map((ins, ii) => (
+                                              <div key={ii} className="bg-gray-50 rounded-lg p-2 text-xs grid grid-cols-3 gap-2">
+                                                <div>
+                                                  <span className="text-gray-500">Sequence:</span> {ins.sequence}
+                                                </div>
+                                                <div>
+                                                  <span className="text-gray-500">Focal:</span> {ins.focal ? 'Yes' : 'No'}
+                                                </div>
+                                                <div>
+                                                  <span className="text-gray-500">Coverage:</span>{' '}
+                                                  <span className="font-mono break-all">{ins.coverage?.reference || '-'}</span>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* References */}
+                                      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        {cr.patient?.reference && (
+                                          <div className="bg-gray-50 rounded p-2">
+                                            <p className="text-xs text-gray-500">Patient</p>
+                                            <p className="text-xs font-mono break-all">{cr.patient.reference}</p>
+                                          </div>
+                                        )}
+                                        {cr.insurer?.reference && (
+                                          <div className="bg-gray-50 rounded p-2">
+                                            <p className="text-xs text-gray-500">Insurer</p>
+                                            <p className="text-xs font-mono break-all">{cr.insurer.reference}</p>
+                                          </div>
+                                        )}
+                                        {cr.requestor?.reference && (
+                                          <div className="bg-gray-50 rounded p-2">
+                                            <p className="text-xs text-gray-500">Requestor</p>
+                                            <p className="text-xs font-mono break-all">{cr.requestor.reference}</p>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Extensions */}
+                                      {cr.extension && cr.extension.length > 0 && (
+                                        <div className="mt-3">
+                                          <p className="text-xs text-gray-500 mb-2">Extensions ({cr.extension.length})</p>
+                                          <div className="space-y-1">
+                                            {cr.extension.map((ext, ei) => (
+                                              <div key={ei} className="bg-gray-50 rounded p-2 text-xs flex items-start gap-2">
+                                                <span className="text-gray-400 font-mono break-all flex-1">{ext.url?.split('/').pop() || ext.url}</span>
+                                                <span className="font-medium">
+                                                  {ext.valueBoolean !== undefined ? String(ext.valueBoolean) :
+                                                   ext.valueString || ext.valueCode ||
+                                                   ext.valueCodeableConcept?.coding?.[0]?.code ||
+                                                   ext.valueIdentifier?.value ||
+                                                   ext.valuePositiveInt ||
+                                                   ext.valueDate || ext.valuePeriod?.start ||
+                                                   JSON.stringify(ext.value || '')}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Patient Details */}
+                                  {patient && (
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        <User className="h-4 w-4 mr-1.5" />
+                                        Patient
+                                      </h4>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-green-50 rounded-lg p-3">
+                                        <div>
+                                          <p className="text-xs text-gray-500">Name</p>
+                                          <p className="text-sm font-medium">{patient.name?.[0]?.text || `${patient.name?.[0]?.given?.join(' ') || ''} ${patient.name?.[0]?.family || ''}`.trim() || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Gender</p>
+                                          <p className="text-sm capitalize">{patient.gender || '-'}</p>
+                                          {patient._gender?.extension?.[0]?.valueCodeableConcept?.coding?.[0]?.code && (
+                                            <p className="text-xs text-gray-400">KSA: {patient._gender.extension[0].valueCodeableConcept.coding[0].code}</p>
+                                          )}
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Birth Date</p>
+                                          <p className="text-sm">{patient.birthDate || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Active</p>
+                                          <p className="text-sm">{patient.active ? 'Yes' : 'No'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Identifier</p>
+                                          <p className="text-sm font-mono">{patient.identifier?.[0]?.value || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">ID Type</p>
+                                          <p className="text-sm">{patient.identifier?.[0]?.type?.coding?.[0]?.display || patient.identifier?.[0]?.type?.coding?.[0]?.code || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">ID System</p>
+                                          <p className="text-xs font-mono break-all">{patient.identifier?.[0]?.system || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Marital Status</p>
+                                          <p className="text-sm">{patient.maritalStatus?.coding?.[0]?.code || '-'}</p>
+                                        </div>
+                                        {patient.deceasedBoolean !== undefined && (
+                                          <div>
+                                            <p className="text-xs text-gray-500">Deceased</p>
+                                            <p className="text-sm">{patient.deceasedBoolean ? 'Yes' : 'No'}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                      {/* Patient extensions (e.g. occupation) */}
+                                      {patient.extension && patient.extension.length > 0 && (
+                                        <div className="mt-2 flex gap-2 flex-wrap">
+                                          {patient.extension.map((ext, ei) => (
+                                            <Badge key={ei} variant="outline" className="text-xs">
+                                              {ext.url?.split('/').pop()}: {ext.valueCodeableConcept?.coding?.[0]?.code || ext.valueString || '-'}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {/* Patient identifier extensions (e.g. country) */}
+                                      {patient.identifier?.[0]?.extension && patient.identifier[0].extension.length > 0 && (
+                                        <div className="mt-1 flex gap-2 flex-wrap">
+                                          {patient.identifier[0].extension.map((ext, ei) => (
+                                            <Badge key={ei} variant="outline" className="text-xs">
+                                              {ext.url?.split('/').pop()}: {ext.valueCodeableConcept?.coding?.[0]?.display || ext.valueCodeableConcept?.coding?.[0]?.code || '-'}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Provider Organization */}
+                                  {providerOrg && (
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        <Building2 className="h-4 w-4 mr-1.5" />
+                                        Provider Organization
+                                      </h4>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-purple-50 rounded-lg p-3">
+                                        <div>
+                                          <p className="text-xs text-gray-500">Name</p>
+                                          <p className="text-sm font-medium">{providerOrg.name || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">License</p>
+                                          <p className="text-sm font-mono">{providerOrg.identifier?.[0]?.value || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Provider Type</p>
+                                          <p className="text-sm">{providerOrg.extension?.find(ext => ext.url?.includes('extension-provider-type'))?.valueCodeableConcept?.coding?.[0]?.display || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Active</p>
+                                          <p className="text-sm">{providerOrg.active ? 'Yes' : 'No'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Organization Type</p>
+                                          <p className="text-sm">{providerOrg.type?.[0]?.coding?.[0]?.code || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">ID</p>
+                                          <p className="text-xs font-mono break-all">{providerOrg.id || '-'}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Insurer Organization */}
+                                  {insurerOrg && (
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        <Shield className="h-4 w-4 mr-1.5" />
+                                        Insurer Organization
+                                      </h4>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-cyan-50 rounded-lg p-3">
+                                        <div>
+                                          <p className="text-xs text-gray-500">Name</p>
+                                          <p className="text-sm font-medium">{insurerOrg.name || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">License</p>
+                                          <p className="text-sm font-mono">{insurerOrg.identifier?.[0]?.value || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">License System</p>
+                                          <p className="text-xs font-mono break-all">{insurerOrg.identifier?.[0]?.system || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Type</p>
+                                          <p className="text-sm">{insurerOrg.type?.[0]?.coding?.[0]?.display || insurerOrg.type?.[0]?.coding?.[0]?.code || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Active</p>
+                                          <p className="text-sm">{insurerOrg.active ? 'Yes' : 'No'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">ID</p>
+                                          <p className="text-xs font-mono break-all">{insurerOrg.id || '-'}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Coverage */}
+                                  {coverage && (
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        <Shield className="h-4 w-4 mr-1.5" />
+                                        Coverage
+                                      </h4>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-amber-50 rounded-lg p-3">
+                                        <div>
+                                          <p className="text-xs text-gray-500">Member ID</p>
+                                          <p className="text-sm font-mono">{coverage.identifier?.[0]?.value || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Type</p>
+                                          <p className="text-sm">{coverage.type?.coding?.[0]?.display || coverage.type?.coding?.[0]?.code || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Status</p>
+                                          <Badge variant={coverage.status === 'active' ? 'default' : 'outline'} className="text-xs mt-1">
+                                            {coverage.status || '-'}
+                                          </Badge>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Relationship</p>
+                                          <p className="text-sm">{coverage.relationship?.coding?.[0]?.display || coverage.relationship?.coding?.[0]?.code || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Plan</p>
+                                          <p className="text-sm">{coverage.class?.[0]?.name || coverage.class?.[0]?.value || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Period</p>
+                                          <p className="text-sm">{coverage.period?.start || '-'} to {coverage.period?.end || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Subscriber</p>
+                                          <p className="text-xs font-mono break-all">{coverage.subscriber?.reference || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Beneficiary</p>
+                                          <p className="text-xs font-mono break-all">{coverage.beneficiary?.reference || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Policy Holder</p>
+                                          <p className="text-xs font-mono break-all">{coverage.policyHolder?.reference || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-gray-500">Payor</p>
+                                          <p className="text-xs font-mono break-all">{coverage.payor?.[0]?.reference || '-'}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Operation Outcome */}
+                                  {oo && oo.issue && oo.issue.length > 0 && (
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-red-600 mb-2 flex items-center">
+                                        <AlertCircle className="h-4 w-4 mr-1.5" />
+                                        Operation Outcome ({oo.issue.length} issues)
+                                      </h4>
+                                      <div className="space-y-2">
+                                        {oo.issue.map((issue, ii) => (
+                                          <div key={ii} className={`rounded-lg p-3 ${
+                                            issue.severity === 'error' || issue.severity === 'fatal'
+                                              ? 'bg-red-50 border border-red-200'
+                                              : issue.severity === 'warning'
+                                              ? 'bg-yellow-50 border border-yellow-200'
+                                              : 'bg-blue-50 border border-blue-200'
+                                          }`}>
+                                            <div className="flex items-start gap-2">
+                                              <Badge variant={issue.severity === 'error' || issue.severity === 'fatal' ? 'destructive' : 'secondary'} className="text-xs shrink-0">
+                                                {issue.severity}
+                                              </Badge>
+                                              <div className="min-w-0">
+                                                <p className="text-sm font-medium">{issue.details?.coding?.[0]?.code || issue.code || '-'}</p>
+                                                <p className="text-sm text-gray-700">{issue.details?.coding?.[0]?.display || issue.diagnostics || issue.details?.text || '-'}</p>
+                                                {issue.expression && issue.expression.length > 0 && (
+                                                  <p className="text-xs text-gray-500 font-mono mt-1 break-all">{issue.expression.join(', ')}</p>
+                                                )}
+                                                {issue.location && issue.location.length > 0 && (
+                                                  <p className="text-xs text-gray-500 font-mono mt-1 break-all">Location: {issue.location.join(', ')}</p>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Bundle metadata footer */}
+                                  <div className="text-xs text-gray-400 pt-3 border-t flex flex-wrap gap-x-4 gap-y-1">
+                                    <span>Bundle ID: <span className="font-mono">{nested.id}</span></span>
+                                    <span>Full URL: <span className="font-mono break-all">{nested._fullUrl || '-'}</span></span>
+                                    <span>Timestamp: {nested.timestamp ? new Date(nested.timestamp).toLocaleString() : '-'}</span>
+                                    <span>Resources: {nested.entry?.length || 0}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Polled Responses Section */}
+                  {polledResponses.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center">
+                          <RefreshCw className="h-5 w-5 mr-2" />
+                          Polled Responses ({polledResponses.length})
+                        </CardTitle>
+                        <CardDescription>Responses retrieved via polling after initial submission</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="border rounded-lg overflow-hidden">
+                          <table className="w-full">
+                            <thead className="bg-blue-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Batch #</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Claim ID</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">NPHIES ID</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Outcome</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Adjudication</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Disposition</th>
@@ -1052,54 +1928,25 @@ export default function BatchClaimDetails() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                              {responses.map((resp, idx) => {
-                                const cr = resp.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
-                                const outcome = cr?.outcome || resp.outcome || '-';
-                                const adjudication = cr?.extension?.find(ext => ext.url?.includes('extension-adjudication-outcome'))?.valueCodeableConcept?.coding?.[0]?.code || resp.adjudicationOutcome || '-';
-                                const errorMsgs = resp.errors || [];
-                                
-                                return (
-                                  <tr key={`resp-${idx}`} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3 text-sm">{resp.claimNumber || resp.batchNumber || idx + 1}</td>
-                                    <td className="px-4 py-3">
-                                      <Badge variant={resp.success ? 'default' : 'destructive'}>
-                                        {resp.success ? 'Success' : 'Failed'}
-                                      </Badge>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm">{outcome}</td>
-                                    <td className="px-4 py-3 text-sm">
-                                      <Badge variant={
-                                        adjudication === 'approved' ? 'default' :
-                                        adjudication === 'rejected' ? 'destructive' : 'secondary'
-                                      }>
-                                        {adjudication}
-                                      </Badge>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm">{cr?.disposition || resp.disposition || '-'}</td>
-                                    <td className="px-4 py-3 text-sm">
-                                      {errorMsgs.length > 0 ? (
-                                        <span className="text-red-600 text-xs">{errorMsgs.map(e => e.display || e.message || e.code).join('; ')}</span>
-                                      ) : '-'}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
                               {polledResponses.map((pr, idx) => (
-                                <tr key={`poll-${idx}`} className="hover:bg-gray-50 bg-blue-50/30">
-                                  <td className="px-4 py-3 text-sm">{pr.batchNumber || idx + 1}
-                                    <Badge variant="secondary" className="ml-1 text-xs">polled</Badge>
-                                  </td>
+                                <tr key={idx} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm">{pr.batchNumber || idx + 1}</td>
+                                  <td className="px-4 py-3 text-sm font-mono">{pr.claimIdentifier || '-'}</td>
+                                  <td className="px-4 py-3 text-sm font-mono">{pr.nphiesClaimId || '-'}</td>
                                   <td className="px-4 py-3">
-                                    <Badge variant={pr.outcome !== 'error' ? 'default' : 'destructive'}>
-                                      {pr.outcome !== 'error' ? 'Success' : 'Failed'}
+                                    <Badge variant={
+                                      pr.outcome === 'complete' ? 'default' :
+                                      pr.outcome === 'queued' ? 'secondary' :
+                                      pr.outcome === 'error' ? 'destructive' : 'outline'
+                                    } className="text-xs">
+                                      {pr.outcome || '-'}
                                     </Badge>
                                   </td>
-                                  <td className="px-4 py-3 text-sm">{pr.outcome}</td>
-                                  <td className="px-4 py-3 text-sm">
+                                  <td className="px-4 py-3">
                                     <Badge variant={
                                       pr.adjudicationOutcome === 'approved' ? 'default' :
                                       pr.adjudicationOutcome === 'rejected' ? 'destructive' : 'secondary'
-                                    }>
+                                    } className="text-xs">
                                       {pr.adjudicationOutcome || '-'}
                                     </Badge>
                                   </td>
@@ -1116,67 +1963,66 @@ export default function BatchClaimDetails() {
                         </div>
                       </CardContent>
                     </Card>
-                  );
-                }
-                return null;
-              })()}
+                  )}
 
-              {/* Raw Response Bundle */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center">
-                        <Activity className="h-5 w-5 mr-2" />
-                        Raw Response Bundle
-                      </CardTitle>
-                      <CardDescription>Full FHIR response received from NPHIES</CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => {
-                          const data = typeof batch.response_bundle === 'string' 
-                            ? batch.response_bundle 
-                            : JSON.stringify(batch.response_bundle, null, 2);
-                          navigator.clipboard.writeText(data);
-                        }}
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => {
-                          const data = typeof batch.response_bundle === 'string' 
-                            ? batch.response_bundle 
-                            : JSON.stringify(batch.response_bundle, null, 2);
-                          const blob = new Blob([data], { type: 'application/json' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `batch-${batch.batch_identifier}-response.json`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
-                    {typeof batch.response_bundle === 'string' 
-                      ? batch.response_bundle 
-                      : JSON.stringify(batch.response_bundle, null, 2)}
-                  </pre>
-                </CardContent>
-              </Card>
-            </div>
+                  {/* Raw Response JSON */}
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center">
+                            <Hash className="h-5 w-5 mr-2" />
+                            Raw Response JSON
+                          </CardTitle>
+                          <CardDescription>Full FHIR response bundle received from NPHIES</CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const data = typeof batch.response_bundle === 'string'
+                                ? batch.response_bundle
+                                : JSON.stringify(batch.response_bundle, null, 2);
+                              navigator.clipboard.writeText(data);
+                            }}
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const data = typeof batch.response_bundle === 'string'
+                                ? batch.response_bundle
+                                : JSON.stringify(batch.response_bundle, null, 2);
+                              const blob = new Blob([data], { type: 'application/json' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `batch-${batch.batch_identifier}-response.json`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            }}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
+                        {typeof batch.response_bundle === 'string'
+                          ? batch.response_bundle
+                          : JSON.stringify(batch.response_bundle, null, 2)}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })()}
           </TabsContent>
         )}
       </Tabs>
