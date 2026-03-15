@@ -20,7 +20,7 @@ import MedicationSafetyPanel from '@/components/general-request/shared/Medicatio
 
 // Import Communication Panel for NPHIES communications
 import { CommunicationPanel } from '@/components/prior-auth';
-import { PRIORITY_OPTIONS } from '@/components/prior-auth/constants';
+import { PRIORITY_OPTIONS, EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS } from '@/components/prior-auth/constants';
 import { selectStyles } from '@/components/prior-auth/styles';
 import Select from 'react-select';
 
@@ -1181,22 +1181,22 @@ export default function PriorAuthorizationDetails() {
                     <Label className="text-gray-500">Outcome</Label>
                     <p className="font-medium capitalize">{priorAuth.outcome || '-'}</p>
                   </div>
-                  {priorAuth.encounter_class === 'emergency' && priorAuth.emergency_department_disposition && (
+                  {(priorAuth.encounter_class === 'emergency' || priorAuth.sub_type === 'emr') && priorAuth.emergency_department_disposition && (
                     <div>
                       <Label className="text-gray-500">ED Disposition</Label>
-                      <p className="font-medium">{priorAuth.emergency_department_disposition}</p>
+                      <p className="font-medium">{EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS.find(o => o.value === priorAuth.emergency_department_disposition)?.label || priorAuth.emergency_department_disposition}</p>
                     </div>
                   )}
-                  {priorAuth.encounter_class === 'emergency' && priorAuth.triage_category && (
+                  {(priorAuth.encounter_class === 'emergency' || priorAuth.sub_type === 'emr') && priorAuth.triage_category && (
                     <div>
                       <Label className="text-gray-500">Triage Category</Label>
-                      <p className="font-medium">{priorAuth.triage_category}</p>
+                      <p className="font-medium">{TRIAGE_CATEGORY_OPTIONS.find(o => o.value === priorAuth.triage_category)?.label || priorAuth.triage_category}</p>
                     </div>
                   )}
-                  {priorAuth.encounter_class === 'emergency' && priorAuth.encounter_priority && (
+                  {(priorAuth.encounter_class === 'emergency' || priorAuth.sub_type === 'emr') && priorAuth.encounter_priority && (
                     <div>
                       <Label className="text-gray-500">Encounter Priority</Label>
-                      <p className="font-medium">{priorAuth.encounter_priority}</p>
+                      <p className="font-medium">{ENCOUNTER_PRIORITY_OPTIONS.find(o => o.value === priorAuth.encounter_priority)?.label || priorAuth.encounter_priority}</p>
                     </div>
                   )}
                 </div>
