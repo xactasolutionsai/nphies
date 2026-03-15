@@ -353,6 +353,17 @@ class MessageUpdater {
         existingResponseBundle.polledResponses = [];
       }
 
+      // Extract financial totals from ClaimResponse
+      const totals = claimResponse.total?.map(t => ({
+        category: t.category?.coding?.[0]?.code,
+        amount: t.amount?.value,
+        currency: t.amount?.currency || 'SAR'
+      })) || [];
+      const benefitAmount = totals.find(t => t.category === 'benefit')?.amount;
+      const eligibleAmount = totals.find(t => t.category === 'eligible')?.amount;
+      const copayAmount = totals.find(t => t.category === 'copay')?.amount;
+      const claimApprovedAmount = benefitAmount || eligibleAmount || 0;
+
       existingResponseBundle.polledResponses.push({
         batchNumber,
         itemId,
@@ -361,16 +372,23 @@ class MessageUpdater {
         disposition: claimResponse.disposition,
         nphiesClaimId,
         batchIdentifier,
+        approvedAmount: claimApprovedAmount,
+        eligibleAmount: eligibleAmount || 0,
+        copayAmount: copayAmount || 0,
         errors: [],
         receivedAt: new Date().toISOString()
       });
 
       // Compute batch-level stats from all polledResponses
-      let approved = 0, rejected = 0;
+      let approved = 0, rejected = 0, totalApprovedAmount = 0;
       for (const pr of existingResponseBundle.polledResponses) {
         if (pr.outcome === 'complete' || pr.outcome === 'partial') {
-          if (pr.adjudicationOutcome === 'approved' || pr.adjudicationOutcome === 'partial') approved++;
-          else if (pr.adjudicationOutcome === 'rejected') rejected++;
+          if (pr.adjudicationOutcome === 'approved' || pr.adjudicationOutcome === 'partial') {
+            approved++;
+            totalApprovedAmount += parseFloat(pr.approvedAmount || 0);
+          } else if (pr.adjudicationOutcome === 'rejected') {
+            rejected++;
+          }
         } else if (pr.outcome === 'error') {
           rejected++;
         }
@@ -380,8 +398,9 @@ class MessageUpdater {
       const processedCount = approved + rejected;
       let batchStatus = 'Submitted';
       if (processedCount === totalClaims && totalClaims > 0) {
-        batchStatus = rejected === totalClaims ? 'Rejected'
-          : approved === totalClaims ? 'Processed' : 'Partial';
+        if (rejected === totalClaims) batchStatus = 'Rejected';
+        else if (approved === totalClaims) batchStatus = 'Processed';
+        else batchStatus = 'Partial';
       } else if (processedCount > 0) {
         batchStatus = 'Partial';
       }
@@ -393,14 +412,17 @@ class MessageUpdater {
             processed_claims = $3,
             approved_claims = $4,
             rejected_claims = $5,
+            approved_amount = $6,
+            processed_date = CASE WHEN $2 IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $6
+        WHERE id = $7
       `, [
         JSON.stringify(existingResponseBundle),
         batchStatus,
         processedCount,
         approved,
         rejected,
+        totalApprovedAmount,
         recordId
       ]);
 

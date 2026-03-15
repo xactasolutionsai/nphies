@@ -97,7 +97,7 @@ class SystemPollController {
       const page = parseInt(req.query.page) || 1;
       const limit = Math.min(parseInt(req.query.limit) || 10, 50);
 
-      const allowedTables = ['prior_authorizations', 'claim_submissions', 'advanced_authorizations'];
+      const allowedTables = ['prior_authorizations', 'claim_submissions', 'advanced_authorizations', 'claim_batches'];
       if (!allowedTables.includes(table)) {
         return res.status(400).json({ error: `Invalid table: ${table}` });
       }
