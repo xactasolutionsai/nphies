@@ -208,7 +208,7 @@ class PriorAuthorizationsController extends BaseController {
         pa.insurance_sequence, pa.insurance_focal,
         pa.claim_response_status, pa.claim_response_use, pa.claim_response_created,
         pa.practice_code, pa.service_event_type,
-        pa.triage_category, pa.triage_date, pa.encounter_priority,
+        pa.triage_category, pa.triage_date, pa.encounter_priority, pa.emergency_department_disposition,
         pa.eligibility_response_id, pa.eligibility_response_system,
         pa.medication_safety_analysis,
         pa.drug_interaction_justification,
