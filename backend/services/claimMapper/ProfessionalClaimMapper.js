@@ -896,13 +896,35 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       }
     }
 
+    // Handle onset supportingInfo explicitly: only category + timingDate, no code or value fields
+    const existingOnset = existingSupportingInfo.find(info =>
+      (info.category || '').toLowerCase() === 'onset'
+    );
+    if (existingOnset) {
+      const onsetDate = existingOnset.timing_date || claim.encounter_start || claim.service_date;
+      if (onsetDate) {
+        supportingInfoList.push({
+          sequence: sequenceNum,
+          category: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+              code: 'onset'
+            }]
+          },
+          timingDate: this.formatDate(onsetDate)
+        });
+        sequences.push(sequenceNum++);
+      }
+    }
+
     // Pass through any remaining supporting info categories not explicitly handled above
-    // (e.g., onset, lab-test, reason-for-visit, attachment, etc.) so they are not silently dropped.
+    // (e.g., lab-test, reason-for-visit, attachment, etc.) so they are not silently dropped.
     const handledCategories = new Set([
       'vital-sign-systolic', 'vital-sign-diastolic', 'vital-sign-height', 'vital-sign-weight',
       'pulse', 'temperature', 'chief-complaint', 'oxygen-saturation', 'respiratory-rate',
       'patient-history', 'investigation-result', 'treatment-plan',
-      'physical-examination', 'history-of-present-illness', 'birth-weight'
+      'physical-examination', 'history-of-present-illness', 'birth-weight',
+      'onset'
     ]);
     existingSupportingInfo.forEach(info => {
       const cat = (info.category || '').toLowerCase();

@@ -352,10 +352,10 @@ class ClaimSubmissionsController extends BaseController {
                                        item.product_or_service_display || 
                                        item.medication_name || 
                                        null,
-            // Use services CodeSystem for professional claims when override is provided
-            product_or_service_system: override?.service_code 
-              ? 'http://nphies.sa/terminology/CodeSystem/services' 
-              : item.product_or_service_system
+            // Use override system if provided, otherwise default to services when code is overridden
+            product_or_service_system: override?.service_code_system
+              || (override?.service_code ? 'http://nphies.sa/terminology/CodeSystem/services' : null)
+              || item.product_or_service_system
           };
         });
         await this.insertItems(claimId, items);

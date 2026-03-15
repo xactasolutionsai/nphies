@@ -178,6 +178,8 @@ export default function ClaimDetails() {
   const [lastSimulateBundle, setLastSimulateBundle] = useState(null);
   const [lastPollBundle, setLastPollBundle] = useState(null);
   const [showPreviewMenu, setShowPreviewMenu] = useState(false);
+  const [priorAuthComms, setPriorAuthComms] = useState([]);
+  const [priorAuthCommsLoading, setPriorAuthCommsLoading] = useState(false);
 
   useEffect(() => {
     loadClaim();
@@ -198,6 +200,26 @@ export default function ClaimDetails() {
       setMotherPatient(null);
     }
   }, [claim?.mother_patient_id]);
+
+  // Fetch prior auth communications when communications tab is active
+  useEffect(() => {
+    if (activeTab === 'communications' && claim?.prior_auth_id && priorAuthComms.length === 0 && !priorAuthCommsLoading) {
+      loadPriorAuthCommunications();
+    }
+  }, [activeTab, claim?.prior_auth_id]);
+
+  const loadPriorAuthCommunications = async () => {
+    if (!claim?.prior_auth_id) return;
+    try {
+      setPriorAuthCommsLoading(true);
+      const response = await api.getCommunications(claim.prior_auth_id);
+      setPriorAuthComms(response.data || response.communications || []);
+    } catch (error) {
+      console.error('Failed to load prior auth communications:', error);
+    } finally {
+      setPriorAuthCommsLoading(false);
+    }
+  };
 
   const loadClaim = async () => {
     try {
@@ -1072,8 +1094,8 @@ export default function ClaimDetails() {
               <Wallet className="h-4 w-4 mr-1 inline" />
               Payments {payments.length > 0 && `(${payments.length})`}
             </TabButton>
-            {/* Communications Tab - Show for queued, pended, approved, or partial claims */}
-            {(claim.status === 'queued' || claim.status === 'pended' || claim.status === 'approved' || claim.status === 'partial' || claim.adjudication_outcome === 'approved') && (
+            {/* Communications Tab - Show for queued, pended, approved, partial claims, or when linked to a prior auth */}
+            {(claim.status === 'queued' || claim.status === 'pended' || claim.status === 'approved' || claim.status === 'partial' || claim.adjudication_outcome === 'approved' || claim.prior_auth_id) && (
               <TabButton active={activeTab === 'communications'} onClick={() => setActiveTab('communications')}>
                 <MessageSquare className="h-4 w-4 mr-1 inline" />
                 Communications
@@ -3558,16 +3580,86 @@ export default function ClaimDetails() {
 
           {/* Communications Tab - Status Check, Poll, and Communications */}
           {activeTab === 'communications' && (
-            <ClaimCommunicationPanel 
-              claimId={id}
-              claimStatus={claim.status}
-              nphiesClaimId={claim.nphies_claim_id}
-              items={claim.items || []}
-              onStatusUpdate={(data) => {
-                // Reload claim data when status changes
-                loadClaim();
-              }}
-            />
+            <div className="space-y-6">
+              {/* Prior Auth Communications (read-only) */}
+              {claim.prior_auth_id && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <History className="h-5 w-5 text-purple-600" />
+                      Prior Authorization Communications
+                    </CardTitle>
+                    <CardDescription>
+                      Communications sent during prior authorization #{claim.prior_auth_id}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {priorAuthCommsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <RefreshCw className="h-5 w-5 animate-spin text-gray-400 mr-2" />
+                        <span className="text-gray-500">Loading prior auth communications...</span>
+                      </div>
+                    ) : priorAuthComms.length === 0 ? (
+                      <p className="text-gray-500 text-sm py-4 text-center">No communications were sent during the prior authorization.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {priorAuthComms.map((comm, idx) => (
+                          <div key={comm.id || idx} className="border rounded-lg p-4 bg-purple-50/30">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className={comm.communication_type === 'unsolicited' ? 'border-blue-300 text-blue-700' : 'border-orange-300 text-orange-700'}>
+                                  {comm.communication_type === 'unsolicited' ? 'Unsolicited' : 'Solicited'}
+                                </Badge>
+                                <Badge variant="outline" className="text-gray-600">
+                                  {comm.status || 'completed'}
+                                </Badge>
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {comm.sent_at ? new Date(comm.sent_at).toLocaleString() : comm.created_at ? new Date(comm.created_at).toLocaleString() : ''}
+                              </span>
+                            </div>
+                            {/* Payloads */}
+                            {comm.payloads && comm.payloads.length > 0 && (
+                              <div className="space-y-2 mt-2">
+                                {comm.payloads.map((payload, pIdx) => (
+                                  <div key={pIdx} className="text-sm">
+                                    {payload.content_string && (
+                                      <p className="text-gray-700 bg-white rounded p-2 border">{payload.content_string}</p>
+                                    )}
+                                    {payload.attachment_title && (
+                                      <p className="text-gray-600 flex items-center gap-1">
+                                        <Paperclip className="h-3 w-3" />
+                                        {payload.attachment_title}
+                                      </p>
+                                    )}
+                                    {payload.claim_item_sequences && payload.claim_item_sequences.length > 0 && (
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Referenced items: {payload.claim_item_sequences.join(', ')}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Claim Communications */}
+              <ClaimCommunicationPanel 
+                claimId={id}
+                claimStatus={claim.status}
+                nphiesClaimId={claim.nphies_claim_id}
+                items={claim.items || []}
+                onStatusUpdate={(data) => {
+                  loadClaim();
+                }}
+              />
+            </div>
           )}
         </div>
 
