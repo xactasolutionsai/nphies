@@ -215,6 +215,7 @@ class PriorAuthorizationsController extends BaseController {
         pa.drug_interaction_justification_date,
         pa.lab_observations,
         pa.icu_hours,
+        pa.authorization_offline_date, pa.authorization_offline_reference,
         p.name as patient_name,
         p.identifier as patient_identifier,
         p.gender as patient_gender,
@@ -1934,6 +1935,9 @@ class PriorAuthorizationsController extends BaseController {
         is_update: formData.is_update || false,
         // ICU hours for institutional inpatient/daycase encounters
         icu_hours: formData.icu_hours ? parseFloat(formData.icu_hours) : null,
+        // Offline authorization fields (per NPHIES extension-authorization-offline-date)
+        authorization_offline_date: formData.authorization_offline_date || null,
+        authorization_offline_reference: formData.authorization_offline_reference || null,
         // Attachments (standalone Binary resources)
         attachments: formData.attachments || []
       };
@@ -2079,6 +2083,7 @@ class PriorAuthorizationsController extends BaseController {
     });
     
     const dateFields = ['encounter_start', 'encounter_end', 'eligibility_offline_date',
+                        'authorization_offline_date',
                         'pre_auth_period_start', 'pre_auth_period_end', 
                         'transfer_period_start', 'transfer_period_end'];
     const numberFields = ['coverage_id', 'related_auth_id', 'total_amount', 'approved_amount'];

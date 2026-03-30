@@ -3894,6 +3894,28 @@ export default function ClaimDetails() {
             </Card>
           )}
 
+          {/* Offline Authorization */}
+          {(claim.authorization_offline_reference || claim.authorization_offline_date) && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-blue-600" />
+                  Offline Authorization
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {claim.authorization_offline_reference && (
+                    <p className="font-mono text-sm">{claim.authorization_offline_reference}</p>
+                  )}
+                  {claim.authorization_offline_date && (
+                    <p className="text-sm text-gray-500">Date: {formatDateTime(claim.authorization_offline_date)}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Authorization Validity */}
           {(() => {
             const claimResponseDetails = getClaimResponseDetails();

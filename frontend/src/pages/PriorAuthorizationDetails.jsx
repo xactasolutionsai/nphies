@@ -697,7 +697,12 @@ export default function PriorAuthorizationDetails() {
       let encounterStartDate;
       if (priorAuth.encounter_start) {
         const dateStr = String(priorAuth.encounter_start);
-        encounterStartDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.substring(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          encounterStartDate = dateStr;
+        } else {
+          const d = new Date(dateStr);
+          encounterStartDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
       } else {
         // Fallback to today in local time
         const today = new Date();
@@ -742,14 +747,12 @@ export default function PriorAuthorizationDetails() {
           // If item.serviced_date is ISO string like "2023-12-03T21:00:00.000Z", extract just the date part
           let itemServicedDate = encounterStartDate;
           if (item.serviced_date && item.serviced_date !== '') {
-            // Handle both ISO strings and plain date strings
             const dateStr = String(item.serviced_date);
-            if (dateStr.includes('T')) {
-              // ISO string - extract date part directly without timezone conversion
-              itemServicedDate = dateStr.split('T')[0];
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+              itemServicedDate = dateStr;
             } else {
-              // Plain date string - use as is
-              itemServicedDate = dateStr.substring(0, 10);
+              const d = new Date(dateStr);
+              itemServicedDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             }
           }
           
@@ -1228,6 +1231,29 @@ export default function PriorAuthorizationDetails() {
                     </>
                   )}
                 </div>
+
+                {(priorAuth.authorization_offline_reference || priorAuth.authorization_offline_date) && (
+                  <>
+                    <hr className="border-gray-200" />
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h3 className="font-semibold text-blue-800 mb-2">Offline Authorization</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {priorAuth.authorization_offline_reference && (
+                          <div>
+                            <Label className="text-gray-500">Reference</Label>
+                            <p className="font-mono text-sm">{priorAuth.authorization_offline_reference}</p>
+                          </div>
+                        )}
+                        {priorAuth.authorization_offline_date && (
+                          <div>
+                            <Label className="text-gray-500">Date</Label>
+                            <p className="font-medium">{formatDateTime(priorAuth.authorization_offline_date)}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {priorAuth.disposition && (
                   <>
