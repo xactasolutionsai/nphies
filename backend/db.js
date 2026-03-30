@@ -1,8 +1,14 @@
 import pkg from 'pg';
-const { Pool } = pkg;
+const { Pool, types } = pkg;
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// Return DATE columns as raw "YYYY-MM-DD" strings instead of JS Date objects.
+// pg normally creates Date at midnight local time, which JSON.stringify converts to UTC ISO —
+// in UTC+ timezones the UTC date can be one day behind the stored date, causing a -1 day shift
+// on every save/load cycle.
+types.setTypeParser(1082, (val) => val);
 
 // Database connection configuration
 const dbConfig = {

@@ -346,17 +346,30 @@ export default function PriorAuthorizationForm() {
     return () => clearTimeout(timer);
   }, [formData.auth_type, formData.items, formData.patient_id, formData.diagnoses]);
 
-  // Parse a date string as a LOCAL date (avoids timezone shift when parsing date-only strings)
-  // new Date("2026-02-11") treats it as UTC midnight, which shifts -1 day in UTC+ timezones
-  // This helper extracts YYYY-MM-DD and creates a local date instead
+  // Parse a date string as a LOCAL date (avoids timezone shift)
   const parseLocalDate = (dateStr) => {
     if (!dateStr) return null;
     const str = String(dateStr);
-    // Extract just the date part (handles "2026-02-11", "2026-02-11T00:00:00Z", "2026-02-10T21:00:00.000Z", etc.)
-    const datePart = str.includes('T') ? str.split('T')[0] : str.substring(0, 10);
-    const [year, month, day] = datePart.split('-').map(Number);
-    if (!year || !month || !day) return null;
-    return new Date(year, month - 1, day);
+    // Pure date string "2026-03-28" — create local midnight directly (avoid new Date() UTC parse)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      const [year, month, day] = str.split('-').map(Number);
+      if (!year || !month || !day) return null;
+      return new Date(year, month - 1, day);
+    }
+    // ISO datetime string — let Date parse then extract LOCAL date components
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+
+  // Convert any date value to "YYYY-MM-DD" in local time (for <input type="date"> value)
+  const formatDateForInput = (dateStr) => {
+    if (!dateStr) return '';
+    const str = String(dateStr);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
   // Helper to calculate patient age from birth date
@@ -3239,7 +3252,7 @@ export default function PriorAuthorizationForm() {
                     <Input
                       id="eligibility_offline_date"
                       type="date"
-                      value={formData.eligibility_offline_date || ''}
+                      value={formatDateForInput(formData.eligibility_offline_date)}
                       onChange={(e) => handleChange('eligibility_offline_date', e.target.value)}
                     />
                   </div>
@@ -3280,14 +3293,21 @@ export default function PriorAuthorizationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="authorization_offline_date">Offline Authorization Date</Label>
-                    <Input
-                      id="authorization_offline_date"
-                      type="date"
-                      max={new Date().toISOString().split('T')[0]}
-                      value={formData.authorization_offline_date || ''}
-                      onChange={(e) => handleChange('authorization_offline_date', e.target.value)}
-                    />
+                    <Label htmlFor="authorization_offline_date">Offline Authorization Date & Time</Label>
+                    <div className="datepicker-wrapper">
+                      <DatePicker
+                        selected={formData.authorization_offline_date ? new Date(formData.authorization_offline_date) : null}
+                        onChange={(date) => handleChange('authorization_offline_date', date ? date.toISOString() : '')}
+                        showTimeSelect
+                        timeIntervals={15}
+                        dateFormat="yyyy-MM-dd HH:mm"
+                        maxDate={new Date()}
+                        isClearable
+                        className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                        placeholderText="Select date & time"
+                      />
+                      <Calendar className="datepicker-icon h-4 w-4" />
+                    </div>
                   </div>
                 </div>
                 {formData.authorization_offline_reference && (

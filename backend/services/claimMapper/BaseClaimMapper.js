@@ -20,21 +20,11 @@ class BaseClaimMapper {
 
   formatDate(date) {
     if (!date) return null;
-    
-    // If it's already a string in YYYY-MM-DD format or ISO format, extract date part
-    if (typeof date === 'string') {
-      // Handle ISO strings like "2023-12-03T21:00:00.000Z" - extract date part directly
-      if (date.includes('T')) {
-        return date.split('T')[0];
-      }
-      // Already in YYYY-MM-DD format
-      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        return date;
-      }
-    }
-    
-    // For Date objects, use local date to avoid UTC conversion
+    // Short-circuit for raw "YYYY-MM-DD" strings (returned by pg DATE type parser override)
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+    // For everything else (Date objects, ISO strings, etc.) parse then use LOCAL date getters
     const d = new Date(date);
+    if (isNaN(d.getTime())) return null;
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
