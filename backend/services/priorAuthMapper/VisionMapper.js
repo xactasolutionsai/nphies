@@ -186,6 +186,13 @@ class VisionMapper extends BaseMapper {
       });
     }
 
+    if (priorAuth.authorization_offline_date) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(priorAuth.authorization_offline_date)
+      });
+    }
+
     if (priorAuth.is_transfer) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transfer',

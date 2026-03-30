@@ -215,6 +215,13 @@ class PharmacyMapper extends BaseMapper {
       });
     }
 
+    if (priorAuth.authorization_offline_date) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(priorAuth.authorization_offline_date)
+      });
+    }
+
     // Transfer extension (optional)
     if (priorAuth.is_transfer) {
       extensions.push({
