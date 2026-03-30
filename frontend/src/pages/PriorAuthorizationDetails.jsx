@@ -732,6 +732,9 @@ export default function PriorAuthorizationDetails() {
         mother_patient_id: priorAuth.mother_patient_id || null,
         // ICU hours for institutional claims
         icu_hours: priorAuth.icu_hours || null,
+        // Offline authorization fields (per NPHIES extension-authorization-offline-date)
+        authorization_offline_date: priorAuth.authorization_offline_date || null,
+        authorization_offline_reference: priorAuth.authorization_offline_reference || null,
         // Attachments
         attachments: priorAuth.attachments || [],
         items: priorAuth.items?.map((item, idx) => {

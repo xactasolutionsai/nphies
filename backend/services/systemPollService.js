@@ -534,7 +534,11 @@ class SystemPollService {
         e.diagnostics || e.message || e.code || JSON.stringify(e)
       ).join('; ');
     }
-    return pollResponse.error || 'Unknown error';
+
+    const err = pollResponse.error;
+    if (!err) return 'Unknown error';
+    if (typeof err === 'string') return err;
+    return err.message || err.code || JSON.stringify(err);
   }
 
   // =========================================================================

@@ -474,6 +474,10 @@ export const validationSchemas = {
     eligibility_offline_date: Joi.date().allow(null, '').optional(),
     eligibility_offline_ref: Joi.string().max(255).allow(null, '').optional(),
     
+    // Offline Authorization (per NPHIES extension-authorization-offline-date)
+    authorization_offline_date: Joi.date().allow(null, '').optional(),
+    authorization_offline_reference: Joi.string().max(255).allow(null, '').optional(),
+    
     // Clinical
     diagnosis_codes: Joi.string().allow(null, '').optional(),
     primary_diagnosis: Joi.string().max(50).allow(null, '').optional(),
@@ -740,6 +744,10 @@ export const validationSchemas = {
     eligibility_ref: Joi.string().max(100).allow(null, '').optional(),
     eligibility_offline_date: Joi.date().allow(null, '').optional(),
     eligibility_offline_ref: Joi.string().max(255).allow(null, '').optional(),
+    
+    // Offline Authorization (per NPHIES extension-authorization-offline-date)
+    authorization_offline_date: Joi.date().allow(null, '').optional(),
+    authorization_offline_reference: Joi.string().max(255).allow(null, '').optional(),
     
     // Service
     service_date: Joi.date().allow(null, '').optional(),

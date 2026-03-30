@@ -322,7 +322,10 @@ class ClaimSubmissionsController extends BaseController {
         triage_category: pa.triage_category || null,
         triage_date: pa.triage_date || null,
         encounter_priority: pa.encounter_priority || null,
-        emergency_department_disposition: pa.emergency_department_disposition || null
+        emergency_department_disposition: pa.emergency_department_disposition || null,
+        // Offline authorization fields (per NPHIES extension-authorization-offline-date)
+        authorization_offline_date: pa.authorization_offline_date || null,
+        authorization_offline_reference: pa.authorization_offline_reference || null
       };
 
       if (excludeReferences) {
@@ -333,6 +336,8 @@ class ClaimSubmissionsController extends BaseController {
         claimData.eligibility_offline_date = null;
         claimData.eligibility_response_id = null;
         claimData.eligibility_response_system = null;
+        claimData.authorization_offline_date = null;
+        claimData.authorization_offline_reference = null;
       }
 
       const columns = Object.keys(claimData).filter(key => claimData[key] !== undefined && claimData[key] !== null);
@@ -641,6 +646,9 @@ class ClaimSubmissionsController extends BaseController {
         mother_patient_id: formData.mother_patient_id || null,
         // ICU hours for institutional claims
         icu_hours: formData.icu_hours ? parseFloat(formData.icu_hours) : null,
+        // Offline authorization fields (per NPHIES extension-authorization-offline-date)
+        authorization_offline_date: formData.authorization_offline_date || null,
+        authorization_offline_reference: formData.authorization_offline_reference || null,
         // Attachments
         attachments: formData.attachments || []
       };

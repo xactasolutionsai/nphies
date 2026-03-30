@@ -302,7 +302,20 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       });
     }
 
-    // 8. Newborn extension - for newborn patient claims
+    // 8. Prior Auth Response extension (authorization response reference)
+    if (claim.pre_auth_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
+        valueReference: {
+          identifier: {
+            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
+            value: claim.pre_auth_ref
+          }
+        }
+      });
+    }
+
+    // 9. Newborn extension - for newborn patient claims
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     if (claim.is_newborn) {
       extensions.push({

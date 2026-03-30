@@ -162,6 +162,9 @@ export default function PriorAuthorizationForm() {
     // Offline eligibility (when online eligibility check was not possible)
     eligibility_offline_ref: '', // Reference number from offline verification
     eligibility_offline_date: '', // Date eligibility was verified offline
+    // Offline authorization (when authorization was obtained manually - phone/portal)
+    authorization_offline_reference: '', // Reference from offline authorization
+    authorization_offline_date: '', // Date offline authorization was obtained (BV-00348: must be <= today)
     patient_id: '',
     provider_id: '',
     practice_code: '08.00', // NPHIES: Practice code for careTeam.qualification (default: Internal Medicine)
@@ -3251,6 +3254,52 @@ export default function PriorAuthorizationForm() {
                       <>
                         <span className="text-gray-400">|</span>
                         <span className="text-gray-500">{formData.eligibility_offline_date}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Offline Authorization Section */}
+              <div className="mt-4 pt-4 border-t border-green-200">
+                <div className="flex items-center gap-2 text-blue-700 font-medium text-sm mb-3">
+                  <AlertTriangle className="h-4 w-4" />
+                  Offline Authorization (Optional)
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Use when authorization was obtained manually (e.g., phone, portal) rather than through NPHIES. Per NPHIES spec, this is required when submitting claims with offline prior authorization.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="authorization_offline_reference">Offline Authorization Reference</Label>
+                    <Input
+                      id="authorization_offline_reference"
+                      value={formData.authorization_offline_reference || ''}
+                      onChange={(e) => handleChange('authorization_offline_reference', e.target.value)}
+                      placeholder="e.g., AUTH-OFFLINE-12345"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="authorization_offline_date">Offline Authorization Date</Label>
+                    <Input
+                      id="authorization_offline_date"
+                      type="date"
+                      max={new Date().toISOString().split('T')[0]}
+                      value={formData.authorization_offline_date || ''}
+                      onChange={(e) => handleChange('authorization_offline_date', e.target.value)}
+                    />
+                  </div>
+                </div>
+                {formData.authorization_offline_reference && (
+                  <div className="flex items-center gap-2 mt-2 text-xs">
+                    <span className="text-blue-600 font-medium">Offline Auth Ref:</span>
+                    <code className="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-mono text-xs">
+                      {formData.authorization_offline_reference}
+                    </code>
+                    {formData.authorization_offline_date && (
+                      <>
+                        <span className="text-gray-400">|</span>
+                        <span className="text-gray-500">{formData.authorization_offline_date}</span>
                       </>
                     )}
                   </div>

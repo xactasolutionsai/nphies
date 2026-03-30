@@ -260,7 +260,15 @@ class OralClaimMapper extends DentalMapper {
       }
     });
 
-    // 5. Newborn extension - for newborn patient claims
+    // 5. Authorization offline date (required when preAuthRef is used per BV-00462)
+    if (claim.authorization_offline_date || claim.pre_auth_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      });
+    }
+
+    // 6. Newborn extension - for newborn patient claims
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     if (claim.is_newborn) {
       extensions.push({
@@ -408,11 +416,15 @@ class OralClaimMapper extends DentalMapper {
     }
 
     // Insurance
-    claimResource.insurance = [{ 
+    const insuranceEntry = { 
       sequence: 1, 
       focal: true, 
       coverage: { reference: `Coverage/${bundleResourceIds.coverage}` } 
-    }];
+    };
+    if (claim.pre_auth_ref) {
+      insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+    }
+    claimResource.insurance = [insuranceEntry];
 
     // Items with oral-specific fields
     const claimServicedDate = claim.service_date || claim.request_date || new Date();

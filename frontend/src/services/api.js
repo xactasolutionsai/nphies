@@ -573,6 +573,8 @@ class ApiService {
       'adjudication_outcome', 'eligible_amount', 'benefit_amount', 'copay_amount',
       'eligibility_offline_ref', 'sub_type', 'outcome', 'disposition',
       'nphies_request_id', 'is_nphies_generated', 'pre_auth_period_start', 'pre_auth_period_end',
+      // Offline authorization fields - context-specific to original auth
+      'authorization_offline_reference', 'authorization_offline_date',
       // Cancellation fields - should not carry over to duplicates
       'is_cancelled', 'cancellation_reason'
     ];
