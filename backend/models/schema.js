@@ -639,7 +639,19 @@ export const validationSchemas = {
         prism_amount: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
         prism_base: Joi.string().valid('up', 'down', 'in', 'out').allow(null, '').optional()
       }).optional()
-    }).allow(null).optional(),
+    }).allow(null).optional().custom((value, helpers) => {
+      if (!value || value.product_type !== 'lens') return value;
+      const hasRightEye = value.right_eye && Object.values(value.right_eye).some(v => v !== '' && v !== null && v !== undefined);
+      const hasLeftEye = value.left_eye && Object.values(value.left_eye).some(v => v !== '' && v !== null && v !== undefined);
+      const isSphereEmpty = (eye) => eye?.sphere === '' || eye?.sphere === null || eye?.sphere === undefined;
+      if (hasRightEye && isSphereEmpty(value.right_eye)) {
+        return helpers.error('any.custom', { message: 'Sphere (SPH) is required for right eye when product type is lens (NPHIES IC-01417)' });
+      }
+      if (hasLeftEye && isSphereEmpty(value.left_eye)) {
+        return helpers.error('any.custom', { message: 'Sphere (SPH) is required for left eye when product type is lens (NPHIES IC-01417)' });
+      }
+      return value;
+    }),
     
     // Lab Observations for Professional claims (LOINC codes for Observation resources)
     // Per NPHIES IG: Lab test details MUST be in Observation resources, NOT Claim.item.productOrService
@@ -817,7 +829,39 @@ export const validationSchemas = {
     })).optional(),
 
     // Vision Prescription (copied from prior auth for vision claims)
-    vision_prescription: Joi.object().allow(null).optional(),
+    vision_prescription: Joi.object({
+      product_type: Joi.string().valid('lens', 'contact').allow(null, '').optional(),
+      date_written: Joi.date().allow(null, '').optional(),
+      prescriber_license: Joi.string().max(100).allow(null, '').optional(),
+      right_eye: Joi.object({
+        sphere: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        cylinder: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        axis: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        add: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        prism_amount: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        prism_base: Joi.string().valid('up', 'down', 'in', 'out').allow(null, '').optional()
+      }).optional(),
+      left_eye: Joi.object({
+        sphere: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        cylinder: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        axis: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        add: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        prism_amount: Joi.alternatives().try(Joi.number(), Joi.string().allow('', null)).optional(),
+        prism_base: Joi.string().valid('up', 'down', 'in', 'out').allow(null, '').optional()
+      }).optional()
+    }).allow(null).optional().custom((value, helpers) => {
+      if (!value || value.product_type !== 'lens') return value;
+      const hasRightEye = value.right_eye && Object.values(value.right_eye).some(v => v !== '' && v !== null && v !== undefined);
+      const hasLeftEye = value.left_eye && Object.values(value.left_eye).some(v => v !== '' && v !== null && v !== undefined);
+      const isSphereEmpty = (eye) => eye?.sphere === '' || eye?.sphere === null || eye?.sphere === undefined;
+      if (hasRightEye && isSphereEmpty(value.right_eye)) {
+        return helpers.error('any.custom', { message: 'Sphere (SPH) is required for right eye when product type is lens (NPHIES IC-01417)' });
+      }
+      if (hasLeftEye && isSphereEmpty(value.left_eye)) {
+        return helpers.error('any.custom', { message: 'Sphere (SPH) is required for left eye when product type is lens (NPHIES IC-01417)' });
+      }
+      return value;
+    }),
 
     // AI Medication Safety Analysis (copied from prior auth for pharmacy claims)
     medication_safety_analysis: Joi.object().allow(null).optional(),

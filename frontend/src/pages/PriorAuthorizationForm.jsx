@@ -1992,6 +1992,26 @@ export default function PriorAuthorizationForm() {
         });
       }
     }
+
+    // NPHIES IC-01417: Sphere is required when product type is 'lens'
+    if (formData.auth_type === 'vision' && formData.vision_prescription?.product_type === 'lens') {
+      const re = formData.vision_prescription.right_eye;
+      const le = formData.vision_prescription.left_eye;
+      const hasEyeData = (eye) => eye && Object.values(eye).some(v => v !== '' && v !== null && v !== undefined);
+      const sphereEmpty = (eye) => !eye || eye.sphere === '' || eye.sphere === null || eye.sphere === undefined;
+      if (hasEyeData(re) && sphereEmpty(re)) {
+        validationErrors.push({
+          field: 'vision_prescription',
+          message: 'Sphere (SPH) is required for right eye when product type is Spectacle Lens (NPHIES IC-01417)'
+        });
+      }
+      if (hasEyeData(le) && sphereEmpty(le)) {
+        validationErrors.push({
+          field: 'vision_prescription',
+          message: 'Sphere (SPH) is required for left eye when product type is Spectacle Lens (NPHIES IC-01417)'
+        });
+      }
+    }
     
     return { valid: validationErrors.length === 0, errors: validationErrors };
   };
@@ -4052,7 +4072,7 @@ export default function PriorAuthorizationForm() {
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <div className="space-y-2">
-                      <Label>Sphere (SPH)</Label>
+                      <Label>Sphere (SPH){formData.vision_prescription.product_type === 'lens' && <span className="text-red-500 ml-0.5">*</span>}</Label>
                       <Input
                         type="number"
                         step="0.25"
@@ -4060,7 +4080,7 @@ export default function PriorAuthorizationForm() {
                         onChange={(e) => handleVisionPrescriptionChange('sphere', e.target.value, 'right_eye')}
                         placeholder="e.g., -2.50"
                       />
-                      <p className="text-xs text-gray-400">Diopters</p>
+                      <p className="text-xs text-gray-400">Diopters{formData.vision_prescription.product_type === 'lens' ? ' (required for lens)' : ''}</p>
                     </div>
                     <div className="space-y-2">
                       <Label>Cylinder (CYL)</Label>
@@ -4141,7 +4161,7 @@ export default function PriorAuthorizationForm() {
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <div className="space-y-2">
-                      <Label>Sphere (SPH)</Label>
+                      <Label>Sphere (SPH){formData.vision_prescription.product_type === 'lens' && <span className="text-red-500 ml-0.5">*</span>}</Label>
                       <Input
                         type="number"
                         step="0.25"
@@ -4149,7 +4169,7 @@ export default function PriorAuthorizationForm() {
                         onChange={(e) => handleVisionPrescriptionChange('sphere', e.target.value, 'left_eye')}
                         placeholder="e.g., -2.25"
                       />
-                      <p className="text-xs text-gray-400">Diopters</p>
+                      <p className="text-xs text-gray-400">Diopters{formData.vision_prescription.product_type === 'lens' ? ' (required for lens)' : ''}</p>
                     </div>
                     <div className="space-y-2">
                       <Label>Cylinder (CYL)</Label>

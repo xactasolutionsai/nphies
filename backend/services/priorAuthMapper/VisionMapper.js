@@ -593,7 +593,7 @@ class VisionMapper extends BaseMapper {
     // Ensure at least one lens specification exists
     if (resource.lensSpecification.length === 0) {
       resource.lensSpecification.push(
-        this.buildLensSpecification({}, 'right', 'lens')
+        this.buildLensSpecification({ sphere: 0 }, 'right', prescription.product_type || 'lens')
       );
     }
 
@@ -627,9 +627,12 @@ class VisionMapper extends BaseMapper {
     // Helper to check if value is valid for numeric field (not null, undefined, empty string, or NaN)
     const isValidNumeric = (val) => val !== undefined && val !== null && val !== '' && !isNaN(parseFloat(val));
     
-    // Sphere (SPH) - required
+    // Sphere (SPH) - required when product is 'lens' (NPHIES IC-01417)
+    const resolvedProduct = productType || data.product || 'lens';
     if (isValidNumeric(data.sphere)) {
       lensSpec.sphere = parseFloat(data.sphere);
+    } else if (resolvedProduct === 'lens') {
+      lensSpec.sphere = 0;
     }
 
     // Cylinder (CYL)
