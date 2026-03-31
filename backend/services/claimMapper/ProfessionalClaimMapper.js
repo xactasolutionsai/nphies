@@ -233,9 +233,8 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       }
     });
 
-    // 2. Authorization offline date (REQUIRED when preAuthRef is used per BV-00462)
-    // If preAuthRef is provided, authorizationOffLineDate MUST be provided
-    if (claim.authorization_offline_date || claim.pre_auth_ref) {
+    // 2. Authorization: offline vs online (mutually exclusive per NPHIES spec)
+    if (claim.authorization_offline_reference) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
         valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
@@ -302,8 +301,8 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       });
     }
 
-    // 8. Prior Auth Response extension (authorization response reference)
-    if (claim.pre_auth_ref) {
+    // 8. Prior Auth Response extension (online authorization only -- skip when offline auth is used)
+    if (claim.pre_auth_ref && !claim.authorization_offline_reference) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
         valueReference: {
@@ -487,8 +486,9 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       coverage: { reference: `Coverage/${coverageRef}` }
     };
 
-    // PreAuthRef is optional for professional claims (reference to approved prior authorization)
-    if (claim.pre_auth_ref) {
+    if (claim.authorization_offline_reference) {
+      insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
+    } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
     }
 

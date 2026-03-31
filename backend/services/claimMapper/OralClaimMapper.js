@@ -213,8 +213,8 @@ class OralClaimMapper extends DentalMapper {
       }
     });
 
-    // 3. Prior Auth Response extension (if claim has pre_auth_ref - per Claim-173094)
-    if (claim.pre_auth_ref) {
+    // 3. Prior Auth Response extension (online authorization only -- skip when offline auth is used)
+    if (claim.pre_auth_ref && !claim.authorization_offline_reference) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
         valueReference: {
@@ -260,8 +260,8 @@ class OralClaimMapper extends DentalMapper {
       }
     });
 
-    // 5. Authorization offline date (required when preAuthRef is used per BV-00462)
-    if (claim.authorization_offline_date || claim.pre_auth_ref) {
+    // 5. Authorization offline date (only for offline authorization path)
+    if (claim.authorization_offline_reference) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
         valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
@@ -421,7 +421,9 @@ class OralClaimMapper extends DentalMapper {
       focal: true, 
       coverage: { reference: `Coverage/${bundleResourceIds.coverage}` } 
     };
-    if (claim.pre_auth_ref) {
+    if (claim.authorization_offline_reference) {
+      insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
+    } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
     }
     claimResource.insurance = [insuranceEntry];

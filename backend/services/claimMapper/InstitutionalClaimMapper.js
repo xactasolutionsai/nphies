@@ -236,16 +236,13 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       });
     }
 
-    // 5. Authorization offline date (required when preAuthRef is used per BV-00462)
-    if (claim.authorization_offline_date || claim.pre_auth_ref) {
+    // 5/6. Authorization: offline vs online (mutually exclusive per NPHIES spec)
+    if (claim.authorization_offline_reference) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
         valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
       });
-    }
-
-    // 6. Prior Auth Response extension (authorization response reference)
-    if (claim.pre_auth_ref) {
+    } else if (claim.pre_auth_ref) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
         valueReference: {
@@ -468,7 +465,9 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       focal: true, 
       coverage: { reference: `Coverage/${bundleResourceIds.coverage}` } 
     };
-    if (claim.pre_auth_ref) {
+    if (claim.authorization_offline_reference) {
+      insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
+    } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
     }
     claimResource.insurance = [insuranceEntry];

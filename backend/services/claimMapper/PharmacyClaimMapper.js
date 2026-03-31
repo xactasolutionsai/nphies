@@ -237,12 +237,13 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     });
 
-    // Authorization offline date (REQUIRED per error IC-01620 - accountingPeriod related)
-    // This is the date when the authorization was done offline
-    extensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-      valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
-    });
+    // Authorization offline date (only for offline authorization path)
+    if (claim.authorization_offline_reference) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      });
+    }
 
     // Episode (REQUIRED per error IC-01453)
     // Per NPHIES example Claim-483078, episode is required for pharmacy claims
@@ -297,8 +298,8 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       });
     }
 
-    // Prior Auth Response extension (authorization response reference)
-    if (claim.pre_auth_ref) {
+    // Prior Auth Response extension (online authorization only -- skip when offline auth is used)
+    if (claim.pre_auth_ref && !claim.authorization_offline_reference) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
         valueReference: {
@@ -618,8 +619,9 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       coverage: { reference: `Coverage/${coverageRef}` }
     };
 
-    // PreAuthRef is REQUIRED for claims (reference to approved prior authorization)
-    if (claim.pre_auth_ref) {
+    if (claim.authorization_offline_reference) {
+      insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
+    } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
     }
 
