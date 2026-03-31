@@ -414,7 +414,7 @@ class MessageUpdater {
             approved_claims = $4,
             rejected_claims = $5,
             approved_amount = $6,
-            processed_date = CASE WHEN $2 IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
+            processed_date = CASE WHEN $8 IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $7
       `, [
@@ -424,7 +424,8 @@ class MessageUpdater {
         approved,
         rejected,
         totalApprovedAmount,
-        recordId
+        recordId,
+        batchStatus
       ]);
 
       // Also update the related prior_authorization_item adjudication if we can

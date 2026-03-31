@@ -709,8 +709,8 @@ class SystemPollService {
           END, 1
         ) as match_rate_percent
       FROM poll_logs
-      WHERE ($2::text IS NULL OR schema_name = $2)
-    `, [today, schemaName || null]);
+      WHERE schema_name = $2
+    `, [today, schemaName || 'public']);
 
     return statsResult.rows[0];
   }
