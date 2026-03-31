@@ -476,6 +476,16 @@ class ClaimSubmissionsController extends BaseController {
       if (!claim) return res.status(404).json({ error: 'Claim submission not found' });
       if (!['draft', 'error'].includes(claim.status)) return res.status(400).json({ error: 'Can only send claims with draft or error status' });
 
+      // BV-00163: Regenerate claim_number on resubmission to avoid duplicate identifier errors
+      if (claim.nphies_request_id) {
+        const newClaimNumber = `CLM-${Date.now()}`;
+        await query(
+          `UPDATE claim_submissions SET claim_number = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+          [newClaimNumber, id]
+        );
+        claim.claim_number = newClaimNumber;
+      }
+
       const [patientResult, providerResult, insurerResult] = await Promise.all([
         query('SELECT * FROM patients WHERE patient_id = $1', [claim.patient_id]),
         query('SELECT * FROM providers WHERE provider_id = $1', [claim.provider_id]),

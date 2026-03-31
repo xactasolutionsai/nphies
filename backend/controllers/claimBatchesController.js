@@ -675,13 +675,16 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: 'Batch must have at least 2 claims' });
       }
 
+      // BV-00163: Generate a resubmit suffix to avoid duplicate identifier errors on retry
+      const resubmitSuffix = batch.request_bundle ? `-R${Date.now()}` : '';
+
       await query(`
         UPDATE claim_batches 
         SET status = 'Pending', submission_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
       `, [id]);
 
-      const bundleData = await this.prepareBatchBundleData(batch);
+      const bundleData = await this.prepareBatchBundleData(batch, resubmitSuffix);
       const batchBundle = batchClaimMapper.buildBatchRequestBundle(bundleData);
 
       console.log(`[BatchClaims] Submitting batch ${batch.batch_identifier} as single batch-request bundle with ${batch.claims.length} nested claims`);
@@ -1129,7 +1132,7 @@ class ClaimBatchesController extends BaseController {
   // HELPER METHODS
   // ============================================
 
-  async prepareBatchBundleData(batch) {
+  async prepareBatchBundleData(batch, resubmitSuffix = '') {
     const providerResult = await query(`
       SELECT * FROM providers WHERE provider_id = $1
     `, [batch.provider_id]);
@@ -1144,7 +1147,7 @@ class ClaimBatchesController extends BaseController {
 
     const claims = [];
     for (const itemId of itemIds) {
-      const claimData = await this.getAuthItemDataForBundle(itemId);
+      const claimData = await this.getAuthItemDataForBundle(itemId, resubmitSuffix);
       if (claimData) {
         claims.push(claimData);
       }
@@ -1166,7 +1169,7 @@ class ClaimBatchesController extends BaseController {
     };
   }
 
-  async getAuthItemDataForBundle(itemId) {
+  async getAuthItemDataForBundle(itemId, resubmitSuffix = '') {
     const itemResult = await query(`
       SELECT 
         pai.*,
@@ -1303,7 +1306,7 @@ class ClaimBatchesController extends BaseController {
     return {
       claim: {
         id: item.id,
-        claim_number: `${item.request_number}-${item.sequence}`,
+        claim_number: `${item.request_number}-${item.sequence}${resubmitSuffix}`,
         claim_type: item.auth_type || 'institutional',
         sub_type: item.sub_type || 'op',
         status: 'pending',
