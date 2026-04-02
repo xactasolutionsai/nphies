@@ -28,12 +28,13 @@ const GTIN_PATTERN = /^\d{14}$/;
 
 const UNLISTED_CODES = {
   procedures:          { code: '99999-99-99',     display: 'Unlisted Procedure' },
-  services:            { code: '99999-99-99',     display: 'Unlisted Service' },
+  services:            { code: '83700-00-00',     display: 'Unlisted services yet to be defined' },
   imaging:             { code: '99999-99-92',     display: 'Unlisted Imaging' },
-  laboratory:          { code: '99999-99-99',     display: 'Unlisted Laboratory' },
+  laboratory:          { code: '73050-39-70',     display: 'Unlisted chemistry tests' },
+  transportation:      { code: '83500-00-80',     display: 'Unlisted ambulance service' },
   'medication-codes':  { code: '99999999999999',  display: 'Unlisted Medication' },
   'medical-devices':   { code: '99999',           display: 'Unlisted Medical Device' },
-  'oral-health-op':    { code: '99999-99-91',     display: 'Unlisted Dental Procedure' },
+  'oral-health-op':    { code: '9999',            display: 'Unlisted Out-Patient Dental Code' },
   'lens-type':         { code: '99999-99-99',     display: 'Unlisted Optical' },
   'scientific-codes':  { code: '99999-99-99',     display: 'Unlisted Scientific Code' },
 };

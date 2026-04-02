@@ -4309,38 +4309,71 @@ export default function PriorAuthorizationForm() {
                         </p>
                       </div>
                       <div className="space-y-2">
-                        <Label>Service/Procedure Code *</Label>
-                        <Select
-                          value={
-                            getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
-                              .find(opt => opt.value === item.product_or_service_code) || null
-                          }
-                          onChange={(option) => {
-                            handleItemChange(index, 'product_or_service_code', option?.value || '');
-                            const description = option?.label?.includes(' - ') 
-                              ? option.label.split(' - ').slice(1).join(' - ')
-                              : '';
-                            handleItemChange(index, 'product_or_service_display', description);
-                          }}
-                          options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
-                          styles={selectStyles}
-                          placeholder="Select code..."
-                          isClearable
-                          isSearchable
-                          menuPortalTarget={document.body}
-                        />
+                        <div className="flex items-center justify-between">
+                          <Label>Service/Procedure Code *</Label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={item.manual_code_entry || false}
+                              onChange={(e) => {
+                                handleItemChange(index, 'manual_code_entry', e.target.checked);
+                                if (e.target.checked) {
+                                  handleItemChange(index, 'product_or_service_code', '');
+                                  handleItemChange(index, 'product_or_service_display', '');
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                            <span className="text-xs text-purple-700 font-medium">Manual Entry</span>
+                          </label>
+                        </div>
+                        {item.manual_code_entry ? (
+                          <Input
+                            value={item.product_or_service_code || ''}
+                            onChange={(e) => handleItemChange(index, 'product_or_service_code', e.target.value)}
+                            placeholder="Enter service/procedure code"
+                            className="font-mono"
+                          />
+                        ) : (
+                          <Select
+                            value={
+                              getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
+                                .find(opt => opt.value === item.product_or_service_code) || null
+                            }
+                            onChange={(option) => {
+                              handleItemChange(index, 'product_or_service_code', option?.value || '');
+                              const description = option?.label?.includes(' - ') 
+                                ? option.label.split(' - ').slice(1).join(' - ')
+                                : '';
+                              handleItemChange(index, 'product_or_service_display', description);
+                            }}
+                            options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
+                            styles={selectStyles}
+                            placeholder="Select code..."
+                            isClearable
+                            isSearchable
+                            menuPortalTarget={document.body}
+                          />
+                        )}
                       </div>
                       <div className="space-y-2">
-                        <Label>Description</Label>
+                        <Label>Description {item.manual_code_entry && '*'}</Label>
                         <Input
                           value={item.product_or_service_display || ''}
                           onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
-                          placeholder="Auto-filled from selection"
-                          readOnly
-                          className="bg-gray-50"
+                          placeholder={item.manual_code_entry ? "Enter service/procedure description" : "Auto-filled from selection"}
+                          readOnly={!item.manual_code_entry}
+                          className={!item.manual_code_entry ? "bg-gray-50" : ""}
                         />
                       </div>
                     </div>
+                    {item.manual_code_entry && item.product_or_service_code && (
+                      <div className="flex items-center gap-2 p-2 bg-amber-50 rounded border border-amber-200 mt-2">
+                        <span className="text-xs text-amber-700">
+                          Code entered manually &mdash; the backend will auto-detect if shadow billing applies.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -4489,35 +4522,52 @@ export default function PriorAuthorizationForm() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                   <div className="space-y-1">
                                     <Label className="text-xs">Service Code *</Label>
-                                    <Select
-                                      value={
-                                        getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
-                                          .find(opt => opt.value === detail.product_or_service_code) || null
-                                      }
-                                      onChange={(option) => {
-                                        const newDetails = [...item.details];
-                                        const description = option?.label?.includes(' - ') 
-                                          ? option.label.split(' - ').slice(1).join(' - ')
-                                          : '';
-                                        newDetails[detailIndex] = { 
-                                          ...detail, 
-                                          product_or_service_code: option?.value || '',
-                                          product_or_service_display: description,
-                                          product_or_service_system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures'
-                                        };
-                                        handleItemChange(index, 'details', newDetails);
-                                      }}
-                                      options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
-                                      styles={selectStyles}
-                                      placeholder="Select code..."
-                                      isClearable
-                                      isSearchable
-                                      menuPortalTarget={document.body}
-                                      className="text-sm"
-                                    />
+                                    {item.manual_code_entry ? (
+                                      <Input
+                                        value={detail.product_or_service_code || ''}
+                                        onChange={(e) => {
+                                          const newDetails = [...item.details];
+                                          newDetails[detailIndex] = {
+                                            ...detail,
+                                            product_or_service_code: e.target.value,
+                                            product_or_service_system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures'
+                                          };
+                                          handleItemChange(index, 'details', newDetails);
+                                        }}
+                                        placeholder="Enter code"
+                                        className="text-sm font-mono"
+                                      />
+                                    ) : (
+                                      <Select
+                                        value={
+                                          getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
+                                            .find(opt => opt.value === detail.product_or_service_code) || null
+                                        }
+                                        onChange={(option) => {
+                                          const newDetails = [...item.details];
+                                          const description = option?.label?.includes(' - ') 
+                                            ? option.label.split(' - ').slice(1).join(' - ')
+                                            : '';
+                                          newDetails[detailIndex] = { 
+                                            ...detail, 
+                                            product_or_service_code: option?.value || '',
+                                            product_or_service_display: description,
+                                            product_or_service_system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures'
+                                          };
+                                          handleItemChange(index, 'details', newDetails);
+                                        }}
+                                        options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
+                                        styles={selectStyles}
+                                        placeholder="Select code..."
+                                        isClearable
+                                        isSearchable
+                                        menuPortalTarget={document.body}
+                                        className="text-sm"
+                                      />
+                                    )}
                                   </div>
                                   <div className="space-y-1">
-                                    <Label className="text-xs">Description</Label>
+                                    <Label className="text-xs">Description {item.manual_code_entry && '*'}</Label>
                                     <Input
                                       value={detail.product_or_service_display || ''}
                                       onChange={(e) => {
@@ -4525,9 +4575,9 @@ export default function PriorAuthorizationForm() {
                                         newDetails[detailIndex] = { ...detail, product_or_service_display: e.target.value };
                                         handleItemChange(index, 'details', newDetails);
                                       }}
-                                      placeholder="Auto-filled from code selection"
-                                      className="text-sm bg-gray-50"
-                                      readOnly={!!detail.product_or_service_code}
+                                      placeholder={item.manual_code_entry ? "Enter description" : "Auto-filled from code selection"}
+                                      className={`text-sm ${!item.manual_code_entry ? 'bg-gray-50' : ''}`}
+                                      readOnly={!item.manual_code_entry && !!detail.product_or_service_code}
                                     />
                                   </div>
                                   <div className="space-y-1">
@@ -4623,37 +4673,73 @@ export default function PriorAuthorizationForm() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Dental Procedure Code *</Label>
-                        <Select
-                          value={DENTAL_PROCEDURE_OPTIONS.find(opt => opt.value === item.product_or_service_code)}
-                          onChange={(option) => {
-                            handleItemChange(index, 'product_or_service_code', option?.value || '');
-                            // Extract description from label (format: "CODE - Description")
-                            const description = option?.label?.includes(' - ') 
-                              ? option.label.split(' - ').slice(1).join(' - ')
-                              : '';
-                            handleItemChange(index, 'product_or_service_display', description);
-                            handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
-                          }}
-                          options={DENTAL_PROCEDURE_OPTIONS}
-                          styles={selectStyles}
-                          placeholder="Select dental procedure..."
-                          isClearable
-                          isSearchable
-                          menuPortalTarget={document.body}
-                        />
+                        <div className="flex items-center justify-between">
+                          <Label>Dental Procedure Code *</Label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={item.manual_code_entry || false}
+                              onChange={(e) => {
+                                handleItemChange(index, 'manual_code_entry', e.target.checked);
+                                if (e.target.checked) {
+                                  handleItemChange(index, 'product_or_service_code', '');
+                                  handleItemChange(index, 'product_or_service_display', '');
+                                }
+                                handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                            <span className="text-xs text-purple-700 font-medium">Manual Entry</span>
+                          </label>
+                        </div>
+                        {item.manual_code_entry ? (
+                          <Input
+                            value={item.product_or_service_code || ''}
+                            onChange={(e) => {
+                              handleItemChange(index, 'product_or_service_code', e.target.value);
+                              handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
+                            }}
+                            placeholder="Enter dental procedure code"
+                            className="font-mono"
+                          />
+                        ) : (
+                          <Select
+                            value={DENTAL_PROCEDURE_OPTIONS.find(opt => opt.value === item.product_or_service_code)}
+                            onChange={(option) => {
+                              handleItemChange(index, 'product_or_service_code', option?.value || '');
+                              const description = option?.label?.includes(' - ') 
+                                ? option.label.split(' - ').slice(1).join(' - ')
+                                : '';
+                              handleItemChange(index, 'product_or_service_display', description);
+                              handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
+                            }}
+                            options={DENTAL_PROCEDURE_OPTIONS}
+                            styles={selectStyles}
+                            placeholder="Select dental procedure..."
+                            isClearable
+                            isSearchable
+                            menuPortalTarget={document.body}
+                          />
+                        )}
                       </div>
                       <div className="space-y-2">
-                        <Label>Procedure Description</Label>
+                        <Label>Procedure Description {item.manual_code_entry && '*'}</Label>
                         <Input
                           value={item.product_or_service_display || ''}
                           onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
-                          placeholder="Auto-filled from selection"
-                          readOnly
-                          className="bg-gray-50"
+                          placeholder={item.manual_code_entry ? "Enter procedure description" : "Auto-filled from selection"}
+                          readOnly={!item.manual_code_entry}
+                          className={!item.manual_code_entry ? "bg-gray-50" : ""}
                         />
                       </div>
                     </div>
+                    {item.manual_code_entry && item.product_or_service_code && (
+                      <div className="flex items-center gap-2 p-2 bg-amber-50 rounded border border-amber-200 mt-2">
+                        <span className="text-xs text-amber-700">
+                          Code entered manually &mdash; the backend will auto-detect if shadow billing applies.
+                        </span>
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Tooth Number (FDI)</Label>
@@ -4891,7 +4977,14 @@ export default function PriorAuthorizationForm() {
                       </div>
                     </div>
 
-                    {/* Shadow Billing - Auto-detected by backend */}
+                    {/* Shadow Billing hints */}
+                    {item.manual_code_entry && (item.medication_code || item.product_or_service_code) && !item.shadow_code && (
+                      <div className="flex items-center gap-2 p-2 bg-amber-50 rounded border border-amber-200">
+                        <span className="text-xs text-amber-700">
+                          Code entered manually &mdash; the backend will auto-detect if shadow billing applies.
+                        </span>
+                      </div>
+                    )}
                     {(item.shadow_code) && (
                       <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                         <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>
