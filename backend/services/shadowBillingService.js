@@ -4,27 +4,11 @@
  * When internal, it triggers shadow billing: the original code becomes the shadow_code,
  * and an appropriate NPHIES unlisted code is assigned as the primary code.
  *
- * Detection uses a 2-layer approach:
- *   Layer 1 - DB lookup (medication_codes for GTIN, nphies_codes for others)
- *   Layer 2 - Pattern matching (SBS, GTIN, ADA, GMDN formats)
+ * Detection: DB lookup only (medication_codes for GTIN, nphies_codes for others).
+ * Any code not found in DB → treated as non-NPHIES → unlisted + shadow billing.
  */
 
 import { query } from '../db.js';
-
-const NPHIES_CODE_PATTERNS = {
-  'http://nphies.sa/terminology/CodeSystem/procedures':       /^\d{5}-\d{2}-\d{2}$/,
-  'http://nphies.sa/terminology/CodeSystem/services':         /^\d{5}-\d{2}-\d{2}$/,
-  'http://nphies.sa/terminology/CodeSystem/imaging':          /^\d{5}-\d{2}-\d{2}$/,
-  'http://nphies.sa/terminology/CodeSystem/laboratory':       /^\d{5}-\d{2}-\d{2}$/,
-  'http://nphies.sa/terminology/CodeSystem/medication-codes': /^\d{14}$/,
-  'http://nphies.sa/terminology/CodeSystem/medical-devices':  /^\d{5}$/,
-  'http://nphies.sa/terminology/CodeSystem/oral-health-op':   /^\d{3,5}$/,
-  'http://nphies.sa/terminology/CodeSystem/lens-type':        /^\d{5}-\d{2}-\d{2}$/,
-  'http://nphies.sa/terminology/CodeSystem/scientific-codes': /^\d{6,18}$/,
-};
-
-const SBS_PATTERN = /^\d{5}-\d{2}-\d{2}$/;
-const GTIN_PATTERN = /^\d{14}$/;
 
 const UNLISTED_CODES = {
   procedures:          { code: '99999-99-99',     display: 'Unlisted Procedure' },
@@ -119,39 +103,41 @@ class ShadowBillingService {
   }
 
   /**
-   * Check whether a code is a valid NPHIES code for the given system.
-   * Layer 1: DB lookup in medication_codes and nphies_codes.
-   * Layer 2: Pattern matching against known NPHIES code formats.
+   * Check whether a code exists in the NPHIES catalog (DB lookup only).
+   * medication_codes table for GTIN, nphies_codes table for all others.
+   * Any code not found → returns false → forces unlisted + shadow billing.
    */
-  async isNphiesCode(code, systemUrl) {
+  async isValidNphiesCode(code, systemUrl) {
     if (!code) return false;
     await this.ensureLoaded();
 
     const codeStr = String(code).trim();
     const key = this._systemKey(systemUrl);
 
-    // Layer 1: DB lookup
     if (key === 'medication-codes' && this.medicationCodesCache.has(codeStr)) return true;
 
     if (key && this.nphiesCodesCache.has(key)) {
       if (this.nphiesCodesCache.get(key).has(codeStr)) return true;
     }
 
-    // Layer 2: Pattern matching
-    const pattern = systemUrl ? NPHIES_CODE_PATTERNS[systemUrl] : null;
-    if (pattern && pattern.test(codeStr)) return true;
-
-    // Fallback when no system URL provided
-    if (!systemUrl) {
-      if (SBS_PATTERN.test(codeStr)) return true;
-      if (GTIN_PATTERN.test(codeStr) && this.medicationCodesCache.has(codeStr)) return true;
-    }
-
     return false;
   }
 
-  getUnlistedCode(systemUrl) {
+  /**
+   * Select the correct unlisted code based on both the coding system and claim type.
+   * Dental has two unlisted codes: 9999 (ADA oral-health-op) and 99999-99-91 (SBS dental).
+   */
+  getUnlistedCode({ systemUrl, claimType }) {
     const key = this._systemKey(systemUrl);
+
+    if (key === 'oral-health-op') {
+      return { code: '9999', display: 'Unlisted Out-Patient Dental Code' };
+    }
+
+    if (claimType === 'dental' || claimType === 'oral') {
+      return { code: '99999-99-91', display: 'Unlisted dental procedure code' };
+    }
+
     return UNLISTED_CODES[key] || UNLISTED_CODES['procedures'];
   }
 
@@ -165,23 +151,22 @@ class ShadowBillingService {
    * Process a single item for shadow billing auto-detection.
    *
    * If shadow_code is already set (backwards-compatible manual flow), leave it untouched.
-   * Otherwise check whether product_or_service_code is a valid NPHIES code:
-   *   YES → no change
-   *   NO  → move original code to shadow_code, assign unlisted NPHIES code as primary
+   * Otherwise check whether product_or_service_code exists in NPHIES catalog:
+   *   YES → no change (valid NPHIES code)
+   *   NO  → shadow billing triggered: move original to shadow_code, assign unlisted NPHIES code
    *
    * Recursively processes item.details[] as well.
    */
   async processItem(item, claimType, providerDomain) {
     if (!item || !item.product_or_service_code) return item;
 
-    // Backwards compatibility: if shadow_code was explicitly provided, skip auto-detection
     if (item.shadow_code) return item;
 
     const system = item.product_or_service_system
       || CLAIM_TYPE_DEFAULT_SYSTEMS[claimType]
       || 'http://nphies.sa/terminology/CodeSystem/procedures';
 
-    const isValid = await this.isNphiesCode(item.product_or_service_code, system);
+    const isValid = await this.isValidNphiesCode(item.product_or_service_code, system);
 
     if (!isValid) {
       const originalCode = item.product_or_service_code;
@@ -191,7 +176,7 @@ class ShadowBillingService {
       item.shadow_code_display = originalDisplay;
       item.shadow_code_system = this.getShadowCodeSystem(providerDomain, item.is_package === true);
 
-      const unlisted = this.getUnlistedCode(system);
+      const unlisted = this.getUnlistedCode({ systemUrl: system, claimType });
       item.product_or_service_code = unlisted.code;
       item.product_or_service_display = unlisted.display;
       item.product_or_service_system = system;

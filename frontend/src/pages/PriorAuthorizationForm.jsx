@@ -4374,6 +4374,14 @@ export default function PriorAuthorizationForm() {
                         </span>
                       </div>
                     )}
+                    {(item.shadow_code) && (
+                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                        <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          Internal code &quot;{item.shadow_code}&quot; detected. An unlisted NPHIES code will be assigned automatically.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -4738,6 +4746,14 @@ export default function PriorAuthorizationForm() {
                         <span className="text-xs text-amber-700">
                           Code entered manually &mdash; the backend will auto-detect if shadow billing applies.
                         </span>
+                      </div>
+                    )}
+                    {(item.shadow_code) && (
+                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                        <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          Internal code &quot;{item.shadow_code}&quot; detected. An unlisted NPHIES code will be assigned automatically.
+                        </p>
                       </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

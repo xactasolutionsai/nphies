@@ -27,7 +27,8 @@ export const getInitialItemData = (sequence, authType = '') => {
     net_amount: '',
     patient_share: 0,
     is_package: false,
-    is_maternity: false
+    is_maternity: false,
+    manual_code_entry: false
   };
 
   // Add pharmacy-specific fields
