@@ -4891,64 +4891,15 @@ export default function PriorAuthorizationForm() {
                       </div>
                     </div>
 
-                    {/* Shadow Billing / Dual Coding Section */}
-                    <div className="space-y-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={!!item.shadow_code || !!item.shadow_code_system}
-                            onChange={(e) => {
-                              if (!e.target.checked) {
-                                handleItemChange(index, 'shadow_code', '');
-                                handleItemChange(index, 'shadow_code_system', '');
-                                handleItemChange(index, 'shadow_code_display', '');
-                              } else {
-                                handleItemChange(index, 'shadow_code_system', 'http://provider.example.sa/item-codes');
-                              }
-                            }}
-                            className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                          />
-                          <span className="text-sm font-medium text-amber-800">Shadow Billing (Dual Coding)</span>
-                        </label>
-                        <p className="text-xs text-amber-600">Required for unlisted/non-standard codes (e.g., 99999999999999)</p>
+                    {/* Shadow Billing - Auto-detected by backend */}
+                    {(item.shadow_code) && (
+                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                        <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          Internal code &quot;{item.shadow_code}&quot; detected. An unlisted NPHIES code will be assigned automatically.
+                        </p>
                       </div>
-                      {(!!item.shadow_code || !!item.shadow_code_system) && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Code System URL *</Label>
-                            <Input
-                              value={item.shadow_code_system || ''}
-                              onChange={(e) => handleItemChange(index, 'shadow_code_system', e.target.value)}
-                              placeholder="http://provider.example.sa/item-codes"
-                              className="text-sm font-mono"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Internal Code *</Label>
-                            <Input
-                              value={item.shadow_code || ''}
-                              onChange={(e) => handleItemChange(index, 'shadow_code', e.target.value)}
-                              placeholder="e.g., INT-MED-4455"
-                              className="text-sm font-mono"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Display Name (Actual Medication Name) *</Label>
-                            <Input
-                              value={item.shadow_code_display || ''}
-                              onChange={(e) => handleItemChange(index, 'shadow_code_display', e.target.value)}
-                              placeholder="e.g., Amoxicillin 500mg Capsules"
-                              className={`text-sm ${(!item.shadow_code_display || item.shadow_code_display.trim().toUpperCase() === 'UNLISTED CODE') ? 'border-red-400 bg-red-50' : ''}`}
-                              required
-                            />
-                            {(!item.shadow_code_display || item.shadow_code_display.trim().toUpperCase() === 'UNLISTED CODE') && (
-                              <p className="text-xs text-red-500">Required: Enter the actual medication/service description, not "UNLISTED CODE"</p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    )}
                     
                     {/* Medication-Specific Fields (hide for devices) */}
                     {item.item_type !== 'device' && (
