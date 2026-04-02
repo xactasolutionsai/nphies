@@ -1065,8 +1065,20 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       productOrServiceCoding.display = productDisplay;
     }
     
+    const productOrServiceCodings = [productOrServiceCoding];
+    if (item.shadow_code && item.shadow_code_system) {
+      const shadowCoding = {
+        system: item.shadow_code_system,
+        code: item.shadow_code
+      };
+      if (item.shadow_code_display) {
+        shadowCoding.display = item.shadow_code_display;
+      }
+      productOrServiceCodings.push(shadowCoding);
+    }
+    
     claimItem.productOrService = {
-      coding: [productOrServiceCoding]
+      coding: productOrServiceCodings
     };
 
     // Serviced date - must be within encounter period per BV-00041
@@ -1144,11 +1156,19 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
         return {
           sequence: detail.sequence || (idx + 1),
           productOrService: {
-            coding: [{
-              system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/services',
-              code: detail.product_or_service_code,
-              display: detail.product_or_service_display
-            }]
+            coding: (() => {
+              const codings = [{
+                system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/services',
+                code: detail.product_or_service_code,
+                display: detail.product_or_service_display
+              }];
+              if (detail.shadow_code && detail.shadow_code_system) {
+                const sc = { system: detail.shadow_code_system, code: detail.shadow_code };
+                if (detail.shadow_code_display) sc.display = detail.shadow_code_display;
+                codings.push(sc);
+              }
+              return codings;
+            })()
           },
           quantity: { value: detailQuantity },
           unitPrice: { 

@@ -563,11 +563,19 @@ class OralClaimMapper extends DentalMapper {
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
       productOrService: {
-        coding: [{
-          system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
-          code: item.product_or_service_code,
-          display: item.product_or_service_display
-        }]
+        coding: (() => {
+          const codings = [{
+            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
+            code: item.product_or_service_code,
+            display: item.product_or_service_display
+          }];
+          if (item.shadow_code && item.shadow_code_system) {
+            const sc = { system: item.shadow_code_system, code: item.shadow_code };
+            if (item.shadow_code_display) sc.display = item.shadow_code_display;
+            codings.push(sc);
+          }
+          return codings;
+        })()
       },
       servicedDate: this.formatDate(item.serviced_date || servicedDate),
       quantity: { value: quantity },
@@ -594,11 +602,19 @@ class OralClaimMapper extends DentalMapper {
         return {
           sequence: detail.sequence || (idx + 1),
           productOrService: {
-            coding: [{
-              system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
-              code: detail.product_or_service_code,
-              display: detail.product_or_service_display
-            }]
+            coding: (() => {
+              const codings = [{
+                system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
+                code: detail.product_or_service_code,
+                display: detail.product_or_service_display
+              }];
+              if (detail.shadow_code && detail.shadow_code_system) {
+                const sc = { system: detail.shadow_code_system, code: detail.shadow_code };
+                if (detail.shadow_code_display) sc.display = detail.shadow_code_display;
+                codings.push(sc);
+              }
+              return codings;
+            })()
           },
           quantity: { value: detailQuantity },
           unitPrice: { 

@@ -561,11 +561,19 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
       productOrService: {
-        coding: [{
-          system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
-          code: item.product_or_service_code,
-          display: item.product_or_service_display
-        }]
+        coding: (() => {
+          const codings = [{
+            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+            code: item.product_or_service_code,
+            display: item.product_or_service_display
+          }];
+          if (item.shadow_code && item.shadow_code_system) {
+            const sc = { system: item.shadow_code_system, code: item.shadow_code };
+            if (item.shadow_code_display) sc.display = item.shadow_code_display;
+            codings.push(sc);
+          }
+          return codings;
+        })()
       },
       servicedDate: this.formatDate(servicedDate),
       quantity: { value: quantity },
@@ -587,11 +595,19 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
         return {
           sequence: detail.sequence || (idx + 1),
           productOrService: {
-            coding: [{
-              system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
-              code: detail.product_or_service_code,
-              display: detail.product_or_service_display
-            }]
+            coding: (() => {
+              const codings = [{
+                system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+                code: detail.product_or_service_code,
+                display: detail.product_or_service_display
+              }];
+              if (detail.shadow_code && detail.shadow_code_system) {
+                const sc = { system: detail.shadow_code_system, code: detail.shadow_code };
+                if (detail.shadow_code_display) sc.display = detail.shadow_code_display;
+                codings.push(sc);
+              }
+              return codings;
+            })()
           },
           quantity: { value: detailQuantity },
           unitPrice: { 

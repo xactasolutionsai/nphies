@@ -516,15 +516,21 @@ class DentalMapper extends BaseMapper {
   buildDentalClaimItem(item, itemIndex, supportingInfoSequences, encounterPeriod) {
     const claimItem = this.buildClaimItem(item, 'dental', itemIndex, supportingInfoSequences, encounterPeriod);
     
-    // Override productOrService to use oral-health-op system
+    // Override productOrService to use oral-health-op system with shadow billing support
     claimItem.productOrService = {
-      coding: [
-        {
+      coding: (() => {
+        const codings = [{
           system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
           code: item.product_or_service_code,
           display: item.product_or_service_display
+        }];
+        if (item.shadow_code && item.shadow_code_system) {
+          const sc = { system: item.shadow_code_system, code: item.shadow_code };
+          if (item.shadow_code_display) sc.display = item.shadow_code_display;
+          codings.push(sc);
         }
-      ]
+        return codings;
+      })()
     };
 
     // Add tooth number using FDI oral region system

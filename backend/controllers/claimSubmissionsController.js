@@ -4,6 +4,7 @@ import { validationSchemas } from '../models/schema.js';
 import claimMapper, { getClaimMapper } from '../services/claimMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
 import claimCommunicationService from '../services/claimCommunicationService.js';
+import shadowBillingService from '../services/shadowBillingService.js';
 
 class ClaimSubmissionsController extends BaseController {
   constructor() {
@@ -206,7 +207,10 @@ class ClaimSubmissionsController extends BaseController {
       const result = await query(insertQuery, values);
       const claimId = result.rows[0].id;
 
-      if (items?.length > 0) await this.insertItems(claimId, items);
+      if (items?.length > 0) {
+        await shadowBillingService.processItems(items, cleanedData.claim_type);
+        await this.insertItems(claimId, items);
+      }
       if (supporting_info?.length > 0) await this.insertSupportingInfo(claimId, supporting_info);
       if (diagnoses?.length > 0) await this.insertDiagnoses(claimId, diagnoses);
       if (attachments?.length > 0) await this.insertAttachments(claimId, attachments);
@@ -367,6 +371,7 @@ class ClaimSubmissionsController extends BaseController {
               : (item.product_or_service_system || null)
           };
         });
+        await shadowBillingService.processItems(items, pa.auth_type);
         await this.insertItems(claimId, items);
       }
 
@@ -441,7 +446,11 @@ class ClaimSubmissionsController extends BaseController {
       await query('DELETE FROM claim_submission_diagnoses WHERE claim_id = $1', [id]);
       await query('DELETE FROM claim_submission_attachments WHERE claim_id = $1', [id]);
 
-      if (items?.length > 0) await this.insertItems(id, items);
+      if (items?.length > 0) {
+        const claimType = cleanedData.claim_type || existing.claim_type;
+        await shadowBillingService.processItems(items, claimType);
+        await this.insertItems(id, items);
+      }
       if (supporting_info?.length > 0) await this.insertSupportingInfo(id, supporting_info);
       if (diagnoses?.length > 0) await this.insertDiagnoses(id, diagnoses);
       if (attachments?.length > 0) await this.insertAttachments(id, attachments);
@@ -625,6 +634,12 @@ class ClaimSubmissionsController extends BaseController {
         }
       }
 
+      // Process items for shadow billing auto-detection before building the preview bundle
+      const previewItems = formData.items || [];
+      if (previewItems.length > 0) {
+        await shadowBillingService.processItems(previewItems, formData.claim_type);
+      }
+
       const claim = {
         claim_number: formData.claim_number || `PREVIEW-${Date.now()}`,
         claim_type: formData.claim_type || 'institutional',
@@ -638,7 +653,7 @@ class ClaimSubmissionsController extends BaseController {
         service_date: formData.service_date,
         total_amount: formData.total_amount,
         currency: formData.currency || 'SAR',
-        items: formData.items || [],
+        items: previewItems,
         diagnoses: formData.diagnoses || [],
         supporting_info: formData.supporting_info || [],
         pre_auth_ref: formData.pre_auth_ref,

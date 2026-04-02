@@ -6,6 +6,7 @@ import nphiesService from '../services/nphiesService.js';
 import communicationService from '../services/communicationService.js';
 import nphiesDataService from '../services/nphiesDataService.js';
 import CommunicationMapper from '../services/communicationMapper.js';
+import shadowBillingService from '../services/shadowBillingService.js';
 
 class PriorAuthorizationsController extends BaseController {
   constructor() {
@@ -419,8 +420,9 @@ class PriorAuthorizationsController extends BaseController {
       const result = await query(insertQuery, values);
       const priorAuthId = result.rows[0].id;
 
-      // Insert items
+      // Insert items (with shadow billing auto-detection)
       if (items && Array.isArray(items) && items.length > 0) {
+        await shadowBillingService.processItems(items, value.auth_type);
         await this.insertItems(priorAuthId, items);
       }
 
@@ -634,8 +636,10 @@ class PriorAuthorizationsController extends BaseController {
       await query('DELETE FROM prior_authorization_diagnoses WHERE prior_auth_id = $1', [id]);
       await query('DELETE FROM prior_authorization_attachments WHERE prior_auth_id = $1', [id]);
 
-      // Re-insert items
+      // Re-insert items (with shadow billing auto-detection)
       if (items && Array.isArray(items) && items.length > 0) {
+        const authType = value.auth_type || existing.auth_type;
+        await shadowBillingService.processItems(items, authType);
         await this.insertItems(id, items);
       }
 
@@ -1092,8 +1096,9 @@ class PriorAuthorizationsController extends BaseController {
       const result = await query(insertQuery, values);
       const newId = result.rows[0].id;
 
-      // Insert nested data
+      // Insert nested data (with shadow billing auto-detection)
       if (updateData.items && updateData.items.length > 0) {
+        await shadowBillingService.processItems(updateData.items, existing.auth_type);
         await this.insertItems(newId, updateData.items);
       }
       if (updateData.supporting_info && updateData.supporting_info.length > 0) {
@@ -1276,8 +1281,9 @@ class PriorAuthorizationsController extends BaseController {
       const result = await query(insertQuery, values);
       const newId = result.rows[0].id;
 
-      // Copy nested data
+      // Copy nested data (with shadow billing auto-detection for items from older records)
       if (existing.items && existing.items.length > 0) {
+        await shadowBillingService.processItems(existing.items, existing.auth_type);
         await this.insertItems(newId, existing.items);
       }
       if (existing.supporting_info && existing.supporting_info.length > 0) {
@@ -1886,6 +1892,12 @@ class PriorAuthorizationsController extends BaseController {
         formData.coverage_id
       );
 
+      // Process items for shadow billing auto-detection before building the preview bundle
+      const previewItems = formData.items || [];
+      if (previewItems.length > 0) {
+        await shadowBillingService.processItems(previewItems, formData.auth_type);
+      }
+
       // Create a mock priorAuth object from form data
       // IMPORTANT: Include ALL fields that mappers use, so preview matches sendToNphies behavior
       const priorAuth = {
@@ -1899,7 +1911,7 @@ class PriorAuthorizationsController extends BaseController {
         encounter_end: formData.encounter_end,
         total_amount: formData.total_amount,
         currency: formData.currency || 'SAR',
-        items: formData.items || [],
+        items: previewItems,
         diagnoses: formData.diagnoses || [],
         supporting_info: formData.supporting_info || [],
         // Vision prescription data for vision auth types
