@@ -14,26 +14,6 @@ class PriorAuthorizationsController extends BaseController {
   }
 
   /**
-   * Strip stale shadow billing fields from items so processItem always re-evaluates.
-   * Must be called before shadowBillingService.processItems in every create/update/preview flow.
-   */
-  _clearShadowBillingData(items) {
-    if (!items || !Array.isArray(items)) return;
-    for (const item of items) {
-      delete item.shadow_code;
-      delete item.shadow_code_system;
-      delete item.shadow_code_display;
-      if (item.details && Array.isArray(item.details)) {
-        for (const detail of item.details) {
-          delete detail.shadow_code;
-          delete detail.shadow_code_system;
-          delete detail.shadow_code_display;
-        }
-      }
-    }
-  }
-
-  /**
    * Derive sub_type from encounter_class following NPHIES rules
    * This ensures consistency between Prior Auth and Claims
    */
@@ -442,7 +422,6 @@ class PriorAuthorizationsController extends BaseController {
 
       // Insert items (with shadow billing auto-detection)
       if (items && Array.isArray(items) && items.length > 0) {
-        this._clearShadowBillingData(items);
         await shadowBillingService.processItems(items, value.auth_type);
         await this.insertItems(priorAuthId, items);
       }
@@ -659,7 +638,6 @@ class PriorAuthorizationsController extends BaseController {
 
       // Re-insert items (with shadow billing auto-detection)
       if (items && Array.isArray(items) && items.length > 0) {
-        this._clearShadowBillingData(items);
         const authType = value.auth_type || existing.auth_type;
         await shadowBillingService.processItems(items, authType);
         await this.insertItems(id, items);
@@ -1120,7 +1098,6 @@ class PriorAuthorizationsController extends BaseController {
 
       // Insert nested data (with shadow billing auto-detection)
       if (updateData.items && updateData.items.length > 0) {
-        this._clearShadowBillingData(updateData.items);
         await shadowBillingService.processItems(updateData.items, existing.auth_type);
         await this.insertItems(newId, updateData.items);
       }
@@ -1306,7 +1283,6 @@ class PriorAuthorizationsController extends BaseController {
 
       // Copy nested data (with shadow billing auto-detection for items from older records)
       if (existing.items && existing.items.length > 0) {
-        this._clearShadowBillingData(existing.items);
         await shadowBillingService.processItems(existing.items, existing.auth_type);
         await this.insertItems(newId, existing.items);
       }
@@ -1919,7 +1895,6 @@ class PriorAuthorizationsController extends BaseController {
       // Process items for shadow billing auto-detection before building the preview bundle
       const previewItems = formData.items || [];
       if (previewItems.length > 0) {
-        this._clearShadowBillingData(previewItems);
         await shadowBillingService.processItems(previewItems, formData.auth_type);
       }
 

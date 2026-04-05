@@ -187,6 +187,8 @@ class ShadowBillingService {
   async processItem(item, claimType, providerDomain) {
     if (!item || !item.product_or_service_code) return item;
 
+    if (item.shadow_code) return item;
+
     const system = item.product_or_service_system
       || CLAIM_TYPE_DEFAULT_SYSTEMS[claimType]
       || 'http://nphies.sa/terminology/CodeSystem/procedures';
