@@ -57,9 +57,11 @@ import {
   SERVICE_CODE_SYSTEM_OPTIONS,
   getServiceCodeOptions,
   getCodeSystemKeyFromUrl,
+  getServiceCodeSystemsByAuthType,
   SHADOW_BILLING_CODES,
   SHADOW_BILLING_TYPE_OPTIONS,
   getShadowBillingCodesByType,
+  getShadowBillingTypesByAuthType,
   SHADOW_BILLING_TYPE_TO_SYSTEM,
   CODE_ENTRY_MODE_OPTIONS,
   getAllKnownDescriptions
@@ -4310,8 +4312,7 @@ export default function PriorAuthorizationForm() {
                   )}
                 </div>
                 
-                {/* Generic procedure code fields - hidden for dental/pharmacy (they use specialized fields below) */}
-                {formData.auth_type !== 'dental' && formData.auth_type !== 'pharmacy' && (
+                {/* Code entry section — unified for all auth types */}
                   <div className="space-y-4">
                     {/* Code Entry Mode Selector */}
                     <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg w-fit">
@@ -4343,65 +4344,182 @@ export default function PriorAuthorizationForm() {
 
                     {/* Mode: NPHIES Code */}
                     {(item.code_entry_mode || 'nphies') === 'nphies' && (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label>Code System</Label>
-                          <Select
-                            value={SERVICE_CODE_SYSTEM_OPTIONS.find(opt =>
-                              opt.system === item.product_or_service_system
-                            ) || SERVICE_CODE_SYSTEM_OPTIONS[0]}
-                            onChange={(option) => {
-                              handleItemChange(index, 'product_or_service_code', '');
-                              handleItemChange(index, 'product_or_service_display', '');
-                              handleItemChange(index, 'product_or_service_system', option?.system || 'http://nphies.sa/terminology/CodeSystem/procedures');
-                              handleItemChange(index, 'shadow_code', '');
-                              handleItemChange(index, 'shadow_code_system', '');
-                              handleItemChange(index, 'shadow_code_display', '');
-                            }}
-                            options={SERVICE_CODE_SYSTEM_OPTIONS}
-                            styles={selectStyles}
-                            menuPortalTarget={document.body}
-                          />
-                          <p className="text-xs text-amber-600">
-                            Note: LOINC codes go in Lab Observations section below
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Service/Procedure Code *</Label>
-                          <Select
-                            value={
-                              getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
-                                .find(opt => opt.value === item.product_or_service_code) || null
-                            }
-                            onChange={(option) => {
-                              handleItemChange(index, 'product_or_service_code', option?.value || '');
-                              const description = option?.label?.includes(' - ')
-                                ? option.label.split(' - ').slice(1).join(' - ')
-                                : '';
-                              handleItemChange(index, 'product_or_service_display', description);
-                              handleItemChange(index, 'shadow_code', '');
-                              handleItemChange(index, 'shadow_code_system', '');
-                              handleItemChange(index, 'shadow_code_display', '');
-                            }}
-                            options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
-                            styles={selectStyles}
-                            placeholder="Select code..."
-                            isClearable
-                            isSearchable
-                            menuPortalTarget={document.body}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Description</Label>
-                          <Input
-                            value={item.product_or_service_display || ''}
-                            onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
-                            placeholder="Auto-filled from selection"
-                            readOnly
-                            className="bg-gray-50"
-                          />
-                        </div>
-                      </div>
+                      <>
+                        {/* Pharmacy: item type selector + medication search / device code */}
+                        {formData.auth_type === 'pharmacy' ? (
+                          <div className="space-y-4">
+                            <div className="flex gap-4">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`item_type_nphies_${index}`}
+                                  value="medication"
+                                  checked={!item.item_type || item.item_type === 'medication'}
+                                  onChange={() => {
+                                    handleItemChange(index, 'item_type', 'medication');
+                                    handleItemChange(index, 'product_or_service_code', '');
+                                    handleItemChange(index, 'product_or_service_display', '');
+                                    handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/medication-codes');
+                                  }}
+                                  className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                                />
+                                <span className="text-sm">Medication</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`item_type_nphies_${index}`}
+                                  value="device"
+                                  checked={item.item_type === 'device'}
+                                  onChange={() => {
+                                    handleItemChange(index, 'item_type', 'device');
+                                    handleItemChange(index, 'medication_code', '');
+                                    handleItemChange(index, 'medication_name', '');
+                                    handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/medical-devices');
+                                  }}
+                                  className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                                />
+                                <span className="text-sm">Medical Device</span>
+                              </label>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>{item.item_type === 'device' ? 'Device Code *' : 'Medication Code *'}</Label>
+                                {item.item_type === 'device' ? (
+                                  <Input
+                                    value={item.product_or_service_code || ''}
+                                    onChange={(e) => {
+                                      handleItemChange(index, 'product_or_service_code', e.target.value);
+                                      handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/medical-devices');
+                                    }}
+                                    placeholder="Enter medical device code (e.g., 58380)"
+                                    className="font-mono"
+                                  />
+                                ) : (
+                                  <AsyncSelect
+                                    value={item.medication_code ? {
+                                      value: item.medication_code,
+                                      label: `${item.medication_code}${item.medication_name ? ' - ' + item.medication_name : ''}`
+                                    } : null}
+                                    onChange={(option) => {
+                                      handleItemChange(index, 'medication_code', option?.value || '');
+                                      if (option?.medication) {
+                                        handleItemChange(index, 'medication_name', option.medication.display || '');
+                                      } else {
+                                        handleItemChange(index, 'medication_name', '');
+                                      }
+                                      handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/medication-codes');
+                                    }}
+                                    loadOptions={async (inputValue) => {
+                                      try {
+                                        const results = await api.searchMedicationCodes(inputValue, 50);
+                                        return results;
+                                      } catch (error) {
+                                        console.error('Error loading medications:', error);
+                                        return [];
+                                      }
+                                    }}
+                                    defaultOptions
+                                    cacheOptions
+                                    styles={selectStyles}
+                                    placeholder="Search medications by name, code, or ingredient..."
+                                    isClearable
+                                    isSearchable
+                                    menuPortalTarget={document.body}
+                                    noOptionsMessage={({ inputValue }) =>
+                                      inputValue ? `No medications found for "${inputValue}"` : 'Type to search medications...'
+                                    }
+                                    loadingMessage={() => 'Searching medications...'}
+                                  />
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                <Label>{item.item_type === 'device' ? 'Device Name' : 'Medication Name'}</Label>
+                                <Input
+                                  value={item.item_type === 'device' ? (item.product_or_service_display || '') : (item.medication_name || '')}
+                                  onChange={(e) => {
+                                    handleItemChange(index, item.item_type === 'device' ? 'product_or_service_display' : 'medication_name', e.target.value);
+                                  }}
+                                  placeholder="Auto-filled from selection"
+                                  readOnly={item.item_type !== 'device'}
+                                  className={item.item_type !== 'device' ? 'bg-gray-50' : ''}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          /* All other auth types: code system dropdown + code dropdown */
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {(() => {
+                              const systemOptions = getServiceCodeSystemsByAuthType(formData.auth_type);
+                              const defaultSystem = systemOptions[0]?.system || 'http://nphies.sa/terminology/CodeSystem/procedures';
+                              return (
+                                <>
+                                  <div className="space-y-2">
+                                    <Label>Code System</Label>
+                                    <Select
+                                      value={systemOptions.find(opt =>
+                                        opt.system === item.product_or_service_system
+                                      ) || systemOptions[0]}
+                                      onChange={(option) => {
+                                        handleItemChange(index, 'product_or_service_code', '');
+                                        handleItemChange(index, 'product_or_service_display', '');
+                                        handleItemChange(index, 'product_or_service_system', option?.system || defaultSystem);
+                                        handleItemChange(index, 'shadow_code', '');
+                                        handleItemChange(index, 'shadow_code_system', '');
+                                        handleItemChange(index, 'shadow_code_display', '');
+                                      }}
+                                      options={systemOptions}
+                                      styles={selectStyles}
+                                      menuPortalTarget={document.body}
+                                    />
+                                    {formData.auth_type !== 'dental' && (
+                                      <p className="text-xs text-amber-600">
+                                        Note: LOINC codes go in Lab Observations section below
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Service/Procedure Code *</Label>
+                                    <Select
+                                      value={
+                                        getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
+                                          .find(opt => opt.value === item.product_or_service_code) || null
+                                      }
+                                      onChange={(option) => {
+                                        handleItemChange(index, 'product_or_service_code', option?.value || '');
+                                        const description = option?.label?.includes(' - ')
+                                          ? option.label.split(' - ').slice(1).join(' - ')
+                                          : '';
+                                        handleItemChange(index, 'product_or_service_display', description);
+                                        handleItemChange(index, 'shadow_code', '');
+                                        handleItemChange(index, 'shadow_code_system', '');
+                                        handleItemChange(index, 'shadow_code_display', '');
+                                      }}
+                                      options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
+                                      styles={selectStyles}
+                                      placeholder="Select code..."
+                                      isClearable
+                                      isSearchable
+                                      menuPortalTarget={document.body}
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Description</Label>
+                                    <Input
+                                      value={item.product_or_service_display || ''}
+                                      onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
+                                      placeholder="Auto-filled from selection"
+                                      readOnly
+                                      className="bg-gray-50"
+                                    />
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {/* Mode: Shadow Billing */}
@@ -4410,7 +4528,7 @@ export default function PriorAuthorizationForm() {
                         <div className="space-y-2">
                           <Label>Type</Label>
                           <Select
-                            value={SHADOW_BILLING_TYPE_OPTIONS.find(opt => opt.value === item.shadow_billing_type) || null}
+                            value={getShadowBillingTypesByAuthType(formData.auth_type).find(opt => opt.value === item.shadow_billing_type) || null}
                             onChange={(option) => {
                               handleItemChange(index, 'shadow_billing_type', option?.value || '');
                               handleItemChange(index, 'product_or_service_code', '');
@@ -4422,7 +4540,7 @@ export default function PriorAuthorizationForm() {
                                 handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[option.value] || '');
                               }
                             }}
-                            options={SHADOW_BILLING_TYPE_OPTIONS}
+                            options={getShadowBillingTypesByAuthType(formData.auth_type)}
                             styles={selectStyles}
                             placeholder="Select type..."
                             isClearable
@@ -4570,7 +4688,6 @@ export default function PriorAuthorizationForm() {
                       </div>
                     )}
                   </div>
-                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-2">
@@ -4863,86 +4980,9 @@ export default function PriorAuthorizationForm() {
                   </div>
                 )}
 
-                {/* Type-specific fields */}
+                {/* Dental-specific fields: tooth number and surfaces */}
                 {formData.auth_type === 'dental' && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>Dental Procedure Code *</Label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={item.manual_code_entry || false}
-                              onChange={(e) => {
-                                handleItemChange(index, 'manual_code_entry', e.target.checked);
-                                if (e.target.checked) {
-                                  handleItemChange(index, 'product_or_service_code', '');
-                                  handleItemChange(index, 'product_or_service_display', '');
-                                }
-                                handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
-                              }}
-                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                            />
-                            <span className="text-xs text-purple-700 font-medium">Manual Entry</span>
-                          </label>
-                        </div>
-                        {item.manual_code_entry ? (
-                          <Input
-                            value={item.product_or_service_code || ''}
-                            onChange={(e) => {
-                              handleItemChange(index, 'product_or_service_code', e.target.value);
-                              handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
-                            }}
-                            placeholder="Enter dental procedure code"
-                            className="font-mono"
-                          />
-                        ) : (
-                          <Select
-                            value={DENTAL_PROCEDURE_OPTIONS.find(opt => opt.value === item.product_or_service_code)}
-                            onChange={(option) => {
-                              handleItemChange(index, 'product_or_service_code', option?.value || '');
-                              const description = option?.label?.includes(' - ') 
-                                ? option.label.split(' - ').slice(1).join(' - ')
-                                : '';
-                              handleItemChange(index, 'product_or_service_display', description);
-                              handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/oral-health-op');
-                            }}
-                            options={DENTAL_PROCEDURE_OPTIONS}
-                            styles={selectStyles}
-                            placeholder="Select dental procedure..."
-                            isClearable
-                            isSearchable
-                            menuPortalTarget={document.body}
-                          />
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Procedure Description {item.manual_code_entry && '*'}</Label>
-                        <Input
-                          value={item.product_or_service_display || ''}
-                          onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
-                          placeholder={item.manual_code_entry ? "Enter procedure description" : "Auto-filled from selection"}
-                          readOnly={!item.manual_code_entry}
-                          className={!item.manual_code_entry ? "bg-gray-50" : ""}
-                        />
-                      </div>
-                    </div>
-                    {item.manual_code_entry && item.product_or_service_code && (
-                      <div className="flex items-center gap-2 p-2 bg-amber-50 rounded border border-amber-200 mt-2">
-                        <span className="text-xs text-amber-700">
-                          Code entered manually &mdash; the backend will auto-detect if shadow billing applies.
-                        </span>
-                      </div>
-                    )}
-                    {(item.shadow_code && item.code_entry_mode === 'manual') && (
-                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                        <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>
-                        <p className="text-xs text-amber-600 mt-1">
-                          Internal code &quot;{item.shadow_code}&quot; detected. An unlisted NPHIES code will be assigned automatically.
-                        </p>
-                      </div>
-                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Tooth Number (FDI)</Label>
@@ -5013,189 +5053,13 @@ export default function PriorAuthorizationForm() {
                   </div>
                 )}
 
+                {/* Pharmacy-specific fields: prescribed medication, days supply, pharmacist info */}
                 {formData.auth_type === 'pharmacy' && (
                   <div className="space-y-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
                     <h4 className="font-medium text-purple-800 flex items-center gap-2">
                       <Pill className="h-4 w-4" />
-                      Pharmacy-Specific Information (NPHIES Required)
+                      Pharmacy-Specific Information
                     </h4>
-                    
-                    {/* Item Type Selection (Medication or Medical Device) */}
-                    <div className="space-y-2 pb-4 border-b border-purple-300">
-                      <Label>Item Type *</Label>
-                      <div className="flex gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`item_type_${index}`}
-                            value="medication"
-                            checked={!item.item_type || item.item_type === 'medication'}
-                            onChange={(e) => {
-                              const newType = e.target.value;
-                              handleItemChange(index, 'item_type', newType);
-                              // Clear device code field if switching from device to medication
-                              if (item.item_type === 'device') {
-                                handleItemChange(index, 'product_or_service_code', '');
-                                handleItemChange(index, 'product_or_service_display', '');
-                              }
-                              // Clear days_supply if switching from medication to device (devices don't have days supply)
-                              if (newType === 'device' && (!item.item_type || item.item_type === 'medication')) {
-                                handleItemChange(index, 'days_supply', '');
-                              }
-                            }}
-                            className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                          />
-                          <span className="text-sm">Medication</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`item_type_${index}`}
-                            value="device"
-                            checked={item.item_type === 'device'}
-                            onChange={(e) => {
-                              const newType = e.target.value;
-                              handleItemChange(index, 'item_type', newType);
-                              // Clear medication code field if switching from medication to device
-                              if (!item.item_type || item.item_type === 'medication') {
-                                handleItemChange(index, 'medication_code', '');
-                                handleItemChange(index, 'medication_name', '');
-                              }
-                              // Clear days_supply if switching to device (devices don't have days supply)
-                              if (newType === 'device') {
-                                handleItemChange(index, 'days_supply', '');
-                              }
-                            }}
-                            className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                          />
-                          <span className="text-sm">Medical Device</span>
-                        </label>
-                      </div>
-                      <p className="text-xs text-gray-600">
-                        Select whether this item is a medication or a medical device
-                      </p>
-                    </div>
-
-                    {/* Medication/Device Code Section */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>{item.item_type === 'device' ? 'Device Code *' : 'Medication Code *'}</Label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={item.manual_code_entry || false}
-                              onChange={(e) => {
-                                handleItemChange(index, 'manual_code_entry', e.target.checked);
-                                // Clear medication code when switching modes
-                                if (e.target.checked) {
-                                  handleItemChange(index, 'medication_code', '');
-                                  handleItemChange(index, 'medication_name', '');
-                                }
-                              }}
-                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                            />
-                            <span className="text-xs text-purple-700 font-medium">Manual Entry</span>
-                          </label>
-                        </div>
-                        {item.manual_code_entry || item.item_type === 'device' ? (
-                          <>
-                            <Input
-                              value={item.medication_code || item.product_or_service_code || ''}
-                              onChange={(e) => {
-                                const code = e.target.value;
-                                if (item.item_type === 'device') {
-                                  handleItemChange(index, 'product_or_service_code', code);
-                                } else {
-                                  handleItemChange(index, 'medication_code', code);
-                                }
-                              }}
-                              placeholder={item.item_type === 'device' 
-                                ? "Enter medical device code (e.g., 58380)" 
-                                : "Enter GTIN/drug code (e.g., 06285097000056)"}
-                              className="font-mono"
-                            />
-                            <p className="text-xs text-purple-600">
-                              {item.item_type === 'device' 
-                                ? "Enter medical device code from NPHIES medical-devices code system"
-                                : "Enter GTIN drug code (e.g., 06285097000056). If the code is not in NPHIES, shadow billing will be applied automatically."}
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <AsyncSelect
-                              value={item.medication_code ? {
-                                value: item.medication_code,
-                                label: `${item.medication_code}${item.medication_name ? ' - ' + item.medication_name : ''}`
-                              } : null}
-                              onChange={(option) => {
-                                // Update medication code
-                                handleItemChange(index, 'medication_code', option?.value || '');
-                                // Auto-fill medication name from selection
-                                if (option?.medication) {
-                                  handleItemChange(index, 'medication_name', option.medication.display || '');
-                                } else {
-                                  handleItemChange(index, 'medication_name', '');
-                                }
-                              }}
-                              loadOptions={async (inputValue) => {
-                                try {
-                                  const results = await api.searchMedicationCodes(inputValue, 50);
-                                  return results;
-                                } catch (error) {
-                                  console.error('Error loading medications:', error);
-                                  return [];
-                                }
-                              }}
-                              defaultOptions
-                              cacheOptions
-                              styles={selectStyles}
-                              placeholder="Search medications by name, code, or ingredient..."
-                              isClearable
-                              isSearchable
-                              menuPortalTarget={document.body}
-                              noOptionsMessage={({ inputValue }) => 
-                                inputValue ? `No medications found for "${inputValue}"` : 'Type to search medications...'
-                              }
-                              loadingMessage={() => 'Searching medications...'}
-                            />
-                            <p className="text-xs text-gray-500">Search by medication name, GTIN code, or ingredient</p>
-                          </>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>{item.item_type === 'device' ? 'Device Name' : 'Medication Name'} {item.manual_code_entry && '*'}</Label>
-                        <Input
-                          value={item.medication_name || item.product_or_service_display || ''}
-                          onChange={(e) => {
-                            handleItemChange(index, item.item_type === 'device' ? 'product_or_service_display' : 'medication_name', e.target.value);
-                          }}
-                          placeholder={item.manual_code_entry ? `Enter ${item.item_type === 'device' ? 'device' : 'medication'} name` : "Auto-filled from selection"}
-                          readOnly={!item.manual_code_entry}
-                          className={!item.manual_code_entry ? "bg-gray-50" : ""}
-                        />
-                        {item.manual_code_entry && (
-                          <p className="text-xs text-purple-600">Enter the {item.item_type === 'device' ? 'device' : 'medication/drug'} name for this code</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Shadow Billing hints */}
-                    {item.manual_code_entry && (item.medication_code || item.product_or_service_code) && !item.shadow_code && (
-                      <div className="flex items-center gap-2 p-2 bg-amber-50 rounded border border-amber-200">
-                        <span className="text-xs text-amber-700">
-                          Code entered manually &mdash; the backend will auto-detect if shadow billing applies.
-                        </span>
-                      </div>
-                    )}
-                    {(item.shadow_code && item.code_entry_mode === 'manual') && (
-                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                        <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>
-                        <p className="text-xs text-amber-600 mt-1">
-                          Internal code &quot;{item.shadow_code}&quot; detected. An unlisted NPHIES code will be assigned automatically.
-                        </p>
-                      </div>
-                    )}
                     
                     {/* Medication-Specific Fields (hide for devices) */}
                     {item.item_type !== 'device' && (

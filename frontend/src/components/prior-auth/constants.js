@@ -330,11 +330,20 @@ export const SERVICE_CODE_SYSTEM_OPTIONS = [
   { value: 'imaging', label: 'NPHIES Imaging', system: 'http://nphies.sa/terminology/CodeSystem/imaging' },
   { value: 'laboratory', label: 'NPHIES Laboratory', system: 'http://nphies.sa/terminology/CodeSystem/laboratory' },
   { value: 'services', label: 'NPHIES Services', system: 'http://nphies.sa/terminology/CodeSystem/services' },
-  // NPHIES IB-00030: lens-type is for VisionPrescription, not Claim.item.productOrService
-  // { value: 'lens-type', label: 'NPHIES Lens Type', system: 'http://nphies.sa/terminology/CodeSystem/lens-type' },
-  // NPHIES IB-00030: practice-codes is for careTeam.qualification, not billing items
-  // { value: 'practice-codes', label: 'Practice Codes', system: 'http://nphies.sa/terminology/CodeSystem/practice-codes' }
+  { value: 'oral-health-op', label: 'Oral Health (ADA)', system: 'http://nphies.sa/terminology/CodeSystem/oral-health-op' },
+  { value: 'medication-codes', label: 'SFDA Medications (GTIN)', system: 'http://nphies.sa/terminology/CodeSystem/medication-codes' },
+  { value: 'medical-devices', label: 'SFDA Medical Devices (GMDN)', system: 'http://nphies.sa/terminology/CodeSystem/medical-devices' },
 ];
+
+const GENERIC_SYSTEMS = ['procedures', 'imaging', 'laboratory', 'services'];
+
+export const SERVICE_CODE_SYSTEM_OPTIONS_BY_AUTH_TYPE = {
+  institutional: SERVICE_CODE_SYSTEM_OPTIONS.filter(o => GENERIC_SYSTEMS.includes(o.value)),
+  professional:  SERVICE_CODE_SYSTEM_OPTIONS.filter(o => GENERIC_SYSTEMS.includes(o.value)),
+  vision:        SERVICE_CODE_SYSTEM_OPTIONS.filter(o => GENERIC_SYSTEMS.includes(o.value)),
+  dental:        SERVICE_CODE_SYSTEM_OPTIONS.filter(o => o.value === 'oral-health-op'),
+  pharmacy:      SERVICE_CODE_SYSTEM_OPTIONS.filter(o => ['medication-codes', 'medical-devices'].includes(o.value)),
+};
 
 // NPHIES Imaging Procedures
 // Reference: http://nphies.sa/terminology/CodeSystem/imaging
@@ -376,14 +385,15 @@ export const getServiceCodeOptions = (codeSystemKey) => {
     'imaging': NPHIES_IMAGING_OPTIONS,
     'laboratory': NPHIES_LABORATORY_OPTIONS,
     'services': NPHIES_SERVICES_OPTIONS,
-    // NPHIES IB-00030: commented out — not valid for Claim.item.productOrService
-    // 'lens-type': NPHIES_LENS_TYPE_OPTIONS,
-    // 'practice-codes': null,
+    'oral-health-op': DENTAL_PROCEDURE_OPTIONS,
+    'medication-codes': [],
+    'medical-devices': [],
   };
-  // if (codeSystemKey === 'practice-codes') {
-  //   return PRACTICE_CODES_OPTIONS.flatMap(group => group.options);
-  // }
   return map[codeSystemKey] || NPHIES_PROCEDURE_OPTIONS;
+};
+
+export const getServiceCodeSystemsByAuthType = (authType) => {
+  return SERVICE_CODE_SYSTEM_OPTIONS_BY_AUTH_TYPE[authType] || SERVICE_CODE_SYSTEM_OPTIONS.filter(o => GENERIC_SYSTEMS.includes(o.value));
 };
 
 // Vision ICD-10 Codes for eye examinations and disorders
@@ -703,7 +713,21 @@ export const SHADOW_BILLING_TYPE_TO_SYSTEM = {
   oral_health: 'http://nphies.sa/terminology/CodeSystem/oral-health-op'
 };
 
-// Code Entry Mode options for the generic (non-dental, non-pharmacy) item section
+export const SHADOW_BILLING_TYPES_BY_AUTH_TYPE = {
+  institutional: ['transportation', 'ksa_services', 'procedures', 'dental', 'imaging', 'laboratory'],
+  professional:  ['transportation', 'ksa_services', 'procedures', 'dental', 'imaging', 'laboratory'],
+  vision:        ['transportation', 'ksa_services', 'procedures', 'imaging', 'laboratory'],
+  dental:        ['oral_health', 'dental'],
+  pharmacy:      ['sfda_gtin', 'sfda_gmdn'],
+};
+
+export const getShadowBillingTypesByAuthType = (authType) => {
+  const allowed = SHADOW_BILLING_TYPES_BY_AUTH_TYPE[authType];
+  if (!allowed) return SHADOW_BILLING_TYPE_OPTIONS;
+  return SHADOW_BILLING_TYPE_OPTIONS.filter(opt => allowed.includes(opt.value));
+};
+
+// Code Entry Mode options for every auth type's item section
 export const CODE_ENTRY_MODE_OPTIONS = [
   { value: 'nphies', label: 'NPHIES Code' },
   { value: 'shadow_billing', label: 'Shadow Billing' },
