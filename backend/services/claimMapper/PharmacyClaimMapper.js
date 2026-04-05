@@ -237,11 +237,21 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     });
 
-    // Offline authorization date at Claim level (NPHIES requires this at root, not insurance)
+    // Authorization extensions at Claim level — mutually exclusive per BV-00462
     if (claim.authorization_offline_reference) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
         valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      });
+    } else if (claim.pre_auth_ref) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
+        valueReference: {
+          identifier: {
+            system: 'http://nphies.sa/identifiers/priorauthresponse',
+            value: claim.pre_auth_ref
+          }
+        }
       });
     }
 
@@ -599,7 +609,6 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       });
     }
 
-    // Insurance — auth extensions must be inside insurance element per BV-00462
     const insuranceEntry = {
       sequence: 1,
       focal: true,
@@ -610,15 +619,6 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
     } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
-      insuranceEntry.extension = [{
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
-        valueReference: {
-          identifier: {
-            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
-            value: claim.pre_auth_ref
-          }
-        }
-      }];
     }
 
     claimResource.insurance = [insuranceEntry];
