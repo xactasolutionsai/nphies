@@ -898,11 +898,19 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
         return {
           sequence: detail.sequence || (idx + 1),
           productOrService: {
-            coding: [{
-              system: detailCodeSystem,
-              code: detail.product_or_service_code,
-              display: detail.product_or_service_display
-            }]
+            coding: (() => {
+              const codings = [{
+                system: detailCodeSystem,
+                code: detail.product_or_service_code,
+                display: detail.product_or_service_display
+              }];
+              if (detail.shadow_code && detail.shadow_code_system) {
+                const sc = { system: detail.shadow_code_system, code: detail.shadow_code };
+                if (detail.shadow_code_display) sc.display = detail.shadow_code_display;
+                codings.push(sc);
+              }
+              return codings;
+            })()
           },
           quantity: { value: detailQuantity },
           unitPrice: { 

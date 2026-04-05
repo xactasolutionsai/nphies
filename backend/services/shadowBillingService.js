@@ -10,17 +10,44 @@
 
 import { query } from '../db.js';
 
+// Default unlisted codes per NPHIES code system category (Section 4.5 of Shadow Billing Guideline V1.7)
 const UNLISTED_CODES = {
-  procedures:          { code: '99999-99-99',     display: 'Unlisted Procedure' },
+  procedures:          { code: '99999-99-99',     display: 'Unlisted procedure code' },
   services:            { code: '83700-00-00',     display: 'Unlisted services yet to be defined' },
-  imaging:             { code: '99999-99-92',     display: 'Unlisted Imaging' },
+  imaging:             { code: '99999-99-92',     display: 'Unlisted imaging code' },
   laboratory:          { code: '73050-39-70',     display: 'Unlisted chemistry tests' },
   transportation:      { code: '83500-00-80',     display: 'Unlisted ambulance service' },
-  'medication-codes':  { code: '99999999999999',  display: 'Unlisted Medication' },
-  'medical-devices':   { code: '99999',           display: 'Unlisted Medical Device' },
+  'medication-codes':  { code: '99999999999999',  display: 'Unlisted other medications' },
+  'medical-devices':   { code: '99999',           display: 'Unlisted medical devices' },
   'oral-health-op':    { code: '9999',            display: 'Unlisted Out-Patient Dental Code' },
-  'lens-type':         { code: '99999-99-99',     display: 'Unlisted Optical' },
-  'scientific-codes':  { code: '99999-99-99',     display: 'Unlisted Scientific Code' },
+  'lens-type':         { code: '99999-99-99',     display: 'Unlisted procedure code' },
+  'scientific-codes':  { code: '99999-99-99',     display: 'Unlisted procedure code' },
+};
+
+// Full laboratory unlisted codes per subcategory (Section 4.5)
+const LABORATORY_UNLISTED_CODES = {
+  'chemistry':            { code: '73050-39-70', display: 'Unlisted chemistry tests' },
+  'hematology':           { code: '73100-09-80', display: 'Unlisted hematology and coagulation procedure' },
+  'urinalysis':           { code: '73150-01-20', display: 'Unlisted urinalysis' },
+  'cytopathology':        { code: '73200-03-60', display: 'Unlisted cytopathology procedure' },
+  'surgical-pathology':   { code: '73200-10-60', display: 'Unlisted surgical pathology procedure' },
+  'transfusion':          { code: '73250-03-80', display: 'Unlisted transfusion medicine procedure' },
+  'molecular-pathology':  { code: '73350-06-00', display: 'Unlisted molecular pathology procedure' },
+  'in-vivo':              { code: '73400-00-40', display: 'Unlisted in vivo laboratory services' },
+  'reproductive':         { code: '73400-05-10', display: 'Unlisted reproductive medicine laboratory procedure' },
+};
+
+// Full GTIN/medication unlisted codes per subcategory (Section 4.5)
+const MEDICATION_UNLISTED_CODES = {
+  'nutritional-other':     { code: '99999999999991', display: 'Unlisted nutritional supplements (Other nutritional substitute)' },
+  'nutritional-enteral':   { code: '99999999999992', display: 'Unlisted nutritional supplements (Enteral feeds)' },
+  'non-medications':       { code: '99999999999993', display: 'Unlisted other non-medications' },
+  'nutritional-infant':    { code: '99999999999994', display: 'Unlisted nutritional supplements (Mother\'s milk substitute (baby/infant formula))' },
+  'cosmetic':              { code: '99999999999995', display: 'Unlisted cosmetic' },
+  'herbal-vitamins':       { code: '99999999999996', display: 'Unlisted herbal and vitamins' },
+  'otc':                   { code: '99999999999997', display: 'Unlisted OTC' },
+  'chemotherapy':          { code: '99999999999998', display: 'Unlisted chemotherapy' },
+  'other-medications':     { code: '99999999999999', display: 'Unlisted other medications' },
 };
 
 const CLAIM_TYPE_DEFAULT_SYSTEMS = {

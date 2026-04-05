@@ -424,11 +424,19 @@ class BaseClaimMapper {
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
       productOrService: {
-        coding: [{
-          system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
-          code: item.product_or_service_code,
-          display: item.product_or_service_display
-        }]
+        coding: (() => {
+          const codings = [{
+            system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
+            code: item.product_or_service_code,
+            display: item.product_or_service_display
+          }];
+          if (item.shadow_code && item.shadow_code_system) {
+            const sc = { system: item.shadow_code_system, code: item.shadow_code };
+            if (item.shadow_code_display) sc.display = item.shadow_code_display;
+            codings.push(sc);
+          }
+          return codings;
+        })()
       },
       servicedDate: this.formatDate(servicedDate),
       quantity: { value: quantity },

@@ -1360,6 +1360,16 @@ export default function PriorAuthorizationDetails() {
                               {itemOutcome || item.adjudication_status || 'pending'}
                             </Badge>
                           </div>
+
+                          {item.shadow_code && (
+                            <div className="mt-2 p-2 bg-amber-50 rounded border border-amber-200">
+                              <p className="text-xs font-medium text-amber-800">Shadow Billing (Dual Coding)</p>
+                              <p className="text-xs text-amber-600 mt-0.5">
+                                Internal code: <span className="font-mono font-medium">{item.shadow_code}</span>
+                                {item.shadow_code_display && <span> &mdash; {item.shadow_code_display}</span>}
+                              </p>
+                            </div>
+                          )}
                           
                           {/* Request Details */}
                           <div className="grid grid-cols-4 gap-4 mt-4 text-sm">
@@ -1512,6 +1522,14 @@ export default function PriorAuthorizationDetails() {
                                         </div>
                                       </div>
                                     </div>
+                                    {detail.shadow_code && (
+                                      <div className="mt-1 p-1.5 bg-amber-50 rounded border border-amber-200">
+                                        <p className="text-xs text-amber-700">
+                                          Shadow: <span className="font-mono font-medium">{detail.shadow_code}</span>
+                                          {detail.shadow_code_display && <span> &mdash; {detail.shadow_code_display}</span>}
+                                        </p>
+                                      </div>
+                                    )}
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-xs">
                                       <div>
                                         <p className="text-gray-500">Quantity</p>

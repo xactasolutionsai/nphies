@@ -4931,7 +4931,7 @@ export default function PriorAuthorizationForm() {
                             <p className="text-xs text-purple-600">
                               {item.item_type === 'device' 
                                 ? "Enter medical device code from NPHIES medical-devices code system"
-                                : "Enter the drug code manually. Use codes like 06285097000056 or 99999999999999 for unlisted drugs."}
+                                : "Enter GTIN drug code (e.g., 06285097000056). If the code is not in NPHIES, shadow billing will be applied automatically."}
                             </p>
                           </>
                         ) : (
