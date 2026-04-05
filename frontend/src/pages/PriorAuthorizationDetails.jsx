@@ -20,7 +20,9 @@ import MedicationSafetyPanel from '@/components/general-request/shared/Medicatio
 
 // Import Communication Panel for NPHIES communications
 import { CommunicationPanel } from '@/components/prior-auth';
-import { PRIORITY_OPTIONS, EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS } from '@/components/prior-auth/constants';
+import { PRIORITY_OPTIONS, EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
+
+const SECTION_4_5_CODES = new Set(SHADOW_BILLING_CODES.map(c => c.value));
 import { selectStyles } from '@/components/prior-auth/styles';
 import Select from 'react-select';
 
@@ -1361,7 +1363,7 @@ export default function PriorAuthorizationDetails() {
                             </Badge>
                           </div>
 
-                          {item.shadow_code && (
+                          {item.shadow_code && !SECTION_4_5_CODES.has(item.shadow_code) && (
                             <div className="mt-2 p-2 bg-amber-50 rounded border border-amber-200">
                               <p className="text-xs font-medium text-amber-800">Shadow Billing (Dual Coding)</p>
                               <p className="text-xs text-amber-600 mt-0.5">
@@ -1522,7 +1524,7 @@ export default function PriorAuthorizationDetails() {
                                         </div>
                                       </div>
                                     </div>
-                                    {detail.shadow_code && (
+                                    {detail.shadow_code && !SECTION_4_5_CODES.has(detail.shadow_code) && (
                                       <div className="mt-1 p-1.5 bg-amber-50 rounded border border-amber-200">
                                         <p className="text-xs text-amber-700">
                                           Shadow: <span className="font-mono font-medium">{detail.shadow_code}</span>

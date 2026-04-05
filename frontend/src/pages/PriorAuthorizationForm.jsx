@@ -603,19 +603,26 @@ export default function PriorAuthorizationForm() {
       // Filter out parsed items from supporting_info (keep only manual/other entries)
       const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
       
-      // Process items to preserve/infer manual_code_entry flag
-      // If items have medication_code, check if manual_code_entry was saved or infer it
+      // Process items to preserve/infer manual_code_entry flag and clean up stale shadow billing data
       const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
-        // If manual_code_entry was explicitly saved as true, use it
-        // Otherwise, infer: if there's a medication_code but it was entered manually (flag saved), keep it
         const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
         const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
         
+        // For old records without code_entry_mode: infer mode and clear stale shadow_code.
+        // The shadow billing service previously shadow-billed ALL codes (DB had no standard codes),
+        // so non-manual items have incorrect shadow_code values that must be cleared.
+        const isOldRecord = !item.code_entry_mode;
+        const inferredMode = item.code_entry_mode || (hasManualCodeEntry ? 'manual' : 'nphies');
+        const shouldClearStaleShadow = isOldRecord && !hasManualCodeEntry;
+
         return {
           ...item,
           manual_code_entry: hasManualCodeEntry,
           manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
-          // Ensure details array exists if item has details from database
+          code_entry_mode: inferredMode,
+          shadow_code: shouldClearStaleShadow ? null : item.shadow_code,
+          shadow_code_system: shouldClearStaleShadow ? null : item.shadow_code_system,
+          shadow_code_display: shouldClearStaleShadow ? null : item.shadow_code_display,
           details: item.details || (item.is_package ? [] : undefined)
         };
       });
@@ -778,16 +785,23 @@ export default function PriorAuthorizationForm() {
       // Filter out parsed items from supporting_info (keep only manual/other entries)
       const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
       
-      // Process items to preserve/infer manual_code_entry flag
+      // Process items to preserve/infer manual_code_entry flag and clean up stale shadow billing data
       const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
         const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
         const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
         
+        const isOldRecord = !item.code_entry_mode;
+        const inferredMode = item.code_entry_mode || (hasManualCodeEntry ? 'manual' : 'nphies');
+        const shouldClearStaleShadow = isOldRecord && !hasManualCodeEntry;
+
         return {
           ...item,
           manual_code_entry: hasManualCodeEntry,
           manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
-          // Ensure details array exists if item has details from database
+          code_entry_mode: inferredMode,
+          shadow_code: shouldClearStaleShadow ? null : item.shadow_code,
+          shadow_code_system: shouldClearStaleShadow ? null : item.shadow_code_system,
+          shadow_code_display: shouldClearStaleShadow ? null : item.shadow_code_display,
           details: item.details || (item.is_package ? [] : undefined)
         };
       });
@@ -963,16 +977,23 @@ export default function PriorAuthorizationForm() {
       // Filter out parsed items from supporting_info (keep only manual/other entries)
       const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
       
-      // Process items to preserve/infer manual_code_entry flag
+      // Process items to preserve/infer manual_code_entry flag and clean up stale shadow billing data
       const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
         const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
         const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
         
+        const isOldRecord = !item.code_entry_mode;
+        const inferredMode = item.code_entry_mode || (hasManualCodeEntry ? 'manual' : 'nphies');
+        const shouldClearStaleShadow = isOldRecord && !hasManualCodeEntry;
+
         return {
           ...item,
           manual_code_entry: hasManualCodeEntry,
           manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
-          // Ensure details array exists if item has details from database
+          code_entry_mode: inferredMode,
+          shadow_code: shouldClearStaleShadow ? null : item.shadow_code,
+          shadow_code_system: shouldClearStaleShadow ? null : item.shadow_code_system,
+          shadow_code_display: shouldClearStaleShadow ? null : item.shadow_code_display,
           details: item.details || (item.is_package ? [] : undefined)
         };
       });
@@ -4539,8 +4560,8 @@ export default function PriorAuthorizationForm() {
                       </div>
                     )}
 
-                    {/* Shadow billing auto-detected hint */}
-                    {(item.shadow_code) && (
+                    {/* Shadow billing auto-detected hint (only for manual entry mode) */}
+                    {(item.shadow_code && item.code_entry_mode === 'manual') && (
                       <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                         <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>
                         <p className="text-xs text-amber-600 mt-1">
@@ -4914,7 +4935,7 @@ export default function PriorAuthorizationForm() {
                         </span>
                       </div>
                     )}
-                    {(item.shadow_code) && (
+                    {(item.shadow_code && item.code_entry_mode === 'manual') && (
                       <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                         <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>
                         <p className="text-xs text-amber-600 mt-1">
@@ -5167,7 +5188,7 @@ export default function PriorAuthorizationForm() {
                         </span>
                       </div>
                     )}
-                    {(item.shadow_code) && (
+                    {(item.shadow_code && item.code_entry_mode === 'manual') && (
                       <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                         <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>
                         <p className="text-xs text-amber-600 mt-1">

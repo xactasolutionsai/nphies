@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
-import { EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS } from '@/components/prior-auth/constants';
+import { EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
+
+const SECTION_4_5_CODES = new Set(SHADOW_BILLING_CODES.map(c => c.value));
 
 // Helper functions
 const getClaimTypeDisplay = (claimType) => {
@@ -1430,7 +1432,7 @@ export default function ClaimDetails() {
                           })()}
 
                           {/* Shadow Code (Payer-specific code) */}
-                          {item.shadow_code && (
+                          {item.shadow_code && !SECTION_4_5_CODES.has(item.shadow_code) && (
                             <div className="mt-3 pt-3 border-t text-sm">
                               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <div>
