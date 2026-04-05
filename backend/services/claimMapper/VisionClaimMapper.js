@@ -259,24 +259,6 @@ class VisionClaimMapper extends VisionPAMapper {
       });
     }
 
-    // 5/6. Authorization: offline vs online (mutually exclusive per NPHIES spec)
-    if (claim.authorization_offline_reference) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
-      });
-    } else if (claim.pre_auth_ref) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
-        valueReference: {
-          identifier: {
-            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
-            value: claim.pre_auth_ref
-          }
-        }
-      });
-    }
-
     // 7. Newborn extension - for newborn patient claims
     if (claim.is_newborn) {
       extensions.push({
@@ -415,7 +397,7 @@ class VisionClaimMapper extends VisionPAMapper {
     }
     // If no supporting info exists, don't add any - per NPHIES example
 
-    // Insurance
+    // Insurance — auth extensions must be inside insurance element per BV-00462
     const insuranceEntry = { 
       sequence: 1, 
       focal: true, 
@@ -423,8 +405,21 @@ class VisionClaimMapper extends VisionPAMapper {
     };
     if (claim.authorization_offline_reference) {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
+      insuranceEntry.extension = [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      }];
     } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+      insuranceEntry.extension = [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
+        valueReference: {
+          identifier: {
+            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
+            value: claim.pre_auth_ref
+          }
+        }
+      }];
     }
     claimResource.insurance = [insuranceEntry];
 

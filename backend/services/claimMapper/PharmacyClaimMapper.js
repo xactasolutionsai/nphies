@@ -237,14 +237,6 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     });
 
-    // Authorization offline date (only for offline authorization path)
-    if (claim.authorization_offline_reference) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
-      });
-    }
-
     // Episode (REQUIRED per error IC-01453)
     // Per NPHIES example Claim-483078, episode is required for pharmacy claims
     const episodeId = claim.episode_id || `EpisodeID-${claim.claim_number || Date.now()}`;
@@ -294,19 +286,6 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response',
         valueReference: {
           identifier: { system: identifierSystem, value: refValue }
-        }
-      });
-    }
-
-    // Prior Auth Response extension (online authorization only -- skip when offline auth is used)
-    if (claim.pre_auth_ref && !claim.authorization_offline_reference) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
-        valueReference: {
-          identifier: {
-            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
-            value: claim.pre_auth_ref
-          }
         }
       });
     }
@@ -612,7 +591,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       });
     }
 
-    // Insurance (required) - with preAuthRef for claims
+    // Insurance — auth extensions must be inside insurance element per BV-00462
     const insuranceEntry = {
       sequence: 1,
       focal: true,
@@ -621,8 +600,21 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
 
     if (claim.authorization_offline_reference) {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
+      insuranceEntry.extension = [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      }];
     } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+      insuranceEntry.extension = [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
+        valueReference: {
+          identifier: {
+            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
+            value: claim.pre_auth_ref
+          }
+        }
+      }];
     }
 
     claimResource.insurance = [insuranceEntry];

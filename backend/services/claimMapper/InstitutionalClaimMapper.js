@@ -236,24 +236,6 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       });
     }
 
-    // 5/6. Authorization: offline vs online (mutually exclusive per NPHIES spec)
-    if (claim.authorization_offline_reference) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
-      });
-    } else if (claim.pre_auth_ref) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
-        valueReference: {
-          identifier: {
-            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
-            value: claim.pre_auth_ref
-          }
-        }
-      });
-    }
-
     // 7. Episode extension (required for institutional claims)
     const episodeId = claim.episode_identifier || `provider_EpisodeID_${claim.claim_number || Date.now()}`;
     extensions.push({
@@ -459,7 +441,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       });
     }
 
-    // Insurance
+    // Insurance — auth extensions must be inside insurance element per BV-00462
     const insuranceEntry = { 
       sequence: 1, 
       focal: true, 
@@ -467,8 +449,21 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     };
     if (claim.authorization_offline_reference) {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
+      insuranceEntry.extension = [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      }];
     } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+      insuranceEntry.extension = [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
+        valueReference: {
+          identifier: {
+            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
+            value: claim.pre_auth_ref
+          }
+        }
+      }];
     }
     claimResource.insurance = [insuranceEntry];
 

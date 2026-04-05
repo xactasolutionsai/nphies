@@ -213,19 +213,6 @@ class OralClaimMapper extends DentalMapper {
       }
     });
 
-    // 3. Prior Auth Response extension (online authorization only -- skip when offline auth is used)
-    if (claim.pre_auth_ref && !claim.authorization_offline_reference) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
-        valueReference: {
-          identifier: {
-            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
-            value: claim.pre_auth_ref
-          }
-        }
-      });
-    }
-
     // 3b. Eligibility response (online) - identifier-based reference to CoverageEligibilityResponse
     if (claim.eligibility_response_id) {
       const identifierSystem = claim.eligibility_response_system || 
@@ -259,14 +246,6 @@ class OralClaimMapper extends DentalMapper {
         value: episodeId 
       }
     });
-
-    // 5. Authorization offline date (only for offline authorization path)
-    if (claim.authorization_offline_reference) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
-      });
-    }
 
     // 6. Newborn extension - for newborn patient claims
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
@@ -415,7 +394,7 @@ class OralClaimMapper extends DentalMapper {
       }));
     }
 
-    // Insurance
+    // Insurance — auth extensions must be inside insurance element per BV-00462
     const insuranceEntry = { 
       sequence: 1, 
       focal: true, 
@@ -423,8 +402,21 @@ class OralClaimMapper extends DentalMapper {
     };
     if (claim.authorization_offline_reference) {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
+      insuranceEntry.extension = [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      }];
     } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+      insuranceEntry.extension = [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
+        valueReference: {
+          identifier: {
+            system: claim.pre_auth_ref_system || `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
+            value: claim.pre_auth_ref
+          }
+        }
+      }];
     }
     claimResource.insurance = [insuranceEntry];
 
