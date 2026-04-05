@@ -419,8 +419,6 @@ class OralClaimMapper extends DentalMapper {
     };
     if (claim.authorization_offline_reference) {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
-    } else if (claim.pre_auth_ref) {
-      insuranceEntry.preAuthRef = [claim.pre_auth_ref];
     }
     claimResource.insurance = [insuranceEntry];
 
