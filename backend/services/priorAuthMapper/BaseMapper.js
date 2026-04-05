@@ -13,6 +13,30 @@ class BaseMapper {
     this.generateId = () => randomUUID();
   }
 
+  /**
+   * Ensure coding array has NPHIES code at [0] and provider code at [1].
+   * Final safety net -- upstream shadowBillingService should already handle this.
+   */
+  _normalizeCoding(codings) {
+    if (!codings || codings.length < 2) return codings;
+    const nphiesIdx = codings.findIndex(c => c.system?.includes('nphies.sa'));
+    const providerIdx = codings.findIndex(c => c.system && !c.system.includes('nphies.sa'));
+    if (nphiesIdx > 0 && providerIdx === 0) {
+      console.warn(
+        `[BaseMapper] Correcting coding order: NPHIES code was at index ${nphiesIdx}, ` +
+        `provider code was at index ${providerIdx}. Swapping to [NPHIES, provider].`
+      );
+      return [codings[nphiesIdx], codings[providerIdx]];
+    }
+    if (process.env.STRICT_NPHIES === 'true' && nphiesIdx === 0) {
+      const primary = codings[0];
+      if (primary.system?.includes('nphies.sa') && codings.length > 1) {
+        console.log(`[BaseMapper][STRICT] Shadow billing coding: primary=${primary.code} system=${primary.system}, shadow=${codings[1].code} system=${codings[1].system}`);
+      }
+    }
+    return codings;
+  }
+
   // ============================================
   // DATE FORMATTING UTILITIES
   // ============================================
@@ -1205,7 +1229,7 @@ class BaseMapper {
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
       productOrService: {
-        coding: (() => {
+        coding: this._normalizeCoding((() => {
           const codings = [{
             system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
             code: item.product_or_service_code,
@@ -1217,7 +1241,7 @@ class BaseMapper {
             codings.push(sc);
           }
           return codings;
-        })()
+        })())
       }
     };
 
@@ -1302,7 +1326,7 @@ class BaseMapper {
         return {
           sequence: detail.sequence || (idx + 1),
           productOrService: {
-            coding: (() => {
+            coding: this._normalizeCoding((() => {
               const codings = [{
                 system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
                 code: detail.product_or_service_code,
@@ -1314,7 +1338,7 @@ class BaseMapper {
                 codings.push(sc);
               }
               return codings;
-            })()
+            })())
           },
           quantity: { value: detailQuantity },
           unitPrice: { 

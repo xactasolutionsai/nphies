@@ -563,7 +563,7 @@ class OralClaimMapper extends DentalMapper {
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
       productOrService: {
-        coding: (() => {
+        coding: this._normalizeCoding((() => {
           const codings = [{
             system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
             code: item.product_or_service_code,
@@ -575,7 +575,7 @@ class OralClaimMapper extends DentalMapper {
             codings.push(sc);
           }
           return codings;
-        })()
+        })())
       },
       servicedDate: this.formatDate(item.serviced_date || servicedDate),
       quantity: { value: quantity },
@@ -602,7 +602,7 @@ class OralClaimMapper extends DentalMapper {
         return {
           sequence: detail.sequence || (idx + 1),
           productOrService: {
-            coding: (() => {
+            coding: this._normalizeCoding((() => {
               const codings = [{
                 system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
                 code: detail.product_or_service_code,
@@ -614,7 +614,7 @@ class OralClaimMapper extends DentalMapper {
                 codings.push(sc);
               }
               return codings;
-            })()
+            })())
           },
           quantity: { value: detailQuantity },
           unitPrice: { 

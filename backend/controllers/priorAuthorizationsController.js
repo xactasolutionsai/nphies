@@ -780,6 +780,12 @@ class PriorAuthorizationsController extends BaseController {
         }
       }
 
+      // Re-validate shadow billing before building the FHIR bundle (safety net).
+      // Corrects any reversed or invalid code placements loaded from DB.
+      if (priorAuth.items && priorAuth.items.length > 0) {
+        await shadowBillingService.processItems(priorAuth.items, priorAuth.auth_type, provider?.provider_domain);
+      }
+
       // Build FHIR bundle
       const bundle = priorAuthMapper.buildPriorAuthRequestBundle({
         priorAuth,
@@ -1826,6 +1832,11 @@ class PriorAuthorizationsController extends BaseController {
         if (motherResult.rows.length > 0) {
           motherPatient = motherResult.rows[0];
         }
+      }
+
+      // Re-validate shadow billing before building the FHIR bundle (safety net)
+      if (priorAuth.items && priorAuth.items.length > 0) {
+        await shadowBillingService.processItems(priorAuth.items, priorAuth.auth_type, provider?.provider_domain);
       }
 
       // Build FHIR bundle

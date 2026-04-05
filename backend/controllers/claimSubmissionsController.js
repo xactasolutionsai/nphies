@@ -519,6 +519,11 @@ class ClaimSubmissionsController extends BaseController {
         }
       }
 
+      // Re-validate shadow billing before building the FHIR bundle (safety net)
+      if (claim.items && claim.items.length > 0) {
+        await shadowBillingService.processItems(claim.items, claim.claim_type, provider?.provider_domain);
+      }
+
       const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, policyHolder: null, motherPatient });
       const nphiesRequestId = `clm-req-${Date.now()}`;
 
@@ -587,10 +592,16 @@ class ClaimSubmissionsController extends BaseController {
         }
       }
       
+      // Re-validate shadow billing before building the FHIR bundle (safety net)
+      const provider = providerResult.rows[0];
+      if (claim.items && claim.items.length > 0) {
+        await shadowBillingService.processItems(claim.items, claim.claim_type, provider?.provider_domain);
+      }
+
       const bundle = claimMapper.buildClaimRequestBundle({ 
         claim, 
         patient: patientResult.rows[0], 
-        provider: providerResult.rows[0], 
+        provider, 
         insurer: insurerResult.rows[0], 
         coverage, 
         policyHolder: null,

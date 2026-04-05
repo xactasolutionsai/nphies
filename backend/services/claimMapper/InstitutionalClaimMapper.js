@@ -561,7 +561,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
       productOrService: {
-        coding: (() => {
+        coding: this._normalizeCoding((() => {
           const codings = [{
             system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
             code: item.product_or_service_code,
@@ -573,7 +573,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
             codings.push(sc);
           }
           return codings;
-        })()
+        })())
       },
       servicedDate: this.formatDate(servicedDate),
       quantity: { value: quantity },
@@ -595,7 +595,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
         return {
           sequence: detail.sequence || (idx + 1),
           productOrService: {
-            coding: (() => {
+            coding: this._normalizeCoding((() => {
               const codings = [{
                 system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
                 code: detail.product_or_service_code,
@@ -607,7 +607,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
                 codings.push(sc);
               }
               return codings;
-            })()
+            })())
           },
           quantity: { value: detailQuantity },
           unitPrice: { 

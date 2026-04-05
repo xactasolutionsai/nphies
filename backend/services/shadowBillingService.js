@@ -148,23 +148,79 @@ class ShadowBillingService {
   }
 
   /**
+   * Check whether an item's shadow billing fields are reversed.
+   * Uses system-ownership (not code validation) for reliable detection.
+   * Returns true if the primary code sits on a NPHIES system but is invalid,
+   * meaning the user/provider code ended up at coding[0] instead of the NPHIES code.
+   */
+  _isReversedOrInvalid(item, system) {
+    if (!item.shadow_code || !item.shadow_code_system) return false;
+
+    const primaryIsNphies = item.product_or_service_system?.includes('nphies.sa');
+    const shadowIsProvider = !item.shadow_code_system?.includes('nphies.sa');
+
+    if (!primaryIsNphies || !shadowIsProvider) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Process a single item for shadow billing auto-detection.
    *
-   * If shadow_code is already set (backwards-compatible manual flow), leave it untouched.
-   * Otherwise check whether product_or_service_code exists in NPHIES catalog:
-   *   YES → no change (valid NPHIES code)
-   *   NO  → shadow billing triggered: move original to shadow_code, assign unlisted NPHIES code
+   * When shadow_code is already set, validates the coding placement using
+   * system-ownership detection. If the primary code on a NPHIES system is
+   * invalid, clears shadow fields and re-runs the full unlisted assignment
+   * (no fragile auto-swap).
    *
    * Recursively processes item.details[] as well.
    */
   async processItem(item, claimType, providerDomain) {
     if (!item || !item.product_or_service_code) return item;
 
-    if (item.shadow_code) return item;
-
     const system = item.product_or_service_system
       || CLAIM_TYPE_DEFAULT_SYSTEMS[claimType]
       || 'http://nphies.sa/terminology/CodeSystem/procedures';
+
+    if (item.shadow_code) {
+      const primaryIsNphies = item.product_or_service_system?.includes('nphies.sa');
+      const shadowIsProvider = !item.shadow_code_system?.includes('nphies.sa');
+
+      if (primaryIsNphies && shadowIsProvider) {
+        const primaryValid = await this.isValidNphiesCode(item.product_or_service_code, system);
+        if (primaryValid) {
+          // Correct state: valid NPHIES code at primary, provider code at shadow
+          if (item.details && Array.isArray(item.details)) {
+            for (const detail of item.details) {
+              await this.processItem(detail, claimType, providerDomain);
+            }
+          }
+          return item;
+        }
+      }
+
+      // Codes are reversed or invalid -- recover the user's original code,
+      // clear shadow fields, and fall through to fresh unlisted assignment.
+      const userCode = primaryIsNphies
+        ? item.product_or_service_code   // user code is sitting on NPHIES system
+        : item.shadow_code;              // user code is at shadow (systems themselves reversed)
+      const userDisplay = primaryIsNphies
+        ? (item.product_or_service_display || '')
+        : (item.shadow_code_display || '');
+
+      console.log(
+        `[ShadowBillingService] Detected misplaced shadow billing for code '${userCode}'. ` +
+        `Clearing and re-processing.`
+      );
+
+      item.product_or_service_code = userCode;
+      item.product_or_service_display = userDisplay;
+      item.product_or_service_system = system;
+      item.shadow_code = null;
+      item.shadow_code_system = null;
+      item.shadow_code_display = null;
+      // Fall through to normal processing below
+    }
 
     const isValid = await this.isValidNphiesCode(item.product_or_service_code, system);
 
@@ -182,7 +238,7 @@ class ShadowBillingService {
       item.product_or_service_system = system;
 
       console.log(
-        `[ShadowBillingService] Shadow billing detected for code '${originalCode}' → ` +
+        `[ShadowBillingService] Shadow billing assigned: '${originalCode}' → ` +
         `unlisted '${unlisted.code}' (${this._systemKey(system)})`
       );
     }

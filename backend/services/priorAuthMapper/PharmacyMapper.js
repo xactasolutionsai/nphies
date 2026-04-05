@@ -733,7 +733,7 @@ class PharmacyMapper extends BaseMapper {
     }
     
     claimItem.productOrService = {
-      coding: productOrServiceCodings
+      coding: this._normalizeCoding(productOrServiceCodings)
     };
 
     // Determine serviced date
