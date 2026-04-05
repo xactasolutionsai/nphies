@@ -742,6 +742,7 @@ export default function PriorAuthorizationDetails() {
         // Offline authorization fields (per NPHIES extension-authorization-offline-date)
         authorization_offline_date: priorAuth.authorization_offline_date || null,
         authorization_offline_reference: priorAuth.authorization_offline_reference || null,
+        pa_nphies_response_id: priorAuth.nphies_response_id || null,
         // Attachments
         attachments: priorAuth.attachments || [],
         items: priorAuth.items?.map((item, idx) => {

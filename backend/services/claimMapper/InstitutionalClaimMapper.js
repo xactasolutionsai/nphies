@@ -248,7 +248,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
         valueReference: {
           identifier: {
             system: `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
-            value: claim.pre_auth_ref
+            value: claim.pa_nphies_response_id || claim.pre_auth_ref
           }
         }
       });

@@ -123,11 +123,13 @@ class ClaimSubmissionsController extends BaseController {
     const formResult = await query(`
       SELECT cs.*, p.name as patient_name, p.identifier as patient_identifier, p.gender as patient_gender, p.birth_date as patient_birth_date,
         pr.provider_name, pr.nphies_id as provider_nphies_id, pr.provider_type,
-        i.insurer_name, i.nphies_id as insurer_nphies_id
+        i.insurer_name, i.nphies_id as insurer_nphies_id,
+        pa.nphies_response_id as pa_nphies_response_id
       FROM claim_submissions cs
       LEFT JOIN patients p ON cs.patient_id = p.patient_id
       LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
       LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
+      LEFT JOIN prior_authorizations pa ON cs.prior_auth_id = pa.id
       WHERE cs.id = $1
     `, [id]);
 
@@ -674,6 +676,7 @@ class ClaimSubmissionsController extends BaseController {
         // Offline authorization fields (per NPHIES extension-authorization-offline-date)
         authorization_offline_date: formData.authorization_offline_date || null,
         authorization_offline_reference: formData.authorization_offline_reference || null,
+        pa_nphies_response_id: formData.pa_nphies_response_id || null,
         // Attachments
         attachments: formData.attachments || []
       };
