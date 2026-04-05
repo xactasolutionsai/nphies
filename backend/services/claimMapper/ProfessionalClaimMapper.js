@@ -233,21 +233,11 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       }
     });
 
-    // 2. Authorization extensions at Claim level — mutually exclusive per BV-00462
+    // 2. Authorization offline date at Claim level (online priorauthresponse goes on insurance entry per BV-00462)
     if (claim.authorization_offline_reference) {
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
         valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
-      });
-    } else if (claim.pre_auth_ref) {
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
-        valueReference: {
-          identifier: {
-            system: 'http://nphies.sa/identifiers/priorauthresponse',
-            value: claim.pre_auth_ref
-          }
-        }
       });
     }
 
@@ -486,6 +476,15 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
     } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
+      insuranceEntry.extension = [{
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
+        valueReference: {
+          identifier: {
+            system: 'http://nphies.sa/identifiers/priorauthresponse',
+            value: claim.pre_auth_ref
+          }
+        }
+      }];
     }
 
     claimResource.insurance = [insuranceEntry];
