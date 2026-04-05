@@ -518,7 +518,7 @@ class DentalMapper extends BaseMapper {
     
     // Override productOrService to use oral-health-op system with shadow billing support
     claimItem.productOrService = {
-      coding: this._normalizeCoding((() => {
+      coding: (() => {
         const codings = [{
           system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/oral-health-op',
           code: item.product_or_service_code,
@@ -530,7 +530,7 @@ class DentalMapper extends BaseMapper {
           codings.push(sc);
         }
         return codings;
-      })())
+      })()
     };
 
     // Add tooth number using FDI oral region system

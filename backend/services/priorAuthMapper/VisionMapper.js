@@ -511,7 +511,7 @@ class VisionMapper extends BaseMapper {
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
       productOrService: {
-        coding: this._normalizeCoding((() => {
+        coding: (() => {
           // IB-00030: Vision claims use 'procedures' CodeSystem, NOT 'scientific-codes'
           const codings = [{
             system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
@@ -524,7 +524,7 @@ class VisionMapper extends BaseMapper {
             codings.push(sc);
           }
           return codings;
-        })())
+        })()
       },
       servicedDate: this.formatDate(item.serviced_date || servicedDate),
       quantity: { value: quantity },

@@ -558,7 +558,7 @@ class VisionClaimMapper extends VisionPAMapper {
       diagnosisSequence: item.diagnosis_sequences || [1],
       informationSequence: item.information_sequences || supportingInfoSequences,
       productOrService: {
-        coding: this._normalizeCoding((() => {
+        coding: (() => {
           const codings = [{
             system: item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
             code: item.product_or_service_code,
@@ -570,7 +570,7 @@ class VisionClaimMapper extends VisionPAMapper {
             codings.push(sc);
           }
           return codings;
-        })())
+        })()
       },
       servicedDate: this.formatDate(item.serviced_date || servicedDate),
       quantity: { value: quantity },
@@ -598,7 +598,7 @@ class VisionClaimMapper extends VisionPAMapper {
         return {
           sequence: detail.sequence || (idx + 1),
           productOrService: {
-            coding: this._normalizeCoding((() => {
+            coding: (() => {
               const codings = [{
                 system: detail.product_or_service_system || item.product_or_service_system || 'http://nphies.sa/terminology/CodeSystem/procedures',
                 code: detail.product_or_service_code,
@@ -610,7 +610,7 @@ class VisionClaimMapper extends VisionPAMapper {
                 codings.push(sc);
               }
               return codings;
-            })())
+            })()
           },
           quantity: { value: detailQuantity },
           unitPrice: { 
