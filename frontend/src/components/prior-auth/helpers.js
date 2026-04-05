@@ -22,6 +22,7 @@ export const getInitialItemData = (sequence, authType = '') => {
     sequence,
     product_or_service_code: '',
     product_or_service_display: '',
+    shadow_billing_type: '',
     quantity: 1,
     unit_price: '',
     net_amount: '',

@@ -1,5 +1,5 @@
 {
-  "id": "d0313748-0c7e-4e8c-b99c-bd9469a32be2",
+  "id": "0226c356-affb-4ee8-b9bf-672cda7048df",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "urn:uuid:7fa5e065-a988-43f1-a182-f6a969cecea9",
+      "fullUrl": "urn:uuid:004643d9-d267-4082-87af-6a15f34702c0",
       "resource": {
-        "id": "7fa5e065-a988-43f1-a182-f6a969cecea9",
+        "id": "004643d9-d267-4082-87af-6a15f34702c0",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -18,7 +18,7 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/5ce4a101-1cac-4599-ba68-8428a91d5459"
+            "reference": "http://provider.com/Claim/ba17690d-50a5-4fe1-93e1-d30b38807faf"
           }
         ],
         "sender": {
@@ -51,9 +51,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/5ce4a101-1cac-4599-ba68-8428a91d5459",
+      "fullUrl": "http://provider.com/Claim/ba17690d-50a5-4fe1-93e1-d30b38807faf",
       "resource": {
-        "id": "5ce4a101-1cac-4599-ba68-8428a91d5459",
+        "id": "ba17690d-50a5-4fe1-93e1-d30b38807faf",
         "use": "preauthorization",
         "item": [
           {
@@ -83,9 +83,9 @@
                       "display": "Intra-arterial administration of pharmacological agent, thrombolytic agent"
                     },
                     {
-                      "code": "30571-00-00",
+                      "code": "99999-99-99",
                       "system": "http://provider.com.sa/product-or-service",
-                      "display": "Appendicectomy"
+                      "display": "Unlisted procedure code"
                     }
                   ]
                 }
@@ -142,9 +142,9 @@
                   "display": "Appendicectomy"
                 },
                 {
-                  "code": "30571-00-00",
+                  "code": "99999-99-99",
                   "system": "http://provider.com.sa/package",
-                  "display": "Appendicectomy"
+                  "display": "Unlisted procedure code"
                 }
               ]
             },
@@ -222,14 +222,14 @@
             "productOrService": {
               "coding": [
                 {
-                  "code": "312312",
-                  "system": "http://nphies.sa/terminology/CodeSystem/laboratory",
-                  "display": "Unlisted chemistry tests"
+                  "code": "99999-99-92",
+                  "system": "http://nphies.sa/terminology/CodeSystem/imaging",
+                  "display": "Unlisted imaging code"
                 },
                 {
-                  "code": "73050-39-70",
+                  "code": "99999-99-92",
                   "system": "http://provider.com.sa/product-or-service",
-                  "display": "Unlisted chemistry tests"
+                  "display": "Unlisted imaging code"
                 }
               ]
             },
@@ -285,7 +285,7 @@
           "currency": "SAR"
         },
         "status": "active",
-        "created": "2026-04-05T11:33:36.542Z",
+        "created": "2026-04-05T12:33:16.553Z",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -311,7 +311,7 @@
               ]
             },
             "provider": {
-              "reference": "Practitioner/fa1ae2a0-d635-48d0-beca-bd019b9aa6d2"
+              "reference": "Practitioner/9f253442-eb61-420d-924f-074f699f4b05"
             },
             "sequence": 1,
             "qualification": {
@@ -372,7 +372,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/5be37fb2-95da-4cb7-9338-177a8ebf132c"
+              "reference": "Encounter/11e1a1a8-8f88-4007-ba6d-6cc9a3e27fff"
             }
           },
           {
@@ -400,7 +400,7 @@
         ],
         "identifier": [
           {
-            "value": "DUP-1775388815542",
+            "value": "DUP-1775392395941",
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
           }
         ],
@@ -706,9 +706,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/5be37fb2-95da-4cb7-9338-177a8ebf132c",
+      "fullUrl": "http://provider.com/Encounter/11e1a1a8-8f88-4007-ba6d-6cc9a3e27fff",
       "resource": {
-        "id": "5be37fb2-95da-4cb7-9338-177a8ebf132c",
+        "id": "11e1a1a8-8f88-4007-ba6d-6cc9a3e27fff",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -729,7 +729,7 @@
         },
         "identifier": [
           {
-            "value": "DUP-1775388815542",
+            "value": "DUP-1775392395941",
             "system": "http://PR-FHIR.com.sa/identifiers/encounter"
           }
         ],
@@ -843,9 +843,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/fa1ae2a0-d635-48d0-beca-bd019b9aa6d2",
+      "fullUrl": "http://provider.com/Practitioner/9f253442-eb61-420d-924f-074f699f4b05",
       "resource": {
-        "id": "fa1ae2a0-d635-48d0-beca-bd019b9aa6d2",
+        "id": "9f253442-eb61-420d-924f-074f699f4b05",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -873,7 +873,7 @@
                 }
               ]
             },
-            "value": "PRACT-fa1ae2a0",
+            "value": "PRACT-9f253442",
             "system": "http://nphies.sa/license/practitioner-license"
           }
         ],
@@ -1091,6 +1091,6 @@
       }
     }
   ],
-  "timestamp": "2026-04-05T11:33:54.468Z",
+  "timestamp": "2026-04-05T12:44:04.156Z",
   "resourceType": "Bundle"
 }

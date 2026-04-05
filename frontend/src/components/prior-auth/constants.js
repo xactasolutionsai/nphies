@@ -621,6 +621,88 @@ export const TOOTH_SURFACE_OPTIONS = [
   { value: 'MOD', label: 'MOD - Mesioclusodistal' }
 ];
 
+// ============================================================================
+// SHADOW BILLING - UNLISTED ITEM CODES
+// Reference: NPHIES Shadow Billing Guideline v1.7, Section 4.5
+// These codes are used when a non-standard code cannot be mapped to a
+// corresponding NPHIES standard code with the same or similar description.
+// ============================================================================
+
+export const SHADOW_BILLING_CODES = [
+  // Transportation (SBS)
+  { value: '83500-00-80', label: '83500-00-80 - Unlisted ambulance service', description: 'Unlisted ambulance service', type: 'transportation' },
+
+  // KSA service codes (SBS)
+  { value: '83700-00-00', label: '83700-00-00 - Unlisted services yet to be defined', description: 'Unlisted services yet to be defined', type: 'ksa_services' },
+
+  // Procedures (SBS)
+  { value: '99999-99-99', label: '99999-99-99 - Unlisted procedure code', description: 'Unlisted procedure code', type: 'procedures' },
+
+  // Dental (SBS)
+  { value: '99999-99-91', label: '99999-99-91 - Unlisted dental procedure code', description: 'Unlisted dental procedure code', type: 'dental' },
+
+  // Imaging (SBS)
+  { value: '99999-99-92', label: '99999-99-92 - Unlisted imaging code', description: 'Unlisted imaging code', type: 'imaging' },
+
+  // Laboratory (SBS) - 9 codes
+  { value: '73050-39-70', label: '73050-39-70 - Unlisted chemistry tests', description: 'Unlisted chemistry tests', type: 'laboratory' },
+  { value: '73100-09-80', label: '73100-09-80 - Unlisted hematology and coagulation procedure', description: 'Unlisted hematology and coagulation procedure', type: 'laboratory' },
+  { value: '73150-01-20', label: '73150-01-20 - Unlisted urinalysis', description: 'Unlisted urinalysis', type: 'laboratory' },
+  { value: '73200-03-60', label: '73200-03-60 - Unlisted cytopathology procedure', description: 'Unlisted cytopathology procedure', type: 'laboratory' },
+  { value: '73200-10-60', label: '73200-10-60 - Unlisted surgical pathology procedure', description: 'Unlisted surgical pathology procedure', type: 'laboratory' },
+  { value: '73250-03-80', label: '73250-03-80 - Unlisted transfusion medicine procedure', description: 'Unlisted transfusion medicine procedure', type: 'laboratory' },
+  { value: '73350-06-00', label: '73350-06-00 - Unlisted molecular pathology procedure', description: 'Unlisted molecular pathology procedure', type: 'laboratory' },
+  { value: '73400-00-40', label: '73400-00-40 - Unlisted in vivo laboratory services', description: 'Unlisted in vivo laboratory services', type: 'laboratory' },
+  { value: '73400-05-10', label: '73400-05-10 - Unlisted reproductive medicine laboratory procedure', description: 'Unlisted reproductive medicine laboratory procedure', type: 'laboratory' },
+
+  // SFDA_GTIN - 9 codes
+  { value: '99999999999991', label: '99999999999991 - Unlisted nutritional supplements (Other nutritional substitute)', description: 'Unlisted nutritional supplements (Other nutritional substitute)', type: 'sfda_gtin' },
+  { value: '99999999999992', label: '99999999999992 - Unlisted nutritional supplements (Enteral feeds)', description: 'Unlisted nutritional supplements (Enteral feeds)', type: 'sfda_gtin' },
+  { value: '99999999999993', label: '99999999999993 - Unlisted other non-medications', description: 'Unlisted other non-medications', type: 'sfda_gtin' },
+  { value: '99999999999994', label: '99999999999994 - Unlisted nutritional supplements (Mother\'s milk substitute (baby/infant formula))', description: 'Unlisted nutritional supplements (Mother\'s milk substitute (baby/infant formula))', type: 'sfda_gtin' },
+  { value: '99999999999995', label: '99999999999995 - Unlisted cosmetic', description: 'Unlisted cosmetic', type: 'sfda_gtin' },
+  { value: '99999999999996', label: '99999999999996 - Unlisted herbal and vitamins', description: 'Unlisted herbal and vitamins', type: 'sfda_gtin' },
+  { value: '99999999999997', label: '99999999999997 - Unlisted OTC', description: 'Unlisted OTC', type: 'sfda_gtin' },
+  { value: '99999999999998', label: '99999999999998 - Unlisted chemotherapy', description: 'Unlisted chemotherapy', type: 'sfda_gtin' },
+  { value: '99999999999999', label: '99999999999999 - Unlisted other medications', description: 'Unlisted other medications', type: 'sfda_gtin' },
+
+  // SFDA_GMDN
+  { value: '99999', label: '99999 - Unlisted medical devices', description: 'Unlisted medical devices', type: 'sfda_gmdn' },
+
+  // Oral Health Out-patient (ADA)
+  { value: '9999', label: '9999 - Unlisted Out-Patient Dental Code', description: 'Unlisted Out-Patient Dental Code', type: 'oral_health' },
+];
+
+export const SHADOW_BILLING_TYPE_OPTIONS = [
+  { value: 'transportation', label: 'Transportation (SBS)' },
+  { value: 'ksa_services', label: 'KSA service codes (SBS)' },
+  { value: 'procedures', label: 'Procedures (SBS)' },
+  { value: 'dental', label: 'Dental (SBS)' },
+  { value: 'imaging', label: 'Imaging (SBS)' },
+  { value: 'laboratory', label: 'Laboratory (SBS)' },
+  { value: 'sfda_gtin', label: 'SFDA_GTIN' },
+  { value: 'sfda_gmdn', label: 'SFDA_GMDN' },
+  { value: 'oral_health', label: 'Oral Health Out-patient (ADA)' }
+];
+
+export const getShadowBillingCodesByType = (typeKey) => {
+  if (!typeKey) return SHADOW_BILLING_CODES;
+  return SHADOW_BILLING_CODES.filter(code => code.type === typeKey);
+};
+
+// Maps shadow billing type keys to the NPHIES CodeSystem URLs
+export const SHADOW_BILLING_TYPE_TO_SYSTEM = {
+  transportation: 'http://nphies.sa/terminology/CodeSystem/services',
+  ksa_services: 'http://nphies.sa/terminology/CodeSystem/services',
+  procedures: 'http://nphies.sa/terminology/CodeSystem/procedures',
+  dental: 'http://nphies.sa/terminology/CodeSystem/procedures',
+  imaging: 'http://nphies.sa/terminology/CodeSystem/imaging',
+  laboratory: 'http://nphies.sa/terminology/CodeSystem/laboratory',
+  sfda_gtin: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
+  sfda_gmdn: 'http://nphies.sa/terminology/CodeSystem/medical-devices',
+  oral_health: 'http://nphies.sa/terminology/CodeSystem/oral-health-op'
+};
+
 // NPHIES Claim Information Category codes
 // Reference: http://nphies.sa/terminology/CodeSystem/claim-information-category
 // Source: https://portal.nphies.sa/ig/CodeSystem-claim-information-category.html
