@@ -259,6 +259,14 @@ class VisionClaimMapper extends VisionPAMapper {
       });
     }
 
+    // 5/6. Offline authorization date at Claim level (NPHIES requires this at root, not insurance)
+    if (claim.authorization_offline_reference) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      });
+    }
+
     // 7. Newborn extension - for newborn patient claims
     if (claim.is_newborn) {
       extensions.push({
@@ -405,10 +413,6 @@ class VisionClaimMapper extends VisionPAMapper {
     };
     if (claim.authorization_offline_reference) {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
-      insuranceEntry.extension = [{
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
-      }];
     } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
       insuranceEntry.extension = [{

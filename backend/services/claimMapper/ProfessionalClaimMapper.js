@@ -233,6 +233,14 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       }
     });
 
+    // 2. Offline authorization date at Claim level (NPHIES requires this at root, not insurance)
+    if (claim.authorization_offline_reference) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      });
+    }
+
     // 3. Episode extension (REQUIRED)
     const episodeId = claim.episode_id || claim.episode_identifier || `provider_EpisodeID_${claim.claim_number || Date.now()}`;
     extensions.push({
@@ -467,10 +475,6 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
 
     if (claim.authorization_offline_reference) {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
-      insuranceEntry.extension = [{
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
-      }];
     } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
       insuranceEntry.extension = [{

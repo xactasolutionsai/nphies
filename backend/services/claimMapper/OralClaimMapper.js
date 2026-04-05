@@ -247,6 +247,14 @@ class OralClaimMapper extends DentalMapper {
       }
     });
 
+    // 5. Offline authorization date at Claim level (NPHIES requires this at root, not insurance)
+    if (claim.authorization_offline_reference) {
+      extensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
+        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
+      });
+    }
+
     // 6. Newborn extension - for newborn patient claims
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     if (claim.is_newborn) {
@@ -402,10 +410,6 @@ class OralClaimMapper extends DentalMapper {
     };
     if (claim.authorization_offline_reference) {
       insuranceEntry.preAuthRef = [claim.authorization_offline_reference];
-      insuranceEntry.extension = [{
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date',
-        valueDateTime: this.formatDateTimeWithTimezone(claim.authorization_offline_date || claim.service_date || new Date())
-      }];
     } else if (claim.pre_auth_ref) {
       insuranceEntry.preAuthRef = [claim.pre_auth_ref];
       insuranceEntry.extension = [{
