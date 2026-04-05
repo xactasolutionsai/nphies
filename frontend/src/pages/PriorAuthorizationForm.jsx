@@ -603,6 +603,32 @@ export default function PriorAuthorizationForm() {
         // Otherwise, infer: if there's a medication_code but it was entered manually (flag saved), keep it
         const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
         const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
+
+        // Restore original user code for edit mode when shadow billing was applied.
+        // After shadow billing the DB stores the unlisted NPHIES code as product_or_service_code
+        // and the user's original code as shadow_code. Swap them back so the user sees
+        // their original code in the form; the backend will re-run shadow billing on save.
+        if (item.shadow_code) {
+          item.product_or_service_code = item.shadow_code;
+          item.product_or_service_display = item.shadow_code_display || '';
+          item.shadow_code = null;
+          item.shadow_code_system = null;
+          item.shadow_code_display = null;
+        }
+
+        // Same swap for package detail sub-items
+        if (item.details && Array.isArray(item.details)) {
+          item.details = item.details.map(detail => {
+            if (detail.shadow_code) {
+              detail.product_or_service_code = detail.shadow_code;
+              detail.product_or_service_display = detail.shadow_code_display || '';
+              detail.shadow_code = null;
+              detail.shadow_code_system = null;
+              detail.shadow_code_display = null;
+            }
+            return detail;
+          });
+        }
         
         return {
           ...item,
@@ -775,6 +801,27 @@ export default function PriorAuthorizationForm() {
       const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
         const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
         const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
+
+        if (item.shadow_code) {
+          item.product_or_service_code = item.shadow_code;
+          item.product_or_service_display = item.shadow_code_display || '';
+          item.shadow_code = null;
+          item.shadow_code_system = null;
+          item.shadow_code_display = null;
+        }
+
+        if (item.details && Array.isArray(item.details)) {
+          item.details = item.details.map(detail => {
+            if (detail.shadow_code) {
+              detail.product_or_service_code = detail.shadow_code;
+              detail.product_or_service_display = detail.shadow_code_display || '';
+              detail.shadow_code = null;
+              detail.shadow_code_system = null;
+              detail.shadow_code_display = null;
+            }
+            return detail;
+          });
+        }
         
         return {
           ...item,
@@ -960,6 +1007,27 @@ export default function PriorAuthorizationForm() {
       const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
         const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
         const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
+
+        if (item.shadow_code) {
+          item.product_or_service_code = item.shadow_code;
+          item.product_or_service_display = item.shadow_code_display || '';
+          item.shadow_code = null;
+          item.shadow_code_system = null;
+          item.shadow_code_display = null;
+        }
+
+        if (item.details && Array.isArray(item.details)) {
+          item.details = item.details.map(detail => {
+            if (detail.shadow_code) {
+              detail.product_or_service_code = detail.shadow_code;
+              detail.product_or_service_display = detail.shadow_code_display || '';
+              detail.shadow_code = null;
+              detail.shadow_code_system = null;
+              detail.shadow_code_display = null;
+            }
+            return detail;
+          });
+        }
         
         return {
           ...item,
@@ -1199,6 +1267,12 @@ export default function PriorAuthorizationForm() {
       const currentItem = newItems[index];
       newItems[index] = { ...currentItem, [field]: value };
       const updatedItem = newItems[index]; // Get the item after update
+
+      if (field === 'product_or_service_code' || field === 'product_or_service_system') {
+        newItems[index].shadow_code = null;
+        newItems[index].shadow_code_system = null;
+        newItems[index].shadow_code_display = null;
+      }
       
       // Auto-calculate net amount for quantity/unit_price changes
       if (field === 'quantity' || field === 'unit_price') {
