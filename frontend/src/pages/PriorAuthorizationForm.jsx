@@ -60,7 +60,9 @@ import {
   SHADOW_BILLING_CODES,
   SHADOW_BILLING_TYPE_OPTIONS,
   getShadowBillingCodesByType,
-  SHADOW_BILLING_TYPE_TO_SYSTEM
+  SHADOW_BILLING_TYPE_TO_SYSTEM,
+  CODE_ENTRY_MODE_OPTIONS,
+  getAllKnownDescriptions
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -4290,100 +4292,235 @@ export default function PriorAuthorizationForm() {
                 {/* Generic procedure code fields - hidden for dental/pharmacy (they use specialized fields below) */}
                 {formData.auth_type !== 'dental' && formData.auth_type !== 'pharmacy' && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label>Type</Label>
-                        <Select
-                          value={SHADOW_BILLING_TYPE_OPTIONS.find(opt => opt.value === item.shadow_billing_type) || null}
-                          onChange={(option) => {
-                            handleItemChange(index, 'shadow_billing_type', option?.value || '');
+                    {/* Code Entry Mode Selector */}
+                    <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg w-fit">
+                      {CODE_ENTRY_MODE_OPTIONS.map((mode) => (
+                        <button
+                          key={mode.value}
+                          type="button"
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            (item.code_entry_mode || 'nphies') === mode.value
+                              ? 'bg-white text-purple-700 shadow-sm'
+                              : 'text-gray-600 hover:text-gray-800'
+                          }`}
+                          onClick={() => {
+                            handleItemChange(index, 'code_entry_mode', mode.value);
                             handleItemChange(index, 'product_or_service_code', '');
                             handleItemChange(index, 'product_or_service_display', '');
-                            if (option?.value) {
-                              handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[option.value] || '');
-                            }
+                            handleItemChange(index, 'shadow_billing_type', '');
+                            handleItemChange(index, 'manual_code_entry', mode.value === 'manual');
                           }}
-                          options={SHADOW_BILLING_TYPE_OPTIONS}
-                          styles={selectStyles}
-                          placeholder="Select type..."
-                          isClearable
-                          isSearchable
-                          menuPortalTarget={document.body}
-                        />
-                        <p className="text-xs text-gray-500">Filter codes by category</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Service/Procedure Code *</Label>
-                        <CreatableSelect
-                          value={
-                            item.product_or_service_code
-                              ? (SHADOW_BILLING_CODES.find(opt => opt.value === item.product_or_service_code) || { value: item.product_or_service_code, label: item.product_or_service_code })
-                              : null
-                          }
-                          onChange={(option) => {
-                            if (!option) {
-                              handleItemChange(index, 'product_or_service_code', '');
-                              handleItemChange(index, 'product_or_service_display', '');
-                              return;
-                            }
-                            handleItemChange(index, 'product_or_service_code', option.value || '');
-                            const matched = SHADOW_BILLING_CODES.find(c => c.value === option.value);
-                            if (matched) {
-                              handleItemChange(index, 'product_or_service_display', matched.description);
-                              handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[matched.type] || '');
-                              if (!item.shadow_billing_type) {
-                                handleItemChange(index, 'shadow_billing_type', matched.type);
-                              }
-                            }
-                          }}
-                          options={getShadowBillingCodesByType(item.shadow_billing_type)}
-                          styles={selectStyles}
-                          placeholder="Select or type code..."
-                          isClearable
-                          isSearchable
-                          formatCreateLabel={(inputValue) => `Use custom code: "${inputValue}"`}
-                          menuPortalTarget={document.body}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Description *</Label>
-                        <CreatableSelect
-                          value={
-                            item.product_or_service_display
-                              ? (SHADOW_BILLING_CODES.find(opt => opt.description === item.product_or_service_display) 
-                                  ? { value: item.product_or_service_display, label: item.product_or_service_display }
-                                  : { value: item.product_or_service_display, label: item.product_or_service_display })
-                              : null
-                          }
-                          onChange={(option) => {
-                            if (!option) {
-                              handleItemChange(index, 'product_or_service_display', '');
-                              handleItemChange(index, 'product_or_service_code', '');
-                              return;
-                            }
-                            handleItemChange(index, 'product_or_service_display', option.value || '');
-                            const matched = SHADOW_BILLING_CODES.find(c => c.description === option.value);
-                            if (matched) {
-                              handleItemChange(index, 'product_or_service_code', matched.value);
-                              handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[matched.type] || '');
-                              if (!item.shadow_billing_type) {
-                                handleItemChange(index, 'shadow_billing_type', matched.type);
-                              }
-                            }
-                          }}
-                          options={getShadowBillingCodesByType(item.shadow_billing_type).map(c => ({
-                            value: c.description,
-                            label: c.description
-                          }))}
-                          styles={selectStyles}
-                          placeholder="Select or type description..."
-                          isClearable
-                          isSearchable
-                          formatCreateLabel={(inputValue) => `Use custom description: "${inputValue}"`}
-                          menuPortalTarget={document.body}
-                        />
-                      </div>
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
                     </div>
+
+                    {/* Mode: NPHIES Code */}
+                    {(item.code_entry_mode || 'nphies') === 'nphies' && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Code System</Label>
+                          <Select
+                            value={SERVICE_CODE_SYSTEM_OPTIONS.find(opt =>
+                              opt.system === item.product_or_service_system
+                            ) || SERVICE_CODE_SYSTEM_OPTIONS[0]}
+                            onChange={(option) => {
+                              handleItemChange(index, 'product_or_service_code', '');
+                              handleItemChange(index, 'product_or_service_display', '');
+                              handleItemChange(index, 'product_or_service_system', option?.system || 'http://nphies.sa/terminology/CodeSystem/procedures');
+                            }}
+                            options={SERVICE_CODE_SYSTEM_OPTIONS}
+                            styles={selectStyles}
+                            menuPortalTarget={document.body}
+                          />
+                          <p className="text-xs text-amber-600">
+                            Note: LOINC codes go in Lab Observations section below
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Service/Procedure Code *</Label>
+                          <Select
+                            value={
+                              getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
+                                .find(opt => opt.value === item.product_or_service_code) || null
+                            }
+                            onChange={(option) => {
+                              handleItemChange(index, 'product_or_service_code', option?.value || '');
+                              const description = option?.label?.includes(' - ')
+                                ? option.label.split(' - ').slice(1).join(' - ')
+                                : '';
+                              handleItemChange(index, 'product_or_service_display', description);
+                            }}
+                            options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
+                            styles={selectStyles}
+                            placeholder="Select code..."
+                            isClearable
+                            isSearchable
+                            menuPortalTarget={document.body}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Description</Label>
+                          <Input
+                            value={item.product_or_service_display || ''}
+                            onChange={(e) => handleItemChange(index, 'product_or_service_display', e.target.value)}
+                            placeholder="Auto-filled from selection"
+                            readOnly
+                            className="bg-gray-50"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mode: Shadow Billing */}
+                    {(item.code_entry_mode || 'nphies') === 'shadow_billing' && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Type</Label>
+                          <Select
+                            value={SHADOW_BILLING_TYPE_OPTIONS.find(opt => opt.value === item.shadow_billing_type) || null}
+                            onChange={(option) => {
+                              handleItemChange(index, 'shadow_billing_type', option?.value || '');
+                              handleItemChange(index, 'product_or_service_code', '');
+                              handleItemChange(index, 'product_or_service_display', '');
+                              if (option?.value) {
+                                handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[option.value] || '');
+                              }
+                            }}
+                            options={SHADOW_BILLING_TYPE_OPTIONS}
+                            styles={selectStyles}
+                            placeholder="Select type..."
+                            isClearable
+                            isSearchable
+                            menuPortalTarget={document.body}
+                          />
+                          <p className="text-xs text-gray-500">Filter codes by category</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Service/Procedure Code *</Label>
+                          <CreatableSelect
+                            value={
+                              item.product_or_service_code
+                                ? (SHADOW_BILLING_CODES.find(opt => opt.value === item.product_or_service_code) || { value: item.product_or_service_code, label: item.product_or_service_code })
+                                : null
+                            }
+                            onChange={(option) => {
+                              if (!option) {
+                                handleItemChange(index, 'product_or_service_code', '');
+                                handleItemChange(index, 'product_or_service_display', '');
+                                return;
+                              }
+                              handleItemChange(index, 'product_or_service_code', option.value || '');
+                              const matched = SHADOW_BILLING_CODES.find(c => c.value === option.value);
+                              if (matched) {
+                                handleItemChange(index, 'product_or_service_display', matched.description);
+                                handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[matched.type] || '');
+                                if (!item.shadow_billing_type) {
+                                  handleItemChange(index, 'shadow_billing_type', matched.type);
+                                }
+                              }
+                            }}
+                            options={getShadowBillingCodesByType(item.shadow_billing_type)}
+                            styles={selectStyles}
+                            placeholder="Select or type code..."
+                            isClearable
+                            isSearchable
+                            formatCreateLabel={(inputValue) => `Use custom code: "${inputValue}"`}
+                            menuPortalTarget={document.body}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Description *</Label>
+                          <CreatableSelect
+                            value={
+                              item.product_or_service_display
+                                ? { value: item.product_or_service_display, label: item.product_or_service_display }
+                                : null
+                            }
+                            onChange={(option) => {
+                              if (!option) {
+                                handleItemChange(index, 'product_or_service_display', '');
+                                handleItemChange(index, 'product_or_service_code', '');
+                                return;
+                              }
+                              handleItemChange(index, 'product_or_service_display', option.value || '');
+                              const matched = SHADOW_BILLING_CODES.find(c => c.description === option.value);
+                              if (matched) {
+                                handleItemChange(index, 'product_or_service_code', matched.value);
+                                handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[matched.type] || '');
+                                if (!item.shadow_billing_type) {
+                                  handleItemChange(index, 'shadow_billing_type', matched.type);
+                                }
+                              }
+                            }}
+                            options={getShadowBillingCodesByType(item.shadow_billing_type).map(c => ({
+                              value: c.description,
+                              label: c.description
+                            }))}
+                            styles={selectStyles}
+                            placeholder="Select or type description..."
+                            isClearable
+                            isSearchable
+                            formatCreateLabel={(inputValue) => `Use custom description: "${inputValue}"`}
+                            menuPortalTarget={document.body}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mode: Manual Entry */}
+                    {(item.code_entry_mode || 'nphies') === 'manual' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Service/Procedure Code *</Label>
+                          <Input
+                            value={item.product_or_service_code || ''}
+                            onChange={(e) => handleItemChange(index, 'product_or_service_code', e.target.value)}
+                            placeholder="Enter service/procedure code"
+                            className="font-mono"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Description *</Label>
+                          <CreatableSelect
+                            value={
+                              item.product_or_service_display
+                                ? { value: item.product_or_service_display, label: item.product_or_service_display }
+                                : null
+                            }
+                            onChange={(option) => {
+                              if (!option) {
+                                handleItemChange(index, 'product_or_service_display', '');
+                                return;
+                              }
+                              handleItemChange(index, 'product_or_service_display', option.value || '');
+                              if (option.code) {
+                                handleItemChange(index, 'product_or_service_code', option.code);
+                              }
+                            }}
+                            options={getAllKnownDescriptions()}
+                            styles={selectStyles}
+                            placeholder="Type or select description..."
+                            isClearable
+                            isSearchable
+                            formatCreateLabel={(inputValue) => `Use custom description: "${inputValue}"`}
+                            menuPortalTarget={document.body}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Manual entry hint */}
+                    {(item.code_entry_mode || 'nphies') === 'manual' && item.product_or_service_code && (
+                      <div className="flex items-center gap-2 p-2 bg-amber-50 rounded border border-amber-200">
+                        <span className="text-xs text-amber-700">
+                          Code entered manually &mdash; the backend will auto-detect if shadow billing applies.
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Shadow billing auto-detected hint */}
                     {(item.shadow_code) && (
                       <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                         <p className="text-sm text-amber-800 font-medium">Shadow Billing (Auto-Detected)</p>

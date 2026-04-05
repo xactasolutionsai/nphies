@@ -703,6 +703,29 @@ export const SHADOW_BILLING_TYPE_TO_SYSTEM = {
   oral_health: 'http://nphies.sa/terminology/CodeSystem/oral-health-op'
 };
 
+// Code Entry Mode options for the generic (non-dental, non-pharmacy) item section
+export const CODE_ENTRY_MODE_OPTIONS = [
+  { value: 'nphies', label: 'NPHIES Code' },
+  { value: 'shadow_billing', label: 'Shadow Billing' },
+  { value: 'manual', label: 'Manual Entry' }
+];
+
+// Aggregates descriptions from all NPHIES code lists and shadow billing codes
+// for use as suggestions in Manual Entry mode
+export const getAllKnownDescriptions = () => {
+  const allDescriptions = [];
+  [NPHIES_PROCEDURE_OPTIONS, NPHIES_IMAGING_OPTIONS, NPHIES_LABORATORY_OPTIONS, NPHIES_SERVICES_OPTIONS].forEach(opts => {
+    opts.forEach(opt => {
+      const desc = opt.label?.includes(' - ') ? opt.label.split(' - ').slice(1).join(' - ') : '';
+      if (desc) allDescriptions.push({ value: desc, label: desc, code: opt.value });
+    });
+  });
+  SHADOW_BILLING_CODES.forEach(c => {
+    allDescriptions.push({ value: c.description, label: c.description, code: c.value });
+  });
+  return allDescriptions;
+};
+
 // NPHIES Claim Information Category codes
 // Reference: http://nphies.sa/terminology/CodeSystem/claim-information-category
 // Source: https://portal.nphies.sa/ig/CodeSystem-claim-information-category.html
