@@ -1,5 +1,5 @@
 {
-  "id": "da0736be-5b1d-457d-8f2d-093234e26f6c",
+  "id": "52e8e80a-6f7c-4c55-bd32-db71a6175a0f",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "urn:uuid:be16241b-b6ed-4883-9585-164305425d9c",
+      "fullUrl": "urn:uuid:36398f29-1d7a-4443-99ad-e7f781888faa",
       "resource": {
-        "id": "be16241b-b6ed-4883-9585-164305425d9c",
+        "id": "36398f29-1d7a-4443-99ad-e7f781888faa",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -18,7 +18,7 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/d2b19b9b-b845-4aaa-ba36-32aca07f837f"
+            "reference": "http://provider.com/Claim/b629d14b-fc37-455c-af36-167f211e604d"
           }
         ],
         "sender": {
@@ -51,9 +51,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/d2b19b9b-b845-4aaa-ba36-32aca07f837f",
+      "fullUrl": "http://provider.com/Claim/b629d14b-fc37-455c-af36-167f211e604d",
       "resource": {
-        "id": "d2b19b9b-b845-4aaa-ba36-32aca07f837f",
+        "id": "b629d14b-fc37-455c-af36-167f211e604d",
         "use": "claim",
         "item": [
           {
@@ -117,7 +117,7 @@
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice",
                 "valueIdentifier": {
-                  "value": "Invc-20260405/CLM-1775418796644",
+                  "value": "Invc-20260405/CLM-1775419236115",
                   "system": "http://saudigeneralhospital.com.sa/identifiers/patientInvoice"
                 }
               },
@@ -197,7 +197,7 @@
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice",
                 "valueIdentifier": {
-                  "value": "Invc-20260405/CLM-1775418796644",
+                  "value": "Invc-20260405/CLM-1775419236115",
                   "system": "http://saudigeneralhospital.com.sa/identifiers/patientInvoice"
                 }
               },
@@ -275,7 +275,7 @@
           "currency": "SAR"
         },
         "status": "active",
-        "created": "2026-04-05T22:53:16+03:00",
+        "created": "2026-04-05T23:00:36+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -301,7 +301,7 @@
               ]
             },
             "provider": {
-              "reference": "Practitioner/b70c1326-1ffa-4249-b054-4e150f28282e"
+              "reference": "Practitioner/dc6ebae9-4a33-47bf-8cb5-b03e62f5daa0"
             },
             "sequence": 1,
             "qualification": {
@@ -378,7 +378,7 @@
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
             "valueReference": {
-              "reference": "Encounter/90b25eb7-98b0-4398-99a6-82c16d5d0133"
+              "reference": "Encounter/12e832f3-a9b9-460f-b041-f88b2f9ca2e9"
             }
           },
           {
@@ -395,18 +395,9 @@
             }
           },
           {
-            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse",
-            "valueReference": {
-              "identifier": {
-                "value": "068900b0-5a3d-41f3-98aa-e101c7695400",
-                "system": "http://nphies.sa/identifiers/priorauthresponse"
-              }
-            }
-          },
-          {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
             "valueIdentifier": {
-              "value": "provider_EpisodeID_CLM-1775418796644",
+              "value": "provider_EpisodeID_CLM-1775419236115",
               "system": "http://saudigeneralhospital.com.sa/identifiers/episode"
             }
           }
@@ -418,14 +409,25 @@
               "reference": "Coverage/4b5eff00-c9b2-4efd-8bfd-5d5cf1a71aa8"
             },
             "sequence": 1,
+            "extension": [
+              {
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse",
+                "valueReference": {
+                  "identifier": {
+                    "value": "e2d16057-b55d-4eea-8655-370ecf7b3165",
+                    "system": "http://nphies.sa/identifiers/priorauthresponse"
+                  }
+                }
+              }
+            ],
             "preAuthRef": [
-              "068900b0-5a3d-41f3-98aa-e101c7695400"
+              "e2d16057-b55d-4eea-8655-370ecf7b3165"
             ]
           }
         ],
         "identifier": [
           {
-            "value": "CLM-1775418796644",
+            "value": "CLM-1775419236115",
             "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
           }
         ],
@@ -731,9 +733,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Encounter/90b25eb7-98b0-4398-99a6-82c16d5d0133",
+      "fullUrl": "http://provider.com/Encounter/12e832f3-a9b9-460f-b041-f88b2f9ca2e9",
       "resource": {
-        "id": "90b25eb7-98b0-4398-99a6-82c16d5d0133",
+        "id": "12e832f3-a9b9-460f-b041-f88b2f9ca2e9",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -754,7 +756,7 @@
         },
         "identifier": [
           {
-            "value": "CLM-1775418796644",
+            "value": "CLM-1775419236115",
             "system": "http://prfhir.com.sa/identifiers/encounter"
           }
         ],
@@ -901,9 +903,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Practitioner/b70c1326-1ffa-4249-b054-4e150f28282e",
+      "fullUrl": "http://provider.com/Practitioner/dc6ebae9-4a33-47bf-8cb5-b03e62f5daa0",
       "resource": {
-        "id": "b70c1326-1ffa-4249-b054-4e150f28282e",
+        "id": "dc6ebae9-4a33-47bf-8cb5-b03e62f5daa0",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -931,7 +933,7 @@
                 }
               ]
             },
-            "value": "PRACT-b70c1326",
+            "value": "PRACT-dc6ebae9",
             "system": "http://nphies.sa/license/practitioner-license"
           }
         ],
@@ -1149,6 +1151,6 @@
       }
     }
   ],
-  "timestamp": "2026-04-05T19:53:17.101Z",
+  "timestamp": "2026-04-05T20:00:36.503Z",
   "resourceType": "Bundle"
 }

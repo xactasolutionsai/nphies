@@ -462,7 +462,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse',
         valueReference: {
           identifier: {
-            system: 'http://nphies.sa/identifiers/priorauthresponse',
+            system: `http://${NPHIES_CONFIG.INSURER_DOMAIN}.com.sa/identifiers/claimresponse`,
             value: claim.pre_auth_ref
           }
         }
