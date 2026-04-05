@@ -2219,8 +2219,8 @@ class PriorAuthorizationsController extends BaseController {
          body_site_code, body_site_system, sub_site_code, description, notes,
          manual_code_entry, manual_prescribed_code_entry, prescribed_medication_code,
          pharmacist_selection_reason, pharmacist_substitute, patient_share, is_package, is_maternity,
-         item_type, shadow_code, shadow_code_system, shadow_code_display)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+         item_type, shadow_code, shadow_code_system, shadow_code_display, code_entry_mode)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
         RETURNING id
       `;
       const itemResult = await query(itemQuery, [
@@ -2259,7 +2259,8 @@ class PriorAuthorizationsController extends BaseController {
         item.item_type || 'medication', // Save item_type (medication or device)
         item.shadow_code || null,
         item.shadow_code_system || null,
-        item.shadow_code_display || null
+        item.shadow_code_display || null,
+        item.code_entry_mode || null
       ]);
       
       const itemId = itemResult.rows[0].id;

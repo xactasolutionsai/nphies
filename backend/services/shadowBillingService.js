@@ -4,11 +4,44 @@
  * When internal, it triggers shadow billing: the original code becomes the shadow_code,
  * and an appropriate NPHIES unlisted code is assigned as the primary code.
  *
- * Detection: DB lookup only (medication_codes for GTIN, nphies_codes for others).
- * Any code not found in DB → treated as non-NPHIES → unlisted + shadow billing.
+ * Detection: DB lookup + hardcoded whitelist of Section 4.5 unlisted codes.
+ * Any code not found → treated as non-NPHIES → unlisted + shadow billing.
+ *
+ * Respects code_entry_mode: auto-detection is SKIPPED when the user explicitly
+ * chose a code via 'nphies' or 'shadow_billing' mode on the frontend.
  */
 
 import { query } from '../db.js';
+
+// Section 4.5 unlisted codes are valid NPHIES codes that must never be shadow-billed.
+// These exist in the NPHIES Clinical Standards Code Lists per the Shadow Billing Guideline V1.7.
+const SECTION_4_5_UNLISTED_CODES = new Set([
+  '83500-00-80',      // Unlisted ambulance service (Transportation)
+  '83700-00-00',      // Unlisted services yet to be defined (KSA service codes)
+  '99999-99-99',      // Unlisted procedure code (Procedures)
+  '99999-99-91',      // Unlisted dental procedure code (Dental)
+  '99999-99-92',      // Unlisted imaging code (Imaging)
+  '73050-39-70',      // Unlisted chemistry tests (Laboratory)
+  '73100-09-80',      // Unlisted hematology and coagulation procedure
+  '73150-01-20',      // Unlisted urinalysis
+  '73200-03-60',      // Unlisted cytopathology procedure
+  '73200-10-60',      // Unlisted surgical pathology procedure
+  '73250-03-80',      // Unlisted transfusion medicine procedure
+  '73350-06-00',      // Unlisted molecular pathology procedure
+  '73400-00-40',      // Unlisted in vivo laboratory services
+  '73400-05-10',      // Unlisted reproductive medicine laboratory procedure
+  '99999999999991',   // Unlisted nutritional supplements (Other)
+  '99999999999992',   // Unlisted nutritional supplements (Enteral feeds)
+  '99999999999993',   // Unlisted other non-medications
+  '99999999999994',   // Unlisted nutritional supplements (Infant formula)
+  '99999999999995',   // Unlisted cosmetic
+  '99999999999996',   // Unlisted herbal and vitamins
+  '99999999999997',   // Unlisted OTC
+  '99999999999998',   // Unlisted chemotherapy
+  '99999999999999',   // Unlisted other medications
+  '99999',            // Unlisted medical devices (SFDA_GMDN)
+  '9999',             // Unlisted Out-Patient Dental Code (ADA)
+]);
 
 // Default unlisted codes per NPHIES code system category (Section 4.5 of Shadow Billing Guideline V1.7)
 const UNLISTED_CODES = {
@@ -130,8 +163,8 @@ class ShadowBillingService {
   }
 
   /**
-   * Check whether a code exists in the NPHIES catalog (DB lookup only).
-   * medication_codes table for GTIN, nphies_codes table for all others.
+   * Check whether a code exists in the NPHIES catalog.
+   * Checks: Section 4.5 whitelist → medication_codes table → nphies_codes table.
    * Any code not found → returns false → forces unlisted + shadow billing.
    */
   async isValidNphiesCode(code, systemUrl) {
@@ -140,6 +173,8 @@ class ShadowBillingService {
 
     const codeStr = String(code).trim();
     const key = this._systemKey(systemUrl);
+
+    if (SECTION_4_5_UNLISTED_CODES.has(codeStr)) return true;
 
     if (key === 'medication-codes' && this.medicationCodesCache.has(codeStr)) return true;
 
@@ -177,15 +212,39 @@ class ShadowBillingService {
   /**
    * Process a single item for shadow billing auto-detection.
    *
-   * If shadow_code is already set (backwards-compatible manual flow), leave it untouched.
-   * Otherwise check whether product_or_service_code exists in NPHIES catalog:
-   *   YES → no change (valid NPHIES code)
-   *   NO  → shadow billing triggered: move original to shadow_code, assign unlisted NPHIES code
+   * Skips auto-detection when:
+   *   - code_entry_mode is 'nphies' or 'shadow_billing' (user explicitly chose the code)
+   *   - shadow_code is already set (backwards-compatible manual flow)
+   *
+   * For 'manual' mode or unset mode (old records): checks whether product_or_service_code
+   * exists in the NPHIES catalog. If not found → shadow billing triggered.
    *
    * Recursively processes item.details[] as well.
    */
   async processItem(item, claimType, providerDomain) {
     if (!item || !item.product_or_service_code) return item;
+
+    const mode = item.code_entry_mode;
+    if (mode === 'nphies' || mode === 'shadow_billing') {
+      // User explicitly selected from NPHIES codes or shadow billing unlisted codes.
+      // Clear any stale shadow_code that might have persisted from a previous edit.
+      if (item.shadow_code) {
+        console.log(
+          `[ShadowBillingService] Clearing stale shadow_code '${item.shadow_code}' ` +
+          `for item in '${mode}' mode (code: '${item.product_or_service_code}')`
+        );
+        item.shadow_code = null;
+        item.shadow_code_system = null;
+        item.shadow_code_display = null;
+      }
+      // Still process sub-items (package details may need auto-detection)
+      if (item.details && Array.isArray(item.details)) {
+        for (const detail of item.details) {
+          await this.processItem(detail, claimType, providerDomain);
+        }
+      }
+      return item;
+    }
 
     if (item.shadow_code) return item;
 

@@ -4307,7 +4307,11 @@ export default function PriorAuthorizationForm() {
                             handleItemChange(index, 'code_entry_mode', mode.value);
                             handleItemChange(index, 'product_or_service_code', '');
                             handleItemChange(index, 'product_or_service_display', '');
+                            handleItemChange(index, 'product_or_service_system', '');
                             handleItemChange(index, 'shadow_billing_type', '');
+                            handleItemChange(index, 'shadow_code', '');
+                            handleItemChange(index, 'shadow_code_system', '');
+                            handleItemChange(index, 'shadow_code_display', '');
                             handleItemChange(index, 'manual_code_entry', mode.value === 'manual');
                           }}
                         >
@@ -4329,6 +4333,9 @@ export default function PriorAuthorizationForm() {
                               handleItemChange(index, 'product_or_service_code', '');
                               handleItemChange(index, 'product_or_service_display', '');
                               handleItemChange(index, 'product_or_service_system', option?.system || 'http://nphies.sa/terminology/CodeSystem/procedures');
+                              handleItemChange(index, 'shadow_code', '');
+                              handleItemChange(index, 'shadow_code_system', '');
+                              handleItemChange(index, 'shadow_code_display', '');
                             }}
                             options={SERVICE_CODE_SYSTEM_OPTIONS}
                             styles={selectStyles}
@@ -4351,6 +4358,9 @@ export default function PriorAuthorizationForm() {
                                 ? option.label.split(' - ').slice(1).join(' - ')
                                 : '';
                               handleItemChange(index, 'product_or_service_display', description);
+                              handleItemChange(index, 'shadow_code', '');
+                              handleItemChange(index, 'shadow_code_system', '');
+                              handleItemChange(index, 'shadow_code_display', '');
                             }}
                             options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
                             styles={selectStyles}
@@ -4384,6 +4394,9 @@ export default function PriorAuthorizationForm() {
                               handleItemChange(index, 'shadow_billing_type', option?.value || '');
                               handleItemChange(index, 'product_or_service_code', '');
                               handleItemChange(index, 'product_or_service_display', '');
+                              handleItemChange(index, 'shadow_code', '');
+                              handleItemChange(index, 'shadow_code_system', '');
+                              handleItemChange(index, 'shadow_code_display', '');
                               if (option?.value) {
                                 handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[option.value] || '');
                               }
@@ -4412,6 +4425,9 @@ export default function PriorAuthorizationForm() {
                                 return;
                               }
                               handleItemChange(index, 'product_or_service_code', option.value || '');
+                              handleItemChange(index, 'shadow_code', '');
+                              handleItemChange(index, 'shadow_code_system', '');
+                              handleItemChange(index, 'shadow_code_display', '');
                               const matched = SHADOW_BILLING_CODES.find(c => c.value === option.value);
                               if (matched) {
                                 handleItemChange(index, 'product_or_service_display', matched.description);
@@ -4445,6 +4461,9 @@ export default function PriorAuthorizationForm() {
                                 return;
                               }
                               handleItemChange(index, 'product_or_service_display', option.value || '');
+                              handleItemChange(index, 'shadow_code', '');
+                              handleItemChange(index, 'shadow_code_system', '');
+                              handleItemChange(index, 'shadow_code_display', '');
                               const matched = SHADOW_BILLING_CODES.find(c => c.description === option.value);
                               if (matched) {
                                 handleItemChange(index, 'product_or_service_code', matched.value);
