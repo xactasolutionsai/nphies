@@ -1840,8 +1840,8 @@ export default function PriorAuthorizationForm() {
           // Device items: check for product_or_service_code or medication_code (both are valid)
           return !item.product_or_service_code && !item.medication_code;
         } else {
-          // Medication items: check for medication_code
-          return !item.medication_code;
+          // Medication items: check for medication_code or product_or_service_code
+          return !item.medication_code && !item.product_or_service_code;
         }
       }
       return !item.product_or_service_code;
