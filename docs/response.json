@@ -1,244 +1,110 @@
 {
-  "success": true,
-  "data": {
-      "reconciliationId": 3,
-      "paymentNoticeBundle": {
-          "resourceType": "Bundle",
-          "id": "a740411d-6577-4aca-89d8-100d5c79d398",
-          "meta": {
-              "profile": [
-                  "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
-              ]
-          },
-          "type": "message",
-          "timestamp": "2026-04-13T14:05:36.177Z",
-          "entry": [
-              {
-                  "fullUrl": "urn:uuid:e5b31506-d9b7-42ee-b951-1e9262177feb",
-                  "resource": {
-                      "resourceType": "MessageHeader",
-                      "id": "e5b31506-d9b7-42ee-b951-1e9262177feb",
-                      "meta": {
-                          "profile": [
-                              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
-                          ]
-                      },
-                      "eventCoding": {
-                          "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
-                          "code": "payment-notice"
-                      },
-                      "source": {
-                          "endpoint": "http://provider.com"
-                      },
-                      "destination": [
-                          {
-                              "endpoint": "http://nphies.sa",
-                              "receiver": {
-                                  "type": "Organization",
-                                  "identifier": {
-                                      "system": "http://nphies.sa/license/nphies-license",
-                                      "value": "nphies"
-                                  }
-                              }
-                          }
-                      ],
-                      "sender": {
-                          "type": "Organization",
-                          "identifier": {
-                              "system": "http://nphies.sa/license/provider-license",
-                              "value": "1010613708"
-                          }
-                      },
-                      "focus": [
-                          {
-                              "reference": "PaymentNotice/8247a071-7f36-43dc-8beb-5a219952dbd0"
-                          }
-                      ]
-                  }
-              },
-              {
-                  "fullUrl": "urn:uuid:8247a071-7f36-43dc-8beb-5a219952dbd0",
-                  "resource": {
-                      "resourceType": "PaymentNotice",
-                      "id": "8247a071-7f36-43dc-8beb-5a219952dbd0",
-                      "meta": {
-                          "profile": [
-                              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/payment-notice|1.0.0"
-                          ]
-                      },
-                      "identifier": [
-                          {
-                              "system": "http://provider.nphies.sa/1010613708/paymentnotice",
-                              "value": "PN-1776089136177"
-                          }
-                      ],
-                      "status": "active",
-                      "created": "2026-04-13T14:05:36.177Z",
-                      "provider": {
-                          "type": "Organization",
-                          "identifier": {
-                              "system": "http://nphies.sa/license/provider-license",
-                              "value": "1010613708"
-                          }
-                      },
-                      "payment": {
-                          "reference": "PaymentReconciliation/a219dfbf-7e24-4721-a6fa-c1a331443137",
-                          "type": "PaymentReconciliation",
-                          "identifier": {
-                              "system": "http://insurer.com/PaymentReconciliation",
-                              "value": "1010613708-2"
-                          }
-                      },
-                      "paymentDate": "2026-04-13",
-                      "recipient": {
-                          "type": "Organization",
-                          "identifier": {
-                              "system": "http://nphies.sa/license/payer-license",
-                              "value": "INS-FHIR"
-                          }
-                      },
-                      "amount": {
-                          "value": 130,
-                          "currency": "SAR"
-                      },
-                      "paymentStatus": {
-                          "coding": [
-                              {
-                                  "system": "http://terminology.hl7.org/CodeSystem/paymentstatus",
-                                  "code": "paid"
-                              }
-                          ]
-                      }
-                  }
-              }
-          ]
-      },
-      "nphiesResponse": {
-          "resourceType": "Bundle",
-          "id": "71b2a4e6-185c-455f-aa1f-86c9e0e269cd",
-          "meta": {
-              "profile": [
-                  "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
-              ]
-          },
-          "type": "message",
-          "timestamp": "2026-04-13T17:05:36.341+03:00",
-          "entry": [
-              {
-                  "fullUrl": "http://nphies.sa/MessageHeader/e7525f66-d506-496e-8ec7-fccc18239c0b",
-                  "resource": {
-                      "resourceType": "MessageHeader",
-                      "id": "e7525f66-d506-496e-8ec7-fccc18239c0b",
-                      "meta": {
-                          "profile": [
-                              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
-                          ],
-                          "tag": [
-                              {
-                                  "system": "http://nphies.sa/terminology/CodeSystem/meta-tags",
-                                  "code": "queued-messages"
-                              }
-                          ]
-                      },
-                      "eventCoding": {
-                          "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
-                          "code": "acknowledgement"
-                      },
-                      "destination": [
-                          {
-                              "endpoint": "http://provider.com",
-                              "receiver": {
-                                  "type": "Organization",
-                                  "identifier": {
-                                      "system": "http://nphies.sa/license/provider-license",
-                                      "value": "1010613708"
-                                  }
-                              }
-                          }
-                      ],
-                      "sender": {
-                          "type": "Organization",
-                          "identifier": {
-                              "system": "http://nphies.sa/license/nphies",
-                              "value": "NPHIES"
-                          }
-                      },
-                      "source": {
-                          "endpoint": "http://nphies.sa/"
-                      },
-                      "response": {
-                          "identifier": "e5b31506-d9b7-42ee-b951-1e9262177feb",
-                          "code": "fatal-error",
-                          "details": {
-                              "reference": "http://nphies.sa/OperationOutcome/d0e17617-0e92-4452-8b36-23c57cd1840d"
-                          }
-                      }
-                  }
-              },
-              {
-                  "fullUrl": "http://nphies.sa/OperationOutcome/d0e17617-0e92-4452-8b36-23c57cd1840d",
-                  "resource": {
-                      "resourceType": "OperationOutcome",
-                      "id": "d0e17617-0e92-4452-8b36-23c57cd1840d",
-                      "meta": {
-                          "profile": [
-                              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/operationoutcome|1.0.0"
-                          ]
-                      },
-                      "issue": [
-                          {
-                              "severity": "error",
-                              "code": "business-rule",
-                              "details": {
-                                  "coding": [
-                                      {
-                                          "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                          "code": "RE-00169",
-                                          "display": "Reference processing is not referring to a valid resource"
-                                      }
-                                  ]
-                              },
-                              "expression": [
-                                  "Bundle.entry[0].resource.focus[0]"
-                              ]
-                          },
-                          {
-                              "severity": "error",
-                              "code": "business-rule",
-                              "details": {
-                                  "coding": [
-                                      {
-                                          "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                          "code": "RE-00169",
-                                          "display": "Reference processing is not referring to a valid resource"
-                                      }
-                                  ]
-                              },
-                              "expression": [
-                                  "Bundle.entry[1].resource.payment"
-                              ]
-                          },
-                          {
-                              "severity": "error",
-                              "code": "business-rule",
-                              "details": {
-                                  "coding": [
-                                      {
-                                          "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                                          "code": "IC-00254",
-                                          "display": "PaymentNotice payee is not provided"
-                                      }
-                                  ]
-                              },
-                              "expression": [
-                                  "Bundle.entry[1].resource.payee"
-                              ]
-                          }
-                      ]
-                  }
-              }
-          ]
-      }
+  "resourceType": "Bundle",
+  "id": "4013556e-0ab4-4c35-ac20-ee6fcbd973a8",
+  "meta": {
+    "profile": [
+      "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
+    ]
   },
-  "message": "Payment Notice sent successfully to NPHIES"
+  "type": "message",
+  "timestamp": "2026-04-13T17:29:40.352+03:00",
+  "entry": [
+    {
+      "fullUrl": "http://nphies.sa/MessageHeader/30e83d31-864f-46e4-a3ad-077c45aca8f2",
+      "resource": {
+        "resourceType": "MessageHeader",
+        "id": "30e83d31-864f-46e4-a3ad-077c45aca8f2",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
+          ],
+          "tag": [
+            {
+              "system": "http://nphies.sa/terminology/CodeSystem/meta-tags",
+              "code": "queued-messages"
+            }
+          ]
+        },
+        "eventCoding": {
+          "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
+          "code": "acknowledgement"
+        },
+        "destination": [
+          {
+            "endpoint": "http://provider.com",
+            "receiver": {
+              "type": "Organization",
+              "identifier": {
+                "system": "http://nphies.sa/license/provider-license",
+                "value": "1010613708"
+              }
+            }
+          }
+        ],
+        "sender": {
+          "type": "Organization",
+          "identifier": {
+            "system": "http://nphies.sa/license/nphies",
+            "value": "NPHIES"
+          }
+        },
+        "source": {
+          "endpoint": "http://nphies.sa/"
+        },
+        "response": {
+          "identifier": "0b9007a5-17bb-4b06-9ff5-6cecd3048eca",
+          "code": "fatal-error",
+          "details": {
+            "reference": "http://nphies.sa/OperationOutcome/b9c86aea-1fb8-4b76-ae24-ab7ca21f1585"
+          }
+        }
+      }
+    },
+    {
+      "fullUrl": "http://nphies.sa/OperationOutcome/b9c86aea-1fb8-4b76-ae24-ab7ca21f1585",
+      "resource": {
+        "resourceType": "OperationOutcome",
+        "id": "b9c86aea-1fb8-4b76-ae24-ab7ca21f1585",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/operationoutcome|1.0.0"
+          ]
+        },
+        "issue": [
+          {
+            "severity": "error",
+            "code": "business-rule",
+            "details": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "code": "IC-01428",
+                  "display": "The element SHALL follow the cardinality specified in the NPHIES profile"
+                }
+              ]
+            },
+            "expression": [
+              "Bundle.entry[2].resource.extension"
+            ]
+          },
+          {
+            "severity": "error",
+            "code": "business-rule",
+            "details": {
+              "coding": [
+                {
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "code": "IC-01574",
+                  "display": "'Organization ProviderType' is not following the specified cardinality within the message profile"
+                }
+              ]
+            },
+            "expression": [
+              "Bundle.entry[2].resource.extension[0].providerType"
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

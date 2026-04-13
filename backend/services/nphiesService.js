@@ -945,6 +945,11 @@ class NphiesService {
     const providerOrgFullUrl = `${providerEndpoint}/Organization/${providerOrgId}`;
     const paymentNoticeFullUrl = `${providerEndpoint}/PaymentNotice/${paymentNoticeId}`;
     
+    const providerTypeMap = { 'hospital': '1', 'polyclinic': '2', 'pharmacy': '3', 'optical': '4', 'optical_shop': '4', 'clinic': '5', 'dental': '5', 'dental_clinic': '5', 'vision': '5', 'vision_clinic': '5', '1': '1', '2': '2', '3': '3', '4': '4', '5': '5' };
+    const providerTypeDisplays = { '1': 'Hospital', '2': 'Polyclinic', '3': 'Pharmacy', '4': 'Optical Shop', '5': 'Clinic' };
+    const providerTypeCode = providerTypeMap[(provider.provider_type || '1')?.toString().toLowerCase()] || '1';
+    const providerTypeDisplay = providerTypeDisplays[providerTypeCode] || 'Hospital';
+    
     return {
       resourceType: 'Bundle',
       id: bundleId,
@@ -1052,6 +1057,16 @@ class NphiesService {
             meta: {
               profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
             },
+            extension: [{
+              url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type',
+              valueCodeableConcept: {
+                coding: [{
+                  system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
+                  code: providerTypeCode,
+                  display: providerTypeDisplay
+                }]
+              }
+            }],
             identifier: [{
               system: 'http://nphies.sa/license/provider-license',
               value: providerId
