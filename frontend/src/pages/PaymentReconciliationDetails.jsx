@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,8 @@ import {
   FileJson,
   Send,
   Eye,
-  RefreshCw
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
 import api, { extractErrorMessage } from '@/services/api';
 
@@ -262,6 +263,11 @@ export default function PaymentReconciliationDetails() {
               <div>
                 <p className="font-semibold text-gray-900">
                   Status: <span className="capitalize">{reconciliation.status}</span>
+                  {reconciliation.outcome && (
+                    <span className="text-gray-500 font-normal ml-2">
+                      — Outcome: <span className="capitalize">{reconciliation.outcome}</span>
+                    </span>
+                  )}
                 </p>
                 <p className="text-sm text-gray-600">
                   {reconciliation.disposition || 'No disposition message'}
@@ -434,11 +440,19 @@ export default function PaymentReconciliationDetails() {
                             <p className="font-mono text-sm mt-1 text-gray-900">
                               {detail.claim_identifier_value || detail.claim_reference || '-'}
                             </p>
-                            {detail.linked_claim_number && (
+                            {detail.claim_submission_id ? (
+                              <Link
+                                to={`/claim-submissions/${detail.claim_submission_id}`}
+                                className="inline-flex items-center gap-1 mt-2 text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                              >
+                                View Claim: {detail.linked_claim_number || `#${detail.claim_submission_id}`}
+                                <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            ) : detail.linked_claim_number ? (
                               <Badge variant="outline" className="mt-2 text-xs">
                                 Linked to: {detail.linked_claim_number}
                               </Badge>
-                            )}
+                            ) : null}
                           </div>
 
                           {/* ClaimResponse Reference */}

@@ -52,10 +52,38 @@ export default function ClaimSubmissionsList() {
     status: searchParams.get('status') || '',
     claim_type: searchParams.get('claim_type') || ''
   });
+  const [searchVersion, setSearchVersion] = useState(0);
 
   useEffect(() => {
+    const loadClaims = async () => {
+      try {
+        setLoading(true);
+        const params = {
+          page: pagination.page,
+          limit: pagination.limit,
+          ...(filters.search && { search: filters.search }),
+          ...(filters.status && { status: filters.status }),
+          ...(filters.claim_type && { claim_type: filters.claim_type })
+        };
+        const response = await api.getClaimSubmissions(params);
+        const data = response?.data || [];
+        setClaims(Array.isArray(data) ? data : []);
+        if (response?.pagination) {
+          setPagination(prev => ({
+            ...prev,
+            total: response.pagination.total,
+            pages: response.pagination.pages
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading claim submissions:', error);
+        setClaims([]);
+      } finally {
+        setLoading(false);
+      }
+    };
     loadClaims();
-  }, [pagination.page, filters.status, filters.claim_type]);
+  }, [pagination.page, pagination.limit, filters.status, filters.claim_type, searchVersion]);
 
   const loadClaims = async () => {
     try {
@@ -87,8 +115,7 @@ export default function ClaimSubmissionsList() {
 
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
-    loadClaims();
-    // Update URL params
+    setSearchVersion(v => v + 1);
     const params = new URLSearchParams();
     if (filters.search) params.set('search', filters.search);
     if (filters.status) params.set('status', filters.status);
@@ -100,7 +127,7 @@ export default function ClaimSubmissionsList() {
     setFilters({ search: '', status: '', claim_type: '' });
     setSearchParams({});
     setPagination(prev => ({ ...prev, page: 1 }));
-    loadClaims();
+    setSearchVersion(v => v + 1);
   };
 
   const handleDelete = async (id) => {
@@ -205,6 +232,11 @@ export default function ClaimSubmissionsList() {
           <span className="font-mono text-sm">{row.claim_number || '-'}</span>
           {row.pre_auth_ref && (
             <div className="text-xs text-gray-500">PA: {row.pre_auth_ref}</div>
+          )}
+          {row.bundle_id && (
+            <div className="text-xs text-purple-500 font-mono truncate max-w-[180px]" title={row.bundle_id}>
+              Bundle: {row.bundle_id}
+            </div>
           )}
         </div>
       )
@@ -473,7 +505,7 @@ export default function ClaimSubmissionsList() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Search by claim #, patient, provider..."
+                  placeholder="Search by claim #, patient, provider, bundle ID..."
                   value={filters.search}
                   onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -485,7 +517,10 @@ export default function ClaimSubmissionsList() {
               <label className="text-sm font-medium mb-1 block">Status</label>
               <select
                 value={filters.status}
-                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                onChange={(e) => {
+                  setFilters(prev => ({ ...prev, status: e.target.value }));
+                  setPagination(prev => ({ ...prev, page: 1 }));
+                }}
                 className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
               >
                 <option value="">All Status</option>
@@ -503,7 +538,10 @@ export default function ClaimSubmissionsList() {
               <label className="text-sm font-medium mb-1 block">Type</label>
               <select
                 value={filters.claim_type}
-                onChange={(e) => setFilters(prev => ({ ...prev, claim_type: e.target.value }))}
+                onChange={(e) => {
+                  setFilters(prev => ({ ...prev, claim_type: e.target.value }));
+                  setPagination(prev => ({ ...prev, page: 1 }));
+                }}
                 className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
               >
                 <option value="">All Types</option>

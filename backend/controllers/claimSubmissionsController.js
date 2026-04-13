@@ -63,41 +63,69 @@ class ClaimSubmissionsController extends BaseController {
       const status = req.query.status || '';
       const claimType = req.query.claim_type || '';
 
-      let whereConditions = [];
-      let queryParams = [limit, offset];
+      // Build WHERE clause for count query (params start at $1)
+      let countWhereConditions = [];
       let countParams = [];
-      let paramIndex = 3;
+      let countParamIndex = 1;
 
       if (search) {
-        whereConditions.push(`(cs.claim_number ILIKE $${paramIndex} OR cs.pre_auth_ref ILIKE $${paramIndex} OR p.name ILIKE $${paramIndex} OR pr.provider_name ILIKE $${paramIndex})`);
-        queryParams.push(`%${search}%`);
+        countWhereConditions.push(`(cs.claim_number ILIKE $${countParamIndex} OR cs.pre_auth_ref ILIKE $${countParamIndex} OR p.name ILIKE $${countParamIndex} OR pr.provider_name ILIKE $${countParamIndex} OR cs.nphies_request_id ILIKE $${countParamIndex} OR cs.request_bundle->>'id' ILIKE $${countParamIndex})`);
         countParams.push(`%${search}%`);
-        paramIndex++;
+        countParamIndex++;
       }
 
       if (status) {
-        whereConditions.push(`cs.status = $${paramIndex}`);
-        queryParams.push(status);
+        countWhereConditions.push(`cs.status = $${countParamIndex}`);
         countParams.push(status);
-        paramIndex++;
+        countParamIndex++;
       }
 
       if (claimType) {
-        whereConditions.push(`cs.claim_type = $${paramIndex}`);
-        queryParams.push(claimType);
+        countWhereConditions.push(`cs.claim_type = $${countParamIndex}`);
         countParams.push(claimType);
-        paramIndex++;
+        countParamIndex++;
       }
 
-      const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+      const countWhereClause = countWhereConditions.length > 0 ? 'WHERE ' + countWhereConditions.join(' AND ') : '';
 
-      const countResult = await query(`SELECT COUNT(*) as total FROM claim_submissions cs LEFT JOIN patients p ON cs.patient_id = p.patient_id LEFT JOIN providers pr ON cs.provider_id = pr.provider_id ${whereClause}`, countParams);
+      const countResult = await query(`
+        SELECT COUNT(*) as total FROM claim_submissions cs
+        LEFT JOIN patients p ON cs.patient_id = p.patient_id
+        LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
+        ${countWhereClause}
+      `, countParams);
       const total = parseInt(countResult.rows[0].total);
+
+      // Build WHERE clause for data query (params start at $3 because $1=limit, $2=offset)
+      let dataWhereConditions = [];
+      let dataParams = [limit, offset];
+      let dataParamIndex = 3;
+
+      if (search) {
+        dataWhereConditions.push(`(cs.claim_number ILIKE $${dataParamIndex} OR cs.pre_auth_ref ILIKE $${dataParamIndex} OR p.name ILIKE $${dataParamIndex} OR pr.provider_name ILIKE $${dataParamIndex} OR cs.nphies_request_id ILIKE $${dataParamIndex} OR cs.request_bundle->>'id' ILIKE $${dataParamIndex})`);
+        dataParams.push(`%${search}%`);
+        dataParamIndex++;
+      }
+
+      if (status) {
+        dataWhereConditions.push(`cs.status = $${dataParamIndex}`);
+        dataParams.push(status);
+        dataParamIndex++;
+      }
+
+      if (claimType) {
+        dataWhereConditions.push(`cs.claim_type = $${dataParamIndex}`);
+        dataParams.push(claimType);
+        dataParamIndex++;
+      }
+
+      const dataWhereClause = dataWhereConditions.length > 0 ? 'WHERE ' + dataWhereConditions.join(' AND ') : '';
 
       const dataQuery = `
         SELECT cs.id, cs.claim_number, cs.claim_type, cs.sub_type, cs.patient_id, cs.provider_id, cs.insurer_id,
           cs.prior_auth_id, cs.pre_auth_ref, cs.status, cs.outcome, cs.adjudication_outcome, cs.disposition,
           cs.total_amount, cs.approved_amount, cs.currency, cs.service_date, cs.request_date, cs.response_date,
+          cs.nphies_request_id, cs.request_bundle->>'id' as bundle_id,
           cs.created_at, cs.updated_at,
           p.name as patient_name, p.identifier as patient_identifier,
           pr.provider_name, pr.nphies_id as provider_nphies_id,
@@ -107,10 +135,10 @@ class ClaimSubmissionsController extends BaseController {
         LEFT JOIN patients p ON cs.patient_id = p.patient_id
         LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
         LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
-        ${whereClause}
+        ${dataWhereClause}
         ORDER BY cs.created_at DESC LIMIT $1 OFFSET $2
       `;
-      const result = await query(dataQuery, queryParams);
+      const result = await query(dataQuery, dataParams);
 
       res.json({ data: result.rows, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
     } catch (error) {

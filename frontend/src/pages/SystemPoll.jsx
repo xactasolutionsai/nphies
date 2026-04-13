@@ -15,6 +15,7 @@ const tableToRoute = {
   claim_submissions: '/claim-submissions',
   advanced_authorizations: '/advanced-authorizations',
   claim_batches: '/claim-batches',
+  payment_reconciliations: '/payment-reconciliations',
 };
 
 const tableDisplayName = {
@@ -24,6 +25,7 @@ const tableDisplayName = {
   nphies_communications: 'Communication',
   nphies_communication_requests: 'Communication Request',
   claim_batches: 'Batch Claim',
+  payment_reconciliations: 'Payment Reconciliation',
 };
 
 const RecordLink = ({ table, recordId, children }) => {
