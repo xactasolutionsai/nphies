@@ -333,22 +333,18 @@ class PaymentReconciliationController {
       
       const result = await paymentReconciliationService.sendPaymentNotice(parseInt(id));
       
-      if (result.success) {
-        return res.json({
-          success: true,
-          data: {
-            reconciliationId: result.reconciliationId,
-            paymentNoticeBundle: result.paymentNoticeBundle,
-            nphiesResponse: result.nphiesResponse
-          },
-          message: result.message
-        });
-      } else {
-        return res.status(400).json({
-          success: false,
-          error: result.error || result.message
-        });
-      }
+      return res.json({
+        success: result.success,
+        data: {
+          reconciliationId: result.reconciliationId,
+          paymentNoticeBundle: result.paymentNoticeBundle,
+          nphiesResponse: result.nphiesResponse,
+          nphiesErrors: result.nphiesErrors || [],
+          nphiesResponseCode: result.nphiesResponseCode || null
+        },
+        message: result.message,
+        ...(result.error && { error: result.error })
+      });
       
     } catch (error) {
       console.error('[PaymentReconciliation] Error sending acknowledgement:', error);

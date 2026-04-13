@@ -830,7 +830,7 @@ class NphiesService {
    * Send Payment Notice (acknowledgement) to NPHIES
    * This is sent by the provider after receiving a PaymentReconciliation
    * @param {Object} paymentNoticeBundle - The PaymentNotice FHIR bundle
-   * @returns {Object} - Response from NPHIES
+   * @returns {Object} - Response from NPHIES with parsed error details
    */
   async sendPaymentNotice(paymentNoticeBundle) {
     console.log('[NPHIES] Sending Payment Notice...');
@@ -851,10 +851,66 @@ class NphiesService {
       
       console.log(`[NPHIES] Payment Notice response: ${response.status}`);
       
+      let httpSuccess = response.status >= 200 && response.status < 300;
+      let nphiesSuccess = httpSuccess;
+      let nphiesErrors = [];
+      let nphiesResponseCode = null;
+      
+      // Parse NPHIES response for FHIR-level errors (NPHIES can return HTTP 200 with fatal-error)
+      if (response.data?.resourceType === 'OperationOutcome') {
+        nphiesSuccess = false;
+        const issues = response.data.issue || [];
+        nphiesErrors = issues.map(i => ({
+          severity: i.severity,
+          code: i.details?.coding?.[0]?.code || i.code || 'UNKNOWN',
+          message: i.details?.coding?.[0]?.display || i.diagnostics || i.details?.text || 'Unknown error',
+          expression: i.expression?.join(', ') || null
+        }));
+        nphiesResponseCode = 'fatal-error';
+      } else if (response.data?.resourceType === 'Bundle' && response.data?.entry) {
+        const respMsgHeader = response.data.entry.find(
+          e => e.resource?.resourceType === 'MessageHeader'
+        )?.resource;
+        
+        if (respMsgHeader?.response?.code) {
+          nphiesResponseCode = respMsgHeader.response.code;
+          if (nphiesResponseCode === 'fatal-error' || nphiesResponseCode === 'transient-error') {
+            nphiesSuccess = false;
+            console.log(`[NPHIES] Payment Notice response code: ${nphiesResponseCode}`);
+          }
+        }
+        
+        const operationOutcome = response.data.entry.find(
+          e => e.resource?.resourceType === 'OperationOutcome'
+        )?.resource;
+        
+        if (operationOutcome?.issue) {
+          const ooErrors = operationOutcome.issue
+            .filter(issue => issue.severity === 'error' || issue.severity === 'fatal')
+            .map(issue => ({
+              severity: issue.severity,
+              code: issue.details?.coding?.[0]?.code || issue.code || 'unknown',
+              message: issue.details?.coding?.[0]?.display || issue.details?.text || issue.diagnostics || 'Unknown error',
+              expression: issue.expression?.join(', ') || null
+            }));
+          
+          if (ooErrors.length > 0) {
+            nphiesSuccess = false;
+            nphiesErrors = ooErrors;
+          }
+        }
+      }
+      
+      if (!nphiesSuccess) {
+        console.error('[NPHIES] Payment Notice NPHIES errors:', JSON.stringify(nphiesErrors, null, 2));
+      }
+      
       return {
-        success: response.status >= 200 && response.status < 300,
+        success: nphiesSuccess,
         status: response.status,
         data: response.data,
+        nphiesErrors,
+        nphiesResponseCode,
         requestBundle: paymentNoticeBundle
       };
       
@@ -863,6 +919,8 @@ class NphiesService {
       return {
         success: false,
         error: this.formatError(error),
+        nphiesErrors: [{ severity: 'fatal', code: 'NETWORK', message: this.formatError(error), expression: null }],
+        nphiesResponseCode: null,
         requestBundle: paymentNoticeBundle
       };
     }
@@ -870,15 +928,22 @@ class NphiesService {
   
   /**
    * Build a Payment Notice bundle to acknowledge receipt of PaymentReconciliation
+   * Follows NPHIES IG: https://portal.nphies.sa/ig/Bundle-06b80922-b538-4ab3-9176-a80b51249001.json.html
    * @param {Object} reconciliation - The payment reconciliation data
    * @param {string} providerId - The provider's NPHIES ID
-   * @returns {Object} - FHIR Bundle containing PaymentNotice
+   * @param {Object} provider - Full provider record from DB
+   * @returns {Object} - FHIR Bundle containing PaymentNotice + Organization
    */
-  buildPaymentNoticeBundle(reconciliation, providerId) {
+  buildPaymentNoticeBundle(reconciliation, providerId, provider = {}) {
     const bundleId = randomUUID();
     const messageHeaderId = randomUUID();
     const paymentNoticeId = randomUUID();
+    const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com';
     const today = new Date().toISOString().split('T')[0];
+    
+    const providerOrgId = provider.provider_id?.toString() || randomUUID();
+    const providerOrgFullUrl = `${providerEndpoint}/Organization/${providerOrgId}`;
+    const paymentNoticeFullUrl = `${providerEndpoint}/PaymentNotice/${paymentNoticeId}`;
     
     return {
       resourceType: 'Bundle',
@@ -889,7 +954,6 @@ class NphiesService {
       type: 'message',
       timestamp: new Date().toISOString(),
       entry: [
-        // MessageHeader
         {
           fullUrl: `urn:uuid:${messageHeaderId}`,
           resource: {
@@ -902,16 +966,13 @@ class NphiesService {
               system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
               code: 'payment-notice'
             },
-            source: {
-              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com'
-            },
             destination: [{
               endpoint: 'http://nphies.sa',
               receiver: {
                 type: 'Organization',
                 identifier: {
-                  system: 'http://nphies.sa/license/nphies-license',
-                  value: 'nphies'
+                  system: 'http://nphies.sa/license/nphies',
+                  value: 'NPHIES'
                 }
               }
             }],
@@ -922,14 +983,16 @@ class NphiesService {
                 value: providerId
               }
             },
+            source: {
+              endpoint: providerEndpoint
+            },
             focus: [{
-              reference: `PaymentNotice/${paymentNoticeId}`
+              reference: paymentNoticeFullUrl
             }]
           }
         },
-        // PaymentNotice
         {
-          fullUrl: `urn:uuid:${paymentNoticeId}`,
+          fullUrl: paymentNoticeFullUrl,
           resource: {
             resourceType: 'PaymentNotice',
             id: paymentNoticeId,
@@ -943,27 +1006,30 @@ class NphiesService {
             status: 'active',
             created: new Date().toISOString(),
             provider: {
-              type: 'Organization',
-              identifier: {
-                system: 'http://nphies.sa/license/provider-license',
-                value: providerId
-              }
+              reference: providerOrgFullUrl
             },
             payment: {
-              reference: `PaymentReconciliation/${reconciliation.fhir_id}`,
-              type: 'PaymentReconciliation',
               identifier: {
-                system: reconciliation.identifier_system,
-                value: reconciliation.identifier_value
+                system: reconciliation.identifier_system || `http://insurer.com/PaymentReconciliation`,
+                value: reconciliation.identifier_value || reconciliation.fhir_id
               }
             },
             paymentDate: reconciliation.payment_date ? 
               new Date(reconciliation.payment_date).toISOString().split('T')[0] : today,
+            payee: {
+              reference: providerOrgFullUrl
+            },
             recipient: {
               type: 'Organization',
               identifier: {
-                system: 'http://nphies.sa/license/payer-license',
-                value: reconciliation.insurer_nphies_id || 'INS-FHIR'
+                type: {
+                  coding: [{
+                    system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
+                    code: 'other'
+                  }]
+                },
+                system: 'http://nphies.sa/license/nphies',
+                value: 'NPHIES'
               }
             },
             amount: {
@@ -976,6 +1042,28 @@ class NphiesService {
                 code: 'paid'
               }]
             }
+          }
+        },
+        {
+          fullUrl: providerOrgFullUrl,
+          resource: {
+            resourceType: 'Organization',
+            id: providerOrgId,
+            meta: {
+              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
+            },
+            identifier: [{
+              system: 'http://nphies.sa/license/provider-license',
+              value: providerId
+            }],
+            active: true,
+            type: [{
+              coding: [{
+                system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
+                code: 'prov'
+              }]
+            }],
+            name: provider.provider_name || 'Provider Organization'
           }
         }
       ]

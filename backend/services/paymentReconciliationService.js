@@ -944,51 +944,61 @@ class PaymentReconciliationService {
       throw new Error(`Payment reconciliation not found: ${reconciliationId}`);
     }
     
-    // 2. Check if already acknowledged
-    if (reconciliation.acknowledgement_status === 'sent') {
-      return {
-        success: false,
-        error: 'Payment Notice has already been sent for this reconciliation',
-        reconciliationId
-      };
+    // 2. Get full provider record (needed for Organization entry in bundle)
+    let provider = null;
+    let providerId = reconciliation.provider_nphies_id;
+    
+    if (reconciliation.requestor_id) {
+      const providerResult = await query(
+        `SELECT * FROM providers WHERE provider_id = $1`,
+        [reconciliation.requestor_id]
+      );
+      provider = providerResult.rows[0] || null;
+      providerId = provider?.nphies_id || providerId;
     }
     
-    // 3. Get provider ID
-    let providerId = reconciliation.provider_nphies_id;
     if (!providerId) {
       const providerResult = await query(
-        `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
+        `SELECT * FROM providers ORDER BY provider_id LIMIT 1`
       );
-      providerId = providerResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
+      provider = providerResult.rows[0] || null;
+      providerId = provider?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     }
     
-    // 4. Build the Payment Notice bundle
-    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId);
+    // 3. Build the Payment Notice bundle (new identifiers each time to allow resend)
+    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId, provider || {});
     
-    // 5. Send to NPHIES
+    // 4. Send to NPHIES
     const result = await NphiesService.sendPaymentNotice(paymentNoticeBundle);
     
-    // 6. Update reconciliation with acknowledgement status
-    if (result.success) {
-      await query(
-        `UPDATE payment_reconciliations 
-         SET acknowledgement_status = 'sent',
-             acknowledgement_date = NOW(),
-             acknowledgement_bundle = $1
-         WHERE id = $2`,
-        [JSON.stringify(paymentNoticeBundle), reconciliationId]
-      );
-    }
+    // 5. Update reconciliation -- store both sent bundle and NPHIES response regardless of outcome
+    const ackStatus = result.success ? 'sent' : 'failed';
+    await query(
+      `UPDATE payment_reconciliations 
+       SET acknowledgement_status = $1,
+           acknowledgement_date = NOW(),
+           acknowledgement_bundle = $2,
+           acknowledgement_response = $3
+       WHERE id = $4`,
+      [
+        ackStatus,
+        JSON.stringify(paymentNoticeBundle),
+        result.data ? JSON.stringify(result.data) : null,
+        reconciliationId
+      ]
+    );
     
     return {
       success: result.success,
       reconciliationId,
       paymentNoticeBundle,
       nphiesResponse: result.data,
+      nphiesErrors: result.nphiesErrors || [],
+      nphiesResponseCode: result.nphiesResponseCode,
       error: result.error,
       message: result.success 
         ? 'Payment Notice sent successfully to NPHIES'
-        : `Failed to send Payment Notice: ${result.error}`
+        : `Failed to send Payment Notice: ${result.nphiesErrors?.map(e => `${e.code}: ${e.message}`).join('; ') || result.error || 'Unknown error'}`
     };
   }
   
@@ -1007,17 +1017,29 @@ class PaymentReconciliationService {
       throw new Error(`Payment reconciliation not found: ${reconciliationId}`);
     }
     
-    // 2. Get provider ID
+    // 2. Get full provider record
+    let provider = null;
     let providerId = reconciliation.provider_nphies_id;
+    
+    if (reconciliation.requestor_id) {
+      const providerResult = await query(
+        `SELECT * FROM providers WHERE provider_id = $1`,
+        [reconciliation.requestor_id]
+      );
+      provider = providerResult.rows[0] || null;
+      providerId = provider?.nphies_id || providerId;
+    }
+    
     if (!providerId) {
       const providerResult = await query(
-        `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
+        `SELECT * FROM providers ORDER BY provider_id LIMIT 1`
       );
-      providerId = providerResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
+      provider = providerResult.rows[0] || null;
+      providerId = provider?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     }
     
     // 3. Build the Payment Notice bundle
-    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId);
+    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId, provider || {});
     
     return {
       success: true,
