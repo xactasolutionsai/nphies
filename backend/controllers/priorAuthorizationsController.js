@@ -107,7 +107,8 @@ class PriorAuthorizationsController extends BaseController {
           pa.pre_auth_ref ILIKE $${idx} OR 
           p.name ILIKE $${idx} OR 
           pr.provider_name ILIKE $${idx} OR 
-          i.insurer_name ILIKE $${idx}
+          i.insurer_name ILIKE $${idx} OR
+          pa.request_bundle->>'id' ILIKE $${idx}
         )`);
       }
 
@@ -158,6 +159,7 @@ class PriorAuthorizationsController extends BaseController {
           pr.nphies_id as provider_nphies_id,
           i.insurer_name,
           i.nphies_id as insurer_nphies_id,
+          pa.request_bundle->>'id' as bundle_id,
           (SELECT COUNT(*) FROM prior_authorization_items WHERE prior_auth_id = pa.id) as item_count
         FROM prior_authorizations pa
         LEFT JOIN patients p ON pa.patient_id = p.patient_id

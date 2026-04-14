@@ -217,7 +217,14 @@ export default function PriorAuthorizations() {
       header: 'Request #',
       accessor: 'request_number',
       render: (row) => (
-        <span className="font-mono text-sm">{row.request_number || '-'}</span>
+        <div>
+          <span className="font-mono text-sm">{row.request_number || '-'}</span>
+          {row.bundle_id && (
+            <div className="text-xs text-purple-500 font-mono truncate max-w-[180px]" title={row.bundle_id}>
+              Bundle: {row.bundle_id}
+            </div>
+          )}
+        </div>
       )
     },
     {
@@ -489,7 +496,7 @@ export default function PriorAuthorizations() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Search by request #, patient, provider..."
+                  placeholder="Search by request #, patient, provider, bundle ID..."
                   value={filters.search}
                   onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}

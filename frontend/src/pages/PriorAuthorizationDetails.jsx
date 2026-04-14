@@ -3580,7 +3580,7 @@ export default function PriorAuthorizationDetails() {
           </Card>
 
           {/* NPHIES References */}
-          {(priorAuth.pre_auth_ref || priorAuth.nphies_request_id) && (
+          {(priorAuth.pre_auth_ref || priorAuth.nphies_request_id || priorAuth.request_bundle?.id) && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -3589,6 +3589,12 @@ export default function PriorAuthorizationDetails() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {priorAuth.request_bundle?.id && (
+                  <div>
+                    <p className="text-sm text-gray-500">Bundle ID</p>
+                    <p className="font-mono text-sm break-all text-purple-600">{priorAuth.request_bundle.id}</p>
+                  </div>
+                )}
                 {priorAuth.pre_auth_ref && (
                   <div>
                     <p className="text-sm text-gray-500">Pre-Auth Reference</p>

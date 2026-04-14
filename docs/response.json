@@ -1,19 +1,19 @@
 {
   "resourceType": "Bundle",
-  "id": "4013556e-0ab4-4c35-ac20-ee6fcbd973a8",
+  "id": "6026d534-9f88-40f7-91df-8ab8c9c5e478",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
     ]
   },
   "type": "message",
-  "timestamp": "2026-04-13T17:29:40.352+03:00",
+  "timestamp": "2026-04-13T17:43:51.801+03:00",
   "entry": [
     {
-      "fullUrl": "http://nphies.sa/MessageHeader/30e83d31-864f-46e4-a3ad-077c45aca8f2",
+      "fullUrl": "http://nphies.sa/MessageHeader/c2c44d95-53b8-4069-adfd-3a1240bd27e2",
       "resource": {
         "resourceType": "MessageHeader",
-        "id": "30e83d31-864f-46e4-a3ad-077c45aca8f2",
+        "id": "c2c44d95-53b8-4069-adfd-3a1240bd27e2",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -52,58 +52,9 @@
           "endpoint": "http://nphies.sa/"
         },
         "response": {
-          "identifier": "0b9007a5-17bb-4b06-9ff5-6cecd3048eca",
-          "code": "fatal-error",
-          "details": {
-            "reference": "http://nphies.sa/OperationOutcome/b9c86aea-1fb8-4b76-ae24-ab7ca21f1585"
-          }
+          "identifier": "c47ba9a8-fa1a-4501-9db3-700e85406a67",
+          "code": "ok"
         }
-      }
-    },
-    {
-      "fullUrl": "http://nphies.sa/OperationOutcome/b9c86aea-1fb8-4b76-ae24-ab7ca21f1585",
-      "resource": {
-        "resourceType": "OperationOutcome",
-        "id": "b9c86aea-1fb8-4b76-ae24-ab7ca21f1585",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/operationoutcome|1.0.0"
-          ]
-        },
-        "issue": [
-          {
-            "severity": "error",
-            "code": "business-rule",
-            "details": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                  "code": "IC-01428",
-                  "display": "The element SHALL follow the cardinality specified in the NPHIES profile"
-                }
-              ]
-            },
-            "expression": [
-              "Bundle.entry[2].resource.extension"
-            ]
-          },
-          {
-            "severity": "error",
-            "code": "business-rule",
-            "details": {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                  "code": "IC-01574",
-                  "display": "'Organization ProviderType' is not following the specified cardinality within the message profile"
-                }
-              ]
-            },
-            "expression": [
-              "Bundle.entry[2].resource.extension[0].providerType"
-            ]
-          }
-        ]
       }
     }
   ]

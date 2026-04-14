@@ -3845,7 +3845,7 @@ export default function ClaimDetails() {
           </Card>
 
           {/* NPHIES IDs */}
-          {(claim.nphies_request_id || claim.nphies_response_id || claim.nphies_claim_id) && (
+          {(claim.nphies_request_id || claim.nphies_response_id || claim.nphies_claim_id || claim.request_bundle?.id) && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -3854,6 +3854,12 @@ export default function ClaimDetails() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {claim.request_bundle?.id && (
+                  <div>
+                    <Label className="text-gray-500 text-xs">Bundle ID</Label>
+                    <p className="font-mono text-xs break-all text-purple-600">{claim.request_bundle.id}</p>
+                  </div>
+                )}
                 {claim.nphies_request_id && (
                   <div>
                     <Label className="text-gray-500 text-xs">Request ID</Label>
