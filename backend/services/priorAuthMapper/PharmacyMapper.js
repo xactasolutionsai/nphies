@@ -491,13 +491,15 @@ class PharmacyMapper extends BaseMapper {
     claim.supportingInfo = supportingInfoList;
 
     // Insurance (required)
-    claim.insurance = [
-      {
-        sequence: 1,
-        focal: true,
-        coverage: { reference: `Coverage/${coverageRef}` }
-      }
-    ];
+    const insuranceEntry = {
+      sequence: 1,
+      focal: true,
+      coverage: { reference: `Coverage/${coverageRef}` }
+    };
+    if (priorAuth.authorization_offline_reference) {
+      insuranceEntry.preAuthRef = [priorAuth.authorization_offline_reference];
+    }
+    claim.insurance = [insuranceEntry];
 
     // Items with medication codes (required - at least one)
     const encounterPeriod = {

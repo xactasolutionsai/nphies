@@ -414,13 +414,15 @@ class VisionMapper extends BaseMapper {
     }
 
     // Insurance
-    claim.insurance = [
-      {
-        sequence: 1,
-        focal: true,
-        coverage: { reference: `Coverage/${coverageRef}` }
-      }
-    ];
+    const insuranceEntry = {
+      sequence: 1,
+      focal: true,
+      coverage: { reference: `Coverage/${coverageRef}` }
+    };
+    if (priorAuth.authorization_offline_reference) {
+      insuranceEntry.preAuthRef = [priorAuth.authorization_offline_reference];
+    }
+    claim.insurance = [insuranceEntry];
 
     // Items - Vision items have NO bodySite (BV-00374)
     const servicedDate = priorAuth.request_date || new Date();

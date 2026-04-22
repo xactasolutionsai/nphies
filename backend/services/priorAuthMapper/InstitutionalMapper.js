@@ -441,13 +441,15 @@ class InstitutionalMapper extends BaseMapper {
     }
 
     // Insurance
-    claim.insurance = [
-      {
-        sequence: 1,
-        focal: true,
-        coverage: { reference: `Coverage/${coverageRef}` }
-      }
-    ];
+    const insuranceEntry = {
+      sequence: 1,
+      focal: true,
+      coverage: { reference: `Coverage/${coverageRef}` }
+    };
+    if (priorAuth.authorization_offline_reference) {
+      insuranceEntry.preAuthRef = [priorAuth.authorization_offline_reference];
+    }
+    claim.insurance = [insuranceEntry];
 
     // Items
     const encounterPeriod = {
