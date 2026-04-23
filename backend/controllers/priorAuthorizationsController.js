@@ -7,6 +7,9 @@ import communicationService from '../services/communicationService.js';
 import nphiesDataService from '../services/nphiesDataService.js';
 import CommunicationMapper from '../services/communicationMapper.js';
 import shadowBillingService from '../services/shadowBillingService.js';
+import { NPHIES_CONFIG } from '../config/nphies.js';
+
+const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
 class PriorAuthorizationsController extends BaseController {
   constructor() {
@@ -424,7 +427,7 @@ class PriorAuthorizationsController extends BaseController {
 
       // Insert items (with shadow billing auto-detection)
       if (items && Array.isArray(items) && items.length > 0) {
-        await shadowBillingService.processItems(items, value.auth_type);
+        await shadowBillingService.processItems(items, value.auth_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(priorAuthId, items);
       }
 
@@ -641,7 +644,7 @@ class PriorAuthorizationsController extends BaseController {
       // Re-insert items (with shadow billing auto-detection)
       if (items && Array.isArray(items) && items.length > 0) {
         const authType = value.auth_type || existing.auth_type;
-        await shadowBillingService.processItems(items, authType);
+        await shadowBillingService.processItems(items, authType, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(id, items);
       }
 
@@ -1100,7 +1103,7 @@ class PriorAuthorizationsController extends BaseController {
 
       // Insert nested data (with shadow billing auto-detection)
       if (updateData.items && updateData.items.length > 0) {
-        await shadowBillingService.processItems(updateData.items, existing.auth_type);
+        await shadowBillingService.processItems(updateData.items, existing.auth_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(newId, updateData.items);
       }
       if (updateData.supporting_info && updateData.supporting_info.length > 0) {
@@ -1285,7 +1288,7 @@ class PriorAuthorizationsController extends BaseController {
 
       // Copy nested data (with shadow billing auto-detection for items from older records)
       if (existing.items && existing.items.length > 0) {
-        await shadowBillingService.processItems(existing.items, existing.auth_type);
+        await shadowBillingService.processItems(existing.items, existing.auth_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(newId, existing.items);
       }
       if (existing.supporting_info && existing.supporting_info.length > 0) {
@@ -1897,7 +1900,7 @@ class PriorAuthorizationsController extends BaseController {
       // Process items for shadow billing auto-detection before building the preview bundle
       const previewItems = formData.items || [];
       if (previewItems.length > 0) {
-        await shadowBillingService.processItems(previewItems, formData.auth_type);
+        await shadowBillingService.processItems(previewItems, formData.auth_type, PROVIDER_SHADOW_DOMAIN);
       }
 
       // Create a mock priorAuth object from form data

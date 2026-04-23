@@ -210,6 +210,29 @@ class ShadowBillingService {
   }
 
   /**
+   * Normalize pharmacy items so they flow through the same product_or_service_code
+   * pipeline as the other auth types. Pharmacy medication items store the code in
+   * `medication_code` (and a display in `medication_name`). Without this copy, the
+   * early-return on `!item.product_or_service_code` below would skip them and no
+   * auto-detection would ever run for pharmacy.
+   */
+  _normalizePharmacyItem(item, claimType) {
+    if (claimType !== 'pharmacy') return;
+    if (item.product_or_service_code) return;
+    if (!item.medication_code) return;
+
+    item.product_or_service_code = item.medication_code;
+    if (!item.product_or_service_display && item.medication_name) {
+      item.product_or_service_display = item.medication_name;
+    }
+    if (!item.product_or_service_system) {
+      item.product_or_service_system = item.item_type === 'device'
+        ? 'http://nphies.sa/terminology/CodeSystem/medical-devices'
+        : 'http://nphies.sa/terminology/CodeSystem/medication-codes';
+    }
+  }
+
+  /**
    * Process a single item for shadow billing auto-detection.
    *
    * Skips auto-detection when:
@@ -219,10 +242,17 @@ class ShadowBillingService {
    * For 'manual' mode or unset mode (old records): checks whether product_or_service_code
    * exists in the NPHIES catalog. If not found → shadow billing triggered.
    *
+   * Pharmacy items are normalized first so their `medication_code` participates in
+   * the same validation pipeline used by every other auth type.
+   *
    * Recursively processes item.details[] as well.
    */
   async processItem(item, claimType, providerDomain) {
-    if (!item || !item.product_or_service_code) return item;
+    if (!item) return item;
+
+    this._normalizePharmacyItem(item, claimType);
+
+    if (!item.product_or_service_code) return item;
 
     const mode = item.code_entry_mode;
     if (mode === 'nphies' || mode === 'shadow_billing') {
@@ -266,6 +296,13 @@ class ShadowBillingService {
       item.product_or_service_code = unlisted.code;
       item.product_or_service_display = unlisted.display;
       item.product_or_service_system = system;
+
+      // Pharmacy: clear medication_code/name so PharmacyMapper does not fall back
+      // to the pre-shadow-billing value and accidentally send it as the primary code.
+      if (claimType === 'pharmacy') {
+        item.medication_code = null;
+        item.medication_name = null;
+      }
 
       console.log(
         `[ShadowBillingService] Shadow billing detected for code '${originalCode}' → ` +

@@ -695,6 +695,11 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     // Extract product/service code - different handling for devices vs medications
     let productCode, productDisplay, codeSystem;
     
+    // When shadowBillingService has rewritten the primary code (shadow_code is set),
+    // product_or_service_code holds the NPHIES unlisted code and must win over any
+    // lingering medication_code that pre-dated the shadow-billing rewrite.
+    const shadowBilled = !!(item.shadow_code && item.product_or_service_code);
+
     if (isDevice) {
       // Medical device items use medical-devices code system
       productCode = (item.product_or_service_code && item.product_or_service_code.trim()) || 
@@ -702,6 +707,13 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       productDisplay = (item.product_or_service_display && item.product_or_service_display.trim()) ||
                        (item.medication_name && item.medication_name.trim());
       codeSystem = 'http://nphies.sa/terminology/CodeSystem/medical-devices';
+    } else if (shadowBilled) {
+      // Shadow-billed medication: product_or_service_code is the unlisted NPHIES code,
+      // shadow_code is the provider internal code (emitted as secondary coding below).
+      productCode = item.product_or_service_code.trim();
+      productDisplay = (item.product_or_service_display && item.product_or_service_display.trim()) ||
+                       (item.medication_name && item.medication_name.trim()) || '';
+      codeSystem = 'http://nphies.sa/terminology/CodeSystem/medication-codes';
     } else {
       // Medication items use medication-codes system
       productCode = (item.medication_code && item.medication_code.trim()) || 

@@ -5,6 +5,9 @@ import claimMapper, { getClaimMapper } from '../services/claimMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
 import claimCommunicationService from '../services/claimCommunicationService.js';
 import shadowBillingService from '../services/shadowBillingService.js';
+import { NPHIES_CONFIG } from '../config/nphies.js';
+
+const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
 class ClaimSubmissionsController extends BaseController {
   constructor() {
@@ -238,7 +241,7 @@ class ClaimSubmissionsController extends BaseController {
       const claimId = result.rows[0].id;
 
       if (items?.length > 0) {
-        await shadowBillingService.processItems(items, cleanedData.claim_type);
+        await shadowBillingService.processItems(items, cleanedData.claim_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(claimId, items);
       }
       if (supporting_info?.length > 0) await this.insertSupportingInfo(claimId, supporting_info);
@@ -401,7 +404,7 @@ class ClaimSubmissionsController extends BaseController {
               : (item.product_or_service_system || null)
           };
         });
-        await shadowBillingService.processItems(items, pa.auth_type);
+        await shadowBillingService.processItems(items, pa.auth_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(claimId, items);
       }
 
@@ -478,7 +481,7 @@ class ClaimSubmissionsController extends BaseController {
 
       if (items?.length > 0) {
         const claimType = cleanedData.claim_type || existing.claim_type;
-        await shadowBillingService.processItems(items, claimType);
+        await shadowBillingService.processItems(items, claimType, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(id, items);
       }
       if (supporting_info?.length > 0) await this.insertSupportingInfo(id, supporting_info);
@@ -667,7 +670,7 @@ class ClaimSubmissionsController extends BaseController {
       // Process items for shadow billing auto-detection before building the preview bundle
       const previewItems = formData.items || [];
       if (previewItems.length > 0) {
-        await shadowBillingService.processItems(previewItems, formData.claim_type);
+        await shadowBillingService.processItems(previewItems, formData.claim_type, PROVIDER_SHADOW_DOMAIN);
       }
 
       const claim = {
