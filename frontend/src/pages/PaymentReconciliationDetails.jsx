@@ -42,6 +42,7 @@ export default function PaymentReconciliationDetails() {
   const [showSentBundleDialog, setShowSentBundleDialog] = useState(false);
   const [showNphiesResponseDialog, setShowNphiesResponseDialog] = useState(false);
   const [sendResult, setSendResult] = useState(null);
+  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('paid');
 
   useEffect(() => {
     loadReconciliation();
@@ -51,7 +52,13 @@ export default function PaymentReconciliationDetails() {
     try {
       setLoading(true);
       const response = await api.getPaymentReconciliation(id);
-      setReconciliation(response.data || null);
+      const rec = response.data || null;
+      setReconciliation(rec);
+      if (rec) {
+        const next = (rec.payment_status_sent === 'paid' && rec.acknowledgement_status === 'sent')
+          ? 'cleared' : 'paid';
+        setSelectedPaymentStatus(next);
+      }
     } catch (error) {
       console.error('Error loading reconciliation:', error);
     } finally {
@@ -60,13 +67,13 @@ export default function PaymentReconciliationDetails() {
   };
   
   const handleSendAcknowledgement = async () => {
-    if (!confirm('Send Payment Notice to NPHIES?\n\nThis will send a new Payment Notice with a unique identifier.')) {
+    if (!confirm(`Send Payment Notice to NPHIES as "${selectedPaymentStatus.toUpperCase()}"?\n\nThis will send a new Payment Notice with a unique identifier.`)) {
       return;
     }
     
     try {
       setSendingAck(true);
-      const response = await api.sendPaymentNoticeAcknowledgement(id);
+      const response = await api.sendPaymentNoticeAcknowledgement(id, selectedPaymentStatus);
       
       setSendResult(response);
       await loadReconciliation();
@@ -86,7 +93,7 @@ export default function PaymentReconciliationDetails() {
   
   const handlePreviewAcknowledgement = async () => {
     try {
-      const response = await api.previewPaymentNotice(id);
+      const response = await api.previewPaymentNotice(id, selectedPaymentStatus);
       if (response.success) {
         setPreviewBundle(response.data.bundle);
         setShowPreviewDialog(true);
@@ -221,6 +228,16 @@ export default function PaymentReconciliationDetails() {
             </Badge>
           )}
           
+          {/* Payment Status Selector */}
+          <select
+            value={selectedPaymentStatus}
+            onChange={(e) => setSelectedPaymentStatus(e.target.value)}
+            className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option value="paid">Paid</option>
+            <option value="cleared">Cleared</option>
+          </select>
+
           {/* Always show Preview & Send buttons */}
           <Button 
             onClick={handlePreviewAcknowledgement}
@@ -240,7 +257,7 @@ export default function PaymentReconciliationDetails() {
             ) : (
               <Send className="h-4 w-4 mr-2" />
             )}
-            {sendingAck ? 'Sending...' : 'Send Payment Notice'}
+            {sendingAck ? 'Sending...' : `Send as ${selectedPaymentStatus === 'cleared' ? 'Cleared' : 'Paid'}`}
           </Button>
           
           {/* View Sent Bundle & NPHIES Response */}
@@ -643,6 +660,18 @@ export default function PaymentReconciliationDetails() {
                 )}
               </div>
             </div>
+            <div className="mt-3">
+              <p className="text-sm text-gray-500">Last Sent Payment Status</p>
+              <div className="mt-1">
+                {reconciliation.payment_status_sent === 'cleared' ? (
+                  <Badge className="bg-green-100 text-green-800 border-green-300">Cleared</Badge>
+                ) : reconciliation.payment_status_sent === 'paid' ? (
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-300">Paid</Badge>
+                ) : (
+                  <span className="text-sm text-gray-400">Not sent yet</span>
+                )}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -735,14 +764,24 @@ export default function PaymentReconciliationDetails() {
               </div>
             </div>
             <div className="p-4 overflow-auto max-h-[calc(90vh-120px)]">
-              {sendResult.data?.nphiesResponseCode && (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-sm text-gray-500">NPHIES Response Code:</span>
-                  <Badge variant={sendResult.success ? 'default' : 'destructive'}>
-                    {sendResult.data.nphiesResponseCode}
-                  </Badge>
-                </div>
-              )}
+              <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                {sendResult.data?.nphiesResponseCode && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">NPHIES Response Code:</span>
+                    <Badge variant={sendResult.success ? 'default' : 'destructive'}>
+                      {sendResult.data.nphiesResponseCode}
+                    </Badge>
+                  </div>
+                )}
+                {sendResult.data?.paymentStatusSent && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">Payment Status:</span>
+                    <Badge className={sendResult.data.paymentStatusSent === 'cleared' ? 'bg-green-100 text-green-800 border-green-300' : 'bg-blue-100 text-blue-800 border-blue-300'}>
+                      {sendResult.data.paymentStatusSent === 'cleared' ? 'Cleared' : 'Paid'}
+                    </Badge>
+                  </div>
+                )}
+              </div>
               
               <p className="text-sm text-gray-700 mb-4">{sendResult.message}</p>
               

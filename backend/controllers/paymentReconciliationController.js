@@ -329,15 +329,20 @@ class PaymentReconciliationController {
         });
       }
       
-      console.log(`[PaymentReconciliation] Sending Payment Notice for reconciliation: ${id}`);
+      const { paymentStatus } = req.body || {};
+      const validStatuses = ['paid', 'cleared'];
+      const resolvedStatus = validStatuses.includes(paymentStatus) ? paymentStatus : undefined;
       
-      const result = await paymentReconciliationService.sendPaymentNotice(parseInt(id));
+      console.log(`[PaymentReconciliation] Sending Payment Notice for reconciliation: ${id}, paymentStatus: ${resolvedStatus || 'auto'}`);
+      
+      const result = await paymentReconciliationService.sendPaymentNotice(parseInt(id), resolvedStatus);
       
       return res.json({
         success: result.success,
         data: {
           reconciliationId: result.reconciliationId,
           paymentNoticeBundle: result.paymentNoticeBundle,
+          paymentStatusSent: result.paymentStatusSent,
           nphiesResponse: result.nphiesResponse,
           nphiesErrors: result.nphiesErrors || [],
           nphiesResponseCode: result.nphiesResponseCode || null
@@ -378,9 +383,13 @@ class PaymentReconciliationController {
         });
       }
       
-      console.log(`[PaymentReconciliation] Previewing Payment Notice for reconciliation: ${id}`);
+      const { paymentStatus } = req.query || {};
+      const validStatuses = ['paid', 'cleared'];
+      const resolvedStatus = validStatuses.includes(paymentStatus) ? paymentStatus : undefined;
       
-      const result = await paymentReconciliationService.previewPaymentNotice(parseInt(id));
+      console.log(`[PaymentReconciliation] Previewing Payment Notice for reconciliation: ${id}, paymentStatus: ${resolvedStatus || 'auto'}`);
+      
+      const result = await paymentReconciliationService.previewPaymentNotice(parseInt(id), resolvedStatus);
       
       return res.json({
         success: true,

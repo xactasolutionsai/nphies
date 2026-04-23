@@ -934,7 +934,9 @@ class NphiesService {
    * @param {Object} provider - Full provider record from DB
    * @returns {Object} - FHIR Bundle containing PaymentNotice + Organization
    */
-  buildPaymentNoticeBundle(reconciliation, providerId, provider = {}) {
+  buildPaymentNoticeBundle(reconciliation, providerId, provider = {}, paymentStatus = 'paid') {
+    const validStatuses = ['paid', 'cleared'];
+    if (!validStatuses.includes(paymentStatus)) paymentStatus = 'paid';
     const bundleId = randomUUID();
     const messageHeaderId = randomUUID();
     const paymentNoticeId = randomUUID();
@@ -1044,7 +1046,7 @@ class NphiesService {
             paymentStatus: {
               coding: [{
                 system: 'http://terminology.hl7.org/CodeSystem/paymentstatus',
-                code: 'paid'
+                code: paymentStatus
               }]
             }
           }

@@ -932,9 +932,10 @@ class PaymentReconciliationService {
   /**
    * Send Payment Notice acknowledgement to NPHIES for a PaymentReconciliation
    * @param {number|string} reconciliationId - The payment reconciliation ID
+   * @param {string} [paymentStatus] - 'paid' or 'cleared'. Auto-progresses if omitted.
    * @returns {Object} - Result with acknowledgement status
    */
-  async sendPaymentNotice(reconciliationId) {
+  async sendPaymentNotice(reconciliationId, paymentStatus) {
     console.log('[PaymentReconciliation] Sending Payment Notice for reconciliation:', reconciliationId);
     
     // 1. Get the reconciliation details
@@ -943,6 +944,15 @@ class PaymentReconciliationService {
     if (!reconciliation) {
       throw new Error(`Payment reconciliation not found: ${reconciliationId}`);
     }
+    
+    // Auto-progress: if caller didn't specify, derive from last successful send
+    if (!paymentStatus) {
+      paymentStatus = (reconciliation.payment_status_sent === 'paid' && reconciliation.acknowledgement_status === 'sent')
+        ? 'cleared'
+        : 'paid';
+    }
+    const validStatuses = ['paid', 'cleared'];
+    if (!validStatuses.includes(paymentStatus)) paymentStatus = 'paid';
     
     // 2. Get full provider record (needed for Organization entry in bundle)
     let provider = null;
@@ -966,32 +976,37 @@ class PaymentReconciliationService {
     }
     
     // 3. Build the Payment Notice bundle (new identifiers each time to allow resend)
-    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId, provider || {});
+    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId, provider || {}, paymentStatus);
     
     // 4. Send to NPHIES
     const result = await NphiesService.sendPaymentNotice(paymentNoticeBundle);
     
     // 5. Update reconciliation -- store both sent bundle and NPHIES response regardless of outcome
     const ackStatus = result.success ? 'sent' : 'failed';
-    await query(
-      `UPDATE payment_reconciliations 
-       SET acknowledgement_status = $1,
-           acknowledgement_date = NOW(),
-           acknowledgement_bundle = $2,
-           acknowledgement_response = $3
-       WHERE id = $4`,
-      [
-        ackStatus,
-        JSON.stringify(paymentNoticeBundle),
-        result.data ? JSON.stringify(result.data) : null,
-        reconciliationId
-      ]
-    );
+    const updateParams = result.success
+      ? [ackStatus, JSON.stringify(paymentNoticeBundle), result.data ? JSON.stringify(result.data) : null, paymentStatus, reconciliationId]
+      : [ackStatus, JSON.stringify(paymentNoticeBundle), result.data ? JSON.stringify(result.data) : null, reconciliationId];
+    const updateSql = result.success
+      ? `UPDATE payment_reconciliations 
+         SET acknowledgement_status = $1,
+             acknowledgement_date = NOW(),
+             acknowledgement_bundle = $2,
+             acknowledgement_response = $3,
+             payment_status_sent = $4
+         WHERE id = $5`
+      : `UPDATE payment_reconciliations 
+         SET acknowledgement_status = $1,
+             acknowledgement_date = NOW(),
+             acknowledgement_bundle = $2,
+             acknowledgement_response = $3
+         WHERE id = $4`;
+    await query(updateSql, updateParams);
     
     return {
       success: result.success,
       reconciliationId,
       paymentNoticeBundle,
+      paymentStatusSent: paymentStatus,
       nphiesResponse: result.data,
       nphiesErrors: result.nphiesErrors || [],
       nphiesResponseCode: result.nphiesResponseCode,
@@ -1005,9 +1020,10 @@ class PaymentReconciliationService {
   /**
    * Preview the Payment Notice bundle that would be sent (without sending)
    * @param {number|string} reconciliationId - The payment reconciliation ID
+   * @param {string} [paymentStatus] - 'paid' or 'cleared'. Auto-progresses if omitted.
    * @returns {Object} - The generated bundle
    */
-  async previewPaymentNotice(reconciliationId) {
+  async previewPaymentNotice(reconciliationId, paymentStatus) {
     console.log('[PaymentReconciliation] Previewing Payment Notice for reconciliation:', reconciliationId);
     
     // 1. Get the reconciliation details
@@ -1016,6 +1032,15 @@ class PaymentReconciliationService {
     if (!reconciliation) {
       throw new Error(`Payment reconciliation not found: ${reconciliationId}`);
     }
+    
+    // Auto-progress: if caller didn't specify, derive from last successful send
+    if (!paymentStatus) {
+      paymentStatus = (reconciliation.payment_status_sent === 'paid' && reconciliation.acknowledgement_status === 'sent')
+        ? 'cleared'
+        : 'paid';
+    }
+    const validStatuses = ['paid', 'cleared'];
+    if (!validStatuses.includes(paymentStatus)) paymentStatus = 'paid';
     
     // 2. Get full provider record
     let provider = null;
@@ -1039,12 +1064,13 @@ class PaymentReconciliationService {
     }
     
     // 3. Build the Payment Notice bundle
-    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId, provider || {});
+    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId, provider || {}, paymentStatus);
     
     return {
       success: true,
       reconciliationId,
       bundle: paymentNoticeBundle,
+      paymentStatusSent: paymentStatus,
       alreadySent: reconciliation.acknowledgement_status === 'sent'
     };
   }
