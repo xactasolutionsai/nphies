@@ -1,27 +1,35 @@
 {
-    "resourceType": "Bundle",
-    "id": "7534d060-6637-4e46-872b-99ab7d1ba681",
+    "id": "7bfa2a9d-f7c7-4326-8dbf-445bb32ef614",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
       ]
     },
     "type": "message",
-    "timestamp": "2026-04-22T23:19:20.464Z",
     "entry": [
       {
-        "fullUrl": "urn:uuid:26f946c8-3786-4ac4-91e1-8868dcd5463e",
+        "fullUrl": "urn:uuid:98a7921c-4c47-4bfe-8bfd-6817dc95245f",
         "resource": {
-          "resourceType": "MessageHeader",
-          "id": "26f946c8-3786-4ac4-91e1-8868dcd5463e",
+          "id": "98a7921c-4c47-4bfe-8bfd-6817dc95245f",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
             ]
           },
-          "eventCoding": {
-            "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events",
-            "code": "claim-request"
+          "focus": [
+            {
+              "reference": "http://provider.com/Claim/b50eed2d-b194-48ad-96d1-c312ff7d434a"
+            }
+          ],
+          "sender": {
+            "type": "Organization",
+            "identifier": {
+              "value": "1010613708",
+              "system": "http://nphies.sa/license/provider-license"
+            }
+          },
+          "source": {
+            "endpoint": "http://provider.com"
           },
           "destination": [
             {
@@ -29,350 +37,42 @@
               "receiver": {
                 "type": "Organization",
                 "identifier": {
-                  "system": "http://nphies.sa/license/payer-license",
-                  "value": "INS-FHIR"
+                  "value": "INS-FHIR",
+                  "system": "http://nphies.sa/license/payer-license"
                 }
               }
             }
           ],
-          "sender": {
-            "type": "Organization",
-            "identifier": {
-              "system": "http://nphies.sa/license/provider-license",
-              "value": "1010613708"
-            }
+          "eventCoding": {
+            "code": "claim-request",
+            "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events"
           },
-          "source": {
-            "endpoint": "http://provider.com"
-          },
-          "focus": [
-            {
-              "reference": "http://provider.com/Claim/a24b43fa-715f-4838-9d33-8e03804f4bea"
-            }
-          ]
+          "resourceType": "MessageHeader"
         }
       },
       {
-        "fullUrl": "http://provider.com/Claim/a24b43fa-715f-4838-9d33-8e03804f4bea",
+        "fullUrl": "http://provider.com/Claim/b50eed2d-b194-48ad-96d1-c312ff7d434a",
         "resource": {
-          "resourceType": "Claim",
-          "id": "a24b43fa-715f-4838-9d33-8e03804f4bea",
-          "meta": {
-            "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-claim|1.0.0"
-            ]
-          },
-          "extension": [
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod",
-              "valueDate": "2026-03-01"
-            },
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
-              "valueReference": {
-                "reference": "Encounter/a32006f6-0484-4847-8d2b-ca0a8f66d46e"
-              }
-            },
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response",
-              "valueReference": {
-                "identifier": {
-                  "system": "http://pseudo-payer.com.sa/coverageeligibilityresponse",
-                  "value": "7be5ebbc-88f0-46bc-b11e-f6aa5ffa427e"
-                }
-              }
-            },
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
-              "valueIdentifier": {
-                "system": "http://saudigeneralhospital.com.sa/identifiers/episode",
-                "value": "1010613708_EpisodeID_PREVIEW-1776899960460"
-              }
-            },
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-authorization-offline-date",
-              "valueDateTime": "2026-01-06T13:30:00+03:00"
-            }
-          ],
-          "identifier": [
-            {
-              "system": "http://saudigeneralhospital.com.sa/identifiers/claim",
-              "value": "PREVIEW-1776899960460"
-            }
-          ],
-          "status": "active",
-          "type": {
-            "coding": [
-              {
-                "system": "http://terminology.hl7.org/CodeSystem/claim-type",
-                "code": "oral"
-              }
-            ]
-          },
-          "subType": {
-            "coding": [
-              {
-                "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype",
-                "code": "op"
-              }
-            ]
-          },
+          "id": "b50eed2d-b194-48ad-96d1-c312ff7d434a",
           "use": "claim",
-          "patient": {
-            "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-          },
-          "created": "2026-04-23T02:19:20+03:00",
-          "insurer": {
-            "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
-          },
-          "provider": {
-            "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
-          },
-          "priority": {
-            "coding": [
-              {
-                "system": "http://terminology.hl7.org/CodeSystem/processpriority",
-                "code": "normal"
-              }
-            ]
-          },
-          "payee": {
-            "type": {
-              "coding": [
-                {
-                  "system": "http://terminology.hl7.org/CodeSystem/payeetype",
-                  "code": "provider"
-                }
-              ]
-            }
-          },
-          "careTeam": [
-            {
-              "sequence": 1,
-              "provider": {
-                "reference": "Practitioner/c106c976-1f9a-4897-8837-cdb00d66f4fd"
-              },
-              "role": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/claimcareteamrole",
-                    "code": "primary"
-                  }
-                ]
-              },
-              "qualification": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
-                    "code": "08.00"
-                  }
-                ]
-              }
-            }
-          ],
-          "supportingInfo": [
-            {
-              "sequence": 1,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "vital-sign-systolic"
-                  }
-                ]
-              },
-              "timingPeriod": {
-                "start": "2026-01-24T00:00:00.000Z",
-                "end": "2026-01-24T00:00:00.000Z"
-              },
-              "valueQuantity": {
-                "value": 115,
-                "system": "http://unitsofmeasure.org",
-                "code": "mm[Hg]"
-              }
-            },
-            {
-              "sequence": 2,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "vital-sign-diastolic"
-                  }
-                ]
-              },
-              "timingPeriod": {
-                "start": "2026-01-24T00:00:00.000Z",
-                "end": "2026-01-24T00:00:00.000Z"
-              },
-              "valueQuantity": {
-                "value": 81,
-                "system": "http://unitsofmeasure.org",
-                "code": "mm[Hg]"
-              }
-            },
-            {
-              "sequence": 3,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "pulse"
-                  }
-                ]
-              },
-              "timingPeriod": {
-                "start": "2026-01-24T00:00:00.000Z",
-                "end": "2026-01-24T00:00:00.000Z"
-              },
-              "valueQuantity": {
-                "value": 98,
-                "system": "http://unitsofmeasure.org",
-                "code": "/min"
-              }
-            },
-            {
-              "sequence": 4,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "oxygen-saturation"
-                  }
-                ]
-              },
-              "timingPeriod": {
-                "start": "2026-01-24T00:00:00.000Z",
-                "end": "2026-01-24T00:00:00.000Z"
-              },
-              "valueQuantity": {
-                "value": 0.2,
-                "system": "http://unitsofmeasure.org",
-                "code": "%"
-              }
-            },
-            {
-              "sequence": 5,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "chief-complaint"
-                  }
-                ]
-              },
-              "code": {
-                "text": "Periodic oral examination"
-              }
-            },
-            {
-              "sequence": 6,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "patient-history"
-                  }
-                ]
-              },
-              "valueString": "Patient reports good oral hygiene habits. Last dental visit 6 months ago. No known allergies."
-            },
-            {
-              "sequence": 7,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "history-of-present-illness"
-                  }
-                ]
-              },
-              "valueString": "Wisdom tooth pain in lower left for 1 week. Difficulty opening mouth fully. Mild swelling."
-            },
-            {
-              "sequence": 8,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "physical-examination"
-                  }
-                ]
-              },
-              "valueString": "Gingival erythema and edema. Probing depths 4-5mm in posterior. Bleeding on probing."
-            },
-            {
-              "sequence": 9,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "treatment-plan"
-                  }
-                ]
-              },
-              "valueString": "Deep cleaning with local anesthesia. Periodontal maintenance program. Recall in 3 months."
-            },
-            {
-              "sequence": 10,
-              "category": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
-                    "code": "investigation-result"
-                  }
-                ]
-              },
-              "code": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
-                    "code": "INP",
-                    "display": "INP - Investigation(s) not performed"
-                  }
-                ]
-              }
-            }
-          ],
-          "diagnosis": [
-            {
-              "sequence": 1,
-              "diagnosisCodeableConcept": {
-                "coding": [
-                  {
-                    "system": "http://hl7.org/fhir/sid/icd-10-am",
-                    "code": "K01.1",
-                    "display": "Impacted teeth"
-                  }
-                ]
-              },
-              "type": [
-                {
-                  "coding": [
-                    {
-                      "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type",
-                      "code": "principal"
-                    }
-                  ]
-                }
-              ]
-            }
-          ],
-          "insurance": [
-            {
-              "sequence": 1,
-              "focal": true,
-              "coverage": {
-                "reference": "Coverage/3932173f-477c-4ee8-a41b-f55786d2efb5"
-              },
-              "preAuthRef": [
-                "offline_auth_123"
-              ]
-            }
-          ],
           "item": [
             {
+              "net": {
+                "value": 200,
+                "currency": "SAR"
+              },
+              "quantity": {
+                "value": 1
+              },
+              "sequence": 1,
               "extension": [
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
+                  "valueMoney": {
+                    "value": 0,
+                    "currency": "SAR"
+                  }
+                },
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
                   "valueBoolean": false
@@ -385,7 +85,83 @@
                   }
                 },
                 {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice",
+                  "valueIdentifier": {
+                    "value": "Invc-20260423-1",
+                    "system": "http://saudigeneralhospital.com.sa/identifiers/patientInvoice"
+                  }
+                },
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "code": "28-1014-1998",
+                        "system": "http://nphies.sa/terminology/CodeSystem/medication-codes"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "code": "patient-request",
+                        "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
+                  "valueBoolean": false
+                }
+              ],
+              "unitPrice": {
+                "value": 200,
+                "currency": "SAR"
+              },
+              "servicedDate": "2026-04-23",
+              "productOrService": {
+                "coding": [
+                  {
+                    "code": "32-1014-1998",
+                    "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
+                    "display": "( GINSENG GOLD ) KOREAN WHITE GINSENG ROOT"
+                  }
+                ]
+              },
+              "diagnosisSequence": [
+                1
+              ],
+              "informationSequence": [
+                6
+              ]
+            },
+            {
+              "net": {
+                "value": 250,
+                "currency": "SAR"
+              },
+              "quantity": {
+                "value": 1
+              },
+              "sequence": 2,
+              "extension": [
+                {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
+                  "valueMoney": {
+                    "value": 0,
+                    "currency": "SAR"
+                  }
+                },
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
+                  "valueBoolean": false
+                },
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax",
                   "valueMoney": {
                     "value": 0,
                     "currency": "SAR"
@@ -394,264 +170,415 @@
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patientInvoice",
                   "valueIdentifier": {
-                    "system": "http://saudigeneralhospital.com.sa/identifiers/patientInvoice",
-                    "value": "Invc-20260423/9999"
+                    "value": "Invc-20260423-2",
+                    "system": "http://saudigeneralhospital.com.sa/identifiers/patientInvoice"
                   }
+                },
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "code": "32-1014-1998",
+                        "system": "http://nphies.sa/terminology/CodeSystem/medication-codes"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "code": "patient-request",
+                        "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
+                  "valueBoolean": false
                 }
               ],
-              "sequence": 1,
-              "careTeamSequence": [
-                1
-              ],
-              "diagnosisSequence": [
-                1
-              ],
+              "unitPrice": {
+                "value": 250,
+                "currency": "SAR"
+              },
+              "servicedDate": "2026-04-23",
               "productOrService": {
                 "coding": [
                   {
-                    "system": "http://nphies.sa/terminology/CodeSystem/oral-health-op",
-                    "code": "9999",
-                    "display": "Unlisted Out-Patient Dental Code"
-                  },
-                  {
-                    "system": "http://provider.com.sa/product-or-service",
-                    "code": "97043-00-00",
-                    "display": "Dental antibiotic sensitivity test"
+                    "code": "99999999999999",
+                    "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
+                    "display": "Unlisted other medications"
                   }
                 ]
               },
-              "servicedDate": "2026-03-31",
-              "quantity": {
-                "value": 1
-              },
-              "unitPrice": {
-                "value": 300,
-                "currency": "SAR"
-              },
-              "net": {
-                "value": 300,
-                "currency": "SAR"
-              },
-              "bodySite": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/fdi-oral-region",
-                    "code": "13",
-                    "display": "UPPER RIGHT; PERMANENT TEETH # 3"
-                  }
-                ]
-              }
+              "diagnosisSequence": [
+                1
+              ],
+              "informationSequence": [
+                7
+              ]
             }
           ],
-          "total": {
-            "value": 300,
-            "currency": "SAR"
-          }
-        }
-      },
-      {
-        "fullUrl": "http://provider.com/Encounter/a32006f6-0484-4847-8d2b-ca0a8f66d46e",
-        "resource": {
-          "resourceType": "Encounter",
-          "id": "a32006f6-0484-4847-8d2b-ca0a8f66d46e",
           "meta": {
             "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
+              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-claim|1.0.0"
             ]
           },
-          "extension": [
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-serviceEventType",
-              "valueCodeableConcept": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/service-event-type",
-                    "code": "ICSE",
-                    "display": "Initial client service event"
-                  }
-                ]
-              }
-            }
-          ],
-          "identifier": [
-            {
-              "system": "http://saudigeneralhospital.com.sa/identifiers/encounter",
-              "value": "AB1518"
-            }
-          ],
-          "status": "finished",
-          "class": {
-            "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-            "code": "AMB",
-            "display": "ambulatory"
-          },
-          "serviceType": {
+          "type": {
             "coding": [
               {
-                "system": "http://nphies.sa/terminology/CodeSystem/service-type",
-                "code": "dental-care",
-                "display": "Dental Care"
+                "code": "pharmacy",
+                "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+              }
+            ]
+          },
+          "payee": {
+            "type": {
+              "coding": [
+                {
+                  "code": "provider",
+                  "system": "http://terminology.hl7.org/CodeSystem/payeetype"
+                }
+              ]
+            }
+          },
+          "total": {
+            "value": 450,
+            "currency": "SAR"
+          },
+          "status": "active",
+          "created": "2026-04-23T03:37:40+03:00",
+          "insurer": {
+            "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+          },
+          "patient": {
+            "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
+          },
+          "subType": {
+            "coding": [
+              {
+                "code": "op",
+                "system": "http://nphies.sa/terminology/CodeSystem/claim-subtype"
               }
             ]
           },
           "priority": {
             "coding": [
               {
-                "system": "http://terminology.hl7.org/CodeSystem/v3-ActPriority",
-                "code": "EL",
-                "display": "elective"
+                "code": "normal",
+                "system": "http://terminology.hl7.org/CodeSystem/processpriority"
               }
             ]
           },
-          "subject": {
-            "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-          },
-          "period": {
-            "start": "2026-03-29T00:00:00+03:00"
-          },
-          "serviceProvider": {
+          "provider": {
             "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
-          }
-        }
-      },
-      {
-        "fullUrl": "http://provider.com/Coverage/3932173f-477c-4ee8-a41b-f55786d2efb5",
-        "resource": {
-          "resourceType": "Coverage",
-          "id": "3932173f-477c-4ee8-a41b-f55786d2efb5",
-          "meta": {
-            "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
-            ]
           },
-          "identifier": [
+          "diagnosis": [
             {
-              "system": "http://payer.com/memberid",
-              "value": "74140958"
-            }
-          ],
-          "status": "active",
-          "type": {
-            "coding": [
-              {
-                "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
-                "code": "EHCPOL",
-                "display": "Extended healthcare"
-              }
-            ]
-          },
-          "policyHolder": {
-            "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-          },
-          "subscriber": {
-            "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-          },
-          "beneficiary": {
-            "reference": "Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83"
-          },
-          "relationship": {
-            "coding": [
-              {
-                "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
-                "code": "self",
-                "display": "Self"
-              }
-            ]
-          },
-          "payor": [
-            {
-              "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
-            }
-          ],
-          "class": [
-            {
-              "type": {
+              "type": [
+                {
+                  "coding": [
+                    {
+                      "code": "principal",
+                      "system": "http://nphies.sa/terminology/CodeSystem/diagnosis-type"
+                    }
+                  ]
+                }
+              ],
+              "sequence": 1,
+              "diagnosisCodeableConcept": {
                 "coding": [
                   {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
+                    "code": "R51",
+                    "system": "http://hl7.org/fhir/sid/icd-10-am",
+                    "display": "Headache"
                   }
                 ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
+              }
             }
           ],
-          "period": {
-            "start": "2021-03-16",
-            "end": "2028-03-16"
-          }
-        }
-      },
-      {
-        "fullUrl": "http://provider.com/Practitioner/c106c976-1f9a-4897-8837-cdb00d66f4fd",
-        "resource": {
-          "resourceType": "Practitioner",
-          "id": "c106c976-1f9a-4897-8837-cdb00d66f4fd",
-          "meta": {
-            "profile": [
-              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
-            ]
-          },
+          "extension": [
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
+              "valueIdentifier": {
+                "value": "batch-CLM-1776904660980",
+                "system": "http://saudigeneralhospital.com.sa/identifiers/batch"
+              }
+            },
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-number",
+              "valuePositiveInt": 1
+            },
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period",
+              "valuePeriod": {
+                "end": "2026-04-23",
+                "start": "2026-04-23"
+              }
+            },
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-priorauthresponse",
+              "valueReference": {
+                "identifier": {
+                  "value": "1720d73c-9c1e-4e17-b9a9-b0803ee1c307",
+                  "system": "http://sni.com.sa/identifiers/claimresponse"
+                }
+              }
+            },
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-episode",
+              "valueIdentifier": {
+                "value": "EpisodeID-CLM-1776904660980",
+                "system": "http://saudigeneralhospital.com.sa/identifiers/episode"
+              }
+            },
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod",
+              "valueDate": "2026-04-01"
+            },
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-eligibility-response",
+              "valueReference": {
+                "identifier": {
+                  "value": "9f87b877-b8b3-419b-a282-17ae64da5757",
+                  "system": "http://pseudo-payer.com.sa/coverageeligibilityresponse"
+                }
+              }
+            }
+          ],
+          "insurance": [
+            {
+              "focal": true,
+              "coverage": {
+                "reference": "Coverage/4b5eff00-c9b2-4efd-8bfd-5d5cf1a71aa8"
+              },
+              "sequence": 1
+            }
+          ],
           "identifier": [
             {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                    "code": "MD",
-                    "display": "Medical License Number"
-                  }
-                ]
-              },
-              "system": "http://nphies.sa/license/practitioner-license",
-              "value": "PRACT-c106c976"
+              "value": "CLM-1776904660980",
+              "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
             }
           ],
-          "active": true,
-          "name": [
-            {
-              "use": "official",
-              "text": "Default Practitioner",
-              "family": "Practitioner",
-              "given": [
-                "Default"
-              ]
-            }
-          ],
-          "qualification": [
+          "resourceType": "Claim",
+          "supportingInfo": [
             {
               "code": {
                 "coding": [
                   {
-                    "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
-                    "code": "08.00",
-                    "display": "Healthcare Professional"
+                    "code": "INP",
+                    "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
+                    "display": "INP - Investigation(s) not performed"
                   }
                 ]
+              },
+              "category": {
+                "coding": [
+                  {
+                    "code": "investigation-result",
+                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
+                  }
+                ]
+              },
+              "sequence": 1
+            },
+            {
+              "category": {
+                "coding": [
+                  {
+                    "code": "treatment-plan",
+                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
+                  }
+                ]
+              },
+              "sequence": 2,
+              "valueString": "No Plan"
+            },
+            {
+              "category": {
+                "coding": [
+                  {
+                    "code": "patient-history",
+                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
+                  }
+                ]
+              },
+              "sequence": 3,
+              "valueString": "No History"
+            },
+            {
+              "category": {
+                "coding": [
+                  {
+                    "code": "physical-examination",
+                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
+                  }
+                ]
+              },
+              "sequence": 4,
+              "valueString": "Stable"
+            },
+            {
+              "category": {
+                "coding": [
+                  {
+                    "code": "history-of-present-illness",
+                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
+                  }
+                ]
+              },
+              "sequence": 5,
+              "valueString": "No History"
+            },
+            {
+              "category": {
+                "coding": [
+                  {
+                    "code": "days-supply",
+                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
+                  }
+                ]
+              },
+              "sequence": 6,
+              "valueQuantity": {
+                "code": "d",
+                "value": 30,
+                "system": "http://unitsofmeasure.org"
+              }
+            },
+            {
+              "category": {
+                "coding": [
+                  {
+                    "code": "days-supply",
+                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category"
+                  }
+                ]
+              },
+              "sequence": 7,
+              "valueQuantity": {
+                "code": "d",
+                "value": 30,
+                "system": "http://unitsofmeasure.org"
               }
             }
           ]
         }
       },
       {
+        "fullUrl": "http://provider.com/Coverage/4b5eff00-c9b2-4efd-8bfd-5d5cf1a71aa8",
+        "resource": {
+          "id": "4b5eff00-c9b2-4efd-8bfd-5d5cf1a71aa8",
+          "meta": {
+            "profile": [
+              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
+            ]
+          },
+          "type": {
+            "coding": [
+              {
+                "code": "EHCPOL",
+                "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
+                "display": "Extended healthcare"
+              }
+            ]
+          },
+          "class": [
+            {
+              "name": "Insurance Plan",
+              "type": {
+                "coding": [
+                  {
+                    "code": "plan",
+                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class"
+                  }
+                ]
+              },
+              "value": "default-plan"
+            }
+          ],
+          "payor": [
+            {
+              "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+            }
+          ],
+          "period": {
+            "end": "2028-03-16",
+            "start": "2021-03-16"
+          },
+          "status": "active",
+          "identifier": [
+            {
+              "value": "75260781",
+              "system": "http://payer.com/memberid"
+            }
+          ],
+          "subscriber": {
+            "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
+          },
+          "beneficiary": {
+            "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
+          },
+          "policyHolder": {
+            "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
+          },
+          "relationship": {
+            "coding": [
+              {
+                "code": "self",
+                "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+                "display": "Self"
+              }
+            ]
+          },
+          "resourceType": "Coverage"
+        }
+      },
+      {
         "fullUrl": "http://provider.com/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
         "resource": {
-          "resourceType": "Organization",
           "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
             ]
           },
+          "name": "Saudi General Hospital",
+          "type": [
+            {
+              "coding": [
+                {
+                  "code": "prov",
+                  "system": "http://nphies.sa/terminology/CodeSystem/organization-type"
+                }
+              ]
+            }
+          ],
+          "active": true,
+          "address": [
+            {
+              "use": "work",
+              "city": "Riyadh",
+              "line": [
+                "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
+              ],
+              "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
+              "country": "Saudi Arabia"
+            }
+          ],
           "extension": [
             {
               "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
               "valueCodeableConcept": {
                 "coding": [
                   {
-                    "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
                     "code": "1",
+                    "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
                     "display": "Hospital"
                   }
                 ]
@@ -660,149 +587,84 @@
           ],
           "identifier": [
             {
-              "system": "http://nphies.sa/license/provider-license",
-              "value": "1010613708"
+              "value": "1010613708",
+              "system": "http://nphies.sa/license/provider-license"
             }
           ],
-          "active": true,
-          "type": [
-            {
-              "coding": [
-                {
-                  "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-                  "code": "prov"
-                }
-              ]
-            }
-          ],
-          "name": "Saudi General Hospital",
-          "address": [
-            {
-              "use": "work",
-              "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
-              "line": [
-                "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
-              ],
-              "city": "Riyadh",
-              "country": "Saudi Arabia"
-            }
-          ]
+          "resourceType": "Organization"
         }
       },
       {
         "fullUrl": "http://provider.com/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
         "resource": {
-          "resourceType": "Organization",
           "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"
             ]
           },
-          "identifier": [
-            {
-              "use": "official",
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                    "code": "NII"
-                  }
-                ]
-              },
-              "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
-            }
-          ],
-          "active": true,
+          "name": "Saudi National Insurance",
           "type": [
             {
               "coding": [
                 {
-                  "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
                   "code": "ins",
+                  "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
                   "display": "Insurance Company"
                 }
               ]
             }
           ],
-          "name": "Saudi National Insurance",
+          "active": true,
           "address": [
             {
               "use": "work",
-              "text": "Business Tower, Riyadh",
+              "city": "Riyadh",
               "line": [
                 "Business Tower, Riyadh"
               ],
-              "city": "Riyadh",
+              "text": "Business Tower, Riyadh",
               "country": "Saudi Arabia"
             }
-          ]
+          ],
+          "identifier": [
+            {
+              "use": "official",
+              "type": {
+                "coding": [
+                  {
+                    "code": "NII",
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+                  }
+                ]
+              },
+              "value": "INS-FHIR",
+              "system": "http://nphies.sa/license/payer-license"
+            }
+          ],
+          "resourceType": "Organization"
         }
       },
       {
-        "fullUrl": "http://provider.com/Patient/09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
+        "fullUrl": "http://provider.com/Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de",
         "resource": {
-          "resourceType": "Patient",
-          "id": "09d8cc5f-1b9e-4e75-bce4-d7b0aed24e83",
+          "id": "2fbeed60-9a40-4e49-b326-8d800b13f2de",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
             ]
           },
-          "extension": [
-            {
-              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
-              "valueCodeableConcept": {
-                "coding": [
-                  {
-                    "system": "http://nphies.sa/terminology/CodeSystem/occupation",
-                    "code": "business"
-                  }
-                ]
-              }
-            }
-          ],
-          "identifier": [
-            {
-              "extension": [
-                {
-                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
-                  "valueCodeableConcept": {
-                    "coding": [
-                      {
-                        "system": "urn:iso:std:iso:3166",
-                        "code": "SAU",
-                        "display": "Saudi Arabia"
-                      }
-                    ]
-                  }
-                }
-              ],
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                    "code": "PRC",
-                    "display": "Permanent Resident Card"
-                  }
-                ]
-              },
-              "system": "http://nphies.sa/identifier/iqama",
-              "value": "2000000003"
-            }
-          ],
-          "active": true,
           "name": [
             {
               "use": "official",
-              "text": "Alaa Jamal",
-              "family": "Jamal",
+              "text": "Sarah Abbas",
               "given": [
-                "Alaa"
-              ]
+                "Sarah"
+              ],
+              "family": "Abbas"
             }
           ],
+          "active": true,
           "gender": "female",
           "_gender": {
             "extension": [
@@ -811,25 +673,70 @@
                 "valueCodeableConcept": {
                   "coding": [
                     {
-                      "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender",
-                      "code": "female"
+                      "code": "female",
+                      "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender"
                     }
                   ]
                 }
               }
             ]
           },
-          "birthDate": "1989-01-27",
-          "deceasedBoolean": false,
+          "birthDate": "1997-02-08",
+          "extension": [
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "code": "business",
+                    "system": "http://nphies.sa/terminology/CodeSystem/occupation"
+                  }
+                ]
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "type": {
+                "coding": [
+                  {
+                    "code": "PRC",
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                    "display": "Permanent Resident Card"
+                  }
+                ]
+              },
+              "value": "2000000007",
+              "system": "http://nphies.sa/identifier/iqama",
+              "extension": [
+                {
+                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
+                  "valueCodeableConcept": {
+                    "coding": [
+                      {
+                        "code": "SAU",
+                        "system": "urn:iso:std:iso:3166",
+                        "display": "Saudi Arabia"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "resourceType": "Patient",
           "maritalStatus": {
             "coding": [
               {
-                "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
-                "code": "U"
+                "code": "U",
+                "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus"
               }
             ]
-          }
+          },
+          "deceasedBoolean": false
         }
       }
-    ]
+    ],
+    "timestamp": "2026-04-23T00:37:41.368Z",
+    "resourceType": "Bundle"
   }

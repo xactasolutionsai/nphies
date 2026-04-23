@@ -10,7 +10,7 @@ import {
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ExternalLink,
-  Wallet, Banknote, ArrowRight, MessageSquare, ChevronDown, MoreVertical, Download, Package
+  Wallet, Banknote, ArrowRight, MessageSquare, ChevronDown, MoreVertical, Download, Package, Pill
 } from 'lucide-react';
 import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
@@ -1402,16 +1402,13 @@ export default function ClaimDetails() {
                             </div>
                           )}
 
-                          {/* Additional item details - Show only relevant fields based on claim type */}
+                          {/* Additional item details - dental / vision */}
                           {(() => {
                             const claimType = extractCodeValue(claim.claim_type);
                             const hasDentalFields = claimType === 'dental' && (item.tooth_number || item.tooth_surface);
                             const hasVisionFields = claimType === 'vision' && item.eye;
-                            const hasPharmacyFields = claimType === 'pharmacy' && item.days_supply;
                             
-                            if (!hasDentalFields && !hasVisionFields && !hasPharmacyFields) {
-                              return null;
-                            }
+                            if (!hasDentalFields && !hasVisionFields) return null;
                             
                             return (
                               <div className="mt-3 pt-3 border-t text-sm">
@@ -1423,9 +1420,6 @@ export default function ClaimDetails() {
                                 )}
                                 {claimType === 'vision' && item.eye && (
                                   <span className="mr-4">Eye: {item.eye}</span>
-                                )}
-                                {claimType === 'pharmacy' && item.days_supply && (
-                                  <span>Days Supply: {item.days_supply}</span>
                                 )}
                               </div>
                             );
@@ -1452,29 +1446,40 @@ export default function ClaimDetails() {
                             </div>
                           )}
 
-                          {/* Pharmacy-specific details */}
-                          {(item.pharmacist_selection_reason || item.pharmacist_substitute || item.medication_code || item.prescribed_medication_code) && (
+                          {/* Pharmacy Details */}
+                          {extractCodeValue(claim.claim_type) === 'pharmacy' && (
                             <div className="mt-3 pt-3 border-t text-sm">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Pill className="h-4 w-4 text-purple-600" />
+                                <p className="text-xs font-medium text-purple-700 uppercase tracking-wider">Pharmacy Details</p>
+                              </div>
                               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 {item.medication_code && item.medication_code !== item.product_or_service_code && (
                                   <div>
                                     <p className="text-gray-500">Medication Code</p>
                                     <p className="font-medium font-mono">{item.medication_code}</p>
+                                    {item.medication_name && <p className="text-xs text-gray-500">{item.medication_name}</p>}
                                   </div>
                                 )}
-                                {item.prescribed_medication_code && (
+                                {item.days_supply && (
+                                  <div>
+                                    <p className="text-gray-500">Days Supply</p>
+                                    <p className="font-medium">{item.days_supply}</p>
+                                  </div>
+                                )}
+                                {(item.item_type || 'medication') !== 'device' && item.prescribed_medication_code && (
                                   <div>
                                     <p className="text-gray-500">Prescribed Medication</p>
                                     <p className="font-medium font-mono">{item.prescribed_medication_code}</p>
                                   </div>
                                 )}
-                                {item.pharmacist_selection_reason && (
+                                {(item.item_type || 'medication') !== 'device' && item.pharmacist_selection_reason && (
                                   <div>
                                     <p className="text-gray-500">Selection Reason</p>
                                     <p className="font-medium capitalize">{item.pharmacist_selection_reason.replace(/-/g, ' ')}</p>
                                   </div>
                                 )}
-                                {item.pharmacist_substitute && (
+                                {(item.item_type || 'medication') !== 'device' && item.pharmacist_substitute && (
                                   <div>
                                     <p className="text-gray-500">Substitute</p>
                                     <p className="font-medium">{item.pharmacist_substitute}</p>

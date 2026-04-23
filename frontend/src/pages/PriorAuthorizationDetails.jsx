@@ -1479,30 +1479,83 @@ export default function PriorAuthorizationDetails() {
                           {(() => {
                             const hasDentalFields = priorAuth.auth_type === 'dental' && (item.tooth_number || item.tooth_surface);
                             const hasVisionFields = priorAuth.auth_type === 'vision' && item.eye;
-                            const hasPharmacyFields = priorAuth.auth_type === 'pharmacy' && item.days_supply;
                             
-                            if (!hasDentalFields && !hasVisionFields && !hasPharmacyFields) return null;
+                            if (!hasDentalFields && !hasVisionFields) return null;
                             
                             return (
                               <div className="mt-3 pt-3 border-t text-sm">
-                                {/* Dental fields - only for dental auth type */}
                                 {priorAuth.auth_type === 'dental' && (
                                   <>
                                     {item.tooth_number && <span className="mr-4">Tooth: {item.tooth_number}</span>}
                                     {item.tooth_surface && <span className="mr-4">Surface: {item.tooth_surface}</span>}
                                   </>
                                 )}
-                                {/* Vision fields - only for vision auth type */}
                                 {priorAuth.auth_type === 'vision' && item.eye && (
                                   <span className="mr-4">Eye: {item.eye}</span>
-                                )}
-                                {/* Pharmacy fields - only for pharmacy auth type */}
-                                {priorAuth.auth_type === 'pharmacy' && item.days_supply && (
-                                  <span>Days Supply: {item.days_supply}</span>
                                 )}
                               </div>
                             );
                           })()}
+
+                          {/* Pharmacy Details */}
+                          {priorAuth.auth_type === 'pharmacy' && (
+                            <div className="mt-3 pt-3 border-t text-sm">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Pill className="h-4 w-4 text-purple-600" />
+                                <p className="text-xs font-medium text-purple-700 uppercase tracking-wider">Pharmacy Details</p>
+                              </div>
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                <Badge variant="outline" className="capitalize text-xs">
+                                  {item.item_type || 'medication'}
+                                </Badge>
+                                {item.is_package && (
+                                  <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">Package</Badge>
+                                )}
+                                {item.is_maternity && (
+                                  <Badge className="bg-pink-100 text-pink-700 border-pink-300 text-xs">Maternity</Badge>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                {item.medication_code && item.medication_code !== item.product_or_service_code && (
+                                  <div>
+                                    <p className="text-gray-500">Medication Code</p>
+                                    <p className="font-medium font-mono">{item.medication_code}</p>
+                                    {item.medication_name && <p className="text-xs text-gray-500">{item.medication_name}</p>}
+                                  </div>
+                                )}
+                                {item.days_supply && (
+                                  <div>
+                                    <p className="text-gray-500">Days Supply</p>
+                                    <p className="font-medium">{item.days_supply}</p>
+                                  </div>
+                                )}
+                                {item.patient_share != null && parseFloat(item.patient_share) > 0 && (
+                                  <div>
+                                    <p className="text-gray-500">Patient Share</p>
+                                    <p className="font-medium text-orange-600">{formatAmount(item.patient_share, item.currency)}</p>
+                                  </div>
+                                )}
+                                {(item.item_type || 'medication') !== 'device' && item.prescribed_medication_code && (
+                                  <div>
+                                    <p className="text-gray-500">Prescribed Medication</p>
+                                    <p className="font-medium font-mono">{item.prescribed_medication_code}</p>
+                                  </div>
+                                )}
+                                {(item.item_type || 'medication') !== 'device' && item.pharmacist_selection_reason && (
+                                  <div>
+                                    <p className="text-gray-500">Selection Reason</p>
+                                    <p className="font-medium capitalize">{item.pharmacist_selection_reason.replace(/-/g, ' ')}</p>
+                                  </div>
+                                )}
+                                {(item.item_type || 'medication') !== 'device' && item.pharmacist_substitute && (
+                                  <div>
+                                    <p className="text-gray-500">Substitute</p>
+                                    <p className="font-medium">{item.pharmacist_substitute}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                           
                           {/* Package Item Details (Sub-items) */}
                           {item.is_package === true && item.details && Array.isArray(item.details) && item.details.length > 0 && (
