@@ -11,6 +11,21 @@ import { NPHIES_CONFIG } from '../config/nphies.js';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
+function sanitizePharmacyDeviceFields(items, authType) {
+  if (authType !== 'pharmacy' || !Array.isArray(items)) return;
+  for (const item of items) {
+    if ((item.item_type || 'medication') === 'device') {
+      item.prescribed_medication_code = null;
+      item.pharmacist_selection_reason = null;
+      item.pharmacist_substitute = null;
+      item.days_supply = null;
+      item.medication_code = null;
+      item.medication_name = null;
+      item.medication_system = null;
+    }
+  }
+}
+
 class PriorAuthorizationsController extends BaseController {
   constructor() {
     super('prior_authorizations', validationSchemas.priorAuthorization);
@@ -427,6 +442,7 @@ class PriorAuthorizationsController extends BaseController {
 
       // Insert items (with shadow billing auto-detection)
       if (items && Array.isArray(items) && items.length > 0) {
+        sanitizePharmacyDeviceFields(items, value.auth_type);
         await shadowBillingService.processItems(items, value.auth_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(priorAuthId, items);
       }
@@ -644,6 +660,7 @@ class PriorAuthorizationsController extends BaseController {
       // Re-insert items (with shadow billing auto-detection)
       if (items && Array.isArray(items) && items.length > 0) {
         const authType = value.auth_type || existing.auth_type;
+        sanitizePharmacyDeviceFields(items, authType);
         await shadowBillingService.processItems(items, authType, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(id, items);
       }
@@ -1103,6 +1120,7 @@ class PriorAuthorizationsController extends BaseController {
 
       // Insert nested data (with shadow billing auto-detection)
       if (updateData.items && updateData.items.length > 0) {
+        sanitizePharmacyDeviceFields(updateData.items, existing.auth_type);
         await shadowBillingService.processItems(updateData.items, existing.auth_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(newId, updateData.items);
       }
@@ -1288,6 +1306,7 @@ class PriorAuthorizationsController extends BaseController {
 
       // Copy nested data (with shadow billing auto-detection for items from older records)
       if (existing.items && existing.items.length > 0) {
+        sanitizePharmacyDeviceFields(existing.items, existing.auth_type);
         await shadowBillingService.processItems(existing.items, existing.auth_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(newId, existing.items);
       }
@@ -1900,6 +1919,7 @@ class PriorAuthorizationsController extends BaseController {
       // Process items for shadow billing auto-detection before building the preview bundle
       const previewItems = formData.items || [];
       if (previewItems.length > 0) {
+        sanitizePharmacyDeviceFields(previewItems, formData.auth_type);
         await shadowBillingService.processItems(previewItems, formData.auth_type, PROVIDER_SHADOW_DOMAIN);
       }
 

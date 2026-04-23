@@ -698,7 +698,9 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     // When shadowBillingService has rewritten the primary code (shadow_code is set),
     // product_or_service_code holds the NPHIES unlisted code and must win over any
     // lingering medication_code that pre-dated the shadow-billing rewrite.
-    const shadowBilled = !!(item.shadow_code && item.product_or_service_code);
+    const shadowBilled = !!(item.product_or_service_code && (
+      item.shadow_code || item.code_entry_mode === 'shadow_billing'
+    ));
 
     if (isDevice) {
       // Medical device items use medical-devices code system

@@ -267,6 +267,11 @@ class ShadowBillingService {
         item.shadow_code_system = null;
         item.shadow_code_display = null;
       }
+      // Pharmacy: wipe stale medication_code so mappers use product_or_service_code
+      if (claimType === 'pharmacy' && item.product_or_service_code) {
+        item.medication_code = null;
+        item.medication_name = null;
+      }
       // Still process sub-items (package details may need auto-detection)
       if (item.details && Array.isArray(item.details)) {
         for (const detail of item.details) {

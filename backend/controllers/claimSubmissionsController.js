@@ -9,6 +9,21 @@ import { NPHIES_CONFIG } from '../config/nphies.js';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
+function sanitizePharmacyDeviceFields(items, claimType) {
+  if (claimType !== 'pharmacy' || !Array.isArray(items)) return;
+  for (const item of items) {
+    if ((item.item_type || 'medication') === 'device') {
+      item.prescribed_medication_code = null;
+      item.pharmacist_selection_reason = null;
+      item.pharmacist_substitute = null;
+      item.days_supply = null;
+      item.medication_code = null;
+      item.medication_name = null;
+      item.medication_system = null;
+    }
+  }
+}
+
 class ClaimSubmissionsController extends BaseController {
   constructor() {
     super('claim_submissions', validationSchemas.claimSubmission);
@@ -241,6 +256,7 @@ class ClaimSubmissionsController extends BaseController {
       const claimId = result.rows[0].id;
 
       if (items?.length > 0) {
+        sanitizePharmacyDeviceFields(items, cleanedData.claim_type);
         await shadowBillingService.processItems(items, cleanedData.claim_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(claimId, items);
       }
@@ -404,6 +420,7 @@ class ClaimSubmissionsController extends BaseController {
               : (item.product_or_service_system || null)
           };
         });
+        sanitizePharmacyDeviceFields(items, pa.auth_type);
         await shadowBillingService.processItems(items, pa.auth_type, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(claimId, items);
       }
@@ -481,6 +498,7 @@ class ClaimSubmissionsController extends BaseController {
 
       if (items?.length > 0) {
         const claimType = cleanedData.claim_type || existing.claim_type;
+        sanitizePharmacyDeviceFields(items, claimType);
         await shadowBillingService.processItems(items, claimType, PROVIDER_SHADOW_DOMAIN);
         await this.insertItems(id, items);
       }
@@ -670,6 +688,7 @@ class ClaimSubmissionsController extends BaseController {
       // Process items for shadow billing auto-detection before building the preview bundle
       const previewItems = formData.items || [];
       if (previewItems.length > 0) {
+        sanitizePharmacyDeviceFields(previewItems, formData.claim_type);
         await shadowBillingService.processItems(previewItems, formData.claim_type, PROVIDER_SHADOW_DOMAIN);
       }
 

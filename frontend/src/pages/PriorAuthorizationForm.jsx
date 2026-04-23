@@ -4335,6 +4335,8 @@ export default function PriorAuthorizationForm() {
                             handleItemChange(index, 'shadow_code_system', '');
                             handleItemChange(index, 'shadow_code_display', '');
                             handleItemChange(index, 'manual_code_entry', mode.value === 'manual');
+                            handleItemChange(index, 'medication_code', '');
+                            handleItemChange(index, 'medication_name', '');
                           }}
                         >
                           {mode.label}
@@ -4376,6 +4378,11 @@ export default function PriorAuthorizationForm() {
                                     handleItemChange(index, 'medication_code', '');
                                     handleItemChange(index, 'medication_name', '');
                                     handleItemChange(index, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/medical-devices');
+                                    handleItemChange(index, 'prescribed_medication_code', '');
+                                    handleItemChange(index, 'pharmacist_selection_reason', 'patient-request');
+                                    handleItemChange(index, 'pharmacist_substitute', null);
+                                    handleItemChange(index, 'days_supply', '');
+                                    handleItemChange(index, 'manual_prescribed_code_entry', false);
                                   }}
                                   className="w-4 h-4 text-purple-600 focus:ring-purple-500"
                                 />
@@ -4536,8 +4543,19 @@ export default function PriorAuthorizationForm() {
                               handleItemChange(index, 'shadow_code', '');
                               handleItemChange(index, 'shadow_code_system', '');
                               handleItemChange(index, 'shadow_code_display', '');
+                              handleItemChange(index, 'medication_code', '');
+                              handleItemChange(index, 'medication_name', '');
                               if (option?.value) {
                                 handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[option.value] || '');
+                                const isDeviceType = option.value === 'sfda_gmdn';
+                                handleItemChange(index, 'item_type', isDeviceType ? 'device' : 'medication');
+                                if (isDeviceType) {
+                                  handleItemChange(index, 'prescribed_medication_code', '');
+                                  handleItemChange(index, 'pharmacist_selection_reason', 'patient-request');
+                                  handleItemChange(index, 'pharmacist_substitute', null);
+                                  handleItemChange(index, 'days_supply', '');
+                                  handleItemChange(index, 'manual_prescribed_code_entry', false);
+                                }
                               }
                             }}
                             options={getShadowBillingTypesByAuthType(formData.auth_type)}
@@ -4574,6 +4592,17 @@ export default function PriorAuthorizationForm() {
                                 if (!item.shadow_billing_type) {
                                   handleItemChange(index, 'shadow_billing_type', matched.type);
                                 }
+                                const isDeviceType = matched.type === 'sfda_gmdn';
+                                handleItemChange(index, 'item_type', isDeviceType ? 'device' : 'medication');
+                                if (isDeviceType) {
+                                  handleItemChange(index, 'medication_code', '');
+                                  handleItemChange(index, 'medication_name', '');
+                                  handleItemChange(index, 'prescribed_medication_code', '');
+                                  handleItemChange(index, 'pharmacist_selection_reason', 'patient-request');
+                                  handleItemChange(index, 'pharmacist_substitute', null);
+                                  handleItemChange(index, 'days_supply', '');
+                                  handleItemChange(index, 'manual_prescribed_code_entry', false);
+                                }
                               }
                             }}
                             options={getShadowBillingCodesByType(item.shadow_billing_type)}
@@ -4609,6 +4638,17 @@ export default function PriorAuthorizationForm() {
                                 handleItemChange(index, 'product_or_service_system', SHADOW_BILLING_TYPE_TO_SYSTEM[matched.type] || '');
                                 if (!item.shadow_billing_type) {
                                   handleItemChange(index, 'shadow_billing_type', matched.type);
+                                }
+                                const isDeviceType = matched.type === 'sfda_gmdn';
+                                handleItemChange(index, 'item_type', isDeviceType ? 'device' : 'medication');
+                                if (isDeviceType) {
+                                  handleItemChange(index, 'medication_code', '');
+                                  handleItemChange(index, 'medication_name', '');
+                                  handleItemChange(index, 'prescribed_medication_code', '');
+                                  handleItemChange(index, 'pharmacist_selection_reason', 'patient-request');
+                                  handleItemChange(index, 'pharmacist_substitute', null);
+                                  handleItemChange(index, 'days_supply', '');
+                                  handleItemChange(index, 'manual_prescribed_code_entry', false);
                                 }
                               }
                             }}
@@ -5139,6 +5179,7 @@ export default function PriorAuthorizationForm() {
                     </div>
                     )}
                     
+                    {item.item_type !== 'device' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Pharmacist Selection Reason *</Label>
@@ -5185,6 +5226,7 @@ export default function PriorAuthorizationForm() {
                         />
                       </div>
                     </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label>Patient Share (SAR)</Label>
