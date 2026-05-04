@@ -105,6 +105,51 @@ const formatDateTime = (dateString) => {
   return new Date(dateString).toLocaleString();
 };
 
+// Pull a normalized error list from a prior_authorization_responses row.
+// Prefers the structured `errors` column. Falls back to parsing the raw
+// `bundle_json -> ClaimResponse.error[]` so legacy poll rows (saved before
+// the backend started persisting errors) still display correctly.
+// Each returned error includes a parsed `itemSequence` (1-based) when the
+// FHIR-path expression points at a specific Claim.item.
+const extractErrorsFromResponse = (resp) => {
+  if (!resp) return [];
+  let list = [];
+  const parsedErrors = (() => {
+    if (!resp.errors) return null;
+    if (typeof resp.errors !== 'string') return resp.errors;
+    try { return JSON.parse(resp.errors); } catch { return null; }
+  })();
+
+  if (Array.isArray(parsedErrors) && parsedErrors.length > 0) {
+    list = parsedErrors;
+  } else {
+    const bundle = typeof resp.bundle_json === 'string'
+      ? (() => { try { return JSON.parse(resp.bundle_json); } catch { return null; } })()
+      : resp.bundle_json;
+    let cr = null;
+    if (bundle?.resourceType === 'Bundle') {
+      cr = bundle.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+    } else if (bundle?.resourceType === 'ClaimResponse') {
+      cr = bundle;
+    }
+    list = (cr?.error || []).map(err => ({
+      code: err.code?.coding?.[0]?.code,
+      message: err.code?.coding?.[0]?.display,
+      location: err.code?.coding?.[0]?.extension?.find(
+        ext => ext.url?.includes('error-expression')
+      )?.valueString
+    }));
+  }
+
+  // Parse item index out of expressions like
+  // "Bundle.entry[1].resource.item[81].productOrService" -> sequence 82
+  return (list || []).map(e => {
+    const m = /item\[(\d+)\]/.exec(e.location || '');
+    const itemSequence = m ? parseInt(m[1], 10) + 1 : null;
+    return { ...e, itemSequence };
+  });
+};
+
 // Custom Modal Component
 const Modal = ({ open, onClose, title, description, children, footer }) => {
   if (!open) return null;
@@ -1117,6 +1162,33 @@ export default function PriorAuthorizationDetails() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Main Details */}
         <div className="lg:col-span-2 space-y-6">
+          {/* NPHIES validation errors banner */}
+          {(() => {
+            const allErrors = (priorAuth.responses || []).flatMap(extractErrorsFromResponse);
+            if (allErrors.length === 0) return null;
+            const affectedItems = new Set(allErrors.map(e => e.itemSequence).filter(Boolean));
+            return (
+              <Card className="border-red-300 bg-red-50">
+                <CardContent className="py-3 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm flex-1">
+                    <p className="font-medium text-red-800">
+                      NPHIES returned {allErrors.length} validation error{allErrors.length === 1 ? '' : 's'}
+                      {affectedItems.size > 0 ? ` on ${affectedItems.size} item${affectedItems.size === 1 ? '' : 's'}` : ''}.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('responses')}
+                      className="text-red-700 underline hover:text-red-900"
+                    >
+                      View error details
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* Tabs */}
           <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
             <TabButton active={activeTab === 'details'} onClick={() => setActiveTab('details')}>
@@ -1343,9 +1415,14 @@ export default function PriorAuthorizationDetails() {
                       const itemOutcome = responseItem?.extension?.find(
                         ext => ext.url?.includes('extension-adjudication-outcome')
                       )?.valueCodeableConcept?.coding?.[0]?.code;
-                      
+
+                      // NPHIES validation errors targeting this specific item (by sequence)
+                      const errorsForItem = (priorAuth.responses || [])
+                        .flatMap(extractErrorsFromResponse)
+                        .filter(e => e.itemSequence === item.sequence);
+
                       return (
-                        <div key={index} className="p-4 border rounded-lg bg-gray-50">
+                        <div key={index} className={`p-4 border rounded-lg ${errorsForItem.length > 0 ? 'border-red-300 bg-red-50' : 'bg-gray-50'}`}>
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-primary-purple text-white flex items-center justify-center text-sm font-medium">
@@ -1356,13 +1433,37 @@ export default function PriorAuthorizationDetails() {
                                 <p className="text-sm text-gray-500">{item.product_or_service_display || item.medication_name || 'No description'}</p>
                               </div>
                             </div>
-                            <Badge variant={
-                              (itemOutcome === 'approved' || item.adjudication_status === 'approved') ? 'default' : 
-                              (itemOutcome === 'rejected' || item.adjudication_status === 'denied') ? 'destructive' : 'outline'
-                            } className={(itemOutcome === 'approved' || item.adjudication_status === 'approved') ? 'bg-green-500' : ''}>
-                              {itemOutcome || item.adjudication_status || 'pending'}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              {errorsForItem.length > 0 && (
+                                <Badge variant="destructive" className="gap-1">
+                                  <AlertCircle className="h-3 w-3" />
+                                  {errorsForItem.length} error{errorsForItem.length === 1 ? '' : 's'}
+                                </Badge>
+                              )}
+                              <Badge variant={
+                                (itemOutcome === 'approved' || item.adjudication_status === 'approved') ? 'default' : 
+                                (itemOutcome === 'rejected' || item.adjudication_status === 'denied') ? 'destructive' : 'outline'
+                              } className={(itemOutcome === 'approved' || item.adjudication_status === 'approved') ? 'bg-green-500' : ''}>
+                                {itemOutcome || item.adjudication_status || 'pending'}
+                              </Badge>
+                            </div>
                           </div>
+
+                          {errorsForItem.length > 0 && (
+                            <div className="mt-3 p-2 rounded border border-red-200 bg-white text-xs space-y-1">
+                              {errorsForItem.map((e, k) => (
+                                <div key={k}>
+                                  <span className="font-mono font-medium text-red-700">{e.code || 'ERR'}</span>
+                                  {e.message && <span className="text-red-700"> &mdash; {e.message}</span>}
+                                  {e.location && (
+                                    <div className="text-red-500 font-mono text-[11px] mt-0.5 break-all">
+                                      {e.location}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
 
                           {item.shadow_code && !SECTION_4_5_CODES.has(item.shadow_code) && (
                             <div className="mt-2 p-2 bg-amber-50 rounded border border-amber-200">
@@ -3216,16 +3317,65 @@ export default function PriorAuthorizationDetails() {
                             <p className="mt-1">{resp.disposition}</p>
                           </div>
                         )}
-                        {resp.has_errors && resp.errors && (
-                          <div className="mt-3 p-3 bg-red-50 rounded-lg">
-                            <p className="text-sm font-medium text-red-800 mb-2">Errors:</p>
-                            <ul className="text-sm text-red-600 space-y-1">
-                              {(typeof resp.errors === 'string' ? JSON.parse(resp.errors) : resp.errors).map((err, i) => (
-                                <li key={i}>{err.details || err.message || JSON.stringify(err)}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
+                        {(() => {
+                          const errs = extractErrorsFromResponse(resp);
+                          if (errs.length === 0) return null;
+                          // Group by itemSequence, with non-item errors under "_general"
+                          const grouped = errs.reduce((acc, e) => {
+                            const key = e.itemSequence ?? '_general';
+                            (acc[key] = acc[key] || []).push(e);
+                            return acc;
+                          }, {});
+                          // Render item buckets in numeric order, "General" last
+                          const orderedKeys = Object.keys(grouped).sort((a, b) => {
+                            if (a === '_general') return 1;
+                            if (b === '_general') return -1;
+                            return parseInt(a, 10) - parseInt(b, 10);
+                          });
+                          return (
+                            <div className="mt-3 p-3 bg-red-50 rounded-lg space-y-3">
+                              <p className="text-sm font-medium text-red-800">
+                                {errs.length} error{errs.length === 1 ? '' : 's'} from NPHIES
+                              </p>
+                              {orderedKeys.map((key) => {
+                                const list = grouped[key];
+                                return (
+                                  <div key={key} className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      {key === '_general' ? (
+                                        <Badge variant="outline" className="text-red-700 border-red-300">General</Badge>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveTab('items')}
+                                          className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-red-300 text-red-700 hover:bg-red-100"
+                                        >
+                                          Item #{key}
+                                        </button>
+                                      )}
+                                      <span className="text-xs text-red-700">
+                                        {list.length} issue{list.length === 1 ? '' : 's'}
+                                      </span>
+                                    </div>
+                                    <ul className="text-sm text-red-700 space-y-1 pl-2">
+                                      {list.map((e, i) => (
+                                        <li key={i} className="flex flex-wrap items-baseline gap-2">
+                                          <Badge variant="destructive" className="font-mono">{e.code || 'ERR'}</Badge>
+                                          <span>{e.message || JSON.stringify(e)}</span>
+                                          {e.location && (
+                                            <span className="font-mono text-[11px] text-red-500 break-all">
+                                              {e.location}
+                                            </span>
+                                          )}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
 
                         {/* Adjudication Details from bundle_json */}
                         {(() => {
