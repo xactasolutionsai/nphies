@@ -1863,7 +1863,17 @@ export default function PriorAuthorizationForm() {
         validationErrors.push({ field: 'items', message: `All items must have a service code` });
       }
     }
-    
+
+    // NPHIES Section 3.3 / 3.4: Shadow Billing requires the provider's internal non-standard code
+    formData.items.forEach((item, idx) => {
+      if (item.code_entry_mode === 'shadow_billing' && !(item.shadow_code && item.shadow_code.toString().trim())) {
+        validationErrors.push({
+          field: `items.${idx}.shadow_code`,
+          message: `Item ${idx + 1}: Provider Internal Code is required in Shadow Billing mode (NPHIES Section 3.4)`
+        });
+      }
+    });
+
     // Validate ICU hours for institutional claims with offline eligibility
     // Per test case requirements: ICU hours should be provided for institutional claims with offline eligibility references
     if (formData.auth_type === 'institutional' && 
@@ -4531,6 +4541,7 @@ export default function PriorAuthorizationForm() {
 
                     {/* Mode: Shadow Billing */}
                     {(item.code_entry_mode || 'nphies') === 'shadow_billing' && (
+                      <>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
                           <Label>Type</Label>
@@ -4540,9 +4551,6 @@ export default function PriorAuthorizationForm() {
                               handleItemChange(index, 'shadow_billing_type', option?.value || '');
                               handleItemChange(index, 'product_or_service_code', '');
                               handleItemChange(index, 'product_or_service_display', '');
-                              handleItemChange(index, 'shadow_code', '');
-                              handleItemChange(index, 'shadow_code_system', '');
-                              handleItemChange(index, 'shadow_code_display', '');
                               handleItemChange(index, 'medication_code', '');
                               handleItemChange(index, 'medication_name', '');
                               if (option?.value) {
@@ -4582,9 +4590,6 @@ export default function PriorAuthorizationForm() {
                                 return;
                               }
                               handleItemChange(index, 'product_or_service_code', option.value || '');
-                              handleItemChange(index, 'shadow_code', '');
-                              handleItemChange(index, 'shadow_code_system', '');
-                              handleItemChange(index, 'shadow_code_display', '');
                               const matched = SHADOW_BILLING_CODES.find(c => c.value === option.value);
                               if (matched) {
                                 handleItemChange(index, 'product_or_service_display', matched.description);
@@ -4629,9 +4634,6 @@ export default function PriorAuthorizationForm() {
                                 return;
                               }
                               handleItemChange(index, 'product_or_service_display', option.value || '');
-                              handleItemChange(index, 'shadow_code', '');
-                              handleItemChange(index, 'shadow_code_system', '');
-                              handleItemChange(index, 'shadow_code_display', '');
                               const matched = SHADOW_BILLING_CODES.find(c => c.description === option.value);
                               if (matched) {
                                 handleItemChange(index, 'product_or_service_code', matched.value);
@@ -4665,6 +4667,36 @@ export default function PriorAuthorizationForm() {
                           />
                         </div>
                       </div>
+                      {/* Provider Internal Code (NPHIES Section 3.4 — second coding entry) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-amber-50/40 rounded-lg border border-amber-200">
+                        <div className="space-y-2">
+                          <Label>Provider Internal Code <span className="text-red-500">*</span></Label>
+                          <Input
+                            value={item.shadow_code || ''}
+                            onChange={(e) => handleItemChange(index, 'shadow_code', e.target.value)}
+                            placeholder="e.g. 9999999999, ITC213342"
+                            className={`font-mono ${errors.some(e => e.field === `items.${index}.shadow_code`) ? 'border-red-400 bg-red-50/30' : ''}`}
+                          />
+                          {errors.some(e => e.field === `items.${index}.shadow_code`) ? (
+                            <p className="text-xs text-red-600">
+                              Provider Internal Code is required in Shadow Billing mode (NPHIES Section 3.4)
+                            </p>
+                          ) : (
+                            <p className="text-xs text-amber-700">
+                              Your provider-specific non-standard code. The system URL is set automatically from your provider domain.
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Provider Internal Description <span className="text-red-500">*</span></Label>
+                          <Input
+                            value={item.shadow_code_display || ''}
+                            onChange={(e) => handleItemChange(index, 'shadow_code_display', e.target.value)}
+                            placeholder="e.g. Internal medication description"
+                          />
+                        </div>
+                      </div>
+                      </>
                     )}
 
                     {/* Mode: Manual Entry */}

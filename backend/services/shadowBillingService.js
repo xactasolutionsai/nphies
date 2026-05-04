@@ -255,17 +255,52 @@ class ShadowBillingService {
     if (!item.product_or_service_code) return item;
 
     const mode = item.code_entry_mode;
-    if (mode === 'nphies' || mode === 'shadow_billing') {
-      // User explicitly selected from NPHIES codes or shadow billing unlisted codes.
-      // Clear any stale shadow_code that might have persisted from a previous edit.
+    if (mode === 'nphies') {
+      // User explicitly selected a NPHIES standard code — there is no internal
+      // non-standard code, so clear any stale shadow_code that might have
+      // persisted from a previous edit (e.g. user switched modes mid-flow).
       if (item.shadow_code) {
         console.log(
           `[ShadowBillingService] Clearing stale shadow_code '${item.shadow_code}' ` +
-          `for item in '${mode}' mode (code: '${item.product_or_service_code}')`
+          `for item in 'nphies' mode (code: '${item.product_or_service_code}')`
         );
         item.shadow_code = null;
         item.shadow_code_system = null;
         item.shadow_code_display = null;
+      }
+      // Pharmacy: wipe stale medication_code so mappers use product_or_service_code
+      if (claimType === 'pharmacy' && item.product_or_service_code) {
+        item.medication_code = null;
+        item.medication_name = null;
+      }
+      // Still process sub-items (package details may need auto-detection)
+      if (item.details && Array.isArray(item.details)) {
+        for (const detail of item.details) {
+          await this.processItem(detail, claimType, providerDomain);
+        }
+      }
+      return item;
+    }
+
+    if (mode === 'shadow_billing') {
+      // NPHIES Shadow Billing Guideline Section 3.4: the productOrService.coding
+      // array must carry BOTH the NPHIES unlisted/standard code (primary) and
+      // the provider's internal non-standard code (secondary). Preserve the
+      // user-entered shadow_code and back-fill shadow_code_system from the
+      // provider domain when it isn't already set.
+      if (item.shadow_code) {
+        if (!item.shadow_code_system) {
+          item.shadow_code_system = this.getShadowCodeSystem(
+            providerDomain,
+            item.is_package === true
+          );
+        }
+        if (!item.shadow_code_display) {
+          console.warn(
+            `[ShadowBillingService] shadow_code '${item.shadow_code}' has no display ` +
+            `(NPHIES Section 3.4 expects a human-readable description).`
+          );
+        }
       }
       // Pharmacy: wipe stale medication_code so mappers use product_or_service_code
       if (claimType === 'pharmacy' && item.product_or_service_code) {

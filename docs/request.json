@@ -1,5 +1,5 @@
 {
-  "id": "37f30fe2-bef2-4472-b9e5-13e7b808708a",
+  "id": "488a28d5-0be9-4c57-ad2e-27b350cc6b53",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "urn:uuid:c8395c0c-6ac6-4ebf-b700-6b3121e39783",
+      "fullUrl": "urn:uuid:7fea7cf2-c42d-4517-aa70-989b31cedf21",
       "resource": {
-        "id": "c8395c0c-6ac6-4ebf-b700-6b3121e39783",
+        "id": "7fea7cf2-c42d-4517-aa70-989b31cedf21",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -18,7 +18,7 @@
         },
         "focus": [
           {
-            "reference": "http://provider.com/Claim/c2cf8860-807b-467e-9077-d11b23de5bb0"
+            "reference": "http://provider.com/Claim/430bd02c-27ce-4d4c-9615-ec73a5aa89ef"
           }
         ],
         "sender": {
@@ -51,9 +51,9 @@
       }
     },
     {
-      "fullUrl": "http://provider.com/Claim/c2cf8860-807b-467e-9077-d11b23de5bb0",
+      "fullUrl": "http://provider.com/Claim/430bd02c-27ce-4d4c-9615-ec73a5aa89ef",
       "resource": {
-        "id": "c2cf8860-807b-467e-9077-d11b23de5bb0",
+        "id": "430bd02c-27ce-4d4c-9615-ec73a5aa89ef",
         "use": "preauthorization",
         "item": [
           {
@@ -82,7 +82,7 @@
                 "valueCodeableConcept": {
                   "coding": [
                     {
-                      "code": "32-1014-1998",
+                      "code": "99999999999999",
                       "system": "http://nphies.sa/terminology/CodeSystem/medication-codes"
                     }
                   ]
@@ -100,18 +100,6 @@
                 }
               },
               {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "code": "Irreplaceable",
-                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-substitute",
-                      "display": "SFDA Irreplaceable drugs"
-                    }
-                  ]
-                }
-              },
-              {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
                 "valueBoolean": false
               }
@@ -124,9 +112,9 @@
             "productOrService": {
               "coding": [
                 {
-                  "code": "32-1014-1998",
+                  "code": "99999999999999",
                   "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
-                  "display": "( GINSENG GOLD ) KOREAN WHITE GINSENG ROOT"
+                  "display": "Unlisted other medications"
                 }
               ]
             },
@@ -159,40 +147,6 @@
                 }
               },
               {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescribed-Medication",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "code": "16-1179-2005",
-                      "system": "http://nphies.sa/terminology/CodeSystem/medication-codes"
-                    }
-                  ]
-                }
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-Selection-Reason",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "code": "patient-request",
-                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason"
-                    }
-                  ]
-                }
-              },
-              {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-pharmacist-substitute",
-                "valueCodeableConcept": {
-                  "coding": [
-                    {
-                      "code": "form-not-available",
-                      "system": "http://nphies.sa/terminology/CodeSystem/pharmacist-substitute",
-                      "display": "Dosage form not available"
-                    }
-                  ]
-                }
-              },
-              {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity",
                 "valueBoolean": false
               }
@@ -205,9 +159,9 @@
             "productOrService": {
               "coding": [
                 {
-                  "code": "99999999999996",
-                  "system": "http://nphies.sa/terminology/CodeSystem/medication-codes",
-                  "display": "Unlisted herbal and vitamins"
+                  "code": "58380",
+                  "system": "http://nphies.sa/terminology/CodeSystem/medical-devices",
+                  "display": "Total testosterone IVD, control"
                 }
               ]
             },
@@ -247,7 +201,7 @@
           "currency": "SAR"
         },
         "status": "active",
-        "created": "2026-04-23T04:04:32+03:00",
+        "created": "2026-04-23T13:10:15+03:00",
         "insurer": {
           "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
         },
@@ -337,7 +291,7 @@
         ],
         "identifier": [
           {
-            "value": "DUP-1776906272548",
+            "value": "DUP-1776939015469",
             "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
           }
         ],
@@ -443,7 +397,7 @@
             "valueQuantity": {
               "code": "d",
               "unit": "d",
-              "value": 20,
+              "value": 30,
               "system": "http://unitsofmeasure.org"
             }
           }
@@ -717,6 +671,6 @@
       }
     }
   ],
-  "timestamp": "2026-04-23T01:05:54.070Z",
+  "timestamp": "2026-04-23T10:10:34.310Z",
   "resourceType": "Bundle"
 }
