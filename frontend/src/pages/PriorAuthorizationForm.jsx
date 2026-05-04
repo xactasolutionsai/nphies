@@ -15,7 +15,8 @@ import {
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
   Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
-  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle, Package, RotateCcw
+  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle, Package, RotateCcw,
+  Zap
 } from 'lucide-react';
 
 // Import AI Medication Safety components
@@ -92,6 +93,7 @@ export default function PriorAuthorizationForm() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [bulkAdding, setBulkAdding] = useState(false);
   const [errors, setErrors] = useState([]);
   const [activeTab, setActiveTab] = useState('basic');
   
@@ -1278,6 +1280,129 @@ export default function PriorAuthorizationForm() {
       ...prev,
       items: [...prev.items, getInitialItemData(prev.items.length + 1, prev.auth_type)]
     }));
+  };
+
+  // Generate N synthetic-but-unique items for volume testing (NPHIES Test Case #9: 300 items)
+  // - Pharmacy: each item gets a distinct medication from the DB (1002 available)
+  // - Other auth types: cycle the small NPHIES code dictionary, varying price/quantity
+  //   and appending a per-row "(test #N)" suffix to the description so every row is unique
+  const generateBulkTestItems = (authType, count, medications = []) => {
+    const systemOptions = getServiceCodeSystemsByAuthType(authType);
+    const defaultSystemOpt = systemOptions[0] || SERVICE_CODE_SYSTEM_OPTIONS[0];
+    const codePool = getServiceCodeOptions(defaultSystemOpt?.value || 'procedures') || [];
+
+    const result = [];
+    for (let i = 0; i < count; i++) {
+      const seq = i + 1;
+      const base = getInitialItemData(seq, authType);
+      const quantity = (i % 5) + 1;                  // 1..5
+      const unitPrice = 100 + ((i % 50) * 10);       // 100..590
+      const netAmount = Number((quantity * unitPrice).toFixed(2));
+
+      if (authType === 'pharmacy' && medications.length > 0) {
+        const med = medications[i % medications.length];
+        const medCode = med.code || med.value;
+        const medDisplay = med.display || med.label || medCode;
+        result.push({
+          ...base,
+          item_type: 'medication',
+          code_entry_mode: 'nphies',
+          medication_code: medCode,
+          medication_name: medDisplay,
+          product_or_service_code: medCode,
+          product_or_service_display: medDisplay,
+          product_or_service_system: 'http://nphies.sa/terminology/CodeSystem/medication-codes',
+          prescribed_medication_code: medCode,
+          pharmacist_selection_reason: 'patient-request',
+          pharmacist_substitute: 'Irreplaceable',
+          days_supply: 30,
+          quantity,
+          unit_price: unitPrice,
+          net_amount: netAmount,
+          serviced_date: formData.encounter_start || '',
+          diagnosis_sequences: [1],
+        });
+      } else if (codePool.length > 0) {
+        const opt = codePool[i % codePool.length];
+        const code = opt.value;
+        const rawDisplay = opt.label?.includes(' - ')
+          ? opt.label.split(' - ').slice(1).join(' - ')
+          : (opt.label || code);
+        result.push({
+          ...base,
+          code_entry_mode: 'nphies',
+          product_or_service_code: code,
+          product_or_service_display: `${rawDisplay} (test #${seq})`,
+          product_or_service_system: defaultSystemOpt?.system
+            || 'http://nphies.sa/terminology/CodeSystem/procedures',
+          quantity,
+          unit_price: unitPrice,
+          net_amount: netAmount,
+          serviced_date: formData.encounter_start || '',
+          diagnosis_sequences: [1],
+        });
+      } else {
+        // Fallback when no code dictionary is available for the auth type
+        result.push({
+          ...base,
+          code_entry_mode: 'manual',
+          manual_code_entry: true,
+          product_or_service_code: `TEST-${String(seq).padStart(4, '0')}`,
+          product_or_service_display: `Test item #${seq}`,
+          product_or_service_system: defaultSystemOpt?.system
+            || 'http://nphies.sa/terminology/CodeSystem/procedures',
+          quantity,
+          unit_price: unitPrice,
+          net_amount: netAmount,
+          serviced_date: formData.encounter_start || '',
+          diagnosis_sequences: [1],
+        });
+      }
+    }
+    return result;
+  };
+
+  const handleBulkAdd300Items = async () => {
+    const TARGET_COUNT = 300;
+    const hasFilledItems = formData.items.some(
+      i => i.product_or_service_code || i.medication_code
+    );
+    if (hasFilledItems) {
+      const ok = window.confirm(
+        `This will REPLACE all current items with ${TARGET_COUNT} auto-generated test items. Continue?`
+      );
+      if (!ok) return;
+    }
+
+    setBulkAdding(true);
+    try {
+      let medications = [];
+      if (formData.auth_type === 'pharmacy') {
+        try {
+          // Backend caps limit at 500, so 300 fits in a single request
+          const res = await api.getMedicationCodes({ limit: TARGET_COUNT, offset: 0 });
+          medications = Array.isArray(res?.data) ? res.data : [];
+          if (medications.length < TARGET_COUNT) {
+            console.warn(
+              `Only ${medications.length} medications available; some codes will repeat.`
+            );
+          }
+        } catch (fetchErr) {
+          console.error('Failed to load medications for bulk fill:', fetchErr);
+          alert(
+            `Could not load medications from the database. ${TARGET_COUNT} items will still be generated but with cycled placeholder codes.`
+          );
+        }
+      }
+
+      const items = generateBulkTestItems(formData.auth_type, TARGET_COUNT, medications);
+      setFormData(prev => ({ ...prev, items }));
+    } catch (err) {
+      console.error('Bulk fill failed:', err);
+      alert(`Failed to bulk-fill items: ${err.message || err}`);
+    } finally {
+      setBulkAdding(false);
+    }
   };
 
   const removeItem = (index) => {
@@ -4293,10 +4418,24 @@ export default function PriorAuthorizationForm() {
                   <CardTitle>Service Items</CardTitle>
                   <CardDescription>Services, procedures, or medications requiring authorization</CardDescription>
                 </div>
-                <Button type="button" onClick={addItem} variant="outline" size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={handleBulkAdd300Items}
+                    variant="outline"
+                    size="sm"
+                    disabled={bulkAdding}
+                    title="Test Case 9: auto-fill 300 unique items"
+                    className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                  >
+                    <Zap className="h-4 w-4 mr-2" />
+                    {bulkAdding ? 'Filling…' : 'Quick Add 300 Test Items'}
+                  </Button>
+                  <Button type="button" onClick={addItem} variant="outline" size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Item
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
