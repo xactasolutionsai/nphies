@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -206,6 +206,7 @@ export default function PriorAuthorizationDetails() {
   const [motherPatient, setMotherPatient] = useState(null);
   const [motherPatientLoading, setMotherPatientLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
+  const [showErrorsOnly, setShowErrorsOnly] = useState(false);
   const [showBundleDialog, setShowBundleDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -247,6 +248,30 @@ export default function PriorAuthorizationDetails() {
       setMotherPatient(null);
     }
   }, [priorAuth?.mother_patient_id]);
+
+  // Item sequences (1-based) that are referenced by any NPHIES validation error
+  // across all stored responses. Used to drive the "Errors only" filter and
+  // to render quick-jump pills in the page-level banner.
+  const erroredSequences = useMemo(() => new Set(
+    (priorAuth?.responses || [])
+      .flatMap(extractErrorsFromResponse)
+      .map(e => e.itemSequence)
+      .filter(Boolean)
+  ), [priorAuth?.responses]);
+
+  // Switch to the Items tab and smooth-scroll the targeted item card into view,
+  // briefly outlining it so the user can see where they landed.
+  const jumpToItem = (sequence) => {
+    setActiveTab('items');
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`pa-item-${sequence}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-red-400');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-red-400'), 1500);
+      }
+    });
+  };
 
   const loadPriorAuthorization = async () => {
     try {
@@ -1176,10 +1201,25 @@ export default function PriorAuthorizationDetails() {
                       NPHIES returned {allErrors.length} validation error{allErrors.length === 1 ? '' : 's'}
                       {affectedItems.size > 0 ? ` on ${affectedItems.size} item${affectedItems.size === 1 ? '' : 's'}` : ''}.
                     </p>
+                    {affectedItems.size > 0 && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <span className="text-xs text-red-700">Jump to item:</span>
+                        {[...affectedItems].sort((a, b) => a - b).map(seq => (
+                          <button
+                            key={seq}
+                            type="button"
+                            onClick={() => jumpToItem(seq)}
+                            className="text-xs font-mono px-2 py-0.5 rounded border border-red-300 text-red-700 hover:bg-red-100"
+                          >
+                            #{seq}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => setActiveTab('responses')}
-                      className="text-red-700 underline hover:text-red-900"
+                      className="block text-red-700 underline hover:text-red-900 mt-1"
                     >
                       View error details
                     </button>
@@ -1393,12 +1433,30 @@ export default function PriorAuthorizationDetails() {
             <>
             <Card>
               <CardHeader>
-                <CardTitle>Service Items</CardTitle>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <CardTitle>Service Items</CardTitle>
+                  {erroredSequences.size > 0 && (
+                    <Button
+                      type="button"
+                      variant={showErrorsOnly ? 'destructive' : 'outline'}
+                      size="sm"
+                      onClick={() => setShowErrorsOnly(v => !v)}
+                    >
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      {showErrorsOnly
+                        ? `Showing ${erroredSequences.size} errored item${erroredSequences.size === 1 ? '' : 's'} (click to show all)`
+                        : `Show only errored items (${erroredSequences.size})`}
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {priorAuth.items && priorAuth.items.length > 0 ? (
                   <div className="space-y-4">
-                    {priorAuth.items.map((item, index) => {
+                    {(showErrorsOnly
+                      ? priorAuth.items.filter(i => erroredSequences.has(i.sequence))
+                      : priorAuth.items
+                    ).map((item, index) => {
                       // Get item-level adjudication details from response bundle
                       // Handle both Bundle format (with entry) and direct ClaimResponse format
                       let claimResponse = null;
@@ -1422,7 +1480,11 @@ export default function PriorAuthorizationDetails() {
                         .filter(e => e.itemSequence === item.sequence);
 
                       return (
-                        <div key={index} className={`p-4 border rounded-lg ${errorsForItem.length > 0 ? 'border-red-300 bg-red-50' : 'bg-gray-50'}`}>
+                        <div
+                          key={index}
+                          id={`pa-item-${item.sequence}`}
+                          className={`p-4 border rounded-lg scroll-mt-24 transition-shadow ${errorsForItem.length > 0 ? 'border-red-300 bg-red-50' : 'bg-gray-50'}`}
+                        >
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-primary-purple text-white flex items-center justify-center text-sm font-medium">
@@ -3344,15 +3406,25 @@ export default function PriorAuthorizationDetails() {
                                     <div className="flex items-center gap-2">
                                       {key === '_general' ? (
                                         <Badge variant="outline" className="text-red-700 border-red-300">General</Badge>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => setActiveTab('items')}
-                                          className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-red-300 text-red-700 hover:bg-red-100"
-                                        >
-                                          Item #{key}
-                                        </button>
-                                      )}
+                                      ) : (() => {
+                                        const refItem = (priorAuth.items || []).find(it => it.sequence === Number(key));
+                                        const itemCode = refItem?.product_or_service_code || refItem?.medication_code || '—';
+                                        const itemLabel = refItem?.product_or_service_display || refItem?.medication_name || '';
+                                        return (
+                                          <button
+                                            type="button"
+                                            onClick={() => jumpToItem(Number(key))}
+                                            className="inline-flex items-center gap-2 text-xs px-2 py-0.5 rounded border border-red-300 text-red-700 hover:bg-red-100"
+                                            title="Jump to this item"
+                                          >
+                                            <span className="font-medium">Item #{key}</span>
+                                            <span className="font-mono">{itemCode}</span>
+                                            {itemLabel && (
+                                              <span className="opacity-70 max-w-[18rem] truncate">{itemLabel}</span>
+                                            )}
+                                          </button>
+                                        );
+                                      })()}
                                       <span className="text-xs text-red-700">
                                         {list.length} issue{list.length === 1 ? '' : 's'}
                                       </span>
