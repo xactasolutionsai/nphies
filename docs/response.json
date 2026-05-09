@@ -1,5 +1,5 @@
 {
-  "id": "c488fc20-adec-4de2-8ae3-04b4266c1aba",
+  "id": "0012cb41-afd2-45c1-9124-d65a881114f3",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "http://nphies.sa/MessageHeader/28f8d3f8-174d-456a-8cec-cc639f11b1e4",
+      "fullUrl": "http://nphies.sa/MessageHeader/e4f6247e-5d24-41b2-b9c6-e9ac25ffd745",
       "resource": {
-        "id": "28f8d3f8-174d-456a-8cec-cc639f11b1e4",
+        "id": "e4f6247e-5d24-41b2-b9c6-e9ac25ffd745",
         "meta": {
           "tag": [
             {
@@ -34,7 +34,7 @@
         },
         "response": {
           "code": "ok",
-          "identifier": "366dc434-d22b-4b1d-824f-20f6bb2b877b"
+          "identifier": "7e8c5a48-ceaf-4cb9-9b75-811fac958a4f"
         },
         "destination": [
           {
@@ -56,9 +56,9 @@
       }
     },
     {
-      "fullUrl": "http://nphies.sa/Task/1464aed2-4352-457e-aef3-573162ad2af7",
+      "fullUrl": "http://nphies.sa/Task/8c7f5258-4ade-48ca-8104-1f0e19fe64c4",
       "resource": {
-        "id": "1464aed2-4352-457e-aef3-573162ad2af7",
+        "id": "8c7f5258-4ade-48ca-8104-1f0e19fe64c4",
         "code": {
           "coding": [
             {
@@ -98,34 +98,34 @@
             "extension": [
               {
                 "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-timestamp",
-                "valueDateTime": "2026-05-04T15:41:23.926+00:00"
+                "valueDateTime": "2026-05-05T22:05:13.098+00:00"
               }
             ],
             "valueReference": {
-              "reference": "http://nphies.sa/Bundle/b1612796-12ab-47dd-bd81-8ece7022a317"
+              "reference": "http://nphies.sa/Bundle/e362c9f2-e337-4157-aa7d-f7a6d5814b49"
             }
           }
         ],
         "status": "completed",
         "priority": "routine",
         "requester": {
-          "reference": "http://saudigeneralhospital.com.sa/Organization/816237fc-833c-4e58-a26a-339ed83c9ae1"
+          "reference": "http://saudigeneralhospital.com.sa/Organization/889c92d8-8cf9-4ec5-bd8f-44c9ab416151"
         },
-        "authoredOn": "2026-05-04T15:49:43.370Z",
+        "authoredOn": "2026-05-05T22:06:14.612Z",
         "identifier": [
           {
-            "value": "908",
+            "value": "532",
             "system": "http://saudigeneralhospital.com.sa/identifiers/poll-request"
           }
         ],
-        "lastModified": "2026-05-04T15:49:43.370Z",
+        "lastModified": "2026-05-05T22:06:14.612Z",
         "resourceType": "Task"
       }
     },
     {
-      "fullUrl": "http://nphies.sa/Bundle/b1612796-12ab-47dd-bd81-8ece7022a317",
+      "fullUrl": "http://nphies.sa/Bundle/e362c9f2-e337-4157-aa7d-f7a6d5814b49",
       "resource": {
-        "id": "b1612796-12ab-47dd-bd81-8ece7022a317",
+        "id": "e362c9f2-e337-4157-aa7d-f7a6d5814b49",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -134,23 +134,17 @@
         "type": "message",
         "entry": [
           {
-            "fullUrl": "http://nphies.sa/MessageHeader/25080b83-2558-4e15-9143-98628871d810",
+            "fullUrl": "http://nphies.sa/MessageHeader/eae66a13-03cc-4923-8912-50a29ef90cbf",
             "resource": {
-              "id": "25080b83-2558-4e15-9143-98628871d810",
+              "id": "eae66a13-03cc-4923-8912-50a29ef90cbf",
               "meta": {
-                "tag": [
-                  {
-                    "code": "queued-messages",
-                    "system": "http://nphies.sa/terminology/CodeSystem/meta-tags"
-                  }
-                ],
                 "profile": [
                   "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
                 ]
               },
               "focus": [
                 {
-                  "reference": "http://nphies.sa/ClaimResponse/829"
+                  "reference": "http://nphies.sa/ClaimResponse/391"
                 }
               ],
               "sender": {
@@ -165,7 +159,7 @@
               },
               "response": {
                 "code": "ok",
-                "identifier": "f5953c22-4d1f-4c5d-9d7a-ea187654b6b9"
+                "identifier": "ce2063c0-bc59-4d1b-bd73-c506b280b230"
               },
               "destination": [
                 {
@@ -180,17 +174,17 @@
                 }
               ],
               "eventCoding": {
-                "code": "priorauth-response",
+                "code": "claim-response",
                 "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events"
               },
               "resourceType": "MessageHeader"
             }
           },
           {
-            "fullUrl": "http://nphies.sa/ClaimResponse/829",
+            "fullUrl": "http://nphies.sa/ClaimResponse/391",
             "resource": {
-              "id": "829",
-              "use": "preauthorization",
+              "id": "391",
+              "use": "claim",
               "meta": {
                 "tag": [
                   {
@@ -210,124 +204,20 @@
                   }
                 ]
               },
-              "error": [
-                {
-                  "code": {
-                    "coding": [
-                      {
-                        "code": "IB-00242",
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "display": "Element value binding is not using a value from the specified ValueSet",
-                        "extension": [
-                          {
-                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                            "valueString": "Bundle.entry[1].resource.item[81].extension[2].value"
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                },
-                {
-                  "code": {
-                    "coding": [
-                      {
-                        "code": "IB-00030",
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "display": "The Claim.item.productOrService SHALL use a code from the specified valueSet",
-                        "extension": [
-                          {
-                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                            "valueString": "Bundle.entry[1].resource.item[81].productOrService"
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                },
-                {
-                  "code": {
-                    "coding": [
-                      {
-                        "code": "IB-00242",
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "display": "Element value binding is not using a value from the specified ValueSet",
-                        "extension": [
-                          {
-                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                            "valueString": "Bundle.entry[1].resource.item[194].extension[2].value"
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                },
-                {
-                  "code": {
-                    "coding": [
-                      {
-                        "code": "IB-00030",
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "display": "The Claim.item.productOrService SHALL use a code from the specified valueSet",
-                        "extension": [
-                          {
-                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                            "valueString": "Bundle.entry[1].resource.item[194].productOrService"
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                },
-                {
-                  "code": {
-                    "coding": [
-                      {
-                        "code": "IB-00242",
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "display": "Element value binding is not using a value from the specified ValueSet",
-                        "extension": [
-                          {
-                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                            "valueString": "Bundle.entry[1].resource.item[204].extension[2].value"
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                },
-                {
-                  "code": {
-                    "coding": [
-                      {
-                        "code": "IB-00030",
-                        "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
-                        "display": "The Claim.item.productOrService SHALL use a code from the specified valueSet",
-                        "extension": [
-                          {
-                            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
-                            "valueString": "Bundle.entry[1].resource.item[204].productOrService"
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                }
-              ],
               "status": "active",
-              "created": "2026-05-04T18:40:38+03:00",
+              "created": "2026-05-06T01:04:45+03:00",
               "insurer": {
                 "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
               },
-              "outcome": "error",
+              "outcome": "queued",
               "patient": {
                 "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
               },
               "request": {
                 "type": "Claim",
                 "identifier": {
-                  "value": "DUP-1777909238577",
-                  "system": "http://saudigeneralhospital.com.sa/identifiers/authorization"
+                  "value": "CLM-1778018685847",
+                  "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
                 }
               },
               "insurance": [
@@ -344,7 +234,7 @@
               },
               "identifier": [
                 {
-                  "value": "DUP-1777909238577",
+                  "value": "CLM-1778018685847",
                   "system": "http://nphies.sa/ClaimResponse"
                 }
               ],
@@ -618,14 +508,14 @@
             }
           }
         ],
-        "timestamp": "2026-05-04T18:41:23.051+03:00",
+        "timestamp": "2026-05-06T01:05:12.048+03:00",
         "resourceType": "Bundle"
       }
     },
     {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/816237fc-833c-4e58-a26a-339ed83c9ae1",
+      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/889c92d8-8cf9-4ec5-bd8f-44c9ab416151",
       "resource": {
-        "id": "816237fc-833c-4e58-a26a-339ed83c9ae1",
+        "id": "889c92d8-8cf9-4ec5-bd8f-44c9ab416151",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
@@ -688,6 +578,6 @@
       }
     }
   ],
-  "timestamp": "2026-05-04T18:49:43.614+03:00",
+  "timestamp": "2026-05-06T01:06:14.826+03:00",
   "resourceType": "Bundle"
 }

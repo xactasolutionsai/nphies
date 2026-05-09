@@ -253,16 +253,31 @@ export const DENTAL_PROCEDURE_OPTIONS = [
   { value: '415', label: '415 - Root canal' }
 ];
 
-// NPHIES Procedure Codes for Institutional/Professional Prior Authorization
+// NPHIES Procedure Codes - Institutional Prior Authorization (inpatient / surgical)
 // Reference: http://nphies.sa/terminology/CodeSystem/procedures
-export const NPHIES_PROCEDURE_OPTIONS = [
+export const NPHIES_PROCEDURE_OPTIONS_INSTITUTIONAL = [
   { value: '30571-00-00', label: '30571-00-00 - Appendicectomy' },
-  { value: '96196-01-00', label: '96196-01-00 - Intra-arterial administration of pharmacological agent, thrombolytic agent' },
-  { value: '96092-00-10', label: '96092-00-10 - Fitting of spectacles' },
+  { value: '16520-00-00', label: '16520-00-00 - Elective classical caesarean section' },
+  { value: '35713-12-00', label: '35713-12-00 - Salpingotomy' },
+  { value: '40703-02-00', label: '40703-02-00 - Elective Partial lobectomy of brain' },
+  { value: '11000-00-00', label: '11000-00-00 - Electroencephalography' },
   { value: '13882-00-00', label: '13882-00-00 - Management of continuous ventilatory support, <= 24 hours' },
-  { value: '38287-02-00', label: '38287-02-00 - Catheter ablation of arrhythmia circuit or focus involving left atrial chamber' },
-  { value: '42503-00-02', label: '42503-00-02 - Ophthalmological examination, bilateral' },
   { value: '33509-00-00', label: '33509-00-00 - Aorta endarterectomy' }
+];
+
+// NPHIES Procedure Codes - Professional / Vision Prior Authorization
+// Use for Claim.type=professional, Claim.subType=op (Outpatient), Encounter.class=AMB
+// Reference: http://nphies.sa/terminology/CodeSystem/procedures
+export const NPHIES_PROCEDURE_OPTIONS_PROFESSIONAL = [
+  { value: '42503-00-02', label: '42503-00-02 - Ophthalmological examination, bilateral' },
+  { value: '96092-00-10', label: '96092-00-10 - Fitting of spectacles' }
+];
+
+// Backwards-compatible union. Used by getAllKnownDescriptions for Manual Entry
+// suggestions and any external import that doesn't yet pass auth_type.
+export const NPHIES_PROCEDURE_OPTIONS = [
+  ...NPHIES_PROCEDURE_OPTIONS_INSTITUTIONAL,
+  ...NPHIES_PROCEDURE_OPTIONS_PROFESSIONAL
 ];
 
 // ============================================================================
@@ -378,10 +393,19 @@ export const getCodeSystemKeyFromUrl = (systemUrl) => {
   return match?.value || 'procedures';
 };
 
-// Helper to get the correct options array for a given code system key
-export const getServiceCodeOptions = (codeSystemKey) => {
+// Helper to get the correct options array for a given code system key.
+// When authType is provided, the `procedures` system returns the auth-type-specific
+// list (institutional gets the inpatient/surgical codes; professional/vision get the
+// outpatient eye codes). Without authType, falls back to the union for back-compat.
+export const getServiceCodeOptions = (codeSystemKey, authType = null) => {
+  const proceduresList =
+    authType === 'institutional' ? NPHIES_PROCEDURE_OPTIONS_INSTITUTIONAL :
+    authType === 'professional'  ? NPHIES_PROCEDURE_OPTIONS_PROFESSIONAL :
+    authType === 'vision'        ? NPHIES_PROCEDURE_OPTIONS_PROFESSIONAL :
+    NPHIES_PROCEDURE_OPTIONS;
+
   const map = {
-    'procedures': NPHIES_PROCEDURE_OPTIONS,
+    'procedures': proceduresList,
     'imaging': NPHIES_IMAGING_OPTIONS,
     'laboratory': NPHIES_LABORATORY_OPTIONS,
     'services': NPHIES_SERVICES_OPTIONS,
@@ -389,7 +413,7 @@ export const getServiceCodeOptions = (codeSystemKey) => {
     'medication-codes': [],
     'medical-devices': [],
   };
-  return map[codeSystemKey] || NPHIES_PROCEDURE_OPTIONS;
+  return map[codeSystemKey] || proceduresList;
 };
 
 export const getServiceCodeSystemsByAuthType = (authType) => {

@@ -1289,7 +1289,7 @@ export default function PriorAuthorizationForm() {
   const generateBulkTestItems = (authType, count, medications = []) => {
     const systemOptions = getServiceCodeSystemsByAuthType(authType);
     const defaultSystemOpt = systemOptions[0] || SERVICE_CODE_SYSTEM_OPTIONS[0];
-    const codePool = getServiceCodeOptions(defaultSystemOpt?.value || 'procedures') || [];
+    const codePool = getServiceCodeOptions(defaultSystemOpt?.value || 'procedures', authType) || [];
 
     const result = [];
     for (let i = 0; i < count; i++) {
@@ -4639,7 +4639,7 @@ export default function PriorAuthorizationForm() {
                                     <Label>Service/Procedure Code *</Label>
                                     <Select
                                       value={
-                                        getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
+                                        getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system), formData.auth_type)
                                           .find(opt => opt.value === item.product_or_service_code) || null
                                       }
                                       onChange={(option) => {
@@ -4652,7 +4652,7 @@ export default function PriorAuthorizationForm() {
                                         handleItemChange(index, 'shadow_code_system', '');
                                         handleItemChange(index, 'shadow_code_display', '');
                                       }}
-                                      options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
+                                      options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system), formData.auth_type)}
                                       styles={selectStyles}
                                       placeholder="Select code..."
                                       isClearable
@@ -5063,7 +5063,7 @@ export default function PriorAuthorizationForm() {
                                     ) : (
                                       <Select
                                         value={
-                                          getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))
+                                          getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system), formData.auth_type)
                                             .find(opt => opt.value === detail.product_or_service_code) || null
                                         }
                                         onChange={(option) => {
@@ -5079,7 +5079,7 @@ export default function PriorAuthorizationForm() {
                                           };
                                           handleItemChange(index, 'details', newDetails);
                                         }}
-                                        options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system))}
+                                        options={getServiceCodeOptions(getCodeSystemKeyFromUrl(item.product_or_service_system), formData.auth_type)}
                                         styles={selectStyles}
                                         placeholder="Select code..."
                                         isClearable
