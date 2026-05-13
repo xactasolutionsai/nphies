@@ -186,7 +186,10 @@ class ClaimSubmissionsController extends BaseController {
       query('SELECT * FROM claim_submission_items WHERE claim_id = $1 ORDER BY sequence ASC', [id]),
       query('SELECT * FROM claim_submission_supporting_info WHERE claim_id = $1 ORDER BY sequence ASC', [id]),
       query('SELECT * FROM claim_submission_diagnoses WHERE claim_id = $1 ORDER BY sequence ASC', [id]),
-      query('SELECT id, claim_id, response_type, outcome, disposition, nphies_claim_id, has_errors, errors, is_nphies_generated, nphies_response_id, received_at FROM claim_submission_responses WHERE claim_id = $1 ORDER BY received_at DESC', [id]),
+      // bundle_json is required so the frontend can fall back to parsing
+      // ClaimResponse.error[] when the structured `errors` column is empty
+      // (e.g. for legacy poll rows persisted before extraction was wired up).
+      query('SELECT id, claim_id, response_type, outcome, disposition, nphies_claim_id, has_errors, errors, bundle_json, is_nphies_generated, nphies_response_id, received_at FROM claim_submission_responses WHERE claim_id = $1 ORDER BY received_at DESC', [id]),
       query('SELECT id, claim_id, supporting_info_id, file_name, content_type, file_size, base64_content, title, description, category, binary_id, created_at FROM claim_submission_attachments WHERE claim_id = $1 ORDER BY created_at ASC', [id])
     ]);
     

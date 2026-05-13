@@ -133,22 +133,35 @@ class MessageUpdater {
         `, [adjudicationStatus, itemApprovedAmount || null, recordId, item.itemSequence]);
       }
 
+      // Extract NPHIES validation errors from ClaimResponse.error[] so the UI can
+      // surface them per-item without re-parsing the whole bundle on every render.
+      const claimResponseErrors = (claimResponse.error || []).map(err => ({
+        code: err.code?.coding?.[0]?.code,
+        message: err.code?.coding?.[0]?.display,
+        location: err.code?.coding?.[0]?.extension?.find(
+          ext => ext.url?.includes('error-expression')
+        )?.valueString || null
+      }));
+      const hasErrors = claimResponseErrors.length > 0 || outcome === 'error';
+
       // Store in responses table
       await client.query(`
         INSERT INTO prior_authorization_responses
         (prior_auth_id, response_type, outcome, disposition, pre_auth_ref,
-         bundle_json, has_errors, is_nphies_generated, nphies_response_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         bundle_json, has_errors, errors, is_nphies_generated, nphies_response_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `, [
         recordId, 'poll', outcome,
         claimResponse.disposition || null,
         claimResponse.preAuthRef || null,
         JSON.stringify(claimResponse),
-        false, true,
+        hasErrors,
+        claimResponseErrors.length > 0 ? JSON.stringify(claimResponseErrors) : null,
+        true,
         claimResponse.id || null
       ]);
 
-      console.log(`[MessageUpdater] Updated prior_authorization #${recordId}: status=${status}, outcome=${outcome}`);
+      console.log(`[MessageUpdater] Updated prior_authorization #${recordId}: status=${status}, outcome=${outcome}, errors=${claimResponseErrors.length}`);
 
       return {
         table: 'prior_authorizations',
@@ -268,22 +281,35 @@ class MessageUpdater {
         ]);
       }
 
+      // Extract NPHIES validation errors from ClaimResponse.error[] so the UI can
+      // surface them per-item without re-parsing the whole bundle on every render.
+      const claimResponseErrors = (claimResponse.error || []).map(err => ({
+        code: err.code?.coding?.[0]?.code,
+        message: err.code?.coding?.[0]?.display,
+        location: err.code?.coding?.[0]?.extension?.find(
+          ext => ext.url?.includes('error-expression')
+        )?.valueString || null
+      }));
+      const hasErrors = claimResponseErrors.length > 0 || outcome === 'error';
+
       // Store in responses table (full bundle for response history)
       await client.query(`
         INSERT INTO claim_submission_responses
         (claim_id, response_type, outcome, disposition, nphies_claim_id,
-         bundle_json, has_errors, is_nphies_generated, nphies_response_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         bundle_json, has_errors, errors, is_nphies_generated, nphies_response_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `, [
         recordId, 'poll', outcome,
         claimResponse.disposition || null,
         nphiesClaimId,
         JSON.stringify(bundleToStore),
-        false, true,
+        hasErrors,
+        claimResponseErrors.length > 0 ? JSON.stringify(claimResponseErrors) : null,
+        true,
         claimResponse.id || null
       ]);
 
-      console.log(`[MessageUpdater] Updated claim_submission #${recordId}: status=${newStatus}, outcome=${outcome}`);
+      console.log(`[MessageUpdater] Updated claim_submission #${recordId}: status=${newStatus}, outcome=${outcome}, errors=${claimResponseErrors.length}`);
 
       return {
         table: 'claim_submissions',
