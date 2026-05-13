@@ -365,6 +365,8 @@ class ClaimSubmissionsController extends BaseController {
         mother_patient_id: pa.mother_patient_id || null, // Copy mother_patient_id from prior auth for newborn claims
         // Copy ICU hours for institutional claims
         icu_hours: pa.icu_hours || null,
+        // Copy Ventilation hours for institutional claims (NPHIES BV-00731)
+        ventilation_hours: pa.ventilation_hours || null,
         // Copy vision prescription for vision claims
         vision_prescription: pa.vision_prescription ? JSON.stringify(pa.vision_prescription) : null,
         // Copy AI medication safety analysis for pharmacy claims
@@ -723,6 +725,8 @@ class ClaimSubmissionsController extends BaseController {
         mother_patient_id: formData.mother_patient_id || null,
         // ICU hours for institutional claims
         icu_hours: formData.icu_hours ? parseFloat(formData.icu_hours) : null,
+        // Ventilation hours for institutional claims (NPHIES BV-00731)
+        ventilation_hours: formData.ventilation_hours ? parseFloat(formData.ventilation_hours) : null,
         // Offline authorization fields (per NPHIES extension-authorization-offline-date)
         authorization_offline_date: formData.authorization_offline_date || null,
         authorization_offline_reference: formData.authorization_offline_reference || null,

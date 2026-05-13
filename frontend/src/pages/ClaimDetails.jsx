@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -125,6 +125,52 @@ const ADJUDICATION_CATEGORY_DISPLAY = {
   deductible: 'Deductible',
 };
 
+// Pull a normalized error list from a claim_submission_responses row.
+// Prefers the structured `errors` column. Falls back to parsing the raw
+// `bundle_json -> ClaimResponse.error[]` so legacy poll rows (saved before
+// the backend started persisting errors) still display correctly.
+// Each returned error includes a parsed `itemSequence` (1-based) when the
+// FHIR-path expression points at a specific Claim.item.
+const extractErrorsFromResponse = (resp) => {
+  if (!resp) return [];
+  let list = [];
+  const parsedErrors = (() => {
+    if (!resp.errors) return null;
+    if (typeof resp.errors !== 'string') return resp.errors;
+    try { return JSON.parse(resp.errors); } catch { return null; }
+  })();
+
+  if (Array.isArray(parsedErrors) && parsedErrors.length > 0) {
+    list = parsedErrors;
+  } else {
+    const bundle = typeof resp.bundle_json === 'string'
+      ? (() => { try { return JSON.parse(resp.bundle_json); } catch { return null; } })()
+      : resp.bundle_json;
+    let cr = null;
+    if (bundle?.resourceType === 'Bundle') {
+      cr = bundle.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+    } else if (bundle?.resourceType === 'ClaimResponse') {
+      cr = bundle;
+    }
+    list = (cr?.error || []).map(err => ({
+      code: err.code?.coding?.[0]?.code,
+      message: err.code?.coding?.[0]?.display,
+      location: err.code?.coding?.[0]?.extension?.find(
+        ext => ext.url?.includes('error-expression')
+      )?.valueString
+    }));
+  }
+
+  // Parse item index out of expressions like
+  // "Bundle.entry[1].resource.item[81].productOrService" -> sequence 82.
+  // The `expression` fallback covers the legacy nphiesService shape.
+  return (list || []).map(e => {
+    const m = /item\[(\d+)\]/.exec(e.location || e.expression || '');
+    const itemSequence = m ? parseInt(m[1], 10) + 1 : null;
+    return { ...e, itemSequence };
+  });
+};
+
 // Custom Modal Component
 const Modal = ({ open, onClose, title, description, children, footer }) => {
   if (!open) return null;
@@ -191,6 +237,31 @@ export default function ClaimDetails() {
   const [pollingPayments, setPollingPayments] = useState(false);
   const [priorAuthComms, setPriorAuthComms] = useState([]);
   const [priorAuthCommsLoading, setPriorAuthCommsLoading] = useState(false);
+  const [showErrorsOnly, setShowErrorsOnly] = useState(false);
+
+  // Item sequences (1-based) referenced by any NPHIES validation error
+  // across all stored responses. Drives the "Errors only" filter and the
+  // quick-jump pills in the page-level banner.
+  const erroredSequences = useMemo(() => new Set(
+    (claim?.responses || [])
+      .flatMap(extractErrorsFromResponse)
+      .map(e => e.itemSequence)
+      .filter(Boolean)
+  ), [claim?.responses]);
+
+  // Switch to the Items tab and smooth-scroll the targeted item card into
+  // view, briefly outlining it so the user can see where they landed.
+  const jumpToItem = (sequence) => {
+    setActiveTab('items');
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`claim-item-${sequence}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-red-400');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-red-400'), 1500);
+      }
+    });
+  };
 
   useEffect(() => {
     loadClaim();
@@ -956,6 +1027,48 @@ export default function ClaimDetails() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Main Details */}
         <div className="lg:col-span-2 space-y-6">
+          {/* NPHIES validation errors banner */}
+          {(() => {
+            const allErrors = (claim.responses || []).flatMap(extractErrorsFromResponse);
+            if (allErrors.length === 0) return null;
+            const affectedItems = new Set(allErrors.map(e => e.itemSequence).filter(Boolean));
+            return (
+              <Card className="border-red-300 bg-red-50">
+                <CardContent className="py-3 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm flex-1">
+                    <p className="font-medium text-red-800">
+                      NPHIES returned {allErrors.length} validation error{allErrors.length === 1 ? '' : 's'}
+                      {affectedItems.size > 0 ? ` on ${affectedItems.size} item${affectedItems.size === 1 ? '' : 's'}` : ''}.
+                    </p>
+                    {affectedItems.size > 0 && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <span className="text-xs text-red-700">Jump to item:</span>
+                        {[...affectedItems].sort((a, b) => a - b).map(seq => (
+                          <button
+                            key={seq}
+                            type="button"
+                            onClick={() => jumpToItem(seq)}
+                            className="text-xs font-mono px-2 py-0.5 rounded border border-red-300 text-red-700 hover:bg-red-100"
+                          >
+                            #{seq}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('responses')}
+                      className="block text-red-700 underline hover:text-red-900 mt-1"
+                    >
+                      View error details
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* Tabs */}
           <div className="flex gap-1.5 bg-gray-100 p-1 rounded-lg overflow-x-auto scrollbar-hide">
             <TabButton active={activeTab === 'details'} onClick={() => setActiveTab('details')}>
@@ -1158,45 +1271,6 @@ export default function ClaimDetails() {
                   </>
                 )}
 
-                {/* Error Summary - Show if there are errors in responses */}
-                {claim.responses?.some(r => r.has_errors && r.errors) && (
-                  <>
-                    <hr className="border-gray-200" />
-                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                      <div className="flex items-center gap-2 text-red-600 font-semibold mb-3">
-                        <AlertCircle className="h-5 w-5" />
-                        <span>NPHIES Validation Errors</span>
-                      </div>
-                      {claim.responses.filter(r => r.has_errors && r.errors).map((resp, respIndex) => {
-                        let parsedErrors = [];
-                        try {
-                          parsedErrors = typeof resp.errors === 'string' ? JSON.parse(resp.errors) : resp.errors;
-                          if (!Array.isArray(parsedErrors)) parsedErrors = [parsedErrors];
-                        } catch (e) {
-                          parsedErrors = [{ message: resp.errors }];
-                        }
-                        return (
-                          <div key={respIndex} className="space-y-2">
-                            {parsedErrors.map((error, errIndex) => (
-                              <div key={errIndex} className="flex items-start gap-2 text-sm">
-                                <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                                <div>
-                                  {error.code && (
-                                    <span className="font-mono text-red-600 mr-2">[{error.code}]</span>
-                                  )}
-                                  <span className="text-red-700">{error.message || error.diagnostics || JSON.stringify(error)}</span>
-                                  {error.location && (
-                                    <p className="text-xs text-red-500 mt-0.5 font-mono">{error.location}</p>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
               </CardContent>
             </Card>
           )}
@@ -1206,12 +1280,30 @@ export default function ClaimDetails() {
             <>
             <Card>
               <CardHeader>
-                <CardTitle>Service Items</CardTitle>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <CardTitle>Service Items</CardTitle>
+                  {erroredSequences.size > 0 && (
+                    <Button
+                      type="button"
+                      variant={showErrorsOnly ? 'destructive' : 'outline'}
+                      size="sm"
+                      onClick={() => setShowErrorsOnly(v => !v)}
+                    >
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      {showErrorsOnly
+                        ? `Showing ${erroredSequences.size} errored item${erroredSequences.size === 1 ? '' : 's'} (click to show all)`
+                        : `Show only errored items (${erroredSequences.size})`}
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {claim.items && claim.items.length > 0 ? (
                   <div className="space-y-4">
-                    {claim.items.map((item, index) => {
+                    {(showErrorsOnly
+                      ? claim.items.filter(i => erroredSequences.has(i.sequence))
+                      : claim.items
+                    ).map((item, index) => {
                       // Get item-level adjudication details from response bundle
                       // Handle both bundle structure and direct ClaimResponse
                       const claimResponseForItems = getClaimResponseFromBundle();
@@ -1236,9 +1328,18 @@ export default function ClaimDetails() {
                       const patientInvoice = responseItem?.extension?.find(
                         ext => ext.url?.includes('extension-patientInvoice')
                       )?.valueIdentifier?.value;
-                      
+
+                      // NPHIES validation errors targeting this specific item (by sequence)
+                      const errorsForItem = (claim.responses || [])
+                        .flatMap(extractErrorsFromResponse)
+                        .filter(e => e.itemSequence === item.sequence);
+
                       return (
-                        <div key={index} className="p-4 border rounded-lg bg-gray-50">
+                        <div
+                          key={index}
+                          id={`claim-item-${item.sequence}`}
+                          className={`p-4 border rounded-lg scroll-mt-24 transition-shadow ${errorsForItem.length > 0 ? 'border-red-300 bg-red-50' : 'bg-gray-50'}`}
+                        >
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-primary-purple text-white flex items-center justify-center text-sm font-medium">
@@ -1249,13 +1350,37 @@ export default function ClaimDetails() {
                                 <p className="text-sm text-gray-500">{item.product_or_service_display || item.medication_name || 'No description'}</p>
                               </div>
                             </div>
-                            <Badge variant={
-                              (extractCodeValue(itemOutcome) === 'approved' || extractCodeValue(item.adjudication_status) === 'approved') ? 'default' : 
-                              (extractCodeValue(itemOutcome) === 'rejected' || extractCodeValue(item.adjudication_status) === 'denied') ? 'destructive' : 'outline'
-                            } className={(extractCodeValue(itemOutcome) === 'approved' || extractCodeValue(item.adjudication_status) === 'approved') ? 'bg-green-500' : ''}>
-                              {extractCodeValue(itemOutcome) || extractCodeValue(item.adjudication_status) || 'pending'}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              {errorsForItem.length > 0 && (
+                                <Badge variant="destructive" className="gap-1">
+                                  <AlertCircle className="h-3 w-3" />
+                                  {errorsForItem.length} error{errorsForItem.length === 1 ? '' : 's'}
+                                </Badge>
+                              )}
+                              <Badge variant={
+                                (extractCodeValue(itemOutcome) === 'approved' || extractCodeValue(item.adjudication_status) === 'approved') ? 'default' : 
+                                (extractCodeValue(itemOutcome) === 'rejected' || extractCodeValue(item.adjudication_status) === 'denied') ? 'destructive' : 'outline'
+                              } className={(extractCodeValue(itemOutcome) === 'approved' || extractCodeValue(item.adjudication_status) === 'approved') ? 'bg-green-500' : ''}>
+                                {extractCodeValue(itemOutcome) || extractCodeValue(item.adjudication_status) || 'pending'}
+                              </Badge>
+                            </div>
                           </div>
+
+                          {errorsForItem.length > 0 && (
+                            <div className="mt-3 p-2 rounded border border-red-200 bg-white text-xs space-y-1">
+                              {errorsForItem.map((e, k) => (
+                                <div key={k}>
+                                  <span className="font-mono font-medium text-red-700">{e.code || 'ERR'}</span>
+                                  {e.message && <span className="text-red-700"> &mdash; {e.message}</span>}
+                                  {(e.location || e.expression) && (
+                                    <div className="text-red-500 font-mono text-[11px] mt-0.5 break-all">
+                                      {e.location || e.expression}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           
                           {/* Request Details */}
                           <div className="grid grid-cols-4 gap-4 mt-4 text-sm">
@@ -1846,23 +1971,33 @@ export default function ClaimDetails() {
                   )}
                 </div>
 
-                {/* ICU Hours - Only for institutional inpatient/daycase */}
-                {extractCodeValue(claim.claim_type) === 'institutional' && ['inpatient', 'daycase'].includes(extractCodeValue(claim.encounter_class)) && claim.icu_hours && (
+                {/* ICU & Ventilation Hours - institutional encounters */}
+                {extractCodeValue(claim.claim_type) === 'institutional' && (claim.icu_hours || claim.ventilation_hours) && (
                   <>
                     <hr className="border-gray-200" />
                     <div>
                       <h4 className="font-medium mb-3 flex items-center gap-2">
                         <Activity className="h-4 w-4 text-red-600" />
-                        ICU Information
+                        ICU &amp; Ventilation Information
                       </h4>
                       <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-                        <div className="flex items-center gap-3">
-                          <div>
-                            <p className="text-sm text-gray-500">ICU Hours</p>
-                            <p className="text-lg font-medium text-red-700">
-                              {claim.icu_hours} hours
-                            </p>
-                          </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          {claim.icu_hours != null && claim.icu_hours !== '' && (
+                            <div>
+                              <p className="text-sm text-gray-500">ICU Hours</p>
+                              <p className="text-lg font-medium text-red-700">
+                                {claim.icu_hours} hours
+                              </p>
+                            </div>
+                          )}
+                          {claim.ventilation_hours != null && claim.ventilation_hours !== '' && (
+                            <div>
+                              <p className="text-sm text-gray-500">Ventilation Hours</p>
+                              <p className="text-lg font-medium text-red-700">
+                                {claim.ventilation_hours} hours
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3138,17 +3273,6 @@ export default function ClaimDetails() {
                 {claim.responses && claim.responses.length > 0 ? (
                   <div className="space-y-4">
                     {claim.responses.map((resp, index) => {
-                      // Parse errors if it's a string
-                      let parsedErrors = [];
-                      if (resp.errors) {
-                        try {
-                          parsedErrors = typeof resp.errors === 'string' ? JSON.parse(resp.errors) : resp.errors;
-                          if (!Array.isArray(parsedErrors)) parsedErrors = [parsedErrors];
-                        } catch (e) {
-                          parsedErrors = [{ message: resp.errors }];
-                        }
-                      }
-                      
                       return (
                         <div key={index} className="p-4 border rounded-lg">
                           <div className="flex items-start justify-between mb-3">
@@ -3185,17 +3309,76 @@ export default function ClaimDetails() {
                               <p className="mt-1">{resp.disposition}</p>
                             </div>
                           )}
-                          
-                          {resp.has_errors && parsedErrors.length > 0 && (
-                            <div className="mt-3 p-3 bg-red-50 rounded-lg">
-                              <p className="text-sm font-medium text-red-800 mb-2">Errors:</p>
-                              <ul className="text-sm text-red-600 space-y-1">
-                                {parsedErrors.map((error, errIndex) => (
-                                  <li key={errIndex}>{error.details || error.message || JSON.stringify(error)}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+
+                          {(() => {
+                            const errs = extractErrorsFromResponse(resp);
+                            if (errs.length === 0) return null;
+                            // Group by itemSequence, with non-item errors under "_general"
+                            const grouped = errs.reduce((acc, e) => {
+                              const key = e.itemSequence ?? '_general';
+                              (acc[key] = acc[key] || []).push(e);
+                              return acc;
+                            }, {});
+                            // Render item buckets in numeric order, "General" last
+                            const orderedKeys = Object.keys(grouped).sort((a, b) => {
+                              if (a === '_general') return 1;
+                              if (b === '_general') return -1;
+                              return parseInt(a, 10) - parseInt(b, 10);
+                            });
+                            return (
+                              <div className="mt-3 p-3 bg-red-50 rounded-lg space-y-3">
+                                <p className="text-sm font-medium text-red-800">
+                                  {errs.length} error{errs.length === 1 ? '' : 's'} from NPHIES
+                                </p>
+                                {orderedKeys.map((key) => {
+                                  const list = grouped[key];
+                                  return (
+                                    <div key={key} className="space-y-1">
+                                      <div className="flex items-center gap-2">
+                                        {key === '_general' ? (
+                                          <Badge variant="outline" className="text-red-700 border-red-300">General</Badge>
+                                        ) : (() => {
+                                          const refItem = (claim.items || []).find(it => it.sequence === Number(key));
+                                          const itemCode = refItem?.product_or_service_code || refItem?.medication_code || '—';
+                                          const itemLabel = refItem?.product_or_service_display || refItem?.medication_name || '';
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={() => jumpToItem(Number(key))}
+                                              className="inline-flex items-center gap-2 text-xs px-2 py-0.5 rounded border border-red-300 text-red-700 hover:bg-red-100"
+                                              title="Jump to this item"
+                                            >
+                                              <span className="font-medium">Item #{key}</span>
+                                              <span className="font-mono">{itemCode}</span>
+                                              {itemLabel && (
+                                                <span className="opacity-70 max-w-[18rem] truncate">{itemLabel}</span>
+                                              )}
+                                            </button>
+                                          );
+                                        })()}
+                                        <span className="text-xs text-red-700">
+                                          {list.length} issue{list.length === 1 ? '' : 's'}
+                                        </span>
+                                      </div>
+                                      <ul className="text-sm text-red-700 space-y-1 pl-2">
+                                        {list.map((e, i) => (
+                                          <li key={i} className="flex flex-wrap items-baseline gap-2">
+                                            <Badge variant="destructive" className="font-mono">{e.code || 'ERR'}</Badge>
+                                            <span>{e.message || e.details || JSON.stringify(e)}</span>
+                                            {(e.location || e.expression) && (
+                                              <span className="font-mono text-[11px] text-red-500 break-all">
+                                                {e.location || e.expression}
+                                              </span>
+                                            )}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
 
                           {/* Adjudication Details from bundle_json */}
                           {(() => {

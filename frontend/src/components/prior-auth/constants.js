@@ -854,6 +854,22 @@ export const ICU_FIELDS = [
   { key: 'icu_hours', category: 'icu-hours', label: 'ICU Hours', unit: 'h', unitLabel: 'hours', placeholder: '24' }
 ];
 
+// NPHIES Ventilation-specific Fields (for institutional claims that include
+// items 13882-00-00, 13882-01-00, 13882-02-00, or 92211-00-00).
+// Required by adjudication rule BV-00731.
+export const VENTILATION_FIELDS = [
+  { key: 'ventilation_hours', category: 'ventilation-hours', label: 'Ventilation Hours', unit: 'h', unitLabel: 'hours', placeholder: '24' }
+];
+
+// Item codes that, when present in an institutional claim, force the inclusion
+// of a ventilation-hours supportingInfo entry.
+export const VENTILATION_TRIGGER_CODES = new Set([
+  '13882-00-00',
+  '13882-01-00',
+  '13882-02-00',
+  '92211-00-00',
+]);
+
 // NPHIES Service Event Type Options (for dental/oral and professional claims)
 // Reference: http://nphies.sa/terminology/CodeSystem/service-event-type
 export const SERVICE_EVENT_TYPE_OPTIONS = [

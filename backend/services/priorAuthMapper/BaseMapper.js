@@ -1016,7 +1016,8 @@ class BaseMapper {
         supportingInfo.valueQuantity = {
           value: parseFloat(info.value_quantity),
           system: 'http://unitsofmeasure.org',
-          code: ucumCode
+          code: ucumCode,
+          unit: info.value_quantity_unit || info.unit || ucumCode
         };
       } else if (info.value_boolean !== null && info.value_boolean !== undefined) {
         supportingInfo.valueBoolean = info.value_boolean;

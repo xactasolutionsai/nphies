@@ -381,6 +381,31 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       }
     }
 
+    // Add Ventilation hours supportingInfo. NPHIES BV-00731 requires this whenever the
+    // institutional claim contains items 13882-00-00, 13882-01-00, 13882-02-00, or 92211-00-00.
+    const VENTILATION_TRIGGER_CODES = new Set([
+      '13882-00-00', '13882-01-00', '13882-02-00', '92211-00-00'
+    ]);
+    const ventilationHoursValue = claim.ventilation_hours != null && claim.ventilation_hours !== ''
+      ? parseFloat(claim.ventilation_hours)
+      : null;
+    const requiresVentilation = (claim.items || []).some(it =>
+      VENTILATION_TRIGGER_CODES.has(it.product_or_service_code)
+    );
+    if (ventilationHoursValue != null && !isNaN(ventilationHoursValue) && ventilationHoursValue > 0 && requiresVentilation) {
+      const hasVentilation = supportingInfoList.some(info => {
+        const category = (info.category || '').toLowerCase();
+        return category === 'ventilation-hours';
+      });
+      if (!hasVentilation) {
+        supportingInfoList.push({
+          category: 'ventilation-hours',
+          value_quantity: ventilationHoursValue,
+          value_quantity_unit: 'h'
+        });
+      }
+    }
+
     // Add attachments as supportingInfo entries with valueAttachment
     // Following NPHIES examples: attachments are embedded in supportingInfo, not as separate Binary resources
     if (claim.attachments && Array.isArray(claim.attachments) && claim.attachments.length > 0) {

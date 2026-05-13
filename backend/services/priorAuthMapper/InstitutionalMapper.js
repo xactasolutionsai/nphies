@@ -411,6 +411,28 @@ class InstitutionalMapper extends BaseMapper {
       }
     }
 
+    // Add Ventilation hours supportingInfo. NPHIES BV-00731 requires this whenever the
+    // institutional claim contains items 13882-00-00, 13882-01-00, 13882-02-00, or 92211-00-00.
+    const VENTILATION_TRIGGER_CODES = new Set([
+      '13882-00-00', '13882-01-00', '13882-02-00', '92211-00-00'
+    ]);
+    const ventilationHoursValue = priorAuth.ventilation_hours != null && priorAuth.ventilation_hours !== ''
+      ? parseFloat(priorAuth.ventilation_hours)
+      : null;
+    const requiresVentilation = (priorAuth.items || []).some(it =>
+      VENTILATION_TRIGGER_CODES.has(it.product_or_service_code)
+    );
+    if (ventilationHoursValue != null && !isNaN(ventilationHoursValue) && ventilationHoursValue > 0 && requiresVentilation) {
+      const hasVentilation = supportingInfoList.some(info => info.category === 'ventilation-hours');
+      if (!hasVentilation) {
+        supportingInfoList.push({
+          category: 'ventilation-hours',
+          value_quantity: ventilationHoursValue,
+          value_quantity_unit: 'h'
+        });
+      }
+    }
+
     // Add attachments as supportingInfo entries with valueAttachment
     // Following NPHIES examples: attachments are embedded in supportingInfo, not as separate Binary resources
     if (priorAuth.attachments && Array.isArray(priorAuth.attachments) && priorAuth.attachments.length > 0) {

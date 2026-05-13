@@ -236,6 +236,7 @@ class PriorAuthorizationsController extends BaseController {
         pa.drug_interaction_justification_date,
         pa.lab_observations,
         pa.icu_hours,
+        pa.ventilation_hours,
         pa.authorization_offline_date, pa.authorization_offline_reference,
         p.name as patient_name,
         p.identifier as patient_identifier,
@@ -1972,6 +1973,8 @@ class PriorAuthorizationsController extends BaseController {
         is_update: formData.is_update || false,
         // ICU hours for institutional inpatient/daycase encounters
         icu_hours: formData.icu_hours ? parseFloat(formData.icu_hours) : null,
+        // Ventilation hours - required by NPHIES BV-00731 when items 13882-* / 92211-00-00 are present
+        ventilation_hours: formData.ventilation_hours ? parseFloat(formData.ventilation_hours) : null,
         // Offline authorization fields (per NPHIES extension-authorization-offline-date)
         authorization_offline_date: formData.authorization_offline_date || null,
         authorization_offline_reference: formData.authorization_offline_reference || null,
@@ -2144,6 +2147,16 @@ class PriorAuthorizationsController extends BaseController {
       } else if (typeof cleanedData.icu_hours === 'string') {
         const numValue = parseFloat(cleanedData.icu_hours);
         cleanedData.icu_hours = isNaN(numValue) ? null : numValue;
+      }
+    }
+
+    // Handle ventilation_hours separately - convert string to number or null
+    if (cleanedData.ventilation_hours !== undefined && cleanedData.ventilation_hours !== null) {
+      if (cleanedData.ventilation_hours === '') {
+        cleanedData.ventilation_hours = null;
+      } else if (typeof cleanedData.ventilation_hours === 'string') {
+        const numValue = parseFloat(cleanedData.ventilation_hours);
+        cleanedData.ventilation_hours = isNaN(numValue) ? null : numValue;
       }
     }
 

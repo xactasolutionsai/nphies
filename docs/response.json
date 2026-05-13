@@ -1,5 +1,5 @@
 {
-  "id": "0012cb41-afd2-45c1-9124-d65a881114f3",
+  "id": "c6705a99-b69a-4c9e-9f44-3390f7a6619b",
   "meta": {
     "profile": [
       "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -8,9 +8,9 @@
   "type": "message",
   "entry": [
     {
-      "fullUrl": "http://nphies.sa/MessageHeader/e4f6247e-5d24-41b2-b9c6-e9ac25ffd745",
+      "fullUrl": "http://nphies.sa/MessageHeader/c359cc55-8711-49de-b107-ad5742dea6fe",
       "resource": {
-        "id": "e4f6247e-5d24-41b2-b9c6-e9ac25ffd745",
+        "id": "c359cc55-8711-49de-b107-ad5742dea6fe",
         "meta": {
           "tag": [
             {
@@ -22,6 +22,11 @@
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
           ]
         },
+        "focus": [
+          {
+            "reference": "http://nphies.sa/ClaimResponse/413"
+          }
+        ],
         "sender": {
           "type": "Organization",
           "identifier": {
@@ -34,7 +39,7 @@
         },
         "response": {
           "code": "ok",
-          "identifier": "7e8c5a48-ceaf-4cb9-9b75-811fac958a4f"
+          "identifier": "2ade321f-c2d5-4e4a-abf3-a37ae73b0e5c"
         },
         "destination": [
           {
@@ -49,24 +54,17 @@
           }
         ],
         "eventCoding": {
-          "code": "poll-response",
+          "code": "claim-response",
           "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events"
         },
         "resourceType": "MessageHeader"
       }
     },
     {
-      "fullUrl": "http://nphies.sa/Task/8c7f5258-4ade-48ca-8104-1f0e19fe64c4",
+      "fullUrl": "http://nphies.sa/ClaimResponse/413",
       "resource": {
-        "id": "8c7f5258-4ade-48ca-8104-1f0e19fe64c4",
-        "code": {
-          "coding": [
-            {
-              "code": "poll",
-              "system": "http://nphies.sa/terminology/CodeSystem/task-code"
-            }
-          ]
-        },
+        "id": "413",
+        "use": "claim",
         "meta": {
           "tag": [
             {
@@ -75,447 +73,882 @@
             }
           ],
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/task|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
           ]
         },
-        "owner": {
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "error": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "BV-00731",
+                  "system": "http://nphies.sa/terminology/CodeSystem/adjudication-error",
+                  "display": "Ventilation Hours Shall be provided in Institutional claim that contain one of the following items '13882-00-00' or '13882-01-00' or '13882-02-00' or '92211-00-00'",
+                  "extension": [
+                    {
+                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-error-expression",
+                      "valueString": "bundle.entry[1].resource.supportingInfo"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "status": "active",
+        "created": "2026-05-13T11:18:58+03:00",
+        "insurer": {
+          "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+        },
+        "outcome": "error",
+        "patient": {
+          "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
+        },
+        "request": {
+          "type": "Claim",
           "identifier": {
-            "value": "NPHIES",
-            "system": "http://nphies.sa/license/nphies"
+            "value": "CLM-1778660338438",
+            "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
           }
         },
-        "intent": "order",
-        "output": [
+        "insurance": [
+          {
+            "focal": true,
+            "coverage": {
+              "reference": "Coverage/d465faee-90f7-4a4c-a72d-a6d9ebba7b97"
+            },
+            "sequence": 1
+          }
+        ],
+        "requestor": {
+          "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
+        },
+        "identifier": [
+          {
+            "value": "CLM-1778660338438",
+            "system": "http://nphies.sa/ClaimResponse"
+          }
+        ],
+        "resourceType": "ClaimResponse"
+      }
+    },
+    {
+      "fullUrl": "http://nphies.sa/Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de",
+      "resource": {
+        "id": "2fbeed60-9a40-4e49-b326-8d800b13f2de",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
+          ]
+        },
+        "name": [
+          {
+            "use": "official",
+            "text": "Sarah Abbas",
+            "given": [
+              "Sarah"
+            ],
+            "family": "Abbas"
+          }
+        ],
+        "active": true,
+        "gender": "female",
+        "_gender": {
+          "extension": [
+            {
+              "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "code": "female",
+                    "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "birthDate": "1997-02-08",
+        "extension": [
+          {
+            "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
+            "valueCodeableConcept": {
+              "coding": [
+                {
+                  "code": "business",
+                  "system": "http://nphies.sa/terminology/CodeSystem/occupation"
+                }
+              ]
+            }
+          }
+        ],
+        "identifier": [
           {
             "type": {
               "coding": [
                 {
-                  "code": "response",
-                  "system": "http://nphies.sa/terminology/ValueSet/task-output-type"
+                  "code": "PRC",
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "display": "Permanent Resident Card"
                 }
               ]
             },
+            "value": "2000000007",
+            "system": "http://nphies.sa/identifier/iqama",
             "extension": [
               {
-                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-timestamp",
-                "valueDateTime": "2026-05-05T22:05:13.098+00:00"
+                "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "code": "SAU",
+                      "system": "urn:iso:std:iso:3166",
+                      "display": "Saudi Arabia"
+                    }
+                  ]
+                }
               }
-            ],
-            "valueReference": {
-              "reference": "http://nphies.sa/Bundle/e362c9f2-e337-4157-aa7d-f7a6d5814b49"
+            ]
+          }
+        ],
+        "resourceType": "Patient",
+        "maritalStatus": {
+          "coding": [
+            {
+              "code": "U",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus"
             }
-          }
-        ],
-        "status": "completed",
-        "priority": "routine",
-        "requester": {
-          "reference": "http://saudigeneralhospital.com.sa/Organization/889c92d8-8cf9-4ec5-bd8f-44c9ab416151"
-        },
-        "authoredOn": "2026-05-05T22:06:14.612Z",
-        "identifier": [
-          {
-            "value": "532",
-            "system": "http://saudigeneralhospital.com.sa/identifiers/poll-request"
-          }
-        ],
-        "lastModified": "2026-05-05T22:06:14.612Z",
-        "resourceType": "Task"
-      }
-    },
-    {
-      "fullUrl": "http://nphies.sa/Bundle/e362c9f2-e337-4157-aa7d-f7a6d5814b49",
-      "resource": {
-        "id": "e362c9f2-e337-4157-aa7d-f7a6d5814b49",
-        "meta": {
-          "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
           ]
         },
-        "type": "message",
-        "entry": [
-          {
-            "fullUrl": "http://nphies.sa/MessageHeader/eae66a13-03cc-4923-8912-50a29ef90cbf",
-            "resource": {
-              "id": "eae66a13-03cc-4923-8912-50a29ef90cbf",
-              "meta": {
-                "profile": [
-                  "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
-                ]
-              },
-              "focus": [
-                {
-                  "reference": "http://nphies.sa/ClaimResponse/391"
-                }
-              ],
-              "sender": {
-                "type": "Organization",
-                "identifier": {
-                  "value": "NPHIES",
-                  "system": "http://nphies.sa/license/nphies"
-                }
-              },
-              "source": {
-                "endpoint": "http://nphies.sa/"
-              },
-              "response": {
-                "code": "ok",
-                "identifier": "ce2063c0-bc59-4d1b-bd73-c506b280b230"
-              },
-              "destination": [
-                {
-                  "endpoint": "http://provider.com",
-                  "receiver": {
-                    "type": "Organization",
-                    "identifier": {
-                      "value": "1010613708",
-                      "system": "http://nphies.sa/license/provider-license"
-                    }
-                  }
-                }
-              ],
-              "eventCoding": {
-                "code": "claim-response",
-                "system": "http://nphies.sa/terminology/CodeSystem/ksa-message-events"
-              },
-              "resourceType": "MessageHeader"
-            }
-          },
-          {
-            "fullUrl": "http://nphies.sa/ClaimResponse/391",
-            "resource": {
-              "id": "391",
-              "use": "claim",
-              "meta": {
-                "tag": [
-                  {
-                    "code": "NPHIES generated",
-                    "display": "NPHIES generated"
-                  }
-                ],
-                "profile": [
-                  "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/claim-response|1.0.0"
-                ]
-              },
-              "type": {
-                "coding": [
-                  {
-                    "code": "pharmacy",
-                    "system": "http://terminology.hl7.org/CodeSystem/claim-type"
-                  }
-                ]
-              },
-              "status": "active",
-              "created": "2026-05-06T01:04:45+03:00",
-              "insurer": {
-                "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
-              },
-              "outcome": "queued",
-              "patient": {
-                "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
-              },
-              "request": {
-                "type": "Claim",
-                "identifier": {
-                  "value": "CLM-1778018685847",
-                  "system": "http://saudigeneralhospital.com.sa/identifiers/claim"
-                }
-              },
-              "insurance": [
-                {
-                  "focal": true,
-                  "coverage": {
-                    "reference": "Coverage/4b5eff00-c9b2-4efd-8bfd-5d5cf1a71aa8"
-                  },
-                  "sequence": 1
-                }
-              ],
-              "requestor": {
-                "reference": "Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac"
-              },
-              "identifier": [
-                {
-                  "value": "CLM-1778018685847",
-                  "system": "http://nphies.sa/ClaimResponse"
-                }
-              ],
-              "resourceType": "ClaimResponse"
-            }
-          },
-          {
-            "fullUrl": "http://nphies.sa/Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de",
-            "resource": {
-              "id": "2fbeed60-9a40-4e49-b326-8d800b13f2de",
-              "meta": {
-                "profile": [
-                  "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/patient|1.0.0"
-                ]
-              },
-              "name": [
-                {
-                  "use": "official",
-                  "text": "Sarah Abbas",
-                  "given": [
-                    "Sarah"
-                  ],
-                  "family": "Abbas"
-                }
-              ],
-              "active": true,
-              "gender": "female",
-              "_gender": {
-                "extension": [
-                  {
-                    "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-ksa-administrative-gender",
-                    "valueCodeableConcept": {
-                      "coding": [
-                        {
-                          "code": "female",
-                          "system": "http://nphies.sa/terminology/CodeSystem/ksa-administrative-gender"
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              "birthDate": "1997-02-08",
-              "extension": [
-                {
-                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-occupation",
-                  "valueCodeableConcept": {
-                    "coding": [
-                      {
-                        "code": "business",
-                        "system": "http://nphies.sa/terminology/CodeSystem/occupation"
-                      }
-                    ]
-                  }
-                }
-              ],
-              "identifier": [
-                {
-                  "type": {
-                    "coding": [
-                      {
-                        "code": "PRC",
-                        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                        "display": "Permanent Resident Card"
-                      }
-                    ]
-                  },
-                  "value": "2000000007",
-                  "system": "http://nphies.sa/identifier/iqama",
-                  "extension": [
-                    {
-                      "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-identifier-country",
-                      "valueCodeableConcept": {
-                        "coding": [
-                          {
-                            "code": "SAU",
-                            "system": "urn:iso:std:iso:3166",
-                            "display": "Saudi Arabia"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ],
-              "resourceType": "Patient",
-              "maritalStatus": {
-                "coding": [
-                  {
-                    "code": "U",
-                    "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus"
-                  }
-                ]
-              },
-              "deceasedBoolean": false
-            }
-          },
-          {
-            "fullUrl": "http://nphies.sa/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
-            "resource": {
-              "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
-              "meta": {
-                "profile": [
-                  "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
-                ]
-              },
-              "name": "Saudi General Hospital",
-              "type": [
-                {
-                  "coding": [
-                    {
-                      "code": "prov",
-                      "system": "http://nphies.sa/terminology/CodeSystem/organization-type"
-                    }
-                  ]
-                }
-              ],
-              "active": true,
-              "address": [
-                {
-                  "use": "work",
-                  "city": "Riyadh",
-                  "line": [
-                    "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
-                  ],
-                  "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
-                  "country": "Saudi Arabia"
-                }
-              ],
-              "extension": [
-                {
-                  "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
-                  "valueCodeableConcept": {
-                    "coding": [
-                      {
-                        "code": "1",
-                        "system": "http://nphies.sa/terminology/CodeSystem/provider-type",
-                        "display": "Hospital"
-                      }
-                    ]
-                  }
-                }
-              ],
-              "identifier": [
-                {
-                  "value": "1010613708",
-                  "system": "http://nphies.sa/license/provider-license"
-                }
-              ],
-              "resourceType": "Organization"
-            }
-          },
-          {
-            "fullUrl": "http://nphies.sa/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
-            "resource": {
-              "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
-              "meta": {
-                "profile": [
-                  "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"
-                ]
-              },
-              "name": "Saudi National Insurance",
-              "type": [
-                {
-                  "coding": [
-                    {
-                      "code": "ins",
-                      "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
-                      "display": "Insurance Company"
-                    }
-                  ]
-                }
-              ],
-              "active": true,
-              "address": [
-                {
-                  "use": "work",
-                  "city": "Riyadh",
-                  "line": [
-                    "Business Tower, Riyadh"
-                  ],
-                  "text": "Business Tower, Riyadh",
-                  "country": "Saudi Arabia"
-                }
-              ],
-              "identifier": [
-                {
-                  "use": "official",
-                  "type": {
-                    "coding": [
-                      {
-                        "code": "NII",
-                        "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
-                      }
-                    ]
-                  },
-                  "value": "INS-FHIR",
-                  "system": "http://nphies.sa/license/payer-license"
-                }
-              ],
-              "resourceType": "Organization"
-            }
-          },
-          {
-            "fullUrl": "http://nphies.sa/Coverage/4b5eff00-c9b2-4efd-8bfd-5d5cf1a71aa8",
-            "resource": {
-              "id": "4b5eff00-c9b2-4efd-8bfd-5d5cf1a71aa8",
-              "meta": {
-                "profile": [
-                  "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
-                ]
-              },
-              "type": {
-                "coding": [
-                  {
-                    "code": "EHCPOL",
-                    "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
-                    "display": "Extended healthcare"
-                  }
-                ]
-              },
-              "class": [
-                {
-                  "name": "Insurance Plan",
-                  "type": {
-                    "coding": [
-                      {
-                        "code": "plan",
-                        "system": "http://terminology.hl7.org/CodeSystem/coverage-class"
-                      }
-                    ]
-                  },
-                  "value": "default-plan"
-                }
-              ],
-              "payor": [
-                {
-                  "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
-                }
-              ],
-              "period": {
-                "end": "2028-03-16",
-                "start": "2021-03-16"
-              },
-              "status": "active",
-              "identifier": [
-                {
-                  "value": "75260781",
-                  "system": "http://payer.com/memberid"
-                }
-              ],
-              "subscriber": {
-                "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
-              },
-              "beneficiary": {
-                "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
-              },
-              "policyHolder": {
-                "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
-              },
-              "relationship": {
-                "coding": [
-                  {
-                    "code": "self",
-                    "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
-                    "display": "Self"
-                  }
-                ]
-              },
-              "resourceType": "Coverage"
-            }
-          }
-        ],
-        "timestamp": "2026-05-06T01:05:12.048+03:00",
-        "resourceType": "Bundle"
+        "deceasedBoolean": false
       }
     },
     {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/889c92d8-8cf9-4ec5-bd8f-44c9ab416151",
+      "fullUrl": "http://nphies.sa/Organization/b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
       "resource": {
-        "id": "889c92d8-8cf9-4ec5-bd8f-44c9ab416151",
+        "id": "b4ea317c-fb81-4957-afa6-5c8ad0c397ac",
         "meta": {
           "profile": [
             "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0"
@@ -533,6 +966,17 @@
           }
         ],
         "active": true,
+        "address": [
+          {
+            "use": "work",
+            "city": "Riyadh",
+            "line": [
+              "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia"
+            ],
+            "text": "Salamah Street, Building 25, Suite 2, Riyadh Saudi Arabia",
+            "country": "Saudi Arabia"
+          }
+        ],
         "extension": [
           {
             "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-provider-type",
@@ -557,27 +1001,126 @@
       }
     },
     {
-      "fullUrl": "http://saudigeneralhospital.com.sa/Organization/NPHIES",
+      "fullUrl": "http://nphies.sa/Organization/69912bb9-020e-42ac-839b-adb11efc18c0",
       "resource": {
-        "id": "NPHIES",
+        "id": "69912bb9-020e-42ac-839b-adb11efc18c0",
         "meta": {
           "profile": [
-            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0"
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0"
           ]
         },
-        "name": "National Program for Health Information Exchange Services",
+        "name": "Saudi National Insurance",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "ins",
+                "system": "http://nphies.sa/terminology/CodeSystem/organization-type",
+                "display": "Insurance Company"
+              }
+            ]
+          }
+        ],
         "active": true,
+        "address": [
+          {
+            "use": "work",
+            "city": "Riyadh",
+            "line": [
+              "Business Tower, Riyadh"
+            ],
+            "text": "Business Tower, Riyadh",
+            "country": "Saudi Arabia"
+          }
+        ],
         "identifier": [
           {
             "use": "official",
-            "value": "NPHIES",
-            "system": "http://nphies.sa/license/nphies"
+            "type": {
+              "coding": [
+                {
+                  "code": "NII",
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+                }
+              ]
+            },
+            "value": "INS-FHIR",
+            "system": "http://nphies.sa/license/payer-license"
           }
         ],
         "resourceType": "Organization"
       }
+    },
+    {
+      "fullUrl": "http://nphies.sa/Coverage/d465faee-90f7-4a4c-a72d-a6d9ebba7b97",
+      "resource": {
+        "id": "d465faee-90f7-4a4c-a72d-a6d9ebba7b97",
+        "meta": {
+          "profile": [
+            "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0"
+          ]
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "EHCPOL",
+              "system": "http://nphies.sa/terminology/CodeSystem/coverage-type",
+              "display": "Extended healthcare"
+            }
+          ]
+        },
+        "class": [
+          {
+            "name": "Insurance Plan",
+            "type": {
+              "coding": [
+                {
+                  "code": "plan",
+                  "system": "http://terminology.hl7.org/CodeSystem/coverage-class"
+                }
+              ]
+            },
+            "value": "default-plan"
+          }
+        ],
+        "payor": [
+          {
+            "reference": "Organization/69912bb9-020e-42ac-839b-adb11efc18c0"
+          }
+        ],
+        "period": {
+          "end": "2028-03-16",
+          "start": "2021-03-16"
+        },
+        "status": "active",
+        "identifier": [
+          {
+            "value": "46117523",
+            "system": "http://payer.com/memberid"
+          }
+        ],
+        "subscriber": {
+          "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
+        },
+        "beneficiary": {
+          "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
+        },
+        "policyHolder": {
+          "reference": "Patient/2fbeed60-9a40-4e49-b326-8d800b13f2de"
+        },
+        "relationship": {
+          "coding": [
+            {
+              "code": "self",
+              "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+              "display": "Self"
+            }
+          ]
+        },
+        "resourceType": "Coverage"
+      }
     }
   ],
-  "timestamp": "2026-05-06T01:06:14.826+03:00",
+  "timestamp": "2026-05-13T11:19:05.961+03:00",
   "resourceType": "Bundle"
 }

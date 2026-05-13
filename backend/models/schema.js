@@ -487,6 +487,13 @@ export const validationSchemas = {
       Joi.number().precision(2).min(0),
       Joi.string().allow('', null)
     ).allow(null, '').optional(),
+
+    // Ventilation Hours (NPHIES BV-00731: required for institutional claims with items
+    // 13882-00-00, 13882-01-00, 13882-02-00, or 92211-00-00)
+    ventilation_hours: Joi.alternatives().try(
+      Joi.number().precision(2).min(0),
+      Joi.string().allow('', null)
+    ).allow(null, '').optional(),
     
     // Priority
     priority: Joi.string().valid('stat', 'normal', 'deferred').allow(null, '').optional(),

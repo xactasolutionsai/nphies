@@ -382,7 +382,13 @@ class BaseClaimMapper {
 
     if (info.value_string != null && !usedValueStringForCodeText) supportingInfo.valueString = info.value_string;
     else if (info.value_quantity != null) {
-      supportingInfo.valueQuantity = { value: parseFloat(info.value_quantity), system: 'http://unitsofmeasure.org', code: this.getUCUMCode(info.value_quantity_unit) };
+      const ucumCode = this.getUCUMCode(info.value_quantity_unit);
+      supportingInfo.valueQuantity = {
+        value: parseFloat(info.value_quantity),
+        system: 'http://unitsofmeasure.org',
+        code: ucumCode,
+        unit: info.value_quantity_unit || ucumCode
+      };
     }
     else if (info.value_boolean != null) supportingInfo.valueBoolean = info.value_boolean;
 

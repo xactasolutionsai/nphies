@@ -45,6 +45,8 @@ import {
   CLINICAL_TEXT_FIELDS,
   ADMISSION_FIELDS,
   ICU_FIELDS,
+  VENTILATION_FIELDS,
+  VENTILATION_TRIGGER_CODES,
   INVESTIGATION_RESULT_OPTIONS,
   SERVICE_EVENT_TYPE_OPTIONS,
   PRACTICE_CODES_OPTIONS,
@@ -220,6 +222,9 @@ export default function PriorAuthorizationForm() {
     },
     // ICU information (for institutional inpatient/daycase)
     icu_hours: '',
+    // Ventilation hours (NPHIES BV-00731: required for institutional claims that include
+    // items 13882-00-00, 13882-01-00, 13882-02-00, or 92211-00-00)
+    ventilation_hours: '',
     // Lab Observations for Professional claims (LOINC codes for Observation resources)
     // Per NPHIES IG: Lab test details MUST be in Observation resources, NOT Claim.item.productOrService
     // These are referenced via Claim.supportingInfo with category = "laboratory"
@@ -1396,7 +1401,20 @@ export default function PriorAuthorizationForm() {
       }
 
       const items = generateBulkTestItems(formData.auth_type, TARGET_COUNT, medications);
-      setFormData(prev => ({ ...prev, items }));
+      // The institutional code pool includes 13882-00-00 ("Management of continuous
+      // ventilatory support"), so the bulk-fill will deterministically emit it. Auto-default
+      // ventilation_hours to 24 to avoid the BV-00731 error storm seen in real submissions.
+      const triggersVentilation =
+        formData.auth_type === 'institutional' &&
+        items.some(it => VENTILATION_TRIGGER_CODES.has(it.product_or_service_code));
+      setFormData(prev => ({
+        ...prev,
+        items,
+        ventilation_hours:
+          triggersVentilation && (prev.ventilation_hours == null || prev.ventilation_hours === '')
+            ? 24
+            : prev.ventilation_hours,
+      }));
     } catch (err) {
       console.error('Bulk fill failed:', err);
       alert(`Failed to bulk-fill items: ${err.message || err}`);
@@ -2009,6 +2027,22 @@ export default function PriorAuthorizationForm() {
         field: 'icu_hours', 
         message: 'ICU hours is required for institutional claims with offline eligibility references' 
       });
+    }
+
+    // NPHIES BV-00731: Ventilation Hours required when items 13882-* / 92211-00-00 are present
+    if (formData.auth_type === 'institutional') {
+      const hasVentilationTrigger = (formData.items || []).some(it =>
+        VENTILATION_TRIGGER_CODES.has(it.product_or_service_code)
+      );
+      const ventilationHoursValue = formData.ventilation_hours != null && formData.ventilation_hours !== ''
+        ? parseFloat(formData.ventilation_hours)
+        : null;
+      if (hasVentilationTrigger && (!ventilationHoursValue || ventilationHoursValue <= 0)) {
+        validationErrors.push({
+          field: 'ventilation_hours',
+          message: 'Ventilation Hours is required (greater than 0) because the claim contains items 13882-00-00, 13882-01-00, 13882-02-00, or 92211-00-00 (NPHIES BV-00731).'
+        });
+      }
     }
     
     // Validate attachment file types
@@ -4000,19 +4034,35 @@ export default function PriorAuthorizationForm() {
             </Card>
           )}
 
-          {/* ICU Information Section - Only for institutional inpatient/daycase */}
-          {formData.auth_type === 'institutional' && ['inpatient', 'daycase'].includes(formData.encounter_class) && (
+          {/* ICU & Ventilation Information Section - shown for institutional inpatient/daycase
+              encounters, or whenever items 13882-* / 92211-00-00 are present (NPHIES BV-00731). */}
+          {formData.auth_type === 'institutional' && (
+            ['inpatient', 'daycase'].includes(formData.encounter_class) ||
+            (formData.items || []).some(it => VENTILATION_TRIGGER_CODES.has(it.product_or_service_code))
+          ) && (
             <Card className="border-red-200 bg-red-50/30">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5 text-red-600" />
-                  ICU Information
+                  ICU &amp; Ventilation Information
                 </CardTitle>
                 <CardDescription>
-                  ICU hours for institutional {formData.encounter_class === 'inpatient' ? 'inpatient' : 'day case'} encounters
+                  ICU and Ventilation hours for institutional encounters
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {(formData.items || []).some(it => VENTILATION_TRIGGER_CODES.has(it.product_or_service_code)) && (
+                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm">
+                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-red-800">
+                      <p className="font-medium">BV-00731: Ventilation Hours required</p>
+                      <p className="text-red-700">
+                        This claim contains item(s) 13882-00-00 / 13882-01-00 / 13882-02-00 / 92211-00-00.
+                        NPHIES requires Ventilation Hours to be provided.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {ICU_FIELDS.map((field) => (
                     <div key={field.key} className="space-y-2">
@@ -4024,6 +4074,27 @@ export default function PriorAuthorizationForm() {
                           step="0.1"
                           value={formData.icu_hours ?? ''}
                           onChange={(e) => handleChange('icu_hours', e.target.value)}
+                          placeholder={field.placeholder}
+                          className="pr-16"
+                        />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <Badge variant="secondary" className="font-mono text-xs">
+                            {field.unitLabel}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {VENTILATION_FIELDS.map((field) => (
+                    <div key={field.key} className="space-y-2">
+                      <Label htmlFor={field.key}>{field.label}</Label>
+                      <div className="relative">
+                        <Input
+                          id={field.key}
+                          type="number"
+                          step="0.1"
+                          value={formData.ventilation_hours ?? ''}
+                          onChange={(e) => handleChange('ventilation_hours', e.target.value)}
                           placeholder={field.placeholder}
                           className="pr-16"
                         />
