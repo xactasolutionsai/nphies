@@ -1,3 +1,4 @@
+import { atomicMethods } from '../utils/atomicController.js';
 import { BaseController } from './baseController.js';
 import { query } from '../db.js';
 import { validationSchemas } from '../models/schema.js';
@@ -19,6 +20,7 @@ import nphiesService from '../services/nphiesService.js';
 class ClaimBatchesController extends BaseController {
   constructor() {
     super('claim_batches', validationSchemas.claimBatch);
+    atomicMethods(this, ["createBatch","addClaimsToBatch","removeClaimsFromBatch","delete"], 'claim_batches');
   }
 
   // ============================================
@@ -404,7 +406,7 @@ class ClaimBatchesController extends BaseController {
       }
 
       const totalAmount = itemsResult.rows.reduce((sum, item) => 
-        sum + parseFloat(item.adjudication_amount || item.net_amount || 0), 0
+        sum + parseFloat(item.adjudication_amount ?? item.net_amount ?? 0), 0
       );
 
       const actualInsurerId = itemsResult.rows[0].insurer_id;
@@ -446,7 +448,7 @@ class ClaimBatchesController extends BaseController {
         request_number: item.request_number,
         product_code: item.product_or_service_code,
         product_display: item.product_or_service_display,
-        amount: item.adjudication_amount || item.net_amount,
+        amount: item.adjudication_amount ?? item.net_amount,
         pre_auth_ref: item.pre_auth_ref
       }));
 
@@ -1258,7 +1260,7 @@ class ClaimBatchesController extends BaseController {
       factor: item.factor || 1,
       tax: item.tax || 0,
       patient_share: item.patient_share || 0,
-      net_amount: item.adjudication_amount || item.net_amount,
+      net_amount: item.adjudication_amount ?? item.net_amount,
       serviced_date: item.serviced_date,
       body_site_code: item.body_site_code,
       body_site_system: item.body_site_system,
@@ -1311,7 +1313,7 @@ class ClaimBatchesController extends BaseController {
         sub_type: item.sub_type || 'op',
         status: 'pending',
         priority: item.priority || 'normal',
-        total_amount: item.adjudication_amount || item.net_amount,
+        total_amount: item.adjudication_amount ?? item.net_amount,
         service_date: item.serviced_date,
         encounter_class: item.encounter_class,
         encounter_start: item.encounter_start,

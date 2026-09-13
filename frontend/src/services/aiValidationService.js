@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8001/api';
+import { API_BASE_URL, apiFetch } from '@/services/http';
 
 class AIValidationService {
   constructor() {
@@ -22,7 +22,7 @@ class AIValidationService {
     };
 
     try {
-      const response = await fetch(url, config);
+      const response = await apiFetch(url, config);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

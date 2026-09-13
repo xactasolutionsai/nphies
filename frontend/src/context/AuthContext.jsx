@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '@/services/api';
+import { clearSession } from '@/services/http';
 
 const AuthContext = createContext(null);
 
@@ -8,25 +9,39 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Load user from localStorage on mount
   useEffect(() => {
+    let active = true;
+    const reset = () => { setUser(null); setToken(null); };
+    window.addEventListener('auth:changed', reset);
     const storedToken = localStorage.getItem('auth_token');
-    const storedUser = localStorage.getItem('auth_user');
-
-    if (storedToken && storedUser) {
-      try {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        console.error('Error parsing stored user data:', error);
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
-      }
+    if (!storedToken) { setLoading(false); }
+    else {
+      api.request('/auth/verify').then(response => {
+        if (active && storedToken === localStorage.getItem('auth_token')) {
+          setToken(storedToken);
+          setUser(response.data.user);
+          localStorage.setItem('auth_user', JSON.stringify(response.data.user));
+        }
+      }).catch(() => {
+        if (active && storedToken === localStorage.getItem('auth_token')) clearSession();
+      }).finally(() => { if (active) setLoading(false); });
     }
-    setLoading(false);
+    return () => { active = false; window.removeEventListener('auth:changed', reset); };
   }, []);
 
+  useEffect(() => {
+    if (!token) return;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      const remaining = payload.exp * 1000 - Date.now();
+      if (!Number.isFinite(remaining) || remaining <= 0) { clearSession(); return; }
+      const timer = setTimeout(clearSession, Math.min(remaining, 2147483647));
+      return () => clearTimeout(timer);
+    } catch { clearSession(); }
+  }, [token]);
+
   const login = (userData, authToken) => {
+    window.dispatchEvent(new Event('auth:changed'));
     setUser(userData);
     setToken(authToken);
     localStorage.setItem('auth_token', authToken);
@@ -34,10 +49,9 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    clearSession();
     setUser(null);
     setToken(null);
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_user');
   };
 
   const register = async (email, password, confirmPassword) => {

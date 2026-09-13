@@ -97,7 +97,8 @@ class SystemPollService {
 
       // 6. Update poll_logs with final stats
       const completedAt = new Date();
-      const status = processingResult.messagesReceived === 0 ? 'no_messages' : 'success';
+      const failed = processingResult.errors.length > 0;
+      const status = failed ? 'error' : processingResult.messagesReceived === 0 ? 'no_messages' : 'success';
 
       await this.updatePollLog(pollLogId, {
         status,
@@ -116,11 +117,11 @@ class SystemPollService {
       console.log(`[SystemPoll] Messages: ${processingResult.messagesReceived} received, ${processingResult.messagesMatched} matched, ${processingResult.messagesUnmatched} unmatched`);
 
       return {
-        success: true,
+        success: !failed,
         pollId,
         pollLogId,
         message: processingResult.messagesReceived > 0
-          ? `Processed ${processingResult.messagesReceived} message(s): ${processingResult.messagesMatched} matched, ${processingResult.messagesUnmatched} unmatched`
+          ? `Processed ${processingResult.messagesProcessed} of ${processingResult.messagesReceived} message(s): ${processingResult.messagesMatched} matched, ${processingResult.messagesUnmatched} unmatched`
           : 'No new messages found',
         stats: {
           received: processingResult.messagesReceived,

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+import { API_BASE_URL, apiFetch } from '@/services/http';
 
 // AI Features Configuration
 // Set to false to disable AI medication safety analysis and suggestions
@@ -9,17 +9,22 @@ const AI_FEATURES_ENABLED = false;
 const requestQueue = new Map();
 const cache = new Map();
 const REQUEST_DELAY = 100; // 100ms delay between requests
+let cacheRevision = 0;
+export function clearApiCache() { cacheRevision++; cache.clear(); requestQueue.clear(); }
+if (typeof window !== 'undefined') window.addEventListener('auth:changed', clearApiCache);
 const CACHE_DURATION = 30000; // 30 seconds cache
 
 class ApiService {
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
-    const method = options.method || 'GET';
+    const method = (options.method || 'GET').toUpperCase();
+    const revision = cacheRevision;
     
     // Only cache GET requests - POST/PUT/DELETE should always be fresh
     // This fixes the issue where AI validation returns stale cached results
-    const shouldCache = method === 'GET' && !endpoint.includes('/validate') && !endpoint.includes('/ai-validation');
-    const cacheKey = `${url}_${JSON.stringify(options)}`;
+    const shouldCache = method === 'GET' && !endpoint.includes('/validate') && !endpoint.includes('/ai-validation') && !endpoint.startsWith('/auth/');
+    const token = localStorage.getItem('auth_token');
+    const cacheKey = `${token || "anonymous"}_${url}_${JSON.stringify(options)}`;
     
     // Check cache first (only for cacheable requests)
     if (shouldCache) {
@@ -29,16 +34,15 @@ class ApiService {
       }
     }
 
-    // Get auth token from localStorage
-    const token = localStorage.getItem('auth_token');
+
     
     const config = {
+      ...options,
       headers: {
         'Content-Type': 'application/json',
         ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
-      ...options,
     };
 
     // Throttle requests to prevent rate limiting
@@ -53,22 +57,23 @@ class ApiService {
     requestQueue.set(url, Date.now());
 
     try {
-      const response = await fetch(url, config);
+      const response = await apiFetch(url, config);
       
       if (!response.ok) {
         if (response.status === 429) {
           // If rate limited, wait and retry once
           console.warn('Rate limited, waiting before retry...');
           await new Promise(resolve => setTimeout(resolve, 2000));
-          const retryResponse = await fetch(url, config);
+          const retryResponse = await apiFetch(url, config);
           if (!retryResponse.ok) {
             const errorData = await retryResponse.json().catch(() => ({}));
             const error = new Error(`HTTP error! status: ${retryResponse.status}`);
             error.response = { status: retryResponse.status, data: errorData };
             throw error;
           }
+          if (method !== 'GET') clearApiCache();
           const data = await retryResponse.json();
-          if (shouldCache) {
+          if (shouldCache && revision === cacheRevision && token === localStorage.getItem('auth_token')) {
             cache.set(cacheKey, { data, timestamp: Date.now() });
           }
           return data;
@@ -80,8 +85,9 @@ class ApiService {
         throw error;
       }
       
+      if (method !== 'GET') clearApiCache();
       const data = await response.json();
-      if (shouldCache) {
+      if (shouldCache && revision === cacheRevision && token === localStorage.getItem('auth_token')) {
         cache.set(cacheKey, { data, timestamp: Date.now() });
       }
       return data;

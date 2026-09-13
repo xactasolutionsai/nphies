@@ -1,3 +1,5 @@
+import { validateNestedArrays } from '../utils/inputFields.js';
+import { atomicMethods } from '../utils/atomicController.js';
 import { BaseController } from './baseController.js';
 import { query } from '../db.js';
 import { validationSchemas } from '../models/schema.js';
@@ -5,6 +7,7 @@ import { validationSchemas } from '../models/schema.js';
 class StandardApprovalsController extends BaseController {
   constructor() {
     super('standard_approvals_claims', validationSchemas.standardApprovalClaim);
+    atomicMethods(this, ["create","update","delete"], 'standard_approvals_claims');
   }
 
   // Get all forms with joins
@@ -78,7 +81,7 @@ class StandardApprovalsController extends BaseController {
       });
     } catch (error) {
       console.error('Error getting standard approvals:', error);
-      res.status(500).json({ error: 'Failed to fetch standard approvals' });
+      res.status(error.status || 500).json({ error: 'Failed to fetch standard approvals' });
     }
   }
 
@@ -141,13 +144,14 @@ class StandardApprovalsController extends BaseController {
       res.json({ data: formData });
     } catch (error) {
       console.error('Error getting standard approval by ID:', error);
-      res.status(500).json({ error: 'Failed to fetch standard approval' });
+      res.status(error.status || 500).json({ error: 'Failed to fetch standard approval' });
     }
   }
 
   // Create new form with nested data
   async create(req, res) {
     try {
+      validateNestedArrays(req.body, ['management_items', 'medications']);
       const { management_items, medications, ...formData } = req.body;
 
       // Clean up empty strings: convert empty strings to null for dates and numbers
@@ -278,7 +282,7 @@ class StandardApprovalsController extends BaseController {
       } else {
         // Return detailed error message
         const errorMessage = error.message || 'Failed to create standard approval';
-        res.status(500).json({ 
+        res.status(error.status || 500).json({
           error: errorMessage,
           details: error.detail || error.hint || null
         });
@@ -290,6 +294,7 @@ class StandardApprovalsController extends BaseController {
   async update(req, res) {
     try {
       const { id } = req.params;
+      validateNestedArrays(req.body, ['management_items', 'medications']);
       const { management_items, medications, ...formData } = req.body;
 
       // Clean up empty strings: convert empty strings to null for dates and numbers
@@ -359,8 +364,8 @@ class StandardApprovalsController extends BaseController {
       }
 
       // Delete existing management items and medications
-      await query('DELETE FROM standard_approvals_management_items WHERE form_id = $1', [id]);
-      await query('DELETE FROM standard_approvals_medications WHERE form_id = $1', [id]);
+      if (management_items !== undefined) await query('DELETE FROM standard_approvals_management_items WHERE form_id = $1', [id]);
+      if (medications !== undefined) await query('DELETE FROM standard_approvals_medications WHERE form_id = $1', [id]);
 
       // Insert updated management items if provided
       if (management_items && Array.isArray(management_items) && management_items.length > 0) {
@@ -415,7 +420,7 @@ class StandardApprovalsController extends BaseController {
       } else {
         // Return detailed error message
         const errorMessage = error.message || 'Failed to update standard approval';
-        res.status(500).json({ 
+        res.status(error.status || 500).json({
           error: errorMessage,
           details: error.detail || error.hint || null
         });
@@ -453,7 +458,7 @@ class StandardApprovalsController extends BaseController {
       if (error.code === '23503') {
         res.status(400).json({ error: 'Cannot delete record with related data' });
       } else {
-        res.status(500).json({ error: 'Failed to delete standard_approvals_claims' });
+        res.status(error.status || 500).json({ error: 'Failed to delete standard_approvals_claims' });
       }
     }
   }

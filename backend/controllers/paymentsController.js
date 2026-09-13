@@ -30,7 +30,7 @@ class PaymentsController extends BaseController {
       }
 
       // Get total count
-      const countQuery = queries.PAYMENTS.GET_ALL_COUNT + whereClause;
+      const countQuery = queries.PAYMENTS.GET_ALL_COUNT + whereClause.replace(/\$3/g, '$1');
       const countResult = await query(countQuery, queryParams.slice(2));
       const total = parseInt(countResult.rows[0].total);
 

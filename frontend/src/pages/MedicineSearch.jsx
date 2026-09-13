@@ -1,7 +1,7 @@
+import { API_BASE_URL, apiFetch } from '@/services/http';
 import React, { useState } from 'react';
 import { Search, Pill, Info, Loader2, AlertCircle, CheckCircle, X } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
 const MedicineSearch = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -27,8 +27,8 @@ const MedicineSearch = () => {
     setSearchResults([]);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/medicines/search?q=${encodeURIComponent(searchQuery)}`
+      const response = await apiFetch(
+        `${API_BASE_URL}/medicines/search?q=${encodeURIComponent(searchQuery)}`
       );
       
       if (!response.ok) {
@@ -90,8 +90,8 @@ const MedicineSearch = () => {
 
     // Fetch the data
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/medicines/${mrid}/ai-info`
+      const response = await apiFetch(
+        `${API_BASE_URL}/medicines/${mrid}/ai-info`
       );
 
       if (!response.ok) {

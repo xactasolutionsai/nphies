@@ -1,9 +1,13 @@
+import { dentalFields } from '../models/approvalFields.js';
+import { selectInputFields, validateNestedArrays } from '../utils/inputFields.js';
+import { atomicMethods } from '../utils/atomicController.js';
 import { BaseController } from './baseController.js';
 import { query } from '../db.js';
 
 class DentalApprovalsController extends BaseController {
   constructor() {
     super('dental_approvals', null); // No validation schema for now
+    atomicMethods(this, ["create","update","delete"], 'dental_approvals');
   }
 
   // Get all forms with joins
@@ -76,6 +80,7 @@ class DentalApprovalsController extends BaseController {
         }
       });
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error getting dental approvals:', error);
       res.status(500).json({ error: 'Failed to fetch dental approvals' });
     }
@@ -139,6 +144,7 @@ class DentalApprovalsController extends BaseController {
 
       res.json({ data: formData });
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error getting dental approval by ID:', error);
       res.status(500).json({ error: 'Failed to fetch dental approval' });
     }
@@ -150,7 +156,8 @@ class DentalApprovalsController extends BaseController {
       const { procedures, medications, ...formData } = req.body;
 
       // Clean up empty strings: convert empty strings to null for dates and numbers
-      const cleanedData = { ...formData };
+      validateNestedArrays(req.body, ["procedures","medications"]);
+      const cleanedData = selectInputFields(formData, dentalFields, ['patient_name', 'patient_identifier', 'insurer_name', 'provider_name_joined']);
       const dateFields = ['date_of_visit', 'expiry_date', 'provider_date'];
       const numberFields = ['age', 'duration_of_illness_days'];
       
@@ -161,7 +168,7 @@ class DentalApprovalsController extends BaseController {
       });
       
       numberFields.forEach(field => {
-        if (cleanedData[field] === '' || cleanedData[field] === null || cleanedData[field] === undefined) {
+        if (cleanedData[field] === '' || cleanedData[field] === null) {
           cleanedData[field] = null;
         }
       });
@@ -240,6 +247,7 @@ class DentalApprovalsController extends BaseController {
         throw err;
       }
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error creating dental approval:', error);
       if (error.code === '23505') {
         res.status(409).json({ error: 'Form number already exists' });
@@ -269,7 +277,8 @@ class DentalApprovalsController extends BaseController {
       const { procedures, medications, ...formData } = req.body;
 
       // Clean up empty strings: convert empty strings to null for dates and numbers
-      const cleanedData = { ...formData };
+      validateNestedArrays(req.body, ["procedures","medications"]);
+      const cleanedData = selectInputFields(formData, dentalFields, ['patient_name', 'patient_identifier', 'insurer_name']);
       const dateFields = ['date_of_visit', 'expiry_date', 'provider_date'];
       const numberFields = ['age', 'duration_of_illness_days'];
       
@@ -280,7 +289,7 @@ class DentalApprovalsController extends BaseController {
       });
       
       numberFields.forEach(field => {
-        if (cleanedData[field] === '' || cleanedData[field] === null || cleanedData[field] === undefined) {
+        if (cleanedData[field] === '' || cleanedData[field] === null) {
           cleanedData[field] = null;
         }
       });
@@ -307,15 +316,16 @@ class DentalApprovalsController extends BaseController {
         WHERE id = $${columns.length + 1}
         RETURNING *
       `;
-      const formResult = await query(updateFormQuery, values);
+      const formResult = columns.length > 0 ? await query(updateFormQuery, values)
+        : await query('SELECT * FROM dental_approvals WHERE id = $1', [id]);
 
       if (formResult.rows.length === 0) {
         return res.status(404).json({ error: 'Dental approval form not found' });
       }
 
       // Delete existing procedures and medications
-      await query('DELETE FROM dental_procedures WHERE form_id = $1', [id]);
-      await query('DELETE FROM dental_medications WHERE form_id = $1', [id]);
+      if (procedures !== undefined) await query('DELETE FROM dental_procedures WHERE form_id = $1', [id]);
+      if (medications !== undefined) await query('DELETE FROM dental_medications WHERE form_id = $1', [id]);
 
       // Insert updated procedures if provided
       if (procedures && Array.isArray(procedures) && procedures.length > 0) {
@@ -355,6 +365,7 @@ class DentalApprovalsController extends BaseController {
 
       res.json({ data: completeFormData });
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error updating dental approval:', error);
       if (error.code === '23505') {
         res.status(409).json({ error: 'Form number already exists' });
@@ -403,6 +414,7 @@ class DentalApprovalsController extends BaseController {
 
       res.json({ message: 'Dental approval form deleted successfully' });
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error deleting dental approval:', error);
       if (error.code === '23503') {
         res.status(400).json({ error: 'Cannot delete record with related data' });

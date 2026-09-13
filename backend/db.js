@@ -1,6 +1,9 @@
 import pkg from 'pg';
 const { Pool, types } = pkg;
 import dotenv from 'dotenv';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+const transactionContext = new AsyncLocalStorage();
 
 dotenv.config();
 
@@ -39,7 +42,7 @@ pool.on('error', (err) => {
 export const query = async (text, params) => {
   const start = Date.now();
   try {
-    const res = await pool.query(text, params);
+    const res = await (transactionContext.getStore() || pool).query(text, params);
     const duration = Date.now() - start;
     console.log('Executed query', { text, duration, rows: res.rowCount });
     return res;
@@ -56,10 +59,12 @@ export const getClient = async () => {
 
 // Helper function to execute a transaction
 export const transaction = async (callback) => {
+  const current = transactionContext.getStore();
+  if (current) return callback(current);
   const client = await getClient();
   try {
     await client.query('BEGIN');
-    const result = await callback(client);
+    const result = await transactionContext.run(client, () => callback(client));
     await client.query('COMMIT');
     return result;
   } catch (error) {

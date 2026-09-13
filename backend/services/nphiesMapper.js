@@ -1235,7 +1235,9 @@ class NphiesMapper {
       'not-in-network': 'Provider is not in the patient\'s network',
       'plan-expired': 'Patient\'s plan has expired',
       'coverage-suspended': 'Patient\'s coverage is suspended',
-      'benefit-exhausted': 'Patient\'s benefits have been exhausted'
+      'benefit-exhausted': 'Patient\'s benefits have been exhausted',
+      'ineligible': 'Ineligible',
+      'pending': 'Pending'
     };
     return fallback[code] || code;
   }
@@ -1359,15 +1361,7 @@ class NphiesMapper {
    * @param {string} code - The site eligibility code
    * @returns {string} Human-readable display text
    */
-  getSiteEligibilityDisplay(code) {
-    const displays = {
-      'eligible': 'Eligible',
-      'not-eligible': 'Not Eligible',
-      'ineligible': 'Ineligible',
-      'pending': 'Pending'
-    };
-    return displays[code] || code;
-  }
+
 
   /**
    * Extract benefits from a single insurance entry

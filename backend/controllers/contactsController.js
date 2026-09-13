@@ -76,8 +76,7 @@ class ContactsController {
   async getAll(req, res) {
     try {
       // Check if user is super admin
-      const userEmail = req.user?.email;
-      if (userEmail !== 'eng.anasshamia@gmail.com') {
+      if (req.user?.role !== 'admin') {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'Only super admin can access this resource'
@@ -146,8 +145,7 @@ class ContactsController {
   async getById(req, res) {
     try {
       // Check if user is super admin
-      const userEmail = req.user?.email;
-      if (userEmail !== 'eng.anasshamia@gmail.com') {
+      if (req.user?.role !== 'admin') {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'Only super admin can access this resource'
@@ -183,8 +181,7 @@ class ContactsController {
   async updateStatus(req, res) {
     try {
       // Check if user is super admin
-      const userEmail = req.user?.email;
-      if (userEmail !== 'eng.anasshamia@gmail.com') {
+      if (req.user?.role !== 'admin') {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'Only super admin can access this resource'

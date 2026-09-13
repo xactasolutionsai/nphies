@@ -1,3 +1,4 @@
+import { API_BASE_URL, apiFetch } from '@/services/http';
 import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Send, Save, RotateCcw } from 'lucide-react';
 import { useGeneralRequestForm } from './useGeneralRequestForm';
@@ -114,7 +115,7 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
   const validatePrerequisites = useCallback(async () => {
     try {
       console.log('🔍 Validating prerequisites...');
-      const response = await fetch('http://localhost:8001/api/general-request/validate', {
+      const response = await apiFetch(`${API_BASE_URL}/general-request/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -195,7 +196,7 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
       let response;
       if (isEditMode && requestId) {
         // Update existing request
-        response = await fetch(`http://localhost:8001/api/general-requests/${requestId}`, {
+        response = await apiFetch(`${API_BASE_URL}/general-requests/${requestId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -204,7 +205,7 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
         });
       } else {
         // Create new request
-        response = await fetch('http://localhost:8001/api/general-requests', {
+        response = await apiFetch(`${API_BASE_URL}/general-requests`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

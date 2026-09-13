@@ -5,8 +5,7 @@ class UsersController {
   async getAll(req, res) {
     try {
       // Check if user is super admin
-      const userEmail = req.user?.email;
-      if (userEmail !== 'eng.anasshamia@gmail.com') {
+      if (req.user?.role !== 'admin') {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'Only super admin can access this resource'
@@ -35,7 +34,7 @@ class UsersController {
 
       // Get paginated users (exclude password_hash)
       const dataQuery = `
-        SELECT id, email, created_at, updated_at 
+        SELECT id, email, role, created_at, updated_at
         FROM users
         ${whereClause}
         ORDER BY created_at DESC
@@ -66,8 +65,7 @@ class UsersController {
   async getById(req, res) {
     try {
       // Check if user is super admin
-      const userEmail = req.user?.email;
-      if (userEmail !== 'eng.anasshamia@gmail.com') {
+      if (req.user?.role !== 'admin') {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'Only super admin can access this resource'
@@ -77,7 +75,7 @@ class UsersController {
       const { id } = req.params;
 
       const result = await query(
-        'SELECT id, email, created_at, updated_at FROM users WHERE id = $1',
+        'SELECT id, email, role, created_at, updated_at FROM users WHERE id = $1',
         [id]
       );
 

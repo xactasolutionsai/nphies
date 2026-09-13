@@ -6,7 +6,7 @@
  * logic that was previously scattered across multiple controllers/services.
  */
 
-import pool from '../db.js';
+import pool, { transaction } from '../db.js';
 import advancedAuthParser from './advancedAuthParser.js';
 import CommunicationMapper from './communicationMapper.js';
 import PaymentReconciliationService from './paymentReconciliationService.js';
@@ -25,9 +25,8 @@ class MessageUpdater {
    * @returns {Object} Update result
    */
   async updatePriorAuthorization(recordId, claimResponse, responseBundle, schemaName) {
-    const client = await pool.connect();
-    try {
-      await client.query(`SET search_path TO ${schemaName}`);
+    return transaction(async client => {
+      await client.query(`SET LOCAL search_path TO ${schemaName}`);
 
       const outcome = claimResponse.outcome;
       let status = 'pending';
@@ -82,7 +81,7 @@ class MessageUpdater {
         currency: total.amount?.currency || 'SAR'
       })) || [];
 
-      const approvedAmount = totals.find(t => t.category === 'benefit')?.amount ||
+      const approvedAmount = totals.find(t => t.category === 'benefit')?.amount ??
                              totals.find(t => t.category === 'eligible')?.amount;
 
       const preAuthPeriod = claimResponse.preAuthPeriod;
@@ -106,7 +105,7 @@ class MessageUpdater {
         status, outcome, claimResponse.disposition, adjudicationOutcome,
         claimResponse.preAuthRef,
         preAuthPeriod?.start || null, preAuthPeriod?.end || null,
-        approvedAmount || null,
+        approvedAmount ?? null,
         JSON.stringify(claimResponse),
         recordId
       ]);
@@ -122,7 +121,7 @@ class MessageUpdater {
                                    itemOutcome === 'rejected' ? 'denied' :
                                    itemOutcome === 'partial' ? 'partial' : 'pending';
 
-        const itemApprovedAmount = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value ||
+        const itemApprovedAmount = item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'benefit')?.amount?.value ??
                                    item.adjudication?.find(a => a.category?.coding?.[0]?.code === 'eligible')?.amount?.value;
 
         await client.query(`
@@ -130,7 +129,7 @@ class MessageUpdater {
           SET adjudication_status = $1,
               adjudication_amount = $2
           WHERE prior_auth_id = $3 AND sequence = $4
-        `, [adjudicationStatus, itemApprovedAmount || null, recordId, item.itemSequence]);
+        `, [adjudicationStatus, itemApprovedAmount ?? null, recordId, item.itemSequence]);
       }
 
       // Extract NPHIES validation errors from ClaimResponse.error[] so the UI can
@@ -172,18 +171,15 @@ class MessageUpdater {
         disposition: claimResponse.disposition
       };
 
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**
    * Update a Claim Submission with a ClaimResponse from poll
    */
   async updateClaimSubmission(recordId, claimResponse, responseBundle, schemaName) {
-    const client = await pool.connect();
-    try {
-      await client.query(`SET search_path TO ${schemaName}`);
+    return transaction(async client => {
+      await client.query(`SET LOCAL search_path TO ${schemaName}`);
 
       const outcome = claimResponse.outcome;
       let adjudicationOutcome = null;
@@ -207,7 +203,7 @@ class MessageUpdater {
         currency: total.amount?.currency || 'SAR'
       })) || [];
 
-      const approvedAmount = totals.find(t => t.category === 'benefit')?.amount ||
+      const approvedAmount = totals.find(t => t.category === 'benefit')?.amount ??
                              totals.find(t => t.category === 'eligible')?.amount;
       const eligibleAmount = totals.find(t => t.category === 'eligible')?.amount;
       const benefitAmount = totals.find(t => t.category === 'benefit')?.amount;
@@ -237,11 +233,11 @@ class MessageUpdater {
       `, [
         newStatus, outcome, claimResponse.disposition,
         nphiesClaimId, adjudicationOutcome,
-        approvedAmount || null,
-        eligibleAmount || null,
-        benefitAmount || null,
-        copayAmount || null,
-        taxAmount || null,
+        approvedAmount ?? null,
+        eligibleAmount ?? null,
+        benefitAmount ?? null,
+        copayAmount ?? null,
+        taxAmount ?? null,
         JSON.stringify(bundleToStore),
         recordId
       ]);
@@ -272,10 +268,10 @@ class MessageUpdater {
           WHERE claim_id = $6 AND sequence = $7
         `, [
           adjudicationStatus,
-          itemBenefitAmount || itemEligibleAmount || null,
-          itemEligibleAmount || null,
-          itemCopayAmount || null,
-          itemApprovedQty || null,
+          itemBenefitAmount ?? itemEligibleAmount ?? null,
+          itemEligibleAmount ?? null,
+          itemCopayAmount ?? null,
+          itemApprovedQty ?? null,
           recordId,
           item.itemSequence
         ]);
@@ -320,9 +316,7 @@ class MessageUpdater {
         disposition: claimResponse.disposition
       };
 
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**
@@ -389,7 +383,7 @@ class MessageUpdater {
       const benefitAmount = totals.find(t => t.category === 'benefit')?.amount;
       const eligibleAmount = totals.find(t => t.category === 'eligible')?.amount;
       const copayAmount = totals.find(t => t.category === 'copay')?.amount;
-      const claimApprovedAmount = benefitAmount || eligibleAmount || 0;
+      const claimApprovedAmount = benefitAmount ?? eligibleAmount ?? 0;
 
       existingResponseBundle.polledResponses.push({
         batchNumber,
@@ -400,8 +394,8 @@ class MessageUpdater {
         nphiesClaimId,
         batchIdentifier,
         approvedAmount: claimApprovedAmount,
-        eligibleAmount: eligibleAmount || 0,
-        copayAmount: copayAmount || 0,
+        eligibleAmount: eligibleAmount ?? 0,
+        copayAmount: copayAmount ?? 0,
         errors: [],
         receivedAt: new Date().toISOString()
       });
@@ -474,7 +468,7 @@ class MessageUpdater {
           SET adjudication_status = $1,
               adjudication_amount = COALESCE($2, adjudication_amount)
           WHERE id = $3
-        `, [adjStatus, itemBenefitAmount || null, itemId]);
+        `, [adjStatus, itemBenefitAmount ?? null, itemId]);
       }
 
       console.log(`[MessageUpdater] Updated claim_batch #${recordId}: batchNumber=${batchNumber}, outcome=${outcome}, adjudication=${adjudicationOutcome}`);

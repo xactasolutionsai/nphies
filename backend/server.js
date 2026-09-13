@@ -1,4 +1,7 @@
 import express from 'express';
+import { pathToFileURL } from 'node:url';
+import { authenticateToken } from './middleware/auth.js';
+import { getJwtSecret } from './config/auth.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -41,6 +44,7 @@ import { startPollScheduler } from './scheduler/pollScheduler.js';
 // Load environment variables
 dotenv.config();
 
+getJwtSecret();
 const app = express();
 const PORT = process.env.PORT || 8001;
 
@@ -119,8 +123,10 @@ app.get('/health', async (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', usersRoutes);
+// Auth and public contact submissions are registered before the protected API.
 app.use('/api/contacts', contactsRoutes);
+app.use('/api', authenticateToken);
+app.use('/api/users', usersRoutes);
 app.use('/api/patients', patientsRoutes);
 app.use('/api/providers', providersRoutes);
 app.use('/api/insurers', insurersRoutes);
@@ -253,7 +259,7 @@ process.on('SIGINT', () => {
 });
 
 // Start server
-app.listen(PORT, async () => {
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`📚 API Documentation: http://localhost:${PORT}/`);

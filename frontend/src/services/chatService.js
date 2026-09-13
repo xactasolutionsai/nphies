@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+import { API_BASE_URL, apiFetch } from '@/services/http';
 
 /**
  * Chat Service
@@ -24,7 +24,7 @@ export const streamChatMessage = async (
   onError
 ) => {
   try {
-    const response = await fetch(`${API_URL}/api/chat/stream`, {
+    const response = await apiFetch(`${API_BASE_URL}/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -40,18 +40,21 @@ export const streamChatMessage = async (
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
+    if (!response.body) throw new Error('Streaming response is unavailable');
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
 
+    let cancelled = false;
     const readStream = async () => {
       try {
         while (true) {
           const { done, value } = await reader.read();
           
+          if (cancelled) return;
           if (done) {
-            console.log('Stream complete');
-            break;
+            onError(new Error('Connection ended before the response was complete. Please retry.'));
+            return;
           }
 
           // Decode the chunk
@@ -95,6 +98,7 @@ export const streamChatMessage = async (
 
     // Return cleanup function
     return () => {
+      cancelled = true;
       reader.cancel();
     };
 
@@ -111,7 +115,7 @@ export const streamChatMessage = async (
  */
 export const checkChatHealth = async () => {
   try {
-    const response = await fetch(`${API_URL}/api/chat/health`);
+    const response = await apiFetch(`${API_BASE_URL}/chat/health`);
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);

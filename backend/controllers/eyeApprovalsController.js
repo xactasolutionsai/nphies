@@ -1,9 +1,13 @@
+import { eyeFields } from '../models/approvalFields.js';
+import { selectInputFields, validateNestedArrays } from '../utils/inputFields.js';
+import { atomicMethods } from '../utils/atomicController.js';
 import { BaseController } from './baseController.js';
 import { query } from '../db.js';
 
 class EyeApprovalsController extends BaseController {
   constructor() {
     super('eye_approvals', null); // No validation schema for now
+    atomicMethods(this, ["create","update","delete"], 'eye_approvals');
   }
 
   // Get all forms with joins
@@ -76,6 +80,7 @@ class EyeApprovalsController extends BaseController {
         }
       });
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error getting eye approvals:', error);
       res.status(500).json({ error: 'Failed to fetch eye approvals' });
     }
@@ -130,6 +135,7 @@ class EyeApprovalsController extends BaseController {
 
       res.json({ data: formData });
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error getting eye approval by ID:', error);
       res.status(500).json({ error: 'Failed to fetch eye approval' });
     }
@@ -141,7 +147,8 @@ class EyeApprovalsController extends BaseController {
       const { procedures, ...formData } = req.body;
 
       // Clean up empty strings: convert empty strings to null for dates and numbers
-      const cleanedData = { ...formData };
+      validateNestedArrays(req.body, ["procedures"]);
+      const cleanedData = selectInputFields(formData, eyeFields, ['patient_name', 'patient_identifier', 'insurer_name', 'provider_name_joined']);
       const dateFields = ['date_of_visit', 'expiry_date', 'provider_date'];
       const numberFields = ['age', 'duration_of_illness_days', 'number_of_pairs'];
       
@@ -152,7 +159,7 @@ class EyeApprovalsController extends BaseController {
       });
       
       numberFields.forEach(field => {
-        if (cleanedData[field] === '' || cleanedData[field] === null || cleanedData[field] === undefined) {
+        if (cleanedData[field] === '' || cleanedData[field] === null) {
           cleanedData[field] = null;
         }
       });
@@ -232,6 +239,7 @@ class EyeApprovalsController extends BaseController {
         throw err;
       }
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error creating eye approval:', error);
       if (error.code === '23505') {
         res.status(409).json({ error: 'Form number already exists' });
@@ -261,7 +269,8 @@ class EyeApprovalsController extends BaseController {
       const { procedures, ...formData } = req.body;
 
       // Clean up empty strings: convert empty strings to null for dates and numbers
-      const cleanedData = { ...formData };
+      validateNestedArrays(req.body, ["procedures"]);
+      const cleanedData = selectInputFields(formData, eyeFields, ['patient_name', 'patient_identifier', 'insurer_name']);
       const dateFields = ['date_of_visit', 'expiry_date', 'provider_date'];
       const numberFields = ['age', 'duration_of_illness_days', 'number_of_pairs'];
       
@@ -272,7 +281,7 @@ class EyeApprovalsController extends BaseController {
       });
       
       numberFields.forEach(field => {
-        if (cleanedData[field] === '' || cleanedData[field] === null || cleanedData[field] === undefined) {
+        if (cleanedData[field] === '' || cleanedData[field] === null) {
           cleanedData[field] = null;
         }
       });
@@ -316,14 +325,15 @@ class EyeApprovalsController extends BaseController {
         WHERE id = $${columns.length + 1}
         RETURNING *
       `;
-      const formResult = await query(updateFormQuery, values);
+      const formResult = columns.length > 0 ? await query(updateFormQuery, values)
+        : await query('SELECT * FROM eye_approvals WHERE id = $1', [id]);
 
       if (formResult.rows.length === 0) {
         return res.status(404).json({ error: 'Eye approval form not found' });
       }
 
       // Delete existing procedures
-      await query('DELETE FROM eye_procedures WHERE form_id = $1', [id]);
+      if (procedures !== undefined) await query('DELETE FROM eye_procedures WHERE form_id = $1', [id]);
 
       // Insert updated procedures if provided
       if (procedures && Array.isArray(procedures) && procedures.length > 0) {
@@ -347,6 +357,7 @@ class EyeApprovalsController extends BaseController {
 
       res.json({ data: completeFormData });
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error updating eye approval:', error);
       if (error.code === '23505') {
         res.status(409).json({ error: 'Form number already exists' });
@@ -392,6 +403,7 @@ class EyeApprovalsController extends BaseController {
 
       res.json({ message: 'Eye approval form deleted successfully' });
     } catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
       console.error('Error deleting eye approval:', error);
       if (error.code === '23503') {
         res.status(400).json({ error: 'Cannot delete record with related data' });

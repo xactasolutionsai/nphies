@@ -1,9 +1,9 @@
+import { API_BASE_URL, apiFetch } from '@/services/http';
 /**
  * Prior Authorization API Service
  * Dedicated service for NPHIES Prior Authorization operations
  */
 
-const API_BASE_URL = 'http://localhost:8001/api';
 
 class PriorAuthApiService {
   async request(endpoint, options = {}) {
@@ -18,7 +18,7 @@ class PriorAuthApiService {
     };
 
     try {
-      const response = await fetch(url, config);
+      const response = await apiFetch(url, config);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

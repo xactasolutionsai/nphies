@@ -24,7 +24,7 @@ class OllamaService {
     console.log(`   ⏱️  Timeout: ${this.timeout}ms`);
     
     // Test connection on startup
-    this.testConnection();
+    if (process.env.NODE_ENV !== 'test') this.testConnection();
   }
 
   /**

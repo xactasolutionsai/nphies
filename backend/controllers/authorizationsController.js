@@ -48,7 +48,7 @@ class AuthorizationsController extends BaseController {
         LEFT JOIN insurers i ON a.insurer_id = i.insurer_id
         ${whereClause}
       `;
-      const countResult = await query(countQuery, countParams);
+      const countResult = await query(countQuery.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) - 2)), countParams);
       const total = parseInt(countResult.rows[0].total);
 
       // Get paginated data with joins

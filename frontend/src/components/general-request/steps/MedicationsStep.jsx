@@ -1,3 +1,4 @@
+import { API_BASE_URL, apiFetch } from '@/services/http';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Pill, Shield, Sparkles, RefreshCw } from 'lucide-react';
@@ -5,7 +6,6 @@ import MedicationsTable from '../shared/MedicationsTable';
 import MedicationSafetyPanel from '../shared/MedicationSafetyPanel';
 import MedicationSuggestionsPanel from '../shared/MedicationSuggestionsPanel';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
 /**
  * MedicationsStep Component
@@ -65,7 +65,7 @@ const MedicationsStep = React.memo(({
     try {
       const patientAge = calculateAge(formData.patient?.dateOfBirth);
       
-      const response = await fetch(`${API_BASE_URL}/api/medication-safety/analyze`, {
+      const response = await apiFetch(`${API_BASE_URL}/medication-safety/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -145,7 +145,7 @@ const MedicationsStep = React.memo(({
     try {
       const patientAge = calculateAge(formData.patient?.dateOfBirth);
       
-      const response = await fetch(`${API_BASE_URL}/api/medication-safety/suggest`, {
+      const response = await apiFetch(`${API_BASE_URL}/medication-safety/suggest`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -207,7 +207,6 @@ const MedicationsStep = React.memo(({
         hasWarningsRef.current = false;
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [validMedications.length]);
 
   return (

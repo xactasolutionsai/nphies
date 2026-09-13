@@ -1,7 +1,7 @@
+import { API_BASE_URL, apiFetch } from '@/services/http';
 import React, { useState, useCallback } from 'react';
 import { Search, X, Loader2, AlertCircle } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
 /**
  * MedicationSearchModal Component
@@ -26,8 +26,8 @@ const MedicationSearchModal = ({ onClose, onSelect }) => {
     setSearchResults([]);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/medicines/search?q=${encodeURIComponent(searchQuery)}`
+      const response = await apiFetch(
+        `${API_BASE_URL}/medicines/search?q=${encodeURIComponent(searchQuery)}`
       );
       
       if (!response.ok) {

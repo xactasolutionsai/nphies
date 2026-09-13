@@ -1,3 +1,7 @@
+import { serverClaimFields } from '../models/claimInput.js';
+import { getSelectedCoverage, persistCoverageInput } from '../utils/coverage.js';
+import { validateNestedArrays } from '../utils/inputFields.js';
+import { atomicMethods } from '../utils/atomicController.js';
 import { BaseController } from './baseController.js';
 import { query } from '../db.js';
 import { validationSchemas } from '../models/schema.js';
@@ -29,6 +33,7 @@ function sanitizePharmacyDeviceFields(items, authType) {
 class PriorAuthorizationsController extends BaseController {
   constructor() {
     super('prior_authorizations', validationSchemas.priorAuthorization);
+    atomicMethods(this, ["create","update","delete","submitUpdate","transfer"], 'prior_authorizations');
   }
 
   /**
@@ -67,6 +72,7 @@ class PriorAuthorizationsController extends BaseController {
    * @returns {Object|null} Coverage data with insurer info
    */
   async getCoverageData(patientId, insurerId, coverageId = null) {
+    if (coverageId) return getSelectedCoverage(patientId, insurerId, coverageId);
     try {
       let coverageResult;
       
@@ -200,7 +206,7 @@ class PriorAuthorizationsController extends BaseController {
       });
     } catch (error) {
       console.error('Error getting prior authorizations:', error);
-      res.status(500).json({ error: 'Failed to fetch prior authorizations' });
+      res.status(error.status || 500).json({ error: 'Failed to fetch prior authorizations' });
     }
   }
 
@@ -212,7 +218,7 @@ class PriorAuthorizationsController extends BaseController {
     const formQuery = `
       SELECT
         pa.id, pa.request_number, pa.auth_type, pa.patient_id, pa.provider_id, pa.insurer_id,
-        pa.coverage_id, pa.practitioner_id, pa.status, pa.outcome, pa.adjudication_outcome,
+        pa.selected_coverage_id AS coverage_id, pa.practitioner_id, pa.status, pa.outcome, pa.adjudication_outcome,
         pa.disposition, pa.pre_auth_ref, pa.nphies_request_id, pa.nphies_response_id,
         pa.is_nphies_generated, pa.encounter_class, pa.encounter_start, pa.encounter_end,
         pa.is_update, pa.related_auth_id, pa.is_resubmission, pa.related_claim_identifier,
@@ -360,7 +366,7 @@ class PriorAuthorizationsController extends BaseController {
       res.json({ data: priorAuth });
     } catch (error) {
       console.error('Error getting prior authorization by ID:', error);
-      res.status(500).json({ error: 'Failed to fetch prior authorization' });
+      res.status(error.status || 500).json({ error: 'Failed to fetch prior authorization' });
     }
   }
 
@@ -369,6 +375,7 @@ class PriorAuthorizationsController extends BaseController {
    */
   async create(req, res) {
     try {
+      validateNestedArrays(req.body, ['items', 'supporting_info', 'diagnoses', 'attachments']);
       const { items, supporting_info, diagnoses, attachments, ...formData } = req.body;
 
       // Clean up data
@@ -423,6 +430,7 @@ class PriorAuthorizationsController extends BaseController {
       delete value.mother_patient_data;
 
       // Prepare JSONB fields for PostgreSQL (stringify objects/arrays)
+      await persistCoverageInput(value);
       this.prepareJsonbFields(value);
 
       // Extract columns and values for main table
@@ -475,7 +483,7 @@ class PriorAuthorizationsController extends BaseController {
       } else if (error.code === '23503') {
         res.status(400).json({ error: 'Invalid reference (patient, provider, or insurer not found)' });
       } else {
-        res.status(500).json({ error: error.message || 'Failed to create prior authorization' });
+        res.status(error.status || 500).json({ error: error.message || 'Failed to create prior authorization' });
       }
     }
   }
@@ -486,6 +494,7 @@ class PriorAuthorizationsController extends BaseController {
   async update(req, res) {
     try {
       const { id } = req.params;
+      validateNestedArrays(req.body, ['items', 'supporting_info', 'diagnoses', 'attachments']);
       const { items, supporting_info, diagnoses, attachments, ...formData } = req.body;
 
       // Check if exists
@@ -505,7 +514,7 @@ class PriorAuthorizationsController extends BaseController {
       const cleanedData = this.cleanFormData(formData);
 
       // Validate input
-      const { error, value } = this.validationSchema.validate(cleanedData, { abortEarly: false });
+      const { error, value } = this.validationSchema.fork(['auth_type'], field => field.optional()).validate(cleanedData, { abortEarly: false });
       if (error) {
         const errors = error.details.map(detail => ({
           field: detail.path.join('.'),
@@ -542,6 +551,7 @@ class PriorAuthorizationsController extends BaseController {
       delete value.mother_patient_data;
 
       // Prepare JSONB fields for PostgreSQL (stringify objects/arrays)
+      await persistCoverageInput(value, existing);
       this.prepareJsonbFields(value);
 
       // Extract columns and values
@@ -617,7 +627,7 @@ class PriorAuthorizationsController extends BaseController {
       `;
       
       try {
-        await query(updateQuery, values);
+        if (columns.length > 0) await query(updateQuery, values);
       } catch (error) {
         // Enhanced error logging for JSONB issues
         if (error.message && error.message.includes('invalid input syntax for type json')) {
@@ -649,14 +659,14 @@ class PriorAuthorizationsController extends BaseController {
 
       // Delete and re-insert nested data
       // Delete item details first (due to foreign key constraint)
-      await query(`
+      if (items !== undefined) await query(`
         DELETE FROM prior_authorization_item_details
         WHERE item_id IN (SELECT id FROM prior_authorization_items WHERE prior_auth_id = $1)
       `, [id]);
-      await query('DELETE FROM prior_authorization_items WHERE prior_auth_id = $1', [id]);
-      await query('DELETE FROM prior_authorization_supporting_info WHERE prior_auth_id = $1', [id]);
-      await query('DELETE FROM prior_authorization_diagnoses WHERE prior_auth_id = $1', [id]);
-      await query('DELETE FROM prior_authorization_attachments WHERE prior_auth_id = $1', [id]);
+      if (items !== undefined) await query('DELETE FROM prior_authorization_items WHERE prior_auth_id = $1', [id]);
+      if (supporting_info !== undefined) await query('DELETE FROM prior_authorization_supporting_info WHERE prior_auth_id = $1', [id]);
+      if (diagnoses !== undefined) await query('DELETE FROM prior_authorization_diagnoses WHERE prior_auth_id = $1', [id]);
+      if (attachments !== undefined) await query('DELETE FROM prior_authorization_attachments WHERE prior_auth_id = $1', [id]);
 
       // Re-insert items (with shadow billing auto-detection)
       if (items && Array.isArray(items) && items.length > 0) {
@@ -688,7 +698,7 @@ class PriorAuthorizationsController extends BaseController {
       res.json({ data: completeData });
     } catch (error) {
       console.error('Error updating prior authorization:', error);
-      res.status(500).json({ error: error.message || 'Failed to update prior authorization' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to update prior authorization' });
     }
   }
 
@@ -718,7 +728,7 @@ class PriorAuthorizationsController extends BaseController {
       res.json({ message: 'Prior authorization deleted successfully' });
     } catch (error) {
       console.error('Error deleting prior authorization:', error);
-      res.status(500).json({ error: 'Failed to delete prior authorization' });
+      res.status(error.status || 500).json({ error: 'Failed to delete prior authorization' });
     }
   }
 
@@ -823,7 +833,7 @@ class PriorAuthorizationsController extends BaseController {
       )?.resource?.id || null;
 
       // Update status to pending and store request bundle
-      await query(`
+      const reserved = await query(`
         UPDATE prior_authorizations 
         SET status = 'pending', 
             nphies_request_id = $1, 
@@ -831,8 +841,10 @@ class PriorAuthorizationsController extends BaseController {
             outbound_message_header_id = $3,
             request_date = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $4
+        WHERE id = $4 AND status IN ('draft', 'error') RETURNING id
       `, [nphiesRequestId, JSON.stringify(bundle), outboundMessageHeaderId, id]);
+
+      if (reserved.rowCount !== 1) return res.status(409).json({ error: 'Prior authorization is already being sent or its status changed' });
 
       // Send to NPHIES (use submitPriorAuth for prior authorization requests)
       const nphiesResponse = await nphiesService.submitPriorAuth(bundle);
@@ -1059,7 +1071,7 @@ class PriorAuthorizationsController extends BaseController {
       }
     } catch (error) {
       console.error('Error sending prior authorization to NPHIES:', error);
-      res.status(500).json({ error: error.message || 'Failed to send prior authorization' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to send prior authorization' });
     }
   }
 
@@ -1101,6 +1113,7 @@ class PriorAuthorizationsController extends BaseController {
         attachments: attachments || existing.attachments
       };
 
+      await persistCoverageInput(updateData);
       // Create the update record
       const columns = Object.keys(updateData).filter(key => 
         !['items', 'supporting_info', 'diagnoses', 'attachments', 'responses', 
@@ -1143,7 +1156,7 @@ class PriorAuthorizationsController extends BaseController {
       });
     } catch (error) {
       console.error('Error creating update request:', error);
-      res.status(500).json({ error: error.message || 'Failed to create update request' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to create update request' });
     }
   }
 
@@ -1249,7 +1262,7 @@ class PriorAuthorizationsController extends BaseController {
       }
     } catch (error) {
       console.error('Error cancelling prior authorization:', error);
-      res.status(500).json({ error: error.message || 'Failed to cancel prior authorization' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to cancel prior authorization' });
     }
   }
 
@@ -1287,6 +1300,7 @@ class PriorAuthorizationsController extends BaseController {
         pre_auth_ref: existing.pre_auth_ref
       };
 
+      await persistCoverageInput(transferData);
       // Create the transfer record
       const columns = Object.keys(transferData).filter(key => 
         !['items', 'supporting_info', 'diagnoses', 'attachments', 'responses',
@@ -1326,7 +1340,7 @@ class PriorAuthorizationsController extends BaseController {
       });
     } catch (error) {
       console.error('Error creating transfer request:', error);
-      res.status(500).json({ error: error.message || 'Failed to create transfer request' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to create transfer request' });
     }
   }
 
@@ -1349,7 +1363,7 @@ class PriorAuthorizationsController extends BaseController {
       const pollResult = await communicationService.pollForMessages(id, schemaName);
 
       if (!pollResult.success) {
-        return res.status(500).json({
+        return res.status(502).json({
           error: 'Failed to poll NPHIES',
           details: pollResult.error,
           pollBundle: pollResult.pollBundle // Include the bundle that was sent for debugging
@@ -1401,7 +1415,7 @@ class PriorAuthorizationsController extends BaseController {
       });
     } catch (error) {
       console.error('Error polling for response:', error);
-      res.status(500).json({ error: error.message || 'Failed to poll for response' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to poll for response' });
     }
   }
 
@@ -1469,7 +1483,7 @@ class PriorAuthorizationsController extends BaseController {
       });
     } catch (error) {
       console.error('Error generating poll bundle preview:', error);
-      res.status(500).json({ error: error.message || 'Failed to generate poll bundle preview' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to generate poll bundle preview' });
     }
   }
 
@@ -1509,7 +1523,7 @@ class PriorAuthorizationsController extends BaseController {
       });
     } catch (error) {
       console.error('Error previewing communication bundle:', error);
-      res.status(500).json({ 
+      res.status(error.status || 500).json({
         error: error.message || 'Failed to preview communication bundle'
       });
     }
@@ -1572,7 +1586,7 @@ class PriorAuthorizationsController extends BaseController {
 
     } catch (error) {
       console.error('Error sending unsolicited communication:', error);
-      res.status(500).json({ error: error.message || 'Failed to send communication' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to send communication' });
     }
   }
 
@@ -1620,7 +1634,7 @@ class PriorAuthorizationsController extends BaseController {
 
     } catch (error) {
       console.error('Error sending solicited communication:', error);
-      res.status(500).json({ error: error.message || 'Failed to send communication' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to send communication' });
     }
   }
 
@@ -1650,7 +1664,7 @@ class PriorAuthorizationsController extends BaseController {
 
     } catch (error) {
       console.error('Error getting communication requests:', error);
-      res.status(500).json({ error: error.message || 'Failed to get communication requests' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to get communication requests' });
     }
   }
 
@@ -1692,7 +1706,7 @@ class PriorAuthorizationsController extends BaseController {
       res.send(buffer);
     } catch (error) {
       console.error('Error downloading communication request attachment:', error);
-      res.status(500).json({ error: error.message || 'Failed to download attachment' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to download attachment' });
     }
   }
 
@@ -1715,7 +1729,7 @@ class PriorAuthorizationsController extends BaseController {
 
     } catch (error) {
       console.error('Error getting communications:', error);
-      res.status(500).json({ error: error.message || 'Failed to get communications' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to get communications' });
     }
   }
 
@@ -1745,7 +1759,7 @@ class PriorAuthorizationsController extends BaseController {
 
     } catch (error) {
       console.error('Error getting communication:', error);
-      res.status(500).json({ error: error.message || 'Failed to get communication' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to get communication' });
     }
   }
 
@@ -1776,7 +1790,7 @@ class PriorAuthorizationsController extends BaseController {
 
     } catch (error) {
       console.error('Error polling for communication acknowledgment:', error);
-      res.status(500).json({ 
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to poll for acknowledgment' 
       });
@@ -1798,7 +1812,7 @@ class PriorAuthorizationsController extends BaseController {
 
     } catch (error) {
       console.error('Error polling for all queued acknowledgments:', error);
-      res.status(500).json({ 
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to poll for acknowledgments' 
       });
@@ -1867,7 +1881,7 @@ class PriorAuthorizationsController extends BaseController {
       res.json({ data: bundle });
     } catch (error) {
       console.error('Error generating bundle:', error);
-      res.status(500).json({ error: error.message || 'Failed to generate FHIR bundle' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to generate FHIR bundle' });
     }
   }
 
@@ -2072,7 +2086,7 @@ class PriorAuthorizationsController extends BaseController {
       });
     } catch (error) {
       console.error('Error generating preview bundle:', error);
-      res.status(500).json({ error: error.message || 'Failed to generate preview' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to generate preview' });
     }
   }
 
@@ -2094,6 +2108,7 @@ class PriorAuthorizationsController extends BaseController {
       'response_date',
       'request_bundle',
       'response_bundle',
+      'selected_coverage_id',
       
       // Joined fields from patients table
       'patient_name',
@@ -2118,7 +2133,7 @@ class PriorAuthorizationsController extends BaseController {
       'attachments'
     ];
     
-    readOnlyFields.forEach(field => {
+    [...readOnlyFields, ...serverClaimFields].forEach(field => {
       delete cleanedData[field];
     });
     
@@ -2126,7 +2141,7 @@ class PriorAuthorizationsController extends BaseController {
                         'authorization_offline_date',
                         'pre_auth_period_start', 'pre_auth_period_end', 
                         'transfer_period_start', 'transfer_period_end'];
-    const numberFields = ['coverage_id', 'related_auth_id', 'total_amount', 'approved_amount'];
+    const numberFields = [ 'related_auth_id', 'total_amount', 'approved_amount'];
     
     dateFields.forEach(field => {
       if (cleanedData[field] === '' || cleanedData[field] === null) {
@@ -2135,7 +2150,7 @@ class PriorAuthorizationsController extends BaseController {
     });
     
     numberFields.forEach(field => {
-      if (cleanedData[field] === '' || cleanedData[field] === null || cleanedData[field] === undefined) {
+      if (cleanedData[field] === '' || cleanedData[field] === null) {
         cleanedData[field] = null;
       }
     });
@@ -2182,6 +2197,7 @@ class PriorAuthorizationsController extends BaseController {
   prepareJsonbFields(data) {
     const jsonbFields = ['vision_prescription', 'lab_observations', 'medication_safety_analysis'];
     jsonbFields.forEach(field => {
+      if (!Object.hasOwn(data, field)) return;
       if (data[field] !== undefined && data[field] !== null) {
         // If it's already a string (JSON), validate it's valid JSON and not double-encoded
         if (typeof data[field] === 'string') {
@@ -2494,4 +2510,3 @@ class PriorAuthorizationsController extends BaseController {
 }
 
 export default new PriorAuthorizationsController();
-

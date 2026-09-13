@@ -105,7 +105,7 @@ export default function Layout({ children }) {
   const [toolsOpen, setToolsOpen] = useState(true);
   const location = useLocation();
 
-  const isSuperAdmin = user?.email === 'eng.anasshamia@gmail.com';
+  const isSuperAdmin = user?.role === 'admin';
 
   const handleLogout = () => {
     logout();

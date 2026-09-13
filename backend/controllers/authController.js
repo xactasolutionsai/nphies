@@ -1,8 +1,8 @@
 import { query } from '../db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../config/auth.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 class AuthController {
@@ -12,7 +12,7 @@ class AuthController {
       const { email, password, confirmPassword } = req.body;
 
       // Validation
-      if (!email || !password) {
+      if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || typeof password !== 'string' || !password) {
         return res.status(400).json({
           error: 'Email and password are required'
         });
@@ -48,7 +48,7 @@ class AuthController {
 
       // Insert user
       const result = await query(
-        'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at',
+        'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, role, created_at',
         [email.toLowerCase().trim(), passwordHash]
       );
 
@@ -57,7 +57,7 @@ class AuthController {
       // Generate JWT token
       const token = jwt.sign(
         { userId: user.id, email: user.email },
-        JWT_SECRET,
+        getJwtSecret(),
         { expiresIn: JWT_EXPIRES_IN }
       );
 
@@ -68,6 +68,7 @@ class AuthController {
           user: {
             id: user.id,
             email: user.email,
+            role: user.role,
             created_at: user.created_at
           },
           token
@@ -96,7 +97,7 @@ class AuthController {
 
       // Find user by email
       const result = await query(
-        'SELECT id, email, password_hash, created_at FROM users WHERE email = $1',
+        'SELECT id, email, role, password_hash, created_at FROM users WHERE email = $1',
         [email.toLowerCase().trim()]
       );
 
@@ -120,7 +121,7 @@ class AuthController {
       // Generate JWT token
       const token = jwt.sign(
         { userId: user.id, email: user.email },
-        JWT_SECRET,
+        getJwtSecret(),
         { expiresIn: JWT_EXPIRES_IN }
       );
 
@@ -131,6 +132,7 @@ class AuthController {
           user: {
             id: user.id,
             email: user.email,
+            role: user.role,
             created_at: user.created_at
           },
           token
@@ -156,11 +158,11 @@ class AuthController {
         });
       }
 
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] });
       
       // Get user info
       const result = await query(
-        'SELECT id, email, created_at FROM users WHERE id = $1',
+        'SELECT id, email, role, created_at FROM users WHERE id = $1',
         [decoded.userId]
       );
 

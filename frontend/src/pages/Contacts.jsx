@@ -231,7 +231,7 @@ export default function ContactsPage() {
   const [updatingStatus, setUpdatingStatus] = useState(null);
   const [selectedContact, setSelectedContact] = useState(null);
 
-  const isSuperAdmin = user?.email === 'eng.anasshamia@gmail.com';
+  const isSuperAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (!isSuperAdmin) {

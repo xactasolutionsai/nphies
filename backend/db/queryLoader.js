@@ -1,136 +1,42 @@
-// Dynamic query loader for auto-update on application start
-// This allows queries to be updated without restarting the application
+import fs from 'node:fs';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-let queries = {};
-let lastModified = 0;
-let queriesPath = path.join(__dirname, 'queries.js');
-
-// Import queries directly
-import { queries as importedQueries } from './queries.js';
-
-/**
- * Load queries from the queries.js file
- * This function will re-import the queries if the file has been modified
- * @returns {Promise<Object>} The loaded queries object
- */
-export async function loadQueries() {
-  try {
-    // Check if queries.js file exists and get its modification time
-    if (fs.existsSync(queriesPath)) {
-      const stats = fs.statSync(queriesPath);
-      const currentModified = stats.mtime.getTime();
-      
-      // If file has been modified since last load, reload it
-      if (currentModified > lastModified) {
-        console.log('🔄 Reloading queries from queries.js...');
-        
-        // Clear current queries to force reload
-        queries = {};
-        
-        // Update last modified time
-        lastModified = currentModified;
-        
-        console.log('✅ Queries reloaded successfully');
-      }
-    }
-    
-    // If queries is empty or we need to reload, use the imported queries
-    if (Object.keys(queries).length === 0) {
-      console.log('📥 Loading queries from queries.js...');
-      
-      // Use the directly imported queries
-      queries = { ...importedQueries };
-      
-      console.log('✅ Queries loaded successfully');
-    }
-    
-    return queries;
-  } catch (error) {
-    console.error('❌ Error loading queries:', error);
-    
-    // Return empty queries object as fallback
-    return {};
+export function createQueryLoader(filename) {
+  let queries;
+  let lastModified = -1;
+  let revision = 0;
+  let loading;
+  async function load(force = false) {
+    if (loading) return loading;
+    const modified = fs.statSync(filename).mtimeMs;
+    if (!force && queries && modified === lastModified) return queries;
+    loading = (async () => {
+      const url = pathToFileURL(filename);
+      url.searchParams.set('revision', String(++revision));
+      const module = await import(url.href);
+      if (!module.queries || typeof module.queries !== 'object') throw new Error('Invalid query module');
+      queries = module.queries;
+      lastModified = modified;
+      return queries;
+    })();
+    try { return await loading; } finally { loading = null; }
   }
+  return { load, current: () => queries, changed: () => fs.statSync(filename).mtimeMs !== lastModified };
 }
 
-/**
- * Force reload queries from file
- * This can be called manually to force a reload
- * @returns {Promise<Object>} The reloaded queries object
- */
-export async function forceReloadQueries() {
-  console.log('🔄 Force reloading queries...');
-  lastModified = 0; // Reset last modified time to force reload
-  queries = {}; // Clear current queries
-  return await loadQueries();
-}
-
-/**
- * Get current queries without reloading
- * @returns {Object} The current queries object
- */
-export function getCurrentQueries() {
-  return queries;
-}
-
-/**
- * Check if queries file has been modified
- * @returns {boolean} True if file has been modified since last load
- */
-export function hasQueriesChanged() {
-  try {
-    if (fs.existsSync(queriesPath)) {
-      const stats = fs.statSync(queriesPath);
-      const currentModified = stats.mtime.getTime();
-      return currentModified > lastModified;
-    }
-    return false;
-  } catch (error) {
-    console.error('❌ Error checking queries file modification:', error);
-    return false;
-  }
-}
-
-/**
- * Initialize the query loader
- * This should be called at application startup
- */
+const filename = fileURLToPath(new URL('./queries.js', import.meta.url));
+const loader = createQueryLoader(filename);
+let queries;
+export async function loadQueries() { queries = await loader.load(); return queries; }
+export async function forceReloadQueries() { queries = await loader.load(true); return queries; }
+export function getCurrentQueries() { return loader.current(); }
+export function hasQueriesChanged() { return loader.changed(); }
 export async function initializeQueryLoader() {
-  console.log('🚀 Initializing dynamic query loader...');
-  
-  try {
-    // Load queries initially
-    await loadQueries();
-    
-    // Set up file watcher for automatic reloading in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log('👀 Setting up file watcher for queries.js...');
-      
-      fs.watchFile(queriesPath, { interval: 1000 }, async (curr, prev) => {
-        if (curr.mtime > prev.mtime) {
-          console.log('📝 Queries file modified, reloading...');
-          // Clear queries and force reload
-          queries = {};
-          lastModified = 0;
-          await loadQueries();
-        }
-      });
-      
-      console.log('✅ File watcher set up successfully');
-    }
-    
-    console.log('✅ Query loader initialized successfully');
-  } catch (error) {
-    console.error('❌ Error initializing query loader:', error);
+  await loadQueries();
+  if (process.env.NODE_ENV === 'development') {
+    fs.watchFile(filename, { interval: 1000, persistent: false }, () => {
+      forceReloadQueries().catch(error => console.error('Query reload failed:', error.message));
+    });
   }
 }
-
-// Export the default queries object for backward compatibility
 export { queries as default };

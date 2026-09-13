@@ -1,3 +1,4 @@
+import { validateNphiesTransport } from '../config/nphiesTransport.js';
 /**
  * NPHIES API Service
  * Handles communication with NPHIES OBA test environment
@@ -24,10 +25,13 @@ class NphiesService {
     let lastError = null;
     
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      let httpResponse;
       try {
         console.log(`[NPHIES] Sending eligibility request (attempt ${attempt}/${this.retryAttempts})`);
         
-        const response = await axios.post(
+        validateNphiesTransport(this.baseURL);
+
+        const response = httpResponse = await axios.post(
           `${this.baseURL}/$process-message`,
           requestBundle,
           {
@@ -56,6 +60,7 @@ class NphiesService {
         };
 
       } catch (error) {
+        if (httpResponse && !error.response) error.response = httpResponse;
         lastError = error;
         console.error(`[NPHIES] Attempt ${attempt} failed:`, error.message);
 
@@ -101,10 +106,13 @@ class NphiesService {
     console.log('[NPHIES] =============================');
     
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      let httpResponse;
       try {
         console.log(`[NPHIES] Sending prior authorization request (attempt ${attempt}/${this.retryAttempts})`);
         
-        const response = await axios.post(
+        validateNphiesTransport(this.baseURL);
+
+        const response = httpResponse = await axios.post(
           `${this.baseURL}/$process-message`,
           requestBundle,
           {
@@ -204,6 +212,7 @@ class NphiesService {
         };
 
       } catch (error) {
+        if (httpResponse && !error.response) error.response = httpResponse;
         lastError = error;
         console.error(`[NPHIES] Attempt ${attempt} failed:`, error.message);
 
@@ -253,10 +262,13 @@ class NphiesService {
     console.log('[NPHIES] ======================================');
     
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      let httpResponse;
       try {
         console.log(`[NPHIES] Sending cancel request (attempt ${attempt}/${this.retryAttempts})`);
         
-        const response = await axios.post(
+        validateNphiesTransport(this.baseURL);
+
+        const response = httpResponse = await axios.post(
           `${this.baseURL}/$process-message`,
           requestBundle,
           {
@@ -302,6 +314,7 @@ class NphiesService {
         };
 
       } catch (error) {
+        if (httpResponse && !error.response) error.response = httpResponse;
         lastError = error;
         console.error(`[NPHIES] Cancel attempt ${attempt} failed:`, error.message);
 
@@ -414,10 +427,13 @@ class NphiesService {
     console.log('[NPHIES] ====================================');
     
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      let httpResponse;
       try {
         console.log(`[NPHIES] Sending claim request (attempt ${attempt}/${this.retryAttempts})`);
         
-        const response = await axios.post(
+        validateNphiesTransport(this.baseURL);
+
+        const response = httpResponse = await axios.post(
           `${this.baseURL}/$process-message`,
           requestBundle,
           {
@@ -456,6 +472,7 @@ class NphiesService {
         };
 
       } catch (error) {
+        if (httpResponse && !error.response) error.response = httpResponse;
         lastError = error;
         console.error(`[NPHIES] Claim attempt ${attempt} failed:`, error.message);
 
@@ -670,6 +687,7 @@ class NphiesService {
     const pollBundle = this.buildPaymentReconciliationPollBundle(providerId);
     
     try {
+      validateNphiesTransport(this.baseURL);
       const response = await axios.post(
         `${this.baseURL}/$process-message`,
         pollBundle,
@@ -836,6 +854,7 @@ class NphiesService {
     console.log('[NPHIES] Sending Payment Notice...');
     
     try {
+      validateNphiesTransport(this.baseURL);
       const response = await axios.post(
         `${this.baseURL}/$process-message`,
         paymentNoticeBundle,
@@ -1116,6 +1135,7 @@ class NphiesService {
     console.log('[NPHIES] ====================================');
     
     try {
+      validateNphiesTransport(this.baseURL);
       const response = await axios.post(
         `${this.baseURL}/$process-message`,
         communicationBundle,
@@ -1198,6 +1218,7 @@ class NphiesService {
     console.log('[NPHIES] =====================================');
     
     try {
+      validateNphiesTransport(this.baseURL);
       const response = await axios.post(
         `${this.baseURL}/$process-message`,  // Poll uses $process-message
         pollBundle,                           // Full Bundle with MessageHeader
@@ -1369,6 +1390,7 @@ class NphiesService {
     console.log('[NPHIES] =====================================');
     
     try {
+      validateNphiesTransport(this.baseURL);
       const response = await axios.post(
         `${this.baseURL}/$process-message`,
         statusCheckBundle,
@@ -1673,10 +1695,13 @@ class NphiesService {
     console.log('[NPHIES] ==========================================');
     
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      let httpResponse;
       try {
         console.log(`[NPHIES] Sending batch claim request (attempt ${attempt}/${this.retryAttempts})`);
         
-        const response = await axios.post(
+        validateNphiesTransport(this.baseURL);
+
+        const response = httpResponse = await axios.post(
           `${this.baseURL}/$process-message`,
           batchRequestBundle,
           {
@@ -1769,6 +1794,7 @@ class NphiesService {
         };
 
       } catch (error) {
+        if (httpResponse && !error.response) error.response = httpResponse;
         lastError = error;
         console.error(`[NPHIES] Batch claim attempt ${attempt} failed:`, error.message);
 
@@ -1831,6 +1857,7 @@ class NphiesService {
     const pollBundle = batchClaimMapper.buildBatchPollRequestBundle(provider, batchIdentifier);
     
     try {
+      validateNphiesTransport(this.baseURL);
       const response = await axios.post(
         `${this.baseURL}/$process-message`,
         pollBundle,

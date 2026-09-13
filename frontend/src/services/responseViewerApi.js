@@ -1,7 +1,8 @@
+import { API_BASE_URL, apiFetch } from '@/services/http';
 // Simple ResponseViewer API service with direct endpoints
 class ResponseViewerApi {
   constructor() {
-    this.baseUrl = 'http://localhost:8001/api/response-viewer';
+    this.baseUrl = `${API_BASE_URL}/response-viewer`;
   }
 
   async request(endpoint, options = {}) {
@@ -15,7 +16,7 @@ class ResponseViewerApi {
     };
 
     try {
-      const response = await fetch(url, config);
+      const response = await apiFetch(url, config);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -51,7 +52,7 @@ class ResponseViewerApi {
   // Get dashboard statistics (fallback to main API)
   async getDashboardStats() {
     try {
-      const response = await fetch('http://localhost:8001/api/dashboard/stats');
+      const response = await apiFetch(`${API_BASE_URL}/dashboard/stats`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

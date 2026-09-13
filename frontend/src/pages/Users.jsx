@@ -22,7 +22,7 @@ export default function UsersPage() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const isSuperAdmin = user?.email === 'eng.anasshamia@gmail.com';
+  const isSuperAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (!isSuperAdmin) {
@@ -78,7 +78,7 @@ export default function UsersPage() {
         <div className="flex items-center space-x-2">
           <Mail className="h-4 w-4 text-gray-400" />
           <span className="font-medium">{row.email}</span>
-          {row.email === 'eng.anasshamia@gmail.com' && (
+          {row.role === 'admin' && (
             <Badge className="bg-purple-100 text-purple-800 border-purple-200">
               <Shield className="h-3 w-3 mr-1" />
               Super Admin

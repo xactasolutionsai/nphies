@@ -3,8 +3,11 @@
  * Handles auto-saving and loading of form drafts from localStorage
  */
 
-const DRAFT_KEY = 'generalRequestDraft';
-const DRAFT_TIMESTAMP_KEY = 'generalRequestDraftTimestamp';
+function draftKey(timestamp = false) {
+  const user = JSON.parse(localStorage.getItem('auth_user') || 'null');
+  if (!user?.id) throw new Error('Sign in before accessing a draft');
+  return `generalRequestDraft:${user.id}${timestamp ? ':timestamp' : ''}`;
+}
 const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
 
 /**
@@ -15,8 +18,8 @@ const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
 export const saveDraft = (formData) => {
   try {
     const timestamp = new Date().toISOString();
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
-    localStorage.setItem(DRAFT_TIMESTAMP_KEY, timestamp);
+    localStorage.setItem(draftKey(), JSON.stringify(formData));
+    localStorage.setItem(draftKey(true), timestamp);
     return true;
   } catch (error) {
     console.error('Error saving draft:', error);
@@ -30,8 +33,8 @@ export const saveDraft = (formData) => {
  */
 export const loadDraft = () => {
   try {
-    const draft = localStorage.getItem(DRAFT_KEY);
-    const timestamp = localStorage.getItem(DRAFT_TIMESTAMP_KEY);
+    const draft = localStorage.getItem(draftKey());
+    const timestamp = localStorage.getItem(draftKey(true));
     
     if (!draft) {
       return null;
@@ -53,8 +56,8 @@ export const loadDraft = () => {
  */
 export const clearDraft = () => {
   try {
-    localStorage.removeItem(DRAFT_KEY);
-    localStorage.removeItem(DRAFT_TIMESTAMP_KEY);
+    localStorage.removeItem(draftKey());
+    localStorage.removeItem(draftKey(true));
     return true;
   } catch (error) {
     console.error('Error clearing draft:', error);
@@ -67,7 +70,7 @@ export const clearDraft = () => {
  * @returns {boolean} True if draft exists
  */
 export const hasDraft = () => {
-  return localStorage.getItem(DRAFT_KEY) !== null;
+  return localStorage.getItem(draftKey()) !== null;
 };
 
 /**
@@ -75,7 +78,7 @@ export const hasDraft = () => {
  * @returns {number|null} Age in minutes or null if no draft
  */
 export const getDraftAge = () => {
-  const timestamp = localStorage.getItem(DRAFT_TIMESTAMP_KEY);
+  const timestamp = localStorage.getItem(draftKey(true));
   if (!timestamp) return null;
   
   const draftDate = new Date(timestamp);
@@ -89,7 +92,7 @@ export const getDraftAge = () => {
  * @returns {string|null} Formatted timestamp or null
  */
 export const getDraftTimestampFormatted = () => {
-  const timestamp = localStorage.getItem(DRAFT_TIMESTAMP_KEY);
+  const timestamp = localStorage.getItem(draftKey(true));
   if (!timestamp) return null;
   
   const date = new Date(timestamp);

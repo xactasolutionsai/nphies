@@ -1,3 +1,7 @@
+import { validateClaimInput, serverClaimFields } from '../models/claimInput.js';
+import { getSelectedCoverage, persistCoverageInput } from '../utils/coverage.js';
+import { validateNestedArrays } from '../utils/inputFields.js';
+import { atomicMethods } from '../utils/atomicController.js';
 import { BaseController } from './baseController.js';
 import { query } from '../db.js';
 import { validationSchemas } from '../models/schema.js';
@@ -27,6 +31,7 @@ function sanitizePharmacyDeviceFields(items, claimType) {
 class ClaimSubmissionsController extends BaseController {
   constructor() {
     super('claim_submissions', validationSchemas.claimSubmission);
+    atomicMethods(this, ["create","createFromPriorAuth","update","delete"], 'claim_submissions');
   }
 
   /**
@@ -58,6 +63,7 @@ class ClaimSubmissionsController extends BaseController {
   }
 
   async getCoverageData(patientId, insurerId, coverageId = null) {
+    if (coverageId) return getSelectedCoverage(patientId, insurerId, coverageId);
     try {
       let coverageResult;
       if (coverageId) {
@@ -161,13 +167,13 @@ class ClaimSubmissionsController extends BaseController {
       res.json({ data: result.rows, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
     } catch (error) {
       console.error('Error getting claim submissions:', error);
-      res.status(500).json({ error: 'Failed to fetch claim submissions' });
+      res.status(error.status || 500).json({ error: 'Failed to fetch claim submissions' });
     }
   }
 
   async getByIdInternal(id) {
     const formResult = await query(`
-      SELECT cs.*, p.name as patient_name, p.identifier as patient_identifier, p.gender as patient_gender, p.birth_date as patient_birth_date,
+      SELECT cs.*, cs.selected_coverage_id AS coverage_id, p.name as patient_name, p.identifier as patient_identifier, p.gender as patient_gender, p.birth_date as patient_birth_date,
         pr.provider_name, pr.nphies_id as provider_nphies_id, pr.provider_type,
         i.insurer_name, i.nphies_id as insurer_nphies_id,
         pa.nphies_response_id as pa_nphies_response_id
@@ -239,14 +245,19 @@ class ClaimSubmissionsController extends BaseController {
       res.json({ data: claim });
     } catch (error) {
       console.error('Error getting claim by ID:', error);
-      res.status(500).json({ error: 'Failed to fetch claim submission' });
+      res.status(error.status || 500).json({ error: 'Failed to fetch claim submission' });
     }
   }
 
   async create(req, res) {
     try {
+      validateNestedArrays(req.body, ['items', 'supporting_info', 'diagnoses', 'attachments']);
       const { items, supporting_info, diagnoses, attachments, ...formData } = req.body;
-      const cleanedData = this.cleanFormData(formData);
+      const cleanedData = validateClaimInput(this.cleanFormData(formData));
+      await persistCoverageInput(cleanedData);
+      for (const field of ['vision_prescription', 'lab_observations', 'medication_safety_analysis']) {
+        if (cleanedData[field] && typeof cleanedData[field] === 'object') cleanedData[field] = JSON.stringify(cleanedData[field]);
+      }
 
       if (!cleanedData.claim_number) cleanedData.claim_number = `CLM-${Date.now()}`;
       if (!cleanedData.status) cleanedData.status = 'draft';
@@ -273,7 +284,7 @@ class ClaimSubmissionsController extends BaseController {
       console.error('Error creating claim submission:', error);
       if (error.code === '23505') res.status(409).json({ error: 'Claim number already exists' });
       else if (error.code === '23503') res.status(400).json({ error: 'Invalid reference' });
-      else res.status(500).json({ error: error.message || 'Failed to create claim submission' });
+      else res.status(error.status || 500).json({ error: error.message || 'Failed to create claim submission' });
     }
   }
 
@@ -344,6 +355,7 @@ class ClaimSubmissionsController extends BaseController {
         provider_id: pa.provider_id,
         insurer_id: pa.insurer_id,
         prior_auth_id: paId,
+        selected_coverage_id: pa.selected_coverage_id || null,
         pre_auth_ref: pa.pre_auth_ref,
         status: 'draft',
         encounter_class: pa.encounter_class,
@@ -359,7 +371,7 @@ class ClaimSubmissionsController extends BaseController {
         mother_patient_id: pa.mother_patient_id, // Copy mother_patient_id from prior auth for newborn claims
         practice_code: pa.practice_code,
         priority: priority || pa.priority || 'normal', // Use provided priority, fallback to PA priority, then 'normal'
-        total_amount: pa.approved_amount || pa.total_amount,
+        total_amount: pa.approved_amount ?? pa.total_amount,
         currency: pa.currency,
         service_date: serviceDate,
         // Copy newborn extension fields from prior authorization
@@ -471,35 +483,40 @@ class ClaimSubmissionsController extends BaseController {
       res.status(201).json({ data: completeData, message: 'Claim created from prior authorization. Review and submit.' });
     } catch (error) {
       console.error('Error creating claim from PA:', error);
-      res.status(500).json({ error: error.message || 'Failed to create claim from prior authorization' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to create claim from prior authorization' });
     }
   }
 
   async update(req, res) {
     try {
       const { id } = req.params;
+      validateNestedArrays(req.body, ['items', 'supporting_info', 'diagnoses', 'attachments']);
       const { items, supporting_info, diagnoses, attachments, ...formData } = req.body;
 
       const existing = await this.getByIdInternal(id);
       if (!existing) return res.status(404).json({ error: 'Claim submission not found' });
       if (!['draft', 'error'].includes(existing.status)) return res.status(400).json({ error: 'Cannot update claim with status: ' + existing.status });
 
-      const cleanedData = this.cleanFormData(formData);
+      const cleanedData = validateClaimInput(this.cleanFormData(formData), true);
+      await persistCoverageInput(cleanedData, existing);
+      for (const field of ['vision_prescription', 'lab_observations', 'medication_safety_analysis']) {
+        if (cleanedData[field] && typeof cleanedData[field] === 'object') cleanedData[field] = JSON.stringify(cleanedData[field]);
+      }
       const columns = Object.keys(cleanedData).filter(key => !['items', 'supporting_info', 'diagnoses', 'attachments', 'coverage_id'].includes(key));
       const values = [...columns.map(col => cleanedData[col]), id];
 
       const updateQuery = `UPDATE claim_submissions SET ${columns.map((col, i) => `${col} = $${i + 1}`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${columns.length + 1} RETURNING *`;
-      await query(updateQuery, values);
+      if (columns.length > 0) await query(updateQuery, values);
 
       // Delete item details first (due to foreign key constraint)
-      await query(`
+      if (items !== undefined) await query(`
         DELETE FROM claim_submission_item_details
         WHERE item_id IN (SELECT id FROM claim_submission_items WHERE claim_id = $1)
       `, [id]);
-      await query('DELETE FROM claim_submission_items WHERE claim_id = $1', [id]);
-      await query('DELETE FROM claim_submission_supporting_info WHERE claim_id = $1', [id]);
-      await query('DELETE FROM claim_submission_diagnoses WHERE claim_id = $1', [id]);
-      await query('DELETE FROM claim_submission_attachments WHERE claim_id = $1', [id]);
+      if (items !== undefined) await query('DELETE FROM claim_submission_items WHERE claim_id = $1', [id]);
+      if (supporting_info !== undefined) await query('DELETE FROM claim_submission_supporting_info WHERE claim_id = $1', [id]);
+      if (diagnoses !== undefined) await query('DELETE FROM claim_submission_diagnoses WHERE claim_id = $1', [id]);
+      if (attachments !== undefined) await query('DELETE FROM claim_submission_attachments WHERE claim_id = $1', [id]);
 
       if (items?.length > 0) {
         const claimType = cleanedData.claim_type || existing.claim_type;
@@ -515,7 +532,7 @@ class ClaimSubmissionsController extends BaseController {
       res.json({ data: completeData });
     } catch (error) {
       console.error('Error updating claim submission:', error);
-      res.status(500).json({ error: error.message || 'Failed to update claim submission' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to update claim submission' });
     }
   }
 
@@ -530,7 +547,7 @@ class ClaimSubmissionsController extends BaseController {
       res.json({ message: 'Claim submission deleted successfully' });
     } catch (error) {
       console.error('Error deleting claim submission:', error);
-      res.status(500).json({ error: 'Failed to delete claim submission' });
+      res.status(error.status || 500).json({ error: 'Failed to delete claim submission' });
     }
   }
 
@@ -544,10 +561,6 @@ class ClaimSubmissionsController extends BaseController {
       // BV-00163: Regenerate claim_number on resubmission to avoid duplicate identifier errors
       if (claim.nphies_request_id) {
         const newClaimNumber = `CLM-${Date.now()}`;
-        await query(
-          `UPDATE claim_submissions SET claim_number = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-          [newClaimNumber, id]
-        );
         claim.claim_number = newClaimNumber;
       }
 
@@ -583,7 +596,8 @@ class ClaimSubmissionsController extends BaseController {
         e => e.resource?.resourceType === 'MessageHeader'
       )?.resource?.id || null;
 
-      await query(`UPDATE claim_submissions SET status = 'pending', nphies_request_id = $1, request_bundle = $2, outbound_message_header_id = $3, request_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $4`, [nphiesRequestId, JSON.stringify(bundle), outboundMessageHeaderId, id]);
+      const reserved = await query(`UPDATE claim_submissions SET status = 'pending', nphies_request_id = $1, request_bundle = $2, outbound_message_header_id = $3, claim_number = $5, request_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $4 AND status IN ('draft', 'error') RETURNING id`, [nphiesRequestId, JSON.stringify(bundle), outboundMessageHeaderId, id, claim.claim_number]);
+      if (reserved.rowCount !== 1) return res.status(409).json({ error: 'Claim is already being sent or its status changed' });
 
       const nphiesResponse = await nphiesService.submitClaim(bundle);
 
@@ -612,7 +626,7 @@ class ClaimSubmissionsController extends BaseController {
       }
     } catch (error) {
       console.error('Error sending claim to NPHIES:', error);
-      res.status(500).json({ error: error.message || 'Failed to send claim' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to send claim' });
     }
   }
 
@@ -655,7 +669,7 @@ class ClaimSubmissionsController extends BaseController {
       res.json({ data: bundle });
     } catch (error) {
       console.error('Error generating bundle:', error);
-      res.status(500).json({ error: error.message || 'Failed to generate FHIR bundle' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to generate FHIR bundle' });
     }
   }
 
@@ -755,24 +769,18 @@ class ClaimSubmissionsController extends BaseController {
       });
     } catch (error) {
       console.error('Error generating preview bundle:', error);
-      res.status(500).json({ error: error.message || 'Failed to generate preview' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to generate preview' });
     }
   }
 
   cleanFormData(formData) {
     const cleanedData = { ...formData };
     const readOnlyFields = ['id', 'created_at', 'updated_at', 'request_date', 'response_date', 'request_bundle', 'response_bundle', 'patient_name', 'patient_identifier', 'patient_gender', 'patient_birth_date', 'provider_name', 'provider_nphies_id', 'provider_type', 'insurer_name', 'insurer_nphies_id', 'responses', 'items', 'supporting_info', 'diagnoses', 'attachments'];
-    readOnlyFields.forEach(field => delete cleanedData[field]);
+    [...readOnlyFields, ...serverClaimFields, 'pa_nphies_response_id'].forEach(field => delete cleanedData[field]);
     
     ['patient_id', 'provider_id', 'insurer_id', 'practitioner_id'].forEach(field => { if (cleanedData[field] === '') cleanedData[field] = null; });
     Object.keys(cleanedData).forEach(key => { if (typeof cleanedData[key] === 'string' && cleanedData[key].trim() === '') cleanedData[key] = null; });
     
-    const jsonbFields = ['vision_prescription', 'medication_safety_analysis'];
-    jsonbFields.forEach(field => {
-      if (cleanedData[field] && typeof cleanedData[field] === 'object') {
-        cleanedData[field] = JSON.stringify(cleanedData[field]);
-      }
-    });
     return cleanedData;
   }
 
@@ -877,7 +885,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Status check preview error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to generate status check preview'
       });
@@ -910,7 +918,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Status check error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to send status check'
       });
@@ -947,7 +955,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Poll error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to poll for messages'
       });
@@ -987,7 +995,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Unsolicited communication error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to send unsolicited communication'
       });
@@ -1034,7 +1042,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Solicited communication error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to send solicited communication'
       });
@@ -1069,7 +1077,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Get communication requests error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to get communication requests'
       });
@@ -1114,7 +1122,7 @@ class ClaimSubmissionsController extends BaseController {
       res.send(buffer);
     } catch (error) {
       console.error('Error downloading communication request attachment:', error);
-      res.status(500).json({ error: error.message || 'Failed to download attachment' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to download attachment' });
     }
   }
 
@@ -1139,7 +1147,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Get communications error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to get communications'
       });
@@ -1182,7 +1190,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Preview communication bundle error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to preview communication bundle'
       });
@@ -1220,7 +1228,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Poll acknowledgment error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to poll for acknowledgment'
       });
@@ -1255,7 +1263,7 @@ class ClaimSubmissionsController extends BaseController {
 
     } catch (error) {
       console.error('[ClaimSubmissions] Poll all acknowledgments error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message || 'Failed to poll for acknowledgments'
       });
@@ -1400,7 +1408,7 @@ class ClaimSubmissionsController extends BaseController {
       }
     } catch (error) {
       console.error('[ClaimSubmissions] Error cancelling claim:', error);
-      res.status(500).json({ error: error.message || 'Failed to cancel claim' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to cancel claim' });
     }
   }
 }
