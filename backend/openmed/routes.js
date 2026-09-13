@@ -65,7 +65,7 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     if (!rows[0]) throw failure('Source does not belong to the selected patient', 404);
     const details = await query(type === 'prior_authorization'
       ? 'SELECT value_string FROM public.prior_authorization_supporting_info WHERE prior_auth_id=$1'
-      : 'SELECT value_string FROM public.claim_supporting_info WHERE claim_id=$1', [id]);
+      : 'SELECT value_string FROM public.claim_submission_supporting_info WHERE claim_id=$1', [id]);
     const text = [rows[0].primary_diagnosis, rows[0].diagnosis_codes, ...details.rows.map(row => row.value_string)].filter(Boolean).join('\n');
     if (text.length > 12000) throw failure('Source exceeds 12000 characters; select a shorter manual excerpt', 400);
     return text;

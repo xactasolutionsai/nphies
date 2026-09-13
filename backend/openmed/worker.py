@@ -16,6 +16,7 @@ socket.socket.connect = deny_network
 socket.socket.connect_ex = deny_network
 socket.socket.sendto = deny_network
 socket.create_connection = deny_network
+socket.getaddrinfo = deny_network
 
 ROOT = Path(__file__).resolve().parent
 MODELS = json.loads((ROOT / "models.json").read_text())
@@ -37,13 +38,26 @@ def execute(request):
     with contextlib.redirect_stdout(sys.stderr):
         import torch
         from openmed import analyze_text, OpenMedConfig
+        from transformers import AutoTokenizer
         torch.set_num_threads(2)
-        result = analyze_text(text, model_id=str(model_path), config=OpenMedConfig(device="cpu"),
-                              sentence_detection=False, cache_results=False,
-                              confidence_threshold=0.5, trust_remote_code=False)
-    entities = [{"text": entity.text, "label": entity.label,
-                 "confidence": float(entity.confidence), "start": entity.start, "end": entity.end}
-                for entity in result.entities]
+        tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True, trust_remote_code=False)
+        offsets = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)["offset_mapping"]
+        # Overlapping token windows avoid silently truncating long clinical notes.
+        found = {}
+        for index in range(0, len(offsets), 224):
+            window = offsets[index:index + 256]
+            begin, finish = window[0][0], window[-1][1]
+            result = analyze_text(text[begin:finish], model_id=str(model_path), config=OpenMedConfig(device="cpu"),
+                                  sentence_detection=False, cache_results=False,
+                                  confidence_threshold=0.5, trust_remote_code=False)
+            for entity in result.entities:
+                start, end = begin + entity.start, begin + entity.end
+                key = (start, end, entity.label)
+                entry = {"text": text[start:end], "label": entity.label,
+                         "confidence": float(entity.confidence), "start": start, "end": end}
+                if key not in found or entry["confidence"] > found[key]["confidence"]:
+                    found[key] = entry
+        entities = sorted(found.values(), key=lambda item: (item["start"], item["end"]))
     return {"entities": entities, "model": MODELS[mode], "sdk_version": "2.3.0",
             "advisory_only": True, "language": "en"}
 
