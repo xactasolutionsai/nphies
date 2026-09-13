@@ -2,6 +2,7 @@ import express from 'express';
 import { pathToFileURL } from 'node:url';
 import { authenticateToken } from './middleware/auth.js';
 import { getJwtSecret } from './config/auth.js';
+import openmedRoutes from './openmed/routes.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -126,6 +127,7 @@ app.use('/api/auth', authRoutes);
 // Auth and public contact submissions are registered before the protected API.
 app.use('/api/contacts', contactsRoutes);
 app.use('/api', authenticateToken);
+app.use('/api/openmed', openmedRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/patients', patientsRoutes);
 app.use('/api/providers', providersRoutes);

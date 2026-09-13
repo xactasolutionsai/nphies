@@ -89,6 +89,7 @@ const claimsPaymentsItems = [
 
 // Tools section
 const toolsItems = [
+  { name: 'OpenMed Advisory', href: '/openmed', icon: Stethoscope },
   { name: 'System Poll', href: '/system-poll', icon: RefreshCw },
   { name: 'Response Viewer', href: '/response-viewer', icon: FileSearch },
   { name: 'Medicine Search', href: '/medicines', icon: Pill },

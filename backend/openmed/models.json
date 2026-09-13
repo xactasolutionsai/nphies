@@ -1,0 +1,14 @@
+{
+  "medications": {
+    "id": "OpenMed/OpenMed-NER-PharmaDetect-SuperMedical-125M",
+    "revision": "e55dbc4f4ef3f45480e77f4e7b1f4a86a5d9203d",
+    "language": "en",
+    "license": "Apache-2.0"
+  },
+  "diseases": {
+    "id": "OpenMed/OpenMed-NER-DiseaseDetect-SuperMedical-125M",
+    "revision": "4bc0d813620c59e4ff6daa48e0b1a4732d021d14",
+    "language": "en",
+    "license": "Apache-2.0"
+  }
+}

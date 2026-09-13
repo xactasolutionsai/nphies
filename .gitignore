@@ -2,6 +2,9 @@
 # Dependencies
 # =====================================================
 node_modules/
+.venv-openmed/
+openmed-models/
+__pycache__/
 .pnp
 .pnp.js
 
