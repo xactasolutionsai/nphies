@@ -854,6 +854,16 @@ class PaymentReconciliationService {
     
     // 2. Poll NPHIES for pending messages
     const pollResult = await NphiesService.pollPaymentReconciliations(providerId);
+    // Preserve the actual exchange in the existing System Poll history.
+    const pollLog = await query(`INSERT INTO poll_logs
+      (poll_id, schema_name, provider_nphies_id, trigger_type, status,
+       poll_bundle, response_bundle, response_code, messages_received, errors, started_at, completed_at)
+      VALUES ($1, 'public', $2, 'manual', $3, $4, $5, $6, $7, $8, $9, NOW()) RETURNING id`,
+      [randomUUID(), providerId, !pollResult.success ? 'error' : pollResult.count ? 'success' : 'no_messages',
+        JSON.stringify(pollResult.pollRequestBundle), JSON.stringify(pollResult.data || null),
+        pollResult.responseCode || String(pollResult.status || ''), pollResult.count || 0,
+        pollResult.success ? null : JSON.stringify([{ type: 'payment_poll', message: pollResult.error }]),
+        pollResult.pollRequestBundle.timestamp]);
     
     if (!pollResult.success) {
       console.error('[PaymentReconciliation] Poll failed:', pollResult.error);
@@ -917,9 +927,12 @@ class PaymentReconciliationService {
     }
     
     console.log(`[PaymentReconciliation] Poll complete. Processed: ${processed}, Failed: ${failed}`);
+    await query(`UPDATE poll_logs SET status=$1, messages_processed=$2, errors=$3, completed_at=NOW() WHERE id=$4`,
+      [failed ? 'error' : 'success', processed,
+        failed ? JSON.stringify(results.filter(r => !r.success)) : null, pollLog.rows[0].id]);
     
     return {
-      success: true,
+      success: failed === 0,
       message: `Processed ${processed} payment reconciliation(s), ${failed} failed`,
       processed,
       failed,

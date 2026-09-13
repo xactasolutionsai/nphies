@@ -8,6 +8,11 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 class AuthController {
   // Register a new user
   async register(req, res) {
+    // Enforce this inside Express too: reverse-proxy exact paths can be bypassed
+    // through trailing slashes or case-insensitive routing.
+    if (process.env.NODE_ENV === 'production' || process.env.DISABLE_PUBLIC_REGISTRATION === 'true') {
+      return res.status(403).json({ error: 'Public registration is disabled' });
+    }
     try {
       const { email, password, confirmPassword } = req.body;
 
@@ -24,9 +29,9 @@ class AuthController {
         });
       }
 
-      if (password.length < 6) {
+      if (password.length < 12 || Buffer.byteLength(password, 'utf8') > 72) {
         return res.status(400).json({
-          error: 'Password must be at least 6 characters long'
+          error: 'Password must contain at least 12 characters and at most 72 UTF-8 bytes'
         });
       }
 
@@ -89,7 +94,8 @@ class AuthController {
       const { email, password } = req.body;
 
       // Validation
-      if (!email || !password) {
+      if (typeof email !== 'string' || email.length > 255 || !email.trim() ||
+          typeof password !== 'string' || !password || Buffer.byteLength(password, 'utf8') > 72) {
         return res.status(400).json({
           error: 'Email and password are required'
         });
@@ -195,4 +201,3 @@ class AuthController {
 }
 
 export default new AuthController();
-

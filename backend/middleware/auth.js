@@ -3,6 +3,7 @@ import { query } from '../db.js';
 import { getJwtSecret } from '../config/auth.js';
 
 export async function authenticateToken(req, res, next) {
+  res.set('Cache-Control', 'no-store');
   const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '');
   if (!match) return res.status(401).json({ error: 'Authentication required' });
   try {

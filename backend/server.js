@@ -48,6 +48,9 @@ dotenv.config();
 getJwtSecret();
 const app = express();
 const PORT = process.env.PORT || 8001;
+const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
+// Nginx overwrites X-Forwarded-For; trust only the local reverse proxy.
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 'loopback');
 
 // Security middleware
 app.use(helmet());
@@ -127,6 +130,7 @@ app.use('/api/auth', authRoutes);
 // Auth and public contact submissions are registered before the protected API.
 app.use('/api/contacts', contactsRoutes);
 app.use('/api', authenticateToken);
+app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 app.use('/api/openmed', openmedRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/patients', patientsRoutes);
@@ -261,7 +265,7 @@ process.on('SIGINT', () => {
 });
 
 // Start server
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) app.listen(PORT, async () => {
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) app.listen(PORT, HOST, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`📚 API Documentation: http://localhost:${PORT}/`);

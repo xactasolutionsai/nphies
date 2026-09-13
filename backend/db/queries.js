@@ -1,6 +1,18 @@
 // Centralized SQL queries for the Nafes Healthcare Management System
 // All SQL queries are defined here for consistency and maintainability
 
+const primaryKeys = Object.freeze({
+  patients: 'patient_id', providers: 'provider_id', insurers: 'insurer_id',
+  authorizations: 'auth_id', eligibility: 'eligibility_id', claims: 'claim_id',
+  payments: 'payment_id', claims_batch: 'batch_id', claim_batches: 'id',
+  prior_authorizations: 'id', claim_submissions: 'id', dental_approvals: 'id',
+  eye_approvals: 'id', standard_approvals_claims: 'id'
+});
+function primaryKey(table) {
+  if (!Object.hasOwn(primaryKeys, table)) throw new Error('Unsupported table for common queries');
+  return primaryKeys[table];
+}
+
 export const queries = {
   // =============================================================================
   // DASHBOARD QUERIES
@@ -1022,13 +1034,13 @@ export const queries = {
     // Get all records with pagination
     GET_ALL: (table, limit = 10, offset = 0) => `
       SELECT * FROM ${table}
-      ORDER BY ${table}_id DESC
+      ORDER BY ${primaryKey(table)} DESC
       LIMIT $1 OFFSET $2
     `,
 
     // Get record by ID
     GET_BY_ID: (table) => `
-      SELECT * FROM ${table} WHERE ${table}_id = $1
+      SELECT * FROM ${table} WHERE ${primaryKey(table)} = $1
     `,
 
     // Insert new record
@@ -1042,13 +1054,13 @@ export const queries = {
     UPDATE: (table, columns) => `
       UPDATE ${table}
       SET ${columns.map((col, i) => `${col} = $${i + 1}`).join(', ')}
-      WHERE ${table}_id = $${columns.length + 1}
+      WHERE ${primaryKey(table)} = $${columns.length + 1}
       RETURNING *
     `,
 
     // Delete record
     DELETE: (table) => `
-      DELETE FROM ${table} WHERE ${table}_id = $1 RETURNING *
+      DELETE FROM ${table} WHERE ${primaryKey(table)} = $1 RETURNING *
     `,
 
     // Count records

@@ -89,21 +89,6 @@ export function JsonDisplayHighlighted({ data, title = "JSON Response", classNam
 
   const jsonString = formatJson(data)
 
-  // Enhanced syntax highlighting for JSON
-  const highlightJson = (json: string) => {
-    return json
-      .replace(/(".*?")\s*:/g, '<span class="json-key">$1</span>:')
-      .replace(/:\s*(".*?")/g, ': <span class="json-string">$1</span>')
-      .replace(/:\s*(true|false)/g, ': <span class="json-boolean">$1</span>')
-      .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>')
-      .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
-      .replace(/\[/g, '<span class="text-slate-600 dark:text-slate-400">[</span>')
-      .replace(/\]/g, '<span class="text-slate-600 dark:text-slate-400">]</span>')
-      .replace(/\{/g, '<span class="text-slate-600 dark:text-slate-400">{</span>')
-      .replace(/\}/g, '<span class="text-slate-600 dark:text-slate-400">}</span>')
-      .replace(/,/g, '<span class="text-slate-600 dark:text-slate-400">,</span>')
-  }
-
   return (
     <Card className={`${className}`}>
       <CardHeader className="pb-3">
@@ -127,7 +112,7 @@ export function JsonDisplayHighlighted({ data, title = "JSON Response", classNam
           <div className="json-display bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 text-sm font-mono overflow-auto max-h-96">
             <div 
               className="whitespace-pre-wrap text-slate-800 dark:text-slate-200"
-              dangerouslySetInnerHTML={{ __html: highlightJson(jsonString) }}
+              children={jsonString}
             />
           </div>
         </div>

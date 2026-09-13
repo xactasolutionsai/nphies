@@ -16,7 +16,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-const response = () => ({ statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } });
+const response = () => ({ headers: {}, set(key, value) { this.headers[key] = value; return this; }, statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } });
 
 test('Missing or published JWT secret cannot be used', t => {
   const original = process.env.JWT_SECRET;
@@ -38,6 +38,7 @@ test('Authentication rejects missing, expired, forged and deleted-user tokens', 
     const res = response();
     await authenticateToken({ headers: token ? { authorization: `Bearer ${token}` } : {} }, res, () => assert.fail('Must not authorize'));
     assert.equal(res.statusCode, 401);
+    assert.equal(res.headers['Cache-Control'], 'no-store');
   }
 });
 

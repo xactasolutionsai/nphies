@@ -38,6 +38,22 @@ test('Isolated PostgreSQL regression suite', { skip: !process.env.TEST_DATABASE_
   await query('ALTER TABLE claim_submissions ADD COLUMN outbound_message_header_id TEXT');
   await query('ALTER TABLE prior_authorizations ADD COLUMN outbound_message_header_id TEXT');
   const input = clinicalInput();
+  await t.test('Common CRUD uses the real primary key and touches only the selected patient', async () => {
+    const { queries } = await import('../db/queries.js');
+    const first = crypto.randomUUID(), second = crypto.randomUUID();
+    await query(queries.COMMON.INSERT('patients', ['patient_id','name']), [first, 'Synthetic first']);
+    await query(queries.COMMON.INSERT('patients', ['patient_id','name']), [second, 'Synthetic second']);
+    const updated = await query(queries.COMMON.UPDATE('patients', ['name']), ['Synthetic changed', first]);
+    assert.equal(updated.rowCount, 1);
+    assert.equal((await query(queries.COMMON.GET_BY_ID('patients'), [second])).rows[0].name, 'Synthetic second');
+    assert.equal((await query(queries.COMMON.DELETE('patients'), [first])).rowCount, 1);
+    assert.equal((await query(queries.COMMON.GET_ALL('patients'), [10,0])).rows.length, 1);
+    await query(queries.COMMON.DELETE('patients'), [second]);
+    for (const [table, key] of Object.entries({providers:'provider_id',insurers:'insurer_id',authorizations:'auth_id',
+      eligibility:'eligibility_id',claims:'claim_id',payments:'payment_id',claim_batches:'id',prior_authorizations:'id'})) {
+      assert.ok(queries.COMMON.DELETE(table).includes(`WHERE ${key} = $1`));
+    }
+  });
   await query('INSERT INTO patients VALUES ($1,$2,$3,$4,$5)', Object.values(input.patient).filter((_, i) => i !== 3));
   await query('INSERT INTO providers VALUES ($1,$2,$3,$4,$5)', Object.values(input.provider));
   await query('INSERT INTO insurers VALUES ($1,$2,$3)', Object.values(input.insurer));

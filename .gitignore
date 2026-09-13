@@ -5,6 +5,7 @@ node_modules/
 .venv-openmed/
 openmed-models/
 __pycache__/
+/deploy/fresh-schema/
 .pnp
 .pnp.js
 
