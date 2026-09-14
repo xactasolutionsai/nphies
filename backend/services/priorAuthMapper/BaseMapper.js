@@ -1,3 +1,4 @@
+import { operationOutcomeErrors, claimResponseErrors } from '../../utils/nphiesErrors.js';
 import { formatSaudiDateTime } from '../../utils/dateTime.js';
 /**
  * NPHIES Prior Authorization Base Mapper
@@ -1146,7 +1147,7 @@ class BaseMapper {
     
     const quantity = parseFloat(item.quantity || 1);
     const unitPrice = parseFloat(item.unit_price || 0);
-    const factor = parseFloat(item.factor || 1);
+    const factor = parseFloat(item.factor ?? 1);
     const tax = parseFloat(item.tax || 0);
     
     const calculatedNet = (quantity * unitPrice * factor) + tax;
@@ -1190,6 +1191,7 @@ class BaseMapper {
     });
 
     const claimItem = {
+      factor,
       extension: itemExtensions,
       sequence: sequence,
       careTeamSequence: [1],
@@ -1270,9 +1272,6 @@ class BaseMapper {
       currency: item.currency || 'SAR'
     };
 
-    if (factor !== 1) {
-      claimItem.factor = factor;
-    }
 
     claimItem.net = {
       value: calculatedNet,
@@ -1284,7 +1283,7 @@ class BaseMapper {
       claimItem.detail = item.details.map((detail, idx) => {
         const detailQuantity = parseFloat(detail.quantity || 1);
         const detailUnitPrice = parseFloat(detail.unit_price || 0);
-        const detailFactor = parseFloat(detail.factor || 1);
+        const detailFactor = parseFloat(detail.factor ?? 1);
         // BV-00434: detail net must equal ((quantity * unit price) * factor) + tax
         // For now, detail items don't have tax field, so use 0 (or could proportionally allocate parent item tax)
         const detailTax = parseFloat(detail.tax || 0);
@@ -1312,7 +1311,7 @@ class BaseMapper {
             value: detailUnitPrice, 
             currency: detail.currency || item.currency || 'SAR' 
           },
-          ...(detailFactor !== 1 ? { factor: detailFactor } : {}),
+          factor: detailFactor,
           net: { 
             value: detailNet, 
             currency: detail.currency || item.currency || 'SAR' 
@@ -1332,6 +1331,9 @@ class BaseMapper {
    * Parse Prior Authorization Response Bundle
    */
   parsePriorAuthResponse(responseBundle) {
+    if (responseBundle?.resourceType === 'OperationOutcome') {
+      return { success: false, outcome: 'error', errors: operationOutcomeErrors(responseBundle), rawBundle: responseBundle };
+    }
     try {
       if (!responseBundle || !responseBundle.entry) {
         throw new Error('Invalid response bundle');
@@ -1364,14 +1366,7 @@ class BaseMapper {
 
       // Handle OperationOutcome errors
       if (operationOutcome) {
-        const errors = operationOutcome.issue?.map(issue => ({
-          severity: issue.severity,
-          code: issue.details?.coding?.[0]?.code || issue.code,
-          message: issue.details?.coding?.[0]?.display || issue.details?.text || issue.diagnostics,
-          location: issue.details?.coding?.[0]?.extension?.find(
-            ext => ext.url?.includes('error-expression')
-          )?.valueString || issue.location?.join(', ')
-        })) || [];
+        const errors = operationOutcomeErrors(operationOutcome);
 
         if (errors.some(e => e.severity === 'error' || e.severity === 'fatal')) {
           return {
@@ -1489,16 +1484,10 @@ class BaseMapper {
       )?.valuePeriod;
 
       // Extract errors from ClaimResponse.error field (NPHIES specific)
-      const claimResponseErrors = claimResponse.error?.map(err => ({
-        code: err.code?.coding?.[0]?.code,
-        message: err.code?.coding?.[0]?.display,
-        location: err.code?.coding?.[0]?.extension?.find(
-          ext => ext.url?.includes('error-expression')
-        )?.valueString
-      })) || [];
+      const parsedClaimErrors = claimResponseErrors(claimResponse);
 
       const outcome = claimResponse.outcome || 'complete';
-      const hasErrors = claimResponseErrors.length > 0 || outcome === 'error';
+      const hasErrors = parsedClaimErrors.length > 0 || outcome === 'error';
       const success = (outcome === 'complete' || outcome === 'partial') && 
                       (adjudicationOutcome !== 'rejected') && !hasErrors;
 
@@ -1588,7 +1577,7 @@ class BaseMapper {
             end: transferAuthPeriod.end
           } : null
         } : null,
-        errors: claimResponseErrors.length > 0 ? claimResponseErrors : undefined,
+        errors: parsedClaimErrors.length > 0 ? parsedClaimErrors : undefined,
         rawBundle: responseBundle
       };
 

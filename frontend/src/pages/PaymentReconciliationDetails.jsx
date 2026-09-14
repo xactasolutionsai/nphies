@@ -43,6 +43,9 @@ export default function PaymentReconciliationDetails() {
   const [showNphiesResponseDialog, setShowNphiesResponseDialog] = useState(false);
   const [sendResult, setSendResult] = useState(null);
   const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('paid');
+  const [bankReceiptConfirmed, setBankReceiptConfirmed] = useState(false);
+  const [receivedDate, setReceivedDate] = useState('');
+  const [receiptReference, setReceiptReference] = useState('');
 
   useEffect(() => {
     loadReconciliation();
@@ -55,8 +58,7 @@ export default function PaymentReconciliationDetails() {
       const rec = response.data || null;
       setReconciliation(rec);
       if (rec) {
-        const next = (rec.payment_status_sent === 'paid' && rec.acknowledgement_status === 'sent')
-          ? 'cleared' : 'paid';
+        const next = rec.payment_status_sent || 'paid';
         setSelectedPaymentStatus(next);
       }
     } catch (error) {
@@ -73,7 +75,7 @@ export default function PaymentReconciliationDetails() {
     
     try {
       setSendingAck(true);
-      const response = await api.sendPaymentNoticeAcknowledgement(id, selectedPaymentStatus);
+      const response = await api.sendPaymentNoticeAcknowledgement(id, selectedPaymentStatus, { bankReceiptConfirmed, receivedDate, receiptReference });
       
       setSendResult(response);
       await loadReconciliation();
@@ -93,7 +95,7 @@ export default function PaymentReconciliationDetails() {
   
   const handlePreviewAcknowledgement = async () => {
     try {
-      const response = await api.previewPaymentNotice(id, selectedPaymentStatus);
+      const response = await api.previewPaymentNotice(id, selectedPaymentStatus, receivedDate);
       if (response.success) {
         setPreviewBundle(response.data.bundle);
         setShowPreviewDialog(true);
@@ -249,7 +251,7 @@ export default function PaymentReconciliationDetails() {
           </Button>
           <Button 
             onClick={handleSendAcknowledgement}
-            disabled={sendingAck}
+            disabled={sendingAck || !bankReceiptConfirmed || !receivedDate || !receiptReference.trim() || reconciliation.notice_attempts?.some(a => ['sending', 'unknown'].includes(a.status)) || reconciliation.payment_status_sent === 'cleared' || (reconciliation.payment_status_sent === selectedPaymentStatus && reconciliation.acknowledgement_status === 'sent')}
             className="bg-purple-600 hover:bg-purple-700 text-white"
           >
             {sendingAck ? (
@@ -289,6 +291,24 @@ export default function PaymentReconciliationDetails() {
         </div>
       </div>
 
+      <Card>
+        <CardHeader><CardTitle>Bank receipt confirmation</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-gray-600">Send a payment notice after the payment reaches the bank account. Select Paid or Cleared according to the confirmed bank status.</p>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={bankReceiptConfirmed} onChange={e => setBankReceiptConfirmed(e.target.checked)} />I confirm receipt of this payment in the bank account</label>
+          <div className="flex flex-wrap gap-4">
+            <label>Receipt date<input aria-label="Receipt date" type="date" value={receivedDate} max={new Date().toISOString().slice(0, 10)} onChange={e => setReceivedDate(e.target.value)} className="block rounded border p-2" /></label>
+            <label>Bank receipt reference<input aria-label="Bank receipt reference" value={receiptReference} onChange={e => setReceiptReference(e.target.value)} className="block rounded border p-2" /></label>
+          </div>
+          {reconciliation.notice_attempts?.some(a => ['sending', 'unknown'].includes(a.status)) && <p className="text-amber-700">An earlier attempt needs response verification before another notice can be sent.</p>}
+        </CardContent>
+      </Card>
+      {reconciliation.notice_attempts?.length > 0 && <Card>
+        <CardHeader><CardTitle>Payment notice attempts</CardTitle></CardHeader>
+        <CardContent><table className="w-full text-left text-sm"><thead><tr><th>Attempt</th><th>Payment status</th><th>Delivery</th><th>Time</th></tr></thead><tbody>
+          {reconciliation.notice_attempts.map(a => <tr key={a.id}><td>{a.id}</td><td>{a.payment_status}</td><td>{a.status}</td><td>{formatDateTime(a.created_at)}</td></tr>)}
+        </tbody></table></CardContent>
+      </Card>}
       {/* Status Banner */}
       <Card className={`border-l-4 ${
         reconciliation.status === 'active' ? 'border-l-emerald-500 bg-emerald-50' :
@@ -756,7 +776,7 @@ export default function PaymentReconciliationDetails() {
                   ) : (
                     <XCircle className="h-5 w-5 mr-2" />
                   )}
-                  {sendResult.success ? 'Payment Notice Accepted' : 'Payment Notice Rejected by NPHIES'}
+                  {sendResult.success ? 'Payment Notice Accepted' : sendResult.data?.deliveryState === 'unknown' ? 'Payment Notice Outcome Unknown' : 'Payment Notice Not Accepted'}
                 </h3>
                 <Button variant="ghost" size="sm" onClick={() => setSendResult(null)}>
                   Close

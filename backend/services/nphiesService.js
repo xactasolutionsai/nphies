@@ -1,4 +1,7 @@
 import { validateNphiesTransport } from '../config/nphiesTransport.js';
+import { operationOutcomeErrors } from '../utils/nphiesErrors.js';
+import { originalPayment, paymentError, validDate } from '../utils/paymentValidation.js';
+import { paymentNoticeContext } from '../utils/paymentNoticeContext.js';
 /**
  * NPHIES API Service
  * Handles communication with NPHIES OBA test environment
@@ -585,9 +588,14 @@ class NphiesService {
 
     if (error.response) {
       // HTTP error response
+      const payload = error.response.data;
+      const outcome = payload?.resourceType === 'OperationOutcome' ? payload :
+        payload?.entry?.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
+      const issues = operationOutcomeErrors(outcome);
       return {
         code: `HTTP_${error.response.status}`,
-        message: error.response.statusText || 'HTTP Error',
+        message: issues.length ? issues.map(i => `${i.code}: ${i.message}${i.location ? ` [${i.location}]` : ''}`).join('; ') : error.response.statusText || 'HTTP Error',
+        errors: issues,
         details: error.response.data,
         status: error.response.status
       };
@@ -614,16 +622,7 @@ class NphiesService {
    * Extract error details from OperationOutcome
    */
   extractOperationOutcomeErrors(operationOutcome) {
-    if (!operationOutcome || !operationOutcome.issue) {
-      return [];
-    }
-
-    return operationOutcome.issue.map(issue => ({
-      severity: issue.severity,
-      code: issue.code,
-      details: issue.details?.text || issue.diagnostics,
-      location: issue.location?.join(', ') || null
-    }));
+    return operationOutcomeErrors(operationOutcome);
   }
 
   /**
@@ -701,162 +700,56 @@ class NphiesService {
    * Extract PaymentReconciliation resources from poll response
    */
   extractPaymentReconciliationsFromPollResponse(responseData) {
-    const paymentReconciliations = [];
-    
-    if (!responseData) return paymentReconciliations;
-    
-    // Response could be a single bundle or a collection of bundles
-    if (responseData.resourceType === 'Bundle') {
-      // Check if this bundle contains PaymentReconciliation
-      const pr = responseData.entry?.find(
-        e => e.resource?.resourceType === 'PaymentReconciliation'
-      );
-      if (pr) {
-        paymentReconciliations.push(responseData);
-      }
-      
-      // Or it might be a searchset/collection containing multiple bundles
-      if (responseData.type === 'searchset' || responseData.type === 'collection') {
-        for (const entry of responseData.entry || []) {
-          if (entry.resource?.resourceType === 'Bundle') {
-            const nestedPr = entry.resource.entry?.find(
-              e => e.resource?.resourceType === 'PaymentReconciliation'
-            );
-            if (nestedPr) {
-              paymentReconciliations.push(entry.resource);
-            }
-          } else if (entry.resource?.resourceType === 'PaymentReconciliation') {
-            // Wrap single PaymentReconciliation in a bundle
-            paymentReconciliations.push({
-              resourceType: 'Bundle',
-              type: 'collection',
-              entry: [{ resource: entry.resource }]
-            });
-          }
-        }
-      }
-    }
-    
-    return paymentReconciliations;
+    const bundles = [];
+    const visit = bundle => {
+      if (bundle?.resourceType !== 'Bundle') return;
+      if (bundle.entry?.some(e => e.resource?.resourceType === 'PaymentReconciliation')) bundles.push(bundle);
+      for (const entry of bundle.entry || []) if (entry.resource?.resourceType === 'Bundle') visit(entry.resource);
+    };
+    visit(responseData);
+    return bundles;
   }
-  
-  /**
-   * Send Payment Notice (acknowledgement) to NPHIES
-   * This is sent by the provider after receiving a PaymentReconciliation
-   * @param {Object} paymentNoticeBundle - The PaymentNotice FHIR bundle
-   * @returns {Object} - Response from NPHIES with parsed error details
-   */
+
   async sendPaymentNotice(paymentNoticeBundle) {
-    console.log('[NPHIES] Sending Payment Notice...');
-    
+    let response;
     try {
       validateNphiesTransport(this.baseURL);
-      const response = await axios.post(
-        `${this.baseURL}/$process-message`,
-        paymentNoticeBundle,
-        {
-          headers: {
-            'Content-Type': 'application/fhir+json',
-            'Accept': 'application/fhir+json'
-          },
-          timeout: this.timeout,
-          validateStatus: (status) => status < 500
-        }
-      );
-      
-      console.log(`[NPHIES] Payment Notice response: ${response.status}`);
-      
-      let httpSuccess = response.status >= 200 && response.status < 300;
-      let nphiesSuccess = httpSuccess;
-      let nphiesErrors = [];
-      let nphiesResponseCode = null;
-      
-      // Parse NPHIES response for FHIR-level errors (NPHIES can return HTTP 200 with fatal-error)
-      if (response.data?.resourceType === 'OperationOutcome') {
-        nphiesSuccess = false;
-        const issues = response.data.issue || [];
-        nphiesErrors = issues.map(i => ({
-          severity: i.severity,
-          code: i.details?.coding?.[0]?.code || i.code || 'UNKNOWN',
-          message: i.details?.coding?.[0]?.display || i.diagnostics || i.details?.text || 'Unknown error',
-          expression: i.expression?.join(', ') || null
-        }));
-        nphiesResponseCode = 'fatal-error';
-      } else if (response.data?.resourceType === 'Bundle' && response.data?.entry) {
-        const respMsgHeader = response.data.entry.find(
-          e => e.resource?.resourceType === 'MessageHeader'
-        )?.resource;
-        
-        if (respMsgHeader?.response?.code) {
-          nphiesResponseCode = respMsgHeader.response.code;
-          if (nphiesResponseCode === 'fatal-error' || nphiesResponseCode === 'transient-error') {
-            nphiesSuccess = false;
-            console.log(`[NPHIES] Payment Notice response code: ${nphiesResponseCode}`);
-          }
-        }
-        
-        const operationOutcome = response.data.entry.find(
-          e => e.resource?.resourceType === 'OperationOutcome'
-        )?.resource;
-        
-        if (operationOutcome?.issue) {
-          const ooErrors = operationOutcome.issue
-            .filter(issue => issue.severity === 'error' || issue.severity === 'fatal')
-            .map(issue => ({
-              severity: issue.severity,
-              code: issue.details?.coding?.[0]?.code || issue.code || 'unknown',
-              message: issue.details?.coding?.[0]?.display || issue.details?.text || issue.diagnostics || 'Unknown error',
-              expression: issue.expression?.join(', ') || null
-            }));
-          
-          if (ooErrors.length > 0) {
-            nphiesSuccess = false;
-            nphiesErrors = ooErrors;
-          }
-        }
-      }
-      
-      if (!nphiesSuccess) {
-        console.error('[NPHIES] Payment Notice NPHIES errors:', JSON.stringify(nphiesErrors, null, 2));
-      }
-      
-      return {
-        success: nphiesSuccess,
-        status: response.status,
-        data: response.data,
-        nphiesErrors,
-        nphiesResponseCode,
-        requestBundle: paymentNoticeBundle
-      };
-      
+      response = await axios.post(this.baseURL+'/$process-message', paymentNoticeBundle, {
+        headers: { 'Content-Type': 'application/fhir+json', Accept: 'application/fhir+json' },
+        timeout: this.timeout, maxRedirects: 0, validateStatus: () => true
+      });
     } catch (error) {
-      console.error('[NPHIES] Payment Notice error:', error.message);
-      return {
-        success: false,
-        error: this.formatError(error),
-        nphiesErrors: [{ severity: 'fatal', code: 'NETWORK', message: this.formatError(error), expression: null }],
-        nphiesResponseCode: null,
-        requestBundle: paymentNoticeBundle
-      };
+      return { success: false, deliveryState: 'unknown', error: this.formatError(error), data: error.response?.data,
+        status: error.response?.status, requestBundle: paymentNoticeBundle };
     }
+    const data = response.data;
+    const header = data?.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
+    const requestHeader = paymentNoticeBundle.entry?.[0]?.resource;
+    const correlated = !!requestHeader?.id && header?.response?.identifier === requestHeader.id;
+    const outcomes = data?.resourceType === 'OperationOutcome' ? [data] : (data?.entry || []).filter(e => e.resource?.resourceType === 'OperationOutcome').map(e => e.resource);
+    const errors = outcomes.flatMap(operationOutcomeErrors).filter(e => ['error','fatal'].includes(e.severity));
+    const success = response.status >= 200 && response.status < 300 && data?.type === 'message' && correlated && header?.response?.code === 'ok' && !errors.length;
+    const rejected = (correlated && ['fatal-error','transient-error'].includes(header?.response?.code)) ||
+      (response.status >= 400 && response.status < 500 && errors.length > 0);
+    if (!success && !errors.length) errors.push({code:'ACKNOWLEDGEMENT_NOT_CONFIRMED',message:'Expected a correlated ok acknowledgement; reconcile this attempt before resending.'});
+    return { success, deliveryState: success?'accepted':rejected?'rejected':'unknown', status:response.status, data,
+      nphiesErrors: errors, nphiesResponseCode: header?.response?.code || null, requestBundle: paymentNoticeBundle };
   }
-  
-  /**
-   * Build a Payment Notice bundle to acknowledge receipt of PaymentReconciliation
-   * Follows NPHIES IG: https://portal.nphies.sa/ig/Bundle-06b80922-b538-4ab3-9176-a80b51249001.json.html
-   * @param {Object} reconciliation - The payment reconciliation data
-   * @param {string} providerId - The provider's NPHIES ID
-   * @param {Object} provider - Full provider record from DB
-   * @returns {Object} - FHIR Bundle containing PaymentNotice + Organization
-   */
-  buildPaymentNoticeBundle(reconciliation, providerId, provider = {}, paymentStatus = 'paid') {
+
+  buildPaymentNoticeBundle(reconciliation, providerId, provider = {}, paymentStatus = 'paid', receipt = {}) {
+    const paymentIdentifier = paymentNoticeContext(reconciliation, providerId);
+    const { pr: original, header: originalHeader } = originalPayment(reconciliation);
+    const amount = original.paymentAmount;
+    if (typeof amount?.value !== 'number' || !Number.isFinite(amount.value) || amount.value < 0 || amount.currency !== 'SAR') throw paymentError('Original reconciliation must contain a nonnegative SAR payment amount');
+    const paymentDate = receipt.receivedDate || original.paymentDate;
+    if (!validDate(paymentDate) || paymentDate > new Date().toISOString().slice(0, 10)) throw paymentError('Payment receipt date must be valid and not in the future');
+
     const validStatuses = ['paid', 'cleared'];
-    if (!validStatuses.includes(paymentStatus)) paymentStatus = 'paid';
+    if (!validStatuses.includes(paymentStatus)) throw paymentError('Invalid payment status', 400);
     const bundleId = randomUUID();
     const messageHeaderId = randomUUID();
     const paymentNoticeId = randomUUID();
-    const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com';
-    const today = new Date().toISOString().split('T')[0];
+    const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || originalHeader.destination[0].endpoint;
     
     const providerOrgId = provider.provider_id?.toString() || randomUUID();
     const providerOrgFullUrl = `${providerEndpoint}/Organization/${providerOrgId}`;
@@ -923,7 +816,7 @@ class NphiesService {
             },
             identifier: [{
               system: `http://provider.nphies.sa/${providerId}/paymentnotice`,
-              value: `PN-${Date.now()}`
+              value: `PN-${paymentNoticeId}`
             }],
             status: 'active',
             created: new Date().toISOString(),
@@ -932,12 +825,11 @@ class NphiesService {
             },
             payment: {
               identifier: {
-                system: reconciliation.identifier_system || `http://insurer.com/PaymentReconciliation`,
-                value: reconciliation.identifier_value || reconciliation.fhir_id
+                system: paymentIdentifier.system,
+                value: paymentIdentifier.value
               }
             },
-            paymentDate: reconciliation.payment_date ? 
-              new Date(reconciliation.payment_date).toISOString().split('T')[0] : today,
+            paymentDate,
             payee: {
               reference: providerOrgFullUrl
             },
@@ -955,8 +847,8 @@ class NphiesService {
               }
             },
             amount: {
-              value: parseFloat(reconciliation.payment_amount) || 0,
-              currency: reconciliation.payment_currency || 'SAR'
+              value: amount.value,
+              currency: amount.currency
             },
             paymentStatus: {
               coding: [{
@@ -1838,4 +1730,3 @@ class NphiesService {
 }
 
 export default new NphiesService();
-

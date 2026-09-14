@@ -444,7 +444,7 @@ class SystemPollService {
             entry: [{ resource }]
           };
 
-          const messageResult = await this.processMessage(fakeBundle, pollBundle, pollLogId, schemaName);
+          const messageResult = await this.processMessage(resource.resourceType === 'PaymentReconciliation' ? responseData : fakeBundle, pollBundle, pollLogId, schemaName);
           result.messagesProcessed++;
           result.messagesReceived++;
 

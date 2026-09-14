@@ -347,7 +347,8 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -961,7 +962,8 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -1608,7 +1610,8 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -2284,7 +2287,8 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -2961,7 +2965,8 @@
                     "display": "UPPER RIGHT; PERMANENT TEETH # 1"
                   }
                 ]
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -3607,7 +3612,8 @@
                     "display": "UPPER RIGHT; PERMANENT TEETH # 1"
                   }
                 ]
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -4242,7 +4248,8 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -4867,7 +4874,8 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -5468,7 +5476,8 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -6081,7 +6090,8 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              }
+              },
+              "factor": 1
             }
           ],
           "total": {
@@ -7496,7 +7506,8 @@
                     "net": {
                       "value": 100,
                       "currency": "SAR"
-                    }
+                    },
+                    "factor": 1
                   }
                 ],
                 "total": {
@@ -8220,7 +8231,8 @@
                     "net": {
                       "value": 100,
                       "currency": "SAR"
-                    }
+                    },
+                    "factor": 1
                   }
                 ],
                 "total": {

@@ -1,3 +1,5 @@
+> تنبيه مراجعة 14 سبتمبر 2026: هذا الملف نقاش تاريخي وليس مرجع مطابقة. ملف Vision Claim الحالي يتضمن extension:encounter اختياريًا (0..1)، ولذلك عبارة «لا يحتوي نهائيًا» أدناه غير صحيحة. قائمة adjudication-error المنشورة جزئية وليست جميع أكواد نفيس. راجع NPHIES_VALIDATION_REVIEW_2026-09-14.md والـ StructureDefinitions الرسمية.
+
 *نعم، سؤال ممتاز — والجواب: *لا يوجد Encounter مستقل إلزامي في Vision Claim كما هو موجود في (Institutional / Professional / Oral).**
 
 ## ✅ *1) هل Vision لها Encounter؟*

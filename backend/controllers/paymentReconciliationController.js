@@ -139,7 +139,7 @@ class PaymentReconciliationController {
     try {
       const { id } = req.params;
       
-      if (!id || isNaN(parseInt(id))) {
+      if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) < 1) {
         return res.status(400).json({ error: 'Invalid reconciliation ID' });
       }
       
@@ -193,7 +193,7 @@ class PaymentReconciliationController {
     try {
       const { id } = req.params;
       
-      if (!id || isNaN(parseInt(id))) {
+      if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) < 1) {
         return res.status(400).json({ error: 'Invalid reconciliation ID' });
       }
       
@@ -227,7 +227,7 @@ class PaymentReconciliationController {
     try {
       const { id } = req.params;
       
-      if (!id || isNaN(parseInt(id))) {
+      if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) < 1) {
         return res.status(400).json({ error: 'Invalid reconciliation ID' });
       }
       
@@ -322,7 +322,7 @@ class PaymentReconciliationController {
     try {
       const { id } = req.params;
       
-      if (!id || isNaN(parseInt(id))) {
+      if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) < 1) {
         return res.status(400).json({ 
           success: false,
           error: 'Invalid reconciliation ID' 
@@ -335,12 +335,14 @@ class PaymentReconciliationController {
       
       console.log(`[PaymentReconciliation] Sending Payment Notice for reconciliation: ${id}, paymentStatus: ${resolvedStatus || 'auto'}`);
       
-      const result = await paymentReconciliationService.sendPaymentNotice(parseInt(id), resolvedStatus);
+      const result = await paymentReconciliationService.sendPaymentNotice(Number(id), paymentStatus, { bankReceiptConfirmed: req.body?.bankReceiptConfirmed, receivedDate: req.body?.receivedDate, receiptReference: req.body?.receiptReference });
       
       return res.json({
         success: result.success,
         data: {
           reconciliationId: result.reconciliationId,
+          attemptId: result.attemptId,
+          deliveryState: result.deliveryState,
           paymentNoticeBundle: result.paymentNoticeBundle,
           paymentStatusSent: result.paymentStatusSent,
           nphiesResponse: result.nphiesResponse,
@@ -354,7 +356,7 @@ class PaymentReconciliationController {
     } catch (error) {
       console.error('[PaymentReconciliation] Error sending acknowledgement:', error);
       
-      let statusCode = 500;
+      let statusCode = error.status || 500;
       if (error.message.includes('not found')) {
         statusCode = 404;
       } else if (error.message.includes('already been sent')) {
@@ -376,7 +378,7 @@ class PaymentReconciliationController {
     try {
       const { id } = req.params;
       
-      if (!id || isNaN(parseInt(id))) {
+      if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) < 1) {
         return res.status(400).json({ 
           success: false,
           error: 'Invalid reconciliation ID' 
@@ -389,7 +391,7 @@ class PaymentReconciliationController {
       
       console.log(`[PaymentReconciliation] Previewing Payment Notice for reconciliation: ${id}, paymentStatus: ${resolvedStatus || 'auto'}`);
       
-      const result = await paymentReconciliationService.previewPaymentNotice(parseInt(id), resolvedStatus);
+      const result = await paymentReconciliationService.previewPaymentNotice(Number(id), paymentStatus, { receivedDate: req.query?.receivedDate });
       
       return res.json({
         success: true,
@@ -399,7 +401,7 @@ class PaymentReconciliationController {
     } catch (error) {
       console.error('[PaymentReconciliation] Error previewing acknowledgement:', error);
       
-      let statusCode = 500;
+      let statusCode = error.status || 500;
       if (error.message.includes('not found')) {
         statusCode = 404;
       }

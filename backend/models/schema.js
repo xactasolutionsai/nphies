@@ -306,16 +306,14 @@ export const validationSchemas = {
   }),
   
   payment: Joi.object({
-    payment_ref_number: Joi.string().min(3).max(50).required(),
-    provider_id: Joi.number().integer().positive().required(),
-    insurer_id: Joi.number().integer().positive().required(),
-    claim_id: Joi.number().integer().positive().optional(),
-    total_amount: Joi.number().precision(2).positive().required(),
-    status: Joi.string().valid('Completed', 'Pending', 'Failed', 'Processing').required(),
-    method: Joi.string().optional(),
-    description: Joi.string().optional()
-  }),
-  
+    payment_ref: Joi.string().min(3).max(50).required(),
+    provider_id: Joi.string().uuid().required(),
+    insurer_id: Joi.string().uuid().required(),
+    amount: Joi.number().precision(2).min(0).required(),
+    payment_date: Joi.string().isoDate().required(),
+    status: Joi.string().max(50).optional()
+  }).rename('payment_ref_number', 'payment_ref').rename('total_amount', 'amount').rename('total_paid_amount', 'amount'),
+
   standardApprovalClaim: Joi.object({
     form_number: Joi.string().max(50).allow(null, '').optional(),
     patient_id: Joi.string().uuid().allow(null, '').optional(),

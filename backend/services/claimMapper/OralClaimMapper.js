@@ -436,7 +436,7 @@ class OralClaimMapper extends DentalMapper {
       totalAmount = claim.items.reduce((sum, item) => {
         const quantity = parseFloat(item.quantity || 1);
         const unitPrice = parseFloat(item.unit_price || 0);
-        const factor = parseFloat(item.factor || 1);
+        const factor = parseFloat(item.factor ?? 1);
         const tax = parseFloat(item.tax || 0);
         return sum + (quantity * unitPrice * factor) + tax;
       }, 0);
@@ -513,7 +513,7 @@ class OralClaimMapper extends DentalMapper {
   buildOralClaimItem(item, sequence, servicedDate, providerIdentifierSystem, claim, supportingInfoSequences = []) {
     const quantity = parseFloat(item.quantity || 1);
     const unitPrice = parseFloat(item.unit_price || 0);
-    const factor = parseFloat(item.factor || 1);
+    const factor = parseFloat(item.factor ?? 1);
     const tax = parseFloat(item.tax || 0);
     const calculatedNet = (quantity * unitPrice * factor) + tax;
 
@@ -552,6 +552,7 @@ class OralClaimMapper extends DentalMapper {
     ];
 
     const claimItem = {
+      factor,
       extension: itemExtensions,
       sequence,
       careTeamSequence: [1],
@@ -577,17 +578,12 @@ class OralClaimMapper extends DentalMapper {
       net: { value: calculatedNet, currency: item.currency || claim?.currency || 'SAR' }
     };
 
-    // Add factor if not 1
-    if (factor !== 1) {
-      claimItem.factor = factor;
-    }
-
     // Add detail array for package items (BV-00036: required when package=true)
     if (item.is_package === true && item.details && Array.isArray(item.details) && item.details.length > 0) {
       claimItem.detail = item.details.map((detail, idx) => {
         const detailQuantity = parseFloat(detail.quantity || 1);
         const detailUnitPrice = parseFloat(detail.unit_price || 0);
-        const detailFactor = parseFloat(detail.factor || 1);
+        const detailFactor = parseFloat(detail.factor ?? 1);
         // BV-00434: detail net must equal ((quantity * unit price) * factor) + tax
         // For now, detail items don't have tax field, so use 0 (or could proportionally allocate parent item tax)
         const detailTax = parseFloat(detail.tax || 0);
@@ -615,7 +611,7 @@ class OralClaimMapper extends DentalMapper {
             value: detailUnitPrice, 
             currency: detail.currency || item.currency || claim?.currency || 'SAR' 
           },
-          ...(detailFactor !== 1 ? { factor: detailFactor } : {}),
+          factor: detailFactor,
           net: { 
             value: detailNet, 
             currency: detail.currency || item.currency || claim?.currency || 'SAR' 

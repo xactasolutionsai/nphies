@@ -793,7 +793,7 @@ class MessageUpdater {
       return {
         table: 'payment_reconciliations',
         recordId: result.reconciliationId,
-        isNew: true
+        isNew: !result.duplicate
       };
     }
 
@@ -807,8 +807,7 @@ class MessageUpdater {
       };
     }
 
-    console.error(`[MessageUpdater] Failed to process PaymentReconciliation:`, result.errors);
-    return null;
+    throw new Error('PaymentReconciliation processing failed: '+(result.errors || []).join('; '));
   }
 }
 

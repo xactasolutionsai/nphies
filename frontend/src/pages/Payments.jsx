@@ -11,6 +11,7 @@ const COLORS = ['#553781', '#9658C4', '#8572CD', '#00DEFE', '#26A69A', '#E0E7FF'
 export default function Payments() {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedPayment, setSelectedPayment] = useState(null);
   
   // Chart data states
@@ -31,52 +32,18 @@ export default function Payments() {
   const loadPayments = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const response = await api.getPayments({ limit: 1000 });
-      const paymentsData = response.data || response || [];
+      const paymentsData = Array.isArray(response.data) ? response.data : [];
       setPayments(paymentsData);
       
       // Process chart data
       processChartData(paymentsData);
     } catch (error) {
       console.error('Error loading payments:', error);
-      // Mock data for demonstration
-      const mockPayments = [
-        {
-          id: 1,
-          payment_ref_number: 'PAY001',
-          insurer_name: 'التأمين الصحي السعودي',
-          provider_name: 'مستشفى الملك فهد التخصصي',
-          total_amount: '15000',
-          payment_date: '2024-01-20',
-          status: 'Completed',
-          method: 'Bank Transfer',
-          description: 'Payment for surgery claim CLM001'
-        },
-        {
-          id: 2,
-          payment_ref_number: 'PAY002',
-          insurer_name: 'بوبا العربية للتأمين',
-          provider_name: 'عيادة الدكتور أحمد محمد',
-          total_amount: '500',
-          payment_date: '2024-01-25',
-          status: 'Pending',
-          method: 'Bank Transfer',
-          description: 'Payment for consultation claim CLM002'
-        },
-        {
-          id: 3,
-          payment_ref_number: 'PAY003',
-          insurer_name: 'تأمين مدجلف',
-          provider_name: 'مركز الأسنان المتخصص',
-          total_amount: '2000',
-          payment_date: '2024-01-22',
-          status: 'Failed',
-          method: 'Bank Transfer',
-          description: 'Payment for dental treatment claim CLM003'
-        }
-      ];
-      setPayments(mockPayments);
-      processChartData(mockPayments);
+      setLoadError('Unable to load payment records. Please retry.');
+      setPayments([]);
+      processChartData([]);
     } finally {
       setLoading(false);
     }
@@ -259,6 +226,7 @@ export default function Payments() {
 
   return (
     <div className="space-y-8">
+      {loadError && <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-red-700">{loadError}</p>}
       {/* Enhanced Header */}
       <div className="relative">
  

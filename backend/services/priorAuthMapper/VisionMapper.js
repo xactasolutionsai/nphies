@@ -439,7 +439,7 @@ class VisionMapper extends BaseMapper {
       totalAmount = priorAuth.items.reduce((sum, item) => {
         const quantity = parseFloat(item.quantity || 1);
         const unitPrice = parseFloat(item.unit_price || 0);
-        const factor = parseFloat(item.factor || 1);
+        const factor = parseFloat(item.factor ?? 1);
         const tax = parseFloat(item.tax || 0);
         return sum + (quantity * unitPrice * factor) + tax;
       }, 0);
@@ -463,7 +463,7 @@ class VisionMapper extends BaseMapper {
     
     const quantity = parseFloat(item.quantity || 1);
     const unitPrice = parseFloat(item.unit_price || 0);
-    const factor = parseFloat(item.factor || 1);
+    const factor = parseFloat(item.factor ?? 1);
     const tax = parseFloat(item.tax || 0);
     
     const calculatedNet = (quantity * unitPrice * factor) + tax;
@@ -507,6 +507,7 @@ class VisionMapper extends BaseMapper {
     });
 
     const claimItem = {
+      factor,
       extension: itemExtensions,
       sequence: sequence,
       careTeamSequence: [1],
@@ -541,9 +542,6 @@ class VisionMapper extends BaseMapper {
       // BV-00374: NO bodySite for vision claims
     };
 
-    if (factor !== 1) {
-      claimItem.factor = factor;
-    }
 
     return claimItem;
   }

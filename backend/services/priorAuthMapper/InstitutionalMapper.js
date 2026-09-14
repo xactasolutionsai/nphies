@@ -491,7 +491,7 @@ class InstitutionalMapper extends BaseMapper {
       totalAmount = priorAuth.items.reduce((sum, item) => {
         const quantity = parseFloat(item.quantity || 1);
         const unitPrice = parseFloat(item.unit_price || 0);
-        const factor = parseFloat(item.factor || 1);
+        const factor = parseFloat(item.factor ?? 1);
         const tax = parseFloat(item.tax || 0);
         return sum + (quantity * unitPrice * factor) + tax;
       }, 0);

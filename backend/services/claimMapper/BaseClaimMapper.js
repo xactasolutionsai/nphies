@@ -1,3 +1,4 @@
+import { operationOutcomeErrors, claimResponseErrors } from '../../utils/nphiesErrors.js';
 import { formatSaudiDateTime } from '../../utils/dateTime.js';
 /**
  * NPHIES Claim Base Mapper
@@ -394,7 +395,7 @@ class BaseClaimMapper {
     const sequence = item.sequence || itemIndex;
     const quantity = parseFloat(item.quantity || 1);
     const unitPrice = parseFloat(item.unit_price || 0);
-    const factor = parseFloat(item.factor || 1);
+    const factor = parseFloat(item.factor ?? 1);
     const tax = parseFloat(item.tax || 0);
     const calculatedNet = (quantity * unitPrice * factor) + tax;
 
@@ -438,6 +439,7 @@ class BaseClaimMapper {
       servicedDate: this.formatDate(servicedDate),
       quantity: { value: quantity },
       unitPrice: { value: unitPrice, currency: item.currency || 'SAR' },
+      factor,
       net: { value: calculatedNet, currency: item.currency || 'SAR' }
     };
   }
@@ -447,6 +449,9 @@ class BaseClaimMapper {
   // ============================================
 
   parseClaimResponse(responseBundle) {
+    if (responseBundle?.resourceType === 'OperationOutcome') {
+      return { success: false, outcome: 'error', errors: operationOutcomeErrors(responseBundle), rawBundle: responseBundle };
+    }
     try {
       if (!responseBundle?.entry) throw new Error('Invalid response bundle');
 
@@ -454,11 +459,7 @@ class BaseClaimMapper {
       const operationOutcome = responseBundle.entry.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
 
       if (operationOutcome) {
-        const errors = operationOutcome.issue?.map(issue => ({
-          severity: issue.severity,
-          code: issue.details?.coding?.[0]?.code || issue.code,
-          message: issue.details?.coding?.[0]?.display || issue.diagnostics
-        })) || [];
+        const errors = operationOutcomeErrors(operationOutcome);
         if (errors.some(e => e.severity === 'error' || e.severity === 'fatal')) {
           return { success: false, outcome: 'error', errors };
         }
@@ -468,10 +469,11 @@ class BaseClaimMapper {
 
       const adjudicationOutcome = claimResponse.extension?.find(ext => ext.url?.includes('extension-adjudication-outcome'))?.valueCodeableConcept?.coding?.[0]?.code;
       const outcome = claimResponse.outcome || 'complete';
-      const success = (outcome === 'complete' || outcome === 'partial') && adjudicationOutcome !== 'rejected';
+      const errors = claimResponseErrors(claimResponse);
+      const success = errors.length === 0 && (outcome === 'complete' || outcome === 'partial') && adjudicationOutcome !== 'rejected';
 
       return {
-        success, outcome, adjudicationOutcome,
+        success, outcome, adjudicationOutcome, errors,
         disposition: claimResponse.disposition,
         nphiesClaimId: claimResponse.identifier?.[0]?.value || claimResponse.id,
         rawBundle: responseBundle

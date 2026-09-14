@@ -11,8 +11,8 @@ class PaymentsController extends BaseController {
   // Get all payments with joins
   async getAll(req, res) {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit) || 10));
       const offset = (page - 1) * limit;
       const search = req.query.search || '';
 
@@ -79,12 +79,13 @@ class PaymentsController extends BaseController {
   async updatePayment(req, res) {
     try {
       const { id } = req.params;
-      const { payment_ref_number, total_paid_amount, payment_date } = req.body;
+      const { error, value } = validationSchemas.payment.fork(['payment_ref','provider_id','insurer_id','amount','payment_date'], field => field.optional()).min(1).validate(req.body);
+      if (error) return res.status(400).json({error: error.details[0].message});
 
       // Load queries dynamically
       const queries = await loadQueries();
       
-      const result = await query(queries.PAYMENTS.UPDATE_PAYMENT, [payment_ref_number, total_paid_amount, payment_date, id]);
+      const result = await query(queries.COMMON.UPDATE('payments', Object.keys(value)), [...Object.values(value), id]);
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Payment not found' });
@@ -117,7 +118,7 @@ class PaymentsController extends BaseController {
     try {
       const { insurerId } = req.params;
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit) || 10));
       const offset = (page - 1) * limit;
 
       // Load queries dynamically

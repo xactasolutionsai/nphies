@@ -1,0 +1,398 @@
+{
+  "checkedAt": "2026-09-14T04:53:58.420Z",
+  "profiles": [
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-professional-priorauth.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    },
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-professional-claim.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    },
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-institutional-priorauth.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    },
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-institutional-claim.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    },
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-oral-priorauth.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    },
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-oral-claim.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    },
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-vision-priorauth.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    },
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-vision-claim.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    },
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-pharmacy-priorauth.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    },
+    {
+      "source": "https://portal.nphies.sa/ig/StructureDefinition-pharmacy-claim.json",
+      "version": "1.0.0",
+      "date": "2025-12-03T14:27:43+02:00"
+    }
+  ],
+  "findings": [
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo",
+      "expected": "13..*",
+      "actual": 1
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:history-of-present-illness",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:oxygen-saturation",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:patient-history",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:physical-examination",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:pulse",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:respiratory-rate",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:temperature",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:treatment-plan",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:vitalSignDiastolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:vitalSignHeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:vitalSignSystolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-professional.entry[3].resource.supportingInfo:vitalSignWeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-professional.entry[1].resource.supportingInfo",
+      "expected": "13..*",
+      "actual": 6
+    },
+    {
+      "location": "claim-professional.entry[1].resource.supportingInfo:oxygen-saturation",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-professional.entry[1].resource.supportingInfo:pulse",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-professional.entry[1].resource.supportingInfo:respiratory-rate",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-professional.entry[1].resource.supportingInfo:temperature",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-professional.entry[1].resource.supportingInfo:vitalSignDiastolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-professional.entry[1].resource.supportingInfo:vitalSignHeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-professional.entry[1].resource.supportingInfo:vitalSignSystolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-professional.entry[1].resource.supportingInfo:vitalSignWeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo",
+      "expected": "14..*",
+      "actual": 2
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:history-of-present-illness",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:investigation-result",
+      "expected": "1..*",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:oxygen-saturation",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:patient-history",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:physical-examination",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:pulse",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:respiratory-rate",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:temperature",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:treatment-plan",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:vitalSignDiastolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:vitalSignHeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:vitalSignSystolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "priorauth-institutional.entry[1].resource.supportingInfo:vitalSignWeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo",
+      "expected": "14..*",
+      "actual": 1
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:history-of-present-illness",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:investigation-result",
+      "expected": "1..*",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:oxygen-saturation",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:patient-history",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:physical-examination",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:pulse",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:respiratory-rate",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:temperature",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:treatment-plan",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:vitalSignDiastolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:vitalSignHeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:vitalSignSystolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "claim-institutional.entry[1].resource.supportingInfo:vitalSignWeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[1].resource.entry[1].resource.supportingInfo",
+      "expected": "13..*",
+      "actual": 6
+    },
+    {
+      "location": "batch.entry[1].resource.entry[1].resource.supportingInfo:oxygen-saturation",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[1].resource.entry[1].resource.supportingInfo:pulse",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[1].resource.entry[1].resource.supportingInfo:respiratory-rate",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[1].resource.entry[1].resource.supportingInfo:temperature",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[1].resource.entry[1].resource.supportingInfo:vitalSignDiastolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[1].resource.entry[1].resource.supportingInfo:vitalSignHeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[1].resource.entry[1].resource.supportingInfo:vitalSignSystolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[1].resource.entry[1].resource.supportingInfo:vitalSignWeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[2].resource.entry[1].resource.supportingInfo",
+      "expected": "13..*",
+      "actual": 6
+    },
+    {
+      "location": "batch.entry[2].resource.entry[1].resource.supportingInfo:oxygen-saturation",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[2].resource.entry[1].resource.supportingInfo:pulse",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[2].resource.entry[1].resource.supportingInfo:respiratory-rate",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[2].resource.entry[1].resource.supportingInfo:temperature",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[2].resource.entry[1].resource.supportingInfo:vitalSignDiastolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[2].resource.entry[1].resource.supportingInfo:vitalSignHeight",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[2].resource.entry[1].resource.supportingInfo:vitalSignSystolic",
+      "expected": "1..1",
+      "actual": 0
+    },
+    {
+      "location": "batch.entry[2].resource.entry[1].resource.supportingInfo:vitalSignWeight",
+      "expected": "1..1",
+      "actual": 0
+    }
+  ],
+  "scope": "Required Claim top-level fields and supported extension/supportingInfo slices only. Not a full FHIR validator; does not evaluate terminology, FHIRPath, clinical truth or server business rules."
+}

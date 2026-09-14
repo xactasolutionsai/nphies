@@ -520,7 +520,7 @@ class PharmacyMapper extends BaseMapper {
       totalAmount = priorAuth.items.reduce((sum, item) => {
         const quantity = parseFloat(item.quantity || 1);
         const unitPrice = parseFloat(item.unit_price || 0);
-        const factor = parseFloat(item.factor || 1);
+        const factor = parseFloat(item.factor ?? 1);
         const tax = parseFloat(item.tax || 0);
         return sum + (quantity * unitPrice * factor) + tax;
       }, 0);
@@ -563,7 +563,7 @@ class PharmacyMapper extends BaseMapper {
     
     const quantity = parseFloat(item.quantity || 1);
     const unitPrice = parseFloat(item.unit_price || 0);
-    const factor = parseFloat(item.factor || 1);
+    const factor = parseFloat(item.factor ?? 1);
     const tax = parseFloat(item.tax || 0);
     
     const calculatedNet = (quantity * unitPrice * factor) + tax;
@@ -710,6 +710,7 @@ class PharmacyMapper extends BaseMapper {
     // Build the claim item
     // IMPORTANT: informationSequence MUST reference the days-supply supportingInfo per BV-00376
     const claimItem = {
+      factor,
       extension: itemExtensions,
       sequence: sequence,
       diagnosisSequence: item.diagnosis_sequences || [1],
@@ -813,9 +814,6 @@ class PharmacyMapper extends BaseMapper {
     };
 
     // Factor (optional, only include if not 1)
-    if (factor !== 1) {
-      claimItem.factor = factor;
-    }
 
     // Net (required)
     claimItem.net = {

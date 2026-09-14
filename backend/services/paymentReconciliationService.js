@@ -10,6 +10,7 @@
  */
 
 import { query, transaction } from '../db.js';
+import { reconciliationBundleErrors, paymentResourceErrors, originalPayment, resolveIdentifier, providerSystem, payerSystem, paymentError, validDate } from '../utils/paymentValidation.js';
 import { randomUUID } from 'crypto';
 import NphiesService from './nphiesService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
@@ -59,150 +60,36 @@ class PaymentReconciliationService {
       };
     }
     
-    // Step 3: Check for duplicates
-    const isDuplicate = await this.checkDuplicate(paymentReconciliation);
-    if (isDuplicate) {
-      console.log('[PaymentReconciliation] Duplicate detected:', paymentReconciliation.id);
-      return {
-        success: false,
-        duplicate: true,
-        errors: ['Duplicate PaymentReconciliation'],
-        acknowledgement: this.buildErrorAcknowledgement(bundle, ['Duplicate PaymentReconciliation already processed'], '409')
-      };
-    }
-    
-    // Step 4: Parse and store the reconciliation
     try {
-      const result = await this.storeReconciliation(bundle, paymentReconciliation);
-      console.log('[PaymentReconciliation] Successfully stored reconciliation:', result.reconciliationId);
-      
-      return {
-        success: true,
-        reconciliationId: result.reconciliationId,
-        acknowledgement: this.buildSuccessAcknowledgement(bundle, result.reconciliationId)
-      };
+      return await transaction(async client => {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [JSON.stringify([paymentReconciliation.identifier[0].system, paymentReconciliation.identifier[0].value])]);
+        const existing = await client.query(`SELECT id, EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(request_bundle->'entry','[]'::jsonb)) e WHERE e->'resource'=$3::jsonb) AS identical FROM payment_reconciliations WHERE identifier_system=$1 AND identifier_value=$2`,
+          [paymentReconciliation.identifier[0].system, paymentReconciliation.identifier[0].value, JSON.stringify(paymentReconciliation)]);
+        if (existing.rows.length && !existing.rows[0].identical) throw paymentError('A different reconciliation already uses this business identifier', 409);
+        if (existing.rows.length) return { success: true, duplicate: true, reconciliationId: existing.rows[0].id,
+          acknowledgement: this.buildSuccessAcknowledgement(bundle, existing.rows[0].id) };
+        const stored = await this.storeReconciliation(bundle, paymentReconciliation);
+        const acknowledgement = this.buildSuccessAcknowledgement(bundle, stored.reconciliationId);
+        await client.query('UPDATE payment_reconciliations SET response_bundle=$1 WHERE id=$2', [JSON.stringify(acknowledgement), stored.reconciliationId]);
+        return { success: true, reconciliationId: stored.reconciliationId, acknowledgement };
+      });
     } catch (error) {
-      console.error('[PaymentReconciliation] Storage error:', error);
-      return {
-        success: false,
-        errors: [error.message],
-        acknowledgement: this.buildErrorAcknowledgement(bundle, [error.message])
-      };
+      return { success: false, errors: [error.message], acknowledgement: this.buildErrorAcknowledgement(bundle, [error.message]) };
     }
   }
-  
+
+
   /**
    * Validate FHIR Bundle structure
    */
   validateBundle(bundle) {
-    const errors = [];
-    
-    if (!bundle) {
-      errors.push('Bundle is empty');
-      return { valid: false, errors };
-    }
-    
-    if (bundle.resourceType !== 'Bundle') {
-      errors.push('Resource is not a FHIR Bundle');
-      return { valid: false, errors };
-    }
-    
-    // Accept both 'message' and 'collection' bundle types
-    if (!['message', 'collection'].includes(bundle.type)) {
-      errors.push(`Bundle type must be 'message' or 'collection', got '${bundle.type}'`);
-    }
-    
-    if (!bundle.entry || !Array.isArray(bundle.entry) || bundle.entry.length === 0) {
-      errors.push('Bundle has no entries');
-      return { valid: false, errors };
-    }
-    
-    // Find PaymentReconciliation resource
-    const paymentReconciliation = bundle.entry.find(
-      e => e.resource?.resourceType === 'PaymentReconciliation'
-    )?.resource;
-    
-    if (!paymentReconciliation) {
-      errors.push('Bundle must contain a PaymentReconciliation resource');
-      return { valid: false, errors };
-    }
-    
-    // Validate mandatory PaymentReconciliation fields
-    const mandatoryErrors = this.validateMandatoryFields(paymentReconciliation);
-    errors.push(...mandatoryErrors);
-    
-    return {
-      valid: errors.length === 0,
-      errors
-    };
+    const errors = reconciliationBundleErrors(bundle);
+    return { valid: errors.length === 0, errors };
   }
-  
-  /**
-   * Validate mandatory fields per nphies IG
-   */
-  validateMandatoryFields(pr) {
-    const errors = [];
-    
-    // PaymentReconciliation.id
-    if (!pr.id) {
-      errors.push('PaymentReconciliation.id is required');
-    }
-    
-    // PaymentReconciliation.status
-    if (!pr.status) {
-      errors.push('PaymentReconciliation.status is required');
-    } else if (!['active', 'cancelled', 'draft', 'entered-in-error'].includes(pr.status)) {
-      errors.push(`Invalid PaymentReconciliation.status: ${pr.status}`);
-    }
-    
-    // PaymentReconciliation.created
-    if (!pr.created) {
-      errors.push('PaymentReconciliation.created is required');
-    }
-    
-    // PaymentReconciliation.paymentDate
-    if (!pr.paymentDate) {
-      errors.push('PaymentReconciliation.paymentDate is required');
-    }
-    
-    // PaymentReconciliation.paymentAmount
-    if (!pr.paymentAmount) {
-      errors.push('PaymentReconciliation.paymentAmount is required');
-    } else if (pr.paymentAmount.value === undefined || pr.paymentAmount.value === null) {
-      errors.push('PaymentReconciliation.paymentAmount.value is required');
-    }
-    
-    // PaymentReconciliation.detail (must have at least one)
-    if (!pr.detail || !Array.isArray(pr.detail) || pr.detail.length === 0) {
-      errors.push('PaymentReconciliation.detail is required and must have at least one entry');
-    } else {
-      // Validate each detail
-      pr.detail.forEach((detail, index) => {
-        // detail.request (Claim reference)
-        if (!detail.request) {
-          errors.push(`PaymentReconciliation.detail[${index}].request is required`);
-        }
-        
-        // detail.response (ClaimResponse reference)
-        if (!detail.response) {
-          errors.push(`PaymentReconciliation.detail[${index}].response is required`);
-        }
-        
-        // detail.amount
-        if (!detail.amount || detail.amount.value === undefined) {
-          errors.push(`PaymentReconciliation.detail[${index}].amount is required`);
-        }
-      });
-    }
-    
-    return errors;
-  }
-  
-  /**
-   * Extract PaymentReconciliation resource from bundle
-   */
+  validateMandatoryFields(pr) { return paymentResourceErrors(pr); }
+
   extractPaymentReconciliation(bundle) {
-    return bundle.entry?.find(
+    return bundle?.entry?.find(
       e => e.resource?.resourceType === 'PaymentReconciliation'
     )?.resource;
   }
@@ -211,7 +98,7 @@ class PaymentReconciliationService {
    * Extract MessageHeader from bundle
    */
   extractMessageHeader(bundle) {
-    return bundle.entry?.find(
+    return bundle?.entry?.find(
       e => e.resource?.resourceType === 'MessageHeader'
     )?.resource;
   }
@@ -295,8 +182,8 @@ class PaymentReconciliationService {
             submitter_reference, payee_reference,
             amount, currency, detail_date,
             predecessor_reference, responsible_reference,
-            extensions
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            extensions, detail_identifier, predecessor_identifier
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
           RETURNING id`,
           [
             reconciliationId,
@@ -317,7 +204,9 @@ class PaymentReconciliationService {
             detail.date,
             detail.predecessor?.reference,
             detail.responsible?.reference,
-            detail.extension ? JSON.stringify(detail.extension) : null
+            detail.extension ? JSON.stringify(detail.extension) : null,
+            detail.identifier ? JSON.stringify(detail.identifier) : null,
+            detail.predecessor ? JSON.stringify(detail.predecessor) : null
           ]
         );
         
@@ -345,7 +234,7 @@ class PaymentReconciliationService {
       }
       
       // 4. Try to link to existing claims/insurers/providers
-      await this.linkToExistingRecords(client, reconciliationId, pr);
+      await this.linkToExistingRecords(client, reconciliationId, pr, bundle);
       
       return { reconciliationId };
     });
@@ -392,101 +281,31 @@ class PaymentReconciliationService {
   /**
    * Try to link reconciliation to existing records
    */
-  async linkToExistingRecords(client, reconciliationId, pr) {
-    // Try to match insurer by reference, identifier, or display name
-    if (pr.paymentIssuer) {
-      // Extract possible identifiers
-      const refId = this.extractIdFromReference(pr.paymentIssuer.reference);
-      const identifierValue = pr.paymentIssuer.identifier?.value;
-      const displayName = pr.paymentIssuer.display;
-      
-      // Try multiple matching strategies
-      const insurerMatch = await client.query(
-        `SELECT insurer_id FROM insurers 
-         WHERE nphies_id = $1 
-            OR nphies_id = $2
-            OR insurer_name ILIKE $3
-            OR insurer_name ILIKE $4
-            OR insurer_id::text = $1
-         LIMIT 1`,
-        [
-          refId,
-          identifierValue || refId,
-          displayName ? `%${displayName}%` : '%impossible-match%',
-          `%${refId}%`
-        ]
-      );
-      
-      if (insurerMatch.rows.length > 0) {
-        await client.query(
-          `UPDATE payment_reconciliations SET payment_issuer_id = $1 WHERE id = $2`,
-          [insurerMatch.rows[0].insurer_id, reconciliationId]
-        );
-        console.log(`[PaymentReconciliation] Linked insurer: ${insurerMatch.rows[0].insurer_id}`);
-      } else {
-        console.log(`[PaymentReconciliation] Could not link insurer. Ref: ${refId}, Identifier: ${identifierValue}, Display: ${displayName}`);
-      }
+  async linkToExistingRecords(client, reconciliationId, pr, bundle) {
+    for (const [field, system, table, key, column] of [
+      ['paymentIssuer', payerSystem, 'insurers', 'insurer_id', 'payment_issuer_id'],
+      ['requestor', providerSystem, 'providers', 'provider_id', 'requestor_id']
+    ]) {
+      const identifier = resolveIdentifier(bundle, pr[field], system);
+      if (!identifier) continue;
+      const match = await client.query('SELECT '+key+' FROM '+table+' WHERE nphies_id=$1', [identifier.value]);
+      if (match.rows.length === 1) await client.query('UPDATE payment_reconciliations SET '+column+'=$1 WHERE id=$2', [match.rows[0][key], reconciliationId]);
     }
-    
-    // Try to match provider by reference, identifier, or display name
-    if (pr.requestor) {
-      // Extract possible identifiers
-      const refId = this.extractIdFromReference(pr.requestor.reference);
-      const identifierValue = pr.requestor.identifier?.value;
-      const displayName = pr.requestor.display;
-      
-      // Try multiple matching strategies
-      const providerMatch = await client.query(
-        `SELECT provider_id FROM providers 
-         WHERE nphies_id = $1 
-            OR nphies_id = $2
-            OR provider_name ILIKE $3
-            OR provider_name ILIKE $4
-            OR provider_id::text = $1
-         LIMIT 1`,
-        [
-          refId,
-          identifierValue || refId,
-          displayName ? `%${displayName}%` : '%impossible-match%',
-          `%${refId}%`
-        ]
-      );
-      
-      if (providerMatch.rows.length > 0) {
-        await client.query(
-          `UPDATE payment_reconciliations SET requestor_id = $1 WHERE id = $2`,
-          [providerMatch.rows[0].provider_id, reconciliationId]
-        );
-        console.log(`[PaymentReconciliation] Linked provider: ${providerMatch.rows[0].provider_id}`);
-      } else {
-        console.log(`[PaymentReconciliation] Could not link provider. Ref: ${refId}, Identifier: ${identifierValue}, Display: ${displayName}`);
-      }
-    }
-    
-    // Try to link details to claim_submissions
-    const details = await client.query(
-      `SELECT id, claim_identifier_value FROM payment_reconciliation_details 
-       WHERE reconciliation_id = $1 AND claim_identifier_value IS NOT NULL`,
-      [reconciliationId]
-    );
-    
-    for (const detail of details.rows) {
-      const claimMatch = await client.query(
-        `SELECT id FROM claim_submissions 
-         WHERE claim_number = $1 OR nphies_claim_id = $1
-         LIMIT 1`,
-        [detail.claim_identifier_value]
-      );
-      
-      if (claimMatch.rows.length > 0) {
-        await client.query(
-          `UPDATE payment_reconciliation_details SET claim_submission_id = $1 WHERE id = $2`,
-          [claimMatch.rows[0].id, detail.id]
-        );
-      }
+    for (const detail of pr.detail || []) {
+      if (!detail.request?.identifier) continue;
+      const identifier = detail.request.identifier;
+      const matches = await client.query(
+        `SELECT id FROM claim_submissions WHERE EXISTS (
+          SELECT 1 FROM jsonb_array_elements(COALESCE(request_bundle->'entry','[]'::jsonb)) e,
+          jsonb_array_elements(COALESCE(e->'resource'->'identifier','[]'::jsonb)) i
+          WHERE e->'resource'->>'resourceType'='Claim' AND i->>'system'=$1 AND i->>'value'=$2)`,
+        [identifier.system, identifier.value]);
+      if (matches.rows.length === 1) await client.query(
+        'UPDATE payment_reconciliation_details SET claim_submission_id=$1 WHERE reconciliation_id=$2 AND claim_identifier_system=$3 AND claim_identifier_value=$4',
+        [matches.rows[0].id, reconciliationId, identifier.system, identifier.value]);
     }
   }
-  
+
   /**
    * Extract ID from FHIR reference
    */
@@ -527,10 +346,11 @@ class PaymentReconciliationService {
               code: 'acknowledgement'
             },
             destination: messageHeader?.source ? [{
-              endpoint: messageHeader.source.endpoint
+              endpoint: messageHeader.source.endpoint, receiver: messageHeader.sender
             }] : [],
+            sender: messageHeader?.destination?.[0]?.receiver || { type: 'Organization', identifier: { system: providerSystem, value: NPHIES_CONFIG.DEFAULT_PROVIDER_ID } },
             source: {
-              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || 'http://nafes.local'
+              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || messageHeader?.destination?.[0]?.endpoint || 'http://nafes.local'
             },
             response: {
               identifier: messageHeader?.id || originalBundle.id,
@@ -573,14 +393,15 @@ class PaymentReconciliationService {
               code: 'acknowledgement'
             },
             destination: messageHeader?.source ? [{
-              endpoint: messageHeader.source.endpoint
+              endpoint: messageHeader.source.endpoint, receiver: messageHeader.sender
             }] : [],
+            sender: messageHeader?.destination?.[0]?.receiver || { type: 'Organization', identifier: { system: providerSystem, value: NPHIES_CONFIG.DEFAULT_PROVIDER_ID } },
             source: {
-              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || 'http://nafes.local'
+              endpoint: process.env.NPHIES_PROVIDER_ENDPOINT || messageHeader?.destination?.[0]?.endpoint || 'http://nafes.local'
             },
             response: {
               identifier: messageHeader?.id || originalBundle?.id || 'unknown',
-              code: httpStatus === '409' ? 'fatal-error' : 'fatal-error'
+              code: 'fatal-error', details: { reference: `urn:uuid:${operationOutcomeId}` }
             }
           }
         },
@@ -589,6 +410,7 @@ class PaymentReconciliationService {
           resource: {
             resourceType: 'OperationOutcome',
             id: operationOutcomeId,
+            meta: { profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/operation-outcome|1.0.0'] },
             issue: errors.map(error => ({
               severity: 'error',
               code: 'invalid',
@@ -724,6 +546,7 @@ class PaymentReconciliationService {
     }
     
     reconciliation.details = detailsResult.rows;
+    reconciliation.notice_attempts = (await query('SELECT id,payment_status,status,http_status,errors,receipt_date,receipt_reference,created_at,completed_at FROM payment_notice_attempts WHERE reconciliation_id=$1 ORDER BY id DESC', [id])).rows;
     
     return reconciliation;
   }
@@ -819,12 +642,7 @@ class PaymentReconciliationService {
    */
   async previewPollBundle(providerId) {
     // Get provider ID if not provided
-    if (!providerId) {
-      const providerResult = await query(
-        `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
-      );
-      providerId = providerResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    }
+    providerId ||= NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     
     // Build the poll request bundle using NphiesService
     const pollBundle = NphiesService.buildPaymentReconciliationPollBundle(providerId);
@@ -845,12 +663,7 @@ class PaymentReconciliationService {
     console.log('[PaymentReconciliation] Starting poll for pending payment reconciliations...');
     
     // 1. Get provider ID if not provided
-    if (!providerId) {
-      const providerResult = await query(
-        `SELECT nphies_id FROM providers ORDER BY provider_id LIMIT 1`
-      );
-      providerId = providerResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    }
+    providerId ||= NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
     
     // 2. Poll NPHIES for pending messages
     const pollResult = await NphiesService.pollPaymentReconciliations(providerId);
@@ -945,149 +758,54 @@ class PaymentReconciliationService {
   /**
    * Send Payment Notice acknowledgement to NPHIES for a PaymentReconciliation
    * @param {number|string} reconciliationId - The payment reconciliation ID
-   * @param {string} [paymentStatus] - 'paid' or 'cleared'. Auto-progresses if omitted.
+   * @param {string} [paymentStatus] - 'paid' or 'cleared', explicitly selected for sending.
    * @returns {Object} - Result with acknowledgement status
    */
-  async sendPaymentNotice(reconciliationId, paymentStatus) {
-    console.log('[PaymentReconciliation] Sending Payment Notice for reconciliation:', reconciliationId);
-    
-    // 1. Get the reconciliation details
+  async preparePaymentNotice(reconciliationId, paymentStatus = 'paid', receipt = {}) {
+    if (!['paid', 'cleared'].includes(paymentStatus)) throw paymentError('paymentStatus must be paid or cleared', 400);
     const reconciliation = await this.getById(reconciliationId);
-    
-    if (!reconciliation) {
-      throw new Error(`Payment reconciliation not found: ${reconciliationId}`);
-    }
-    
-    // Auto-progress: if caller didn't specify, derive from last successful send
-    if (!paymentStatus) {
-      paymentStatus = (reconciliation.payment_status_sent === 'paid' && reconciliation.acknowledgement_status === 'sent')
-        ? 'cleared'
-        : 'paid';
-    }
-    const validStatuses = ['paid', 'cleared'];
-    if (!validStatuses.includes(paymentStatus)) paymentStatus = 'paid';
-    
-    // 2. Get full provider record (needed for Organization entry in bundle)
-    let provider = null;
-    let providerId = reconciliation.provider_nphies_id;
-    
-    if (reconciliation.requestor_id) {
-      const providerResult = await query(
-        `SELECT * FROM providers WHERE provider_id = $1`,
-        [reconciliation.requestor_id]
-      );
-      provider = providerResult.rows[0] || null;
-      providerId = provider?.nphies_id || providerId;
-    }
-    
-    if (!providerId) {
-      const providerResult = await query(
-        `SELECT * FROM providers ORDER BY provider_id LIMIT 1`
-      );
-      provider = providerResult.rows[0] || null;
-      providerId = provider?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    }
-    
-    // 3. Build the Payment Notice bundle (new identifiers each time to allow resend)
-    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId, provider || {}, paymentStatus);
-    
-    // 4. Send to NPHIES
-    const result = await NphiesService.sendPaymentNotice(paymentNoticeBundle);
-    
-    // 5. Update reconciliation -- store both sent bundle and NPHIES response regardless of outcome
-    const ackStatus = result.success ? 'sent' : 'failed';
-    const updateParams = result.success
-      ? [ackStatus, JSON.stringify(paymentNoticeBundle), result.data ? JSON.stringify(result.data) : null, paymentStatus, reconciliationId]
-      : [ackStatus, JSON.stringify(paymentNoticeBundle), result.data ? JSON.stringify(result.data) : null, reconciliationId];
-    const updateSql = result.success
-      ? `UPDATE payment_reconciliations 
-         SET acknowledgement_status = $1,
-             acknowledgement_date = NOW(),
-             acknowledgement_bundle = $2,
-             acknowledgement_response = $3,
-             payment_status_sent = $4
-         WHERE id = $5`
-      : `UPDATE payment_reconciliations 
-         SET acknowledgement_status = $1,
-             acknowledgement_date = NOW(),
-             acknowledgement_bundle = $2,
-             acknowledgement_response = $3
-         WHERE id = $4`;
-    await query(updateSql, updateParams);
-    
-    return {
-      success: result.success,
-      reconciliationId,
-      paymentNoticeBundle,
-      paymentStatusSent: paymentStatus,
-      nphiesResponse: result.data,
-      nphiesErrors: result.nphiesErrors || [],
-      nphiesResponseCode: result.nphiesResponseCode,
-      error: result.error,
-      message: result.success 
-        ? 'Payment Notice sent successfully to NPHIES'
-        : `Failed to send Payment Notice: ${result.nphiesErrors?.map(e => `${e.code}: ${e.message}`).join('; ') || result.error || 'Unknown error'}`
-    };
+    if (!reconciliation) throw paymentError('Payment reconciliation not found', 404);
+    const { provider: identity } = originalPayment(reconciliation);
+    const providers = await query('SELECT * FROM providers WHERE nphies_id=$1', [identity.value]);
+    if (providers.rows.length !== 1) throw paymentError('The original destination must match exactly one configured provider');
+    const bundle = NphiesService.buildPaymentNoticeBundle(reconciliation, identity.value, providers.rows[0], paymentStatus, receipt);
+    return { reconciliation, bundle, paymentStatus };
   }
-  
-  /**
-   * Preview the Payment Notice bundle that would be sent (without sending)
-   * @param {number|string} reconciliationId - The payment reconciliation ID
-   * @param {string} [paymentStatus] - 'paid' or 'cleared'. Auto-progresses if omitted.
-   * @returns {Object} - The generated bundle
-   */
-  async previewPaymentNotice(reconciliationId, paymentStatus) {
-    console.log('[PaymentReconciliation] Previewing Payment Notice for reconciliation:', reconciliationId);
-    
-    // 1. Get the reconciliation details
-    const reconciliation = await this.getById(reconciliationId);
-    
-    if (!reconciliation) {
-      throw new Error(`Payment reconciliation not found: ${reconciliationId}`);
-    }
-    
-    // Auto-progress: if caller didn't specify, derive from last successful send
-    if (!paymentStatus) {
-      paymentStatus = (reconciliation.payment_status_sent === 'paid' && reconciliation.acknowledgement_status === 'sent')
-        ? 'cleared'
-        : 'paid';
-    }
-    const validStatuses = ['paid', 'cleared'];
-    if (!validStatuses.includes(paymentStatus)) paymentStatus = 'paid';
-    
-    // 2. Get full provider record
-    let provider = null;
-    let providerId = reconciliation.provider_nphies_id;
-    
-    if (reconciliation.requestor_id) {
-      const providerResult = await query(
-        `SELECT * FROM providers WHERE provider_id = $1`,
-        [reconciliation.requestor_id]
-      );
-      provider = providerResult.rows[0] || null;
-      providerId = provider?.nphies_id || providerId;
-    }
-    
-    if (!providerId) {
-      const providerResult = await query(
-        `SELECT * FROM providers ORDER BY provider_id LIMIT 1`
-      );
-      provider = providerResult.rows[0] || null;
-      providerId = provider?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    }
-    
-    // 3. Build the Payment Notice bundle
-    const paymentNoticeBundle = NphiesService.buildPaymentNoticeBundle(reconciliation, providerId, provider || {}, paymentStatus);
-    
-    return {
-      success: true,
-      reconciliationId,
-      bundle: paymentNoticeBundle,
-      paymentStatusSent: paymentStatus,
-      alreadySent: reconciliation.acknowledgement_status === 'sent'
-    };
+
+  async sendPaymentNotice(reconciliationId, paymentStatus, receipt = {}) {
+    if (!paymentStatus) throw paymentError('Select paid or cleared explicitly', 400);
+    const sandboxReceipt = process.env.NPHIES_ENVIRONMENT === 'sandbox' && receipt.syntheticTest === true;
+    if (receipt.bankReceiptConfirmed !== true && !sandboxReceipt) throw paymentError('Confirm actual bank receipt before sending a PaymentNotice', 400);
+    if (!validDate(receipt.receivedDate) || receipt.receivedDate > new Date().toISOString().slice(0, 10) ||
+        typeof receipt.receiptReference !== 'string' || !receipt.receiptReference.trim()) throw paymentError('A valid non-future receipt date and receipt reference are required', 400);
+    const { bundle } = await this.preparePaymentNotice(reconciliationId, paymentStatus, receipt);
+    const attempt = await transaction(async client => {
+      const locked = (await client.query('SELECT * FROM payment_reconciliations WHERE id=$1 FOR UPDATE', [reconciliationId])).rows[0];
+      const historicalStatus = locked.payment_status_sent || locked.acknowledgement_bundle?.entry?.find(e => e.resource?.resourceType === 'PaymentNotice')?.resource.paymentStatus?.coding?.[0]?.code;
+      if (historicalStatus === 'cleared' || (locked.acknowledgement_status === 'sent' && (!historicalStatus || historicalStatus === paymentStatus))) throw paymentError('This payment state has already been sent successfully', 409);
+      const pending = await client.query(`SELECT id FROM payment_notice_attempts WHERE reconciliation_id=$1 AND status IN ('sending','unknown')`, [reconciliationId]);
+      if (pending.rows.length) throw paymentError('An earlier send is pending or uncertain; reconcile its response before sending again', 409);
+      return (await client.query(`INSERT INTO payment_notice_attempts (reconciliation_id,payment_status,status,request_bundle,receipt_date,receipt_reference)
+        VALUES ($1,$2,'sending',$3,$4,$5) RETURNING id`, [reconciliationId,paymentStatus,JSON.stringify(bundle),receipt.receivedDate,receipt.receiptReference.trim()])).rows[0];
+    });
+    const result = await NphiesService.sendPaymentNotice(bundle);
+    const delivery = result.deliveryState || (result.success ? 'accepted' : 'unknown');
+    await transaction(async client => {
+      await client.query(`UPDATE payment_notice_attempts SET status=$1,response_bundle=$2,http_status=$3,errors=$4,completed_at=NOW() WHERE id=$5`,
+        [delivery,JSON.stringify(result.data || null),result.status || null,JSON.stringify(result.nphiesErrors || result.error || []),attempt.id]);
+      await client.query(`UPDATE payment_reconciliations SET acknowledgement_status=$1,acknowledgement_date=NOW(),acknowledgement_bundle=$2,
+        acknowledgement_response=$3,payment_status_sent=CASE WHEN $4 THEN $5 ELSE payment_status_sent END WHERE id=$6`,
+        [result.success?'sent':delivery==='unknown'?'unknown':'failed',JSON.stringify(bundle),JSON.stringify(result.data || null),result.success,paymentStatus,reconciliationId]);
+    });
+    return { success: result.success, reconciliationId, attemptId: attempt.id, deliveryState: delivery,
+      paymentNoticeBundle: bundle, paymentStatusSent: paymentStatus, nphiesResponse: result.data,
+      nphiesErrors: result.nphiesErrors || [], nphiesResponseCode: result.nphiesResponseCode, error: result.error,
+      message: result.success ? 'Payment notice accepted by NPHIES' : 'Payment notice '+delivery };
+  }
+
+  async previewPaymentNotice(reconciliationId, paymentStatus = 'paid', receipt = {}) {
+    const { reconciliation, bundle } = await this.preparePaymentNotice(reconciliationId, paymentStatus, receipt);
+    return { success: true, reconciliationId, bundle, paymentStatusSent: paymentStatus, alreadySent: reconciliation.acknowledgement_status === 'sent' };
   }
 }
-
 export default new PaymentReconciliationService();
-
