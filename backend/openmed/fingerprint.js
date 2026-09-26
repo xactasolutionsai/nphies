@@ -15,7 +15,8 @@ export const FINGERPRINT_PATHS = Object.freeze([
   'clinical-context', 'clinical-evidence', 'openmed/worker.py', 'openmed/workerPool.js', 'openmed/inference.js',
   'openmed/routes.js', 'openmed/models.json',
   'migrations/064_openmed_advisory.sql', 'migrations/071_clinical_ai_access_and_reviews.sql',
-  'migrations/072_clinical_knowledge_sources.sql', 'migrations/073_openmed_idempotency.sql'
+  'migrations/072_clinical_knowledge_sources.sql', 'migrations/073_openmed_idempotency.sql',
+  'migrations/074_clinical_pilot.sql', 'openmed/pilot.js'
 ]);
 
 function listFiles(root, relative) {

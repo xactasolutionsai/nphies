@@ -57,7 +57,7 @@ test('Approved sources, restricted retrieval and evidence-backed summaries', { s
   await owner.query('INSERT INTO public.patients VALUES ($1,$2,$3),($4,$5,$6)',
     [patientA, 'Synthetic A', 'SYN-A', patientB, 'Synthetic B', 'SYN-B']);
   for (const file of ['064_openmed_advisory.sql', '071_clinical_ai_access_and_reviews.sql', '072_clinical_knowledge_sources.sql',
-    '073_openmed_idempotency.sql']) {
+    '073_openmed_idempotency.sql', '074_clinical_pilot.sql']) {
     const sql = await fs.readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8');
     await owner.query(sql);
     await owner.query(sql); // idempotent
@@ -82,7 +82,7 @@ test('Approved sources, restricted retrieval and evidence-backed summaries', { s
   // OpenMed module on the restricted login with a fake extractor (no model)
   const app = express(); app.use(express.json());
   app.use((req, res, next) => { req.user = { id: Number(req.get('test-user') || 1) }; next(); });
-  app.use('/om', createAdvisoryRouter({ query: rquery, ready: () => true, analyze: async (text) => ({
+  app.use('/om', createAdvisoryRouter({ query: rquery, ready: () => true, requirePilot: false, analyze: async (text) => ({
     entities: ['metformin', 'lisinopril', 'aspirin'].flatMap(term => {
       const i = text.indexOf(term);
       return i < 0 ? [] : [{ text: term, label: 'CHEM', confidence: 0.9, start: i, end: i + term.length }];

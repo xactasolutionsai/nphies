@@ -7,6 +7,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import OpenMedAdvisory from './pages/OpenMedAdvisory';
 import ClinicalKnowledgeAdmin from './pages/ClinicalKnowledgeAdmin';
+import ClinicalPilotAdmin from './pages/ClinicalPilotAdmin';
 import Patients from './pages/Patients';
 import PatientDetails from './pages/PatientDetails';
 import PatientForm from './pages/PatientForm';
@@ -114,6 +115,7 @@ function AppRoutes() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/openmed" element={<OpenMedAdvisory />} />
           <Route path="/clinical-knowledge" element={<ClinicalKnowledgeAdmin />} />
+          <Route path="/clinical-pilot" element={<ClinicalPilotAdmin />} />
           <Route path="/patients" element={<Patients />} />
           <Route path="/patients/new" element={<RequirePermission action="create"><PatientForm /></RequirePermission>} />
           <Route path="/patients/:id/edit" element={<RequirePermission action="edit"><PatientForm /></RequirePermission>} />

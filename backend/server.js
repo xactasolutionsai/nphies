@@ -6,6 +6,7 @@ import openmedRoutes from './openmed/routes.js';
 import { closeRuntime as closeOpenmedRuntime } from './openmed/inference.js';
 import clinicalAiAccessRoutes from './routes/clinicalAiAccess.js';
 import clinicalKnowledgeRoutes from './routes/clinicalKnowledge.js';
+import clinicalPilotRoutes from './routes/clinicalPilot.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -83,7 +84,9 @@ app.use(cors({
     return callback(Object.assign(new Error('Origin not allowed by CORS policy'), { status: 403, code: 'CORS_ORIGIN_REJECTED' }));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  // Idempotency-Key: repeated OpenMed submissions return the first result (openmed/routes.js)
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+  exposedHeaders: ['Idempotent-Replay', 'Retry-After'],
   credentials: true
 }));
 
@@ -148,6 +151,7 @@ app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next
 app.use('/api/openmed', openmedRoutes);
 app.use('/api/clinical-ai-access', clinicalAiAccessRoutes);
 app.use('/api/clinical-knowledge', clinicalKnowledgeRoutes);
+app.use('/api/clinical-pilot', clinicalPilotRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/patients', patientsRoutes);
 app.use('/api/providers', providersRoutes);

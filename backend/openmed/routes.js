@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { advisoryQuery } from './database.js';
 import { runLocalAnalysis, runtimeReady, runtimeStatus as poolStatus } from './inference.js';
 import { buildFingerprint } from './fingerprint.js';
+import { pilotEligibility, PILOT_REASONS } from './pilot.js';
+import { inspectPassage } from '../clinical-evidence/ingestion.js';
 import { contextForOpenMed } from '../clinical-context/openmedAdapter.js';
 import { ENGINE } from '../clinical-context/index.js';
 import { buildSummary, patientFacts, queryTerms } from '../clinical-evidence/summary.js';
@@ -71,12 +73,17 @@ export function createRateLimiter({ perMinute = 20, now = () => Date.now() } = {
 
 export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocalAnalysis, ready = runtimeReady,
   runtimeStatus = poolStatus, fingerprint = buildFingerprint,
+  // Model runs need an approved pilot (migration 074). 'false' is for non-clinical test setups only.
+  requirePilot = process.env.CLINICAL_AI_REQUIRE_PILOT !== 'false',
   rateLimit = createRateLimiter({ perMinute: Number(process.env.OPENMED_RATE_PER_MINUTE) || 20 }) } = {}) {
   const router = express.Router();
   const inFlight = new Map();          // `${user}:${idempotency key}` -> promise of the stored row
   const route = fn => async (req, res) => {
     try { await fn(req, res); }
-    catch (error) { res.status(error.status || 503).json({ error: error.status ? error.message : 'OpenMed database is unavailable or not migrated' }); }
+    catch (error) {
+      res.status(error.status || 503).json({ error: error.status ? error.message : 'OpenMed database is unavailable or not migrated',
+        ...(error.reason ? { reason: error.reason } : {}) });
+    }
   };
   router.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -96,6 +103,13 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
       next();
     } catch { res.status(503).json({ error: 'OpenMed database is not configured or unavailable' }); }
   });
+  // Returns the pilot the run belongs to (null when pilots are not enforced) or refuses with 403.
+  async function requirePilotEligibility(userId) {
+    if (!requirePilot) return null;
+    const result = await pilotEligibility(query, userId, fingerprint().sha256);
+    if (!result.eligible) throw Object.assign(failure(PILOT_REASONS[result.reason], 403), { reason: result.reason });
+    return result.pilot;
+  }
   async function requirePatientAccess(userId, patientId) {
     const { rows } = await query(`SELECT ${grantSql('$1', '$2')} AS allowed`, [userId, patientId]);
     if (rows[0]?.allowed !== true) throw failure('No active clinical AI access to this patient', 403);
@@ -105,7 +119,8 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     await query('SELECT analysis_id FROM openmed_advisory.analysis_reviews LIMIT 0');
     res.json({ database: 'connected', runtime_ready: ready(), advisory_only: true, language: 'en', sdk_version: '2.3.0',
       context_engine: { name: ENGINE.name, version: ENGINE.version, languages: ENGINE.languages },
-      patient_access: 'explicit_grant', runtime: runtimeStatus(), build: fingerprint() });
+      patient_access: 'explicit_grant', runtime: runtimeStatus(), build: fingerprint(),
+      pilot: requirePilot ? await pilotEligibility(query, req.user.id, fingerprint().sha256) : { enforced: false } });
   }));
   router.get('/patients', route(async (req, res) => {
     const search = validate(Joi.string().trim().min(2).max(100).required(), req.query.search);
@@ -168,6 +183,7 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     const flightKey = key === null ? null : `${req.user.id}:${key}`;
     if (flightKey && inFlight.has(flightKey)) return replay(await inFlight.get(flightKey));
 
+    const pilot = await requirePilotEligibility(req.user.id);
     const retryAfter = rateLimit(req.user.id);
     if (retryAfter > 0) {
       res.set('Retry-After', String(retryAfter));
@@ -184,10 +200,10 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
       const result = { ...analysis, context: contextForOpenMed(value.text, analysis, value.mode) };
       try {
         const { rows } = await query(`INSERT INTO openmed_advisory.analyses
-          (id,user_id,patient_id,source_type,source_id,mode,input_text,result,idempotency_key)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9) RETURNING *`,
+          (id,user_id,patient_id,source_type,source_id,mode,input_text,result,idempotency_key,pilot_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10) RETURNING *`,
         [randomUUID(), req.user.id, value.patient_id, value.source_type, value.source_id, value.mode, value.text,
-          JSON.stringify(result), key]);
+          JSON.stringify(result), key, pilot?.id ?? null]);
         return rows[0];
       } catch (error) {
         const winner = error.code === '23505' ? await existing() : null;   // another instance stored it first
@@ -261,6 +277,7 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
   // reference passages quoted verbatim, no inference. Each generation is a stored version.
   router.post('/analyses/:id/summaries', route(async (req, res) => {
     const analysis = await ownAnalysis(req);
+    await requirePilotEligibility(req.user.id);
     const context = analysis.result?.context;
     const terms = context?.status === 'ok' ? queryTerms(patientFacts(context, analysis.input_text)) : [];
     const retrieval = await retrieveForTerms(query, terms);
@@ -293,6 +310,52 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     [randomUUID(), id, req.user.id, value.decision, value.note]);
     if (!rows[0]) throw failure('Summary not found', 404);
     res.status(201).json(rows[0]);
+  }));
+  // Error reports during the pilot. Allowed even while the pilot is paused. A serious report
+  // pauses the assistant for the whole pilot until it is resolved.
+  const issueInput = Joi.object({
+    analysis_id: Joi.string().guid().allow(null).default(null),
+    summary_id: Joi.string().guid().allow(null).default(null),
+    category: Joi.string().valid('wrong_assertion', 'wrong_experiencer', 'wrong_temporality', 'wrong_medication_status',
+      'missed_entity', 'wrong_entity', 'wrong_medication_detail', 'wrong_reference', 'unsupported_statement',
+      'access_or_privacy', 'performance', 'other').required(),
+    severity: Joi.string().valid('minor', 'moderate', 'serious').required(),
+    entity_index: Joi.number().integer().min(0).allow(null).default(null),
+    description: Joi.string().trim().max(2000).allow('').default('')
+  }).unknown(false);
+  router.post('/issues', route(async (req, res) => {
+    const value = validate(issueInput, req.body);
+    if (inspectPassage(value.description).phi.length) {
+      throw failure('Remove patient identifiers (ID, phone, e-mail, file number) from the description', 422);
+    }
+    let analysisId = value.analysis_id, pilotId = null;
+    if (value.summary_id) {
+      const { rows } = await query(`SELECT s.analysis_id FROM openmed_advisory.summaries s
+        JOIN openmed_advisory.analyses a ON a.id = s.analysis_id
+        WHERE s.id=$1 AND a.user_id=$2 AND ${grantSql('$2', 'a.patient_id')}`, [value.summary_id, req.user.id]);
+      if (!rows[0] || (analysisId && rows[0].analysis_id !== analysisId)) throw failure('Summary not found', 404);
+      analysisId = rows[0].analysis_id;
+    }
+    if (analysisId) {
+      const { rows } = await query(`SELECT a.pilot_id FROM openmed_advisory.analyses a
+        WHERE a.id=$1 AND a.user_id=$2 AND ${grantSql('$2', 'a.patient_id')}`, [analysisId, req.user.id]);
+      if (!rows[0]) throw failure('Analysis not found', 404);
+      pilotId = rows[0].pilot_id;
+    } else if (!['performance', 'access_or_privacy', 'other'].includes(value.category)) {
+      throw failure('This category needs the analysis or summary it concerns', 400);
+    }
+    if (!pilotId && requirePilot) pilotId = (await pilotEligibility(query, req.user.id, fingerprint().sha256)).pilot?.id ?? null;
+    const { rows } = await query(`INSERT INTO clinical_pilot.issue_reports
+      (id, pilot_id, analysis_id, summary_id, reporter_id, category, severity, entity_index, description, build_sha256)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, pilot_id, category, severity, status, created_at`,
+    [randomUUID(), pilotId, analysisId, value.summary_id, req.user.id, value.category, value.severity,
+      value.entity_index, value.description, fingerprint().sha256]);
+    res.status(201).json({ ...rows[0], pauses_pilot: value.severity === 'serious' && Boolean(pilotId) });
+  }));
+  router.get('/issues', route(async (req, res) => {
+    const { rows } = await query(`SELECT id, pilot_id, analysis_id, summary_id, category, severity, status, triage_note,
+      created_at, updated_at FROM clinical_pilot.issue_reports WHERE reporter_id=$1 ORDER BY created_at DESC LIMIT 100`, [req.user.id]);
+    res.json({ data: rows });
   }));
   return router;
 }

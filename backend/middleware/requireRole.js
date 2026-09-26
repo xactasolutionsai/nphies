@@ -43,7 +43,8 @@ export const ADMIN_ONLY_OPERATIONS = Object.freeze([
   ['POST', /^\/eligibility\/check-nphies-direct$/],      // raw bundle relay to NPHIES
   ['*', /^\/users(\/.*)?$/],                             // user administration
   ['*', /^\/clinical-ai-access(\/.*)?$/],                // patient access grants for clinical AI
-  ['*', /^\/clinical-knowledge(\/.*)?$/]                 // approved reference sources for clinical AI
+  ['*', /^\/clinical-knowledge(\/.*)?$/],                // approved reference sources for clinical AI
+  ['*', /^\/clinical-pilot(\/.*)?$/]                     // clinical assistant pilot administration
 ]);
 
 // Non-GET operations a reviewer may call: they build or check data but never create,

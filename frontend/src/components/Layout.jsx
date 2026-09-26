@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import {
   LayoutDashboard,
   BookOpen,
+  FlaskConical,
   Users,
   Building2,
   Shield,
@@ -63,6 +64,7 @@ const adminItems = [
   { name: 'Users', href: '/users', icon: Users },
   { name: 'Contacts', href: '/contacts', icon: MessageSquare },
   { name: 'Clinical Knowledge', href: '/clinical-knowledge', icon: BookOpen },
+  { name: 'Clinical Pilot', href: '/clinical-pilot', icon: FlaskConical },
 ];
 
 // Merged Requests & Claims section

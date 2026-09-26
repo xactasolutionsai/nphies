@@ -59,6 +59,11 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
   const idempotency = await fs.readFile(new URL('../migrations/073_openmed_idempotency.sql', import.meta.url), 'utf8');
   await owner.query(idempotency);
   await owner.query(idempotency); // idempotent
+  const knowledgeSql = await fs.readFile(new URL('../migrations/072_clinical_knowledge_sources.sql', import.meta.url), 'utf8');
+  await owner.query(knowledgeSql);          // 074 references openmed_advisory.summaries from 072
+  const pilotSql = await fs.readFile(new URL('../migrations/074_clinical_pilot.sql', import.meta.url), 'utf8');
+  await owner.query(pilotSql);
+  await owner.query(pilotSql); // idempotent
   // User 1 has an active grant for the synthetic patient; user 2 has none.
   await owner.query("INSERT INTO public.clinical_ai_patient_access (user_id,patient_id,reason,granted_by) VALUES (1,$1,'synthetic test grant',1)", [patientId]);
   // Generated identifiers/password contain only a-z0-9; no user SQL interpolation.
@@ -73,7 +78,7 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
   let simulateFailure = false;
   const app = express(); app.use(express.json());
   app.use((req, res, next) => { req.user = { id: Number(req.get('test-user') || 1) }; next(); });
-  app.use('/api/openmed', createAdvisoryRouter({ query, ready: () => true, analyze: async (...args) => {
+  app.use('/api/openmed', createAdvisoryRouter({ query, ready: () => true, requirePilot: false, analyze: async (...args) => {
     if (simulateFailure) throw Object.assign(new Error('Analysis failed'), { status:503 });
     return process.env.TEST_OPENMED_REAL_MODELS === 'true' ? runLocalAnalysis(...args) : result;
   } }));
@@ -199,7 +204,7 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
   const app2 = express(); app2.use(express.json());
   app2.use((req, res, next) => { req.user = { id: Number(req.get('test-user') || 1) }; next(); });
   let clock = 0;
-  app2.use('/om2', createAdvisoryRouter({ query, ready: () => true,
+  app2.use('/om2', createAdvisoryRouter({ query, ready: () => true, requirePilot: false,
     rateLimit: createRateLimiter({ perMinute: 3, now: () => clock }),
     runtimeStatus: () => ({ queued: 0, stats: { completed: calls } }),
     analyze: async (text, mode, { signal } = {}) => {

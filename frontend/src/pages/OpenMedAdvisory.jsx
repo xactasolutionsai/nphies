@@ -2,6 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { API_BASE_URL, apiFetch } from '@/services/http';
 import ContextReview from '@/components/openmed/ContextReview';
 import EvidenceSummary from '@/components/openmed/EvidenceSummary';
+import IssueReport from '@/components/openmed/IssueReport';
+
+const PILOT_REASONS = {
+  no_active_pilot: 'المساعد غير مفعّل لحسابك: لا توجد تجربة معتمدة نشطة تشملك. يمكنك مراجعة النتائج السابقة فقط.',
+  outside_dates: 'المساعد غير مفعّل اليوم: خارج تواريخ التجربة المعتمدة.',
+  build_not_evaluated: 'المساعد موقوف: النسخة المنشورة ليست النسخة التي قُيّمت واعتُمدت.',
+  paused_serious_issue: 'المساعد موقوف مؤقتاً حتى مراجعة بلاغ خطأ خطير.'
+};
 
 async function request(path, options = {}) {
   const response = await apiFetch(`${API_BASE_URL}/openmed${path}`, {
@@ -82,6 +90,11 @@ export default function OpenMedAdvisory() {
       النتائج اقتراحات استخراج نصي، وليست تشخيصاً أو توصية علاجية. وجود اسم مرض لا يثبت إصابة المريض به، وقد يكون منفياً أو ضمن تاريخ عائلي.
       النماذج وقواعد السياق للنص الإنجليزي فقط. يلزم تفويض وصول مسجّل لكل مريض. هذه الصفحة لا ترسل إلى نفيس ولا تعدّل المطالبات أو الموافقات.
     </div>
+    {status?.pilot?.eligible && <p className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
+      تجربة داخلية محدودة: {status.pilot.pilot.name} · {status.pilot.pilot.scope} · حتى {String(status.pilot.pilot.ends_on).slice(0, 10)}.
+      النتائج استشارية وتخضع لمراجعتك، وبلّغ عن أي خطأ.</p>}
+    {status?.pilot && status.pilot.enforced !== false && !status.pilot.eligible && <p role="alert"
+      className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{PILOT_REASONS[status.pilot.reason] || status.pilot.reason}</p>}
     <p role="status" className="text-sm text-gray-600">{status
       ? `قاعدة البيانات متصلة · ${status.runtime_ready ? 'ملفات النماذج المحلية جاهزة' : 'يلزم تثبيت النماذج المحلية'} · OpenMed ${status.sdk_version}`
       : 'لم يتم تأكيد جاهزية الوحدة'}</p>
@@ -131,7 +144,8 @@ export default function OpenMedAdvisory() {
           onChange={event => setText(event.target.value)} placeholder="Patient takes metformin for type 2 diabetes." />
       </label>
       <p className="text-sm text-gray-500">سيُحفظ النص والنتائج في السجل الاستشاري للمريض. لا يُطبق استخراج هوية تلقائي هنا.</p>
-      <button className={button} disabled={busy || !status?.runtime_ready || !text.trim()} onClick={analyze}>
+      <button className={button} disabled={busy || !status?.runtime_ready || !text.trim()
+        || (status?.pilot && status.pilot.enforced !== false && !status.pilot.eligible)} onClick={analyze}>
         {busy ? 'جارٍ تنفيذ الطلب…' : 'تحليل وحفظ الاستشارة'}</button>
     </section>}
     {selected && <section className="space-y-4 rounded-xl border bg-white p-5">
@@ -139,6 +153,7 @@ export default function OpenMedAdvisory() {
       <p>{labels[selected.review_status]} · {selected.result.model.id}</p>
       <details><summary className="cursor-pointer">النص المحلل</summary><p dir="auto" className="whitespace-pre-wrap p-3">{selected.input_text}</p></details>
       <ContextReview analysis={selected} request={request} busy={busy} onReviewed={reviewed} />
+      <IssueReport key={selected.id} analysis={selected} request={request} />
       <details><summary className="cursor-pointer text-sm">مخرجات النموذج الخام (قبل السياق)</summary>
         <div className="overflow-x-auto"><table className="w-full text-right text-sm">
           <thead><tr><th className="p-2">النص المستخرج</th><th>التصنيف</th><th>درجة النموذج</th></tr></thead>
