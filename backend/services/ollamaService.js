@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { getOllamaConfig, createOllamaClient, isTimeoutError } from './ollamaConfig.js';
+import { getOllamaConfig, createOllamaClient, isTimeoutError, DEFAULT_OLLAMA_MODEL } from './ollamaConfig.js';
 
 dotenv.config();
 
@@ -8,7 +8,7 @@ class OllamaService {
     const { baseUrl, timeoutMs, configError } = getOllamaConfig();
     this.baseUrl = baseUrl;
     this.configError = configError;
-    this.model = process.env.OLLAMA_MODEL || 'thewindmom/llama3-med42-8b:latest';
+    this.model = process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
     this.timeout = timeoutMs;
     this.maxRetries = 3;
     this.requestCounter = 0;

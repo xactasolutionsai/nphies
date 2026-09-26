@@ -43,6 +43,7 @@ import systemPollRoutes from './routes/systemPoll.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import contactsRoutes from './routes/contacts.js';
+import aiRoutes from './routes/ai/index.js';
 import { startPollScheduler, stopPollScheduler } from './scheduler/pollScheduler.js';
 
 // Load environment variables
@@ -169,6 +170,7 @@ app.use('/api/payment-reconciliation', paymentReconciliationRoutes);
 app.use('/api/coverages', coveragesRoutes);
 app.use('/api/advanced-authorizations', advancedAuthorizationsRoutes);
 app.use('/api/system-poll', systemPollRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -203,6 +205,7 @@ app.get('/', (req, res) => {
       coverages: '/api/coverages',
       advancedAuthorizations: '/api/advanced-authorizations',
       contacts: '/api/contacts',
+      ai: '/api/ai',
       health: '/health'
     }
   });

@@ -54,6 +54,7 @@ import PaymentReconciliationDetails from './pages/PaymentReconciliationDetails';
 import Users from './pages/Users';
 import Contacts from './pages/Contacts';
 import SystemPoll from './pages/SystemPoll';
+import AIInsights from './pages/ai/AIInsights';
 import ChatAssistant from './components/chat/ChatAssistant';
 
 // Protected Route Component
@@ -167,6 +168,7 @@ function AppRoutes() {
           <Route path="/payment-reconciliations" element={<PaymentReconciliations />} />
                 <Route path="/payment-reconciliations/:id" element={<PaymentReconciliationDetails />} />
                 <Route path="/system-poll" element={<SystemPoll />} />
+                <Route path="/ai/insights" element={<AIInsights />} />
               </Routes>
             </Layout>
             <ChatAssistant />

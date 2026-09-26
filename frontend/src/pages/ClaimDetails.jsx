@@ -15,6 +15,7 @@ import {
 import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
 import PractitionerSummary from '@/components/prior-auth/PractitionerSummary';
+import CompareWithAcceptedPanel from '@/components/ai/CompareWithAcceptedPanel';
 import { EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
 import { useAuth } from '@/context/AuthContext';
 
@@ -1102,6 +1103,11 @@ export default function ClaimDetails() {
               </Card>
             );
           })()}
+
+          {/* Rejected / failed request: structural diff against the last accepted request (rules; AI explanation optional) */}
+          {['error', 'denied'].includes(claim.status) && (
+            <CompareWithAcceptedPanel kind="claim-submissions" recordId={claim.id} />
+          )}
 
           {/* Tabs */}
           <div className="flex gap-1.5 bg-gray-100 p-1 rounded-lg overflow-x-auto scrollbar-hide">

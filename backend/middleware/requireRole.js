@@ -2,7 +2,7 @@
 // (req.user.role), never from JWT claims.
 //
 // Roles, from least to most privileged (migration 068):
-//   viewer    - read only (GET/HEAD/OPTIONS)
+//   viewer    - read only (GET/HEAD/OPTIONS), plus VIEWER_WRITE_OPERATIONS (AI feedback)
 //   reviewer  - viewer + AI / validation / bundle-preview endpoints (REVIEW_OPERATIONS)
 //   submitter - everything except the admin-only operations; the legacy 'user' role
 //               (existing rows are not migrated) has exactly the same rights
@@ -52,7 +52,14 @@ export const REVIEW_OPERATIONS = Object.freeze([
   /^\/medication-safety(\/.*)?$/,
   /^\/general-request\/validate$/,
   /^\/chat(\/.*)?$/,
-  /^\/openmed(\/.*)?$/
+  /^\/openmed(\/.*)?$/,
+  /^\/(prior-authorizations|claim-submissions)\/[^/]+\/compare-success\/explain$/   // advisory AI explanation
+]);
+
+// Non-GET operations every authenticated role (viewer included) may call.
+// They record an opinion about advisory AI output and never touch a clinical record.
+export const VIEWER_WRITE_OPERATIONS = Object.freeze([
+  ['POST', /^\/ai\/feedback$/]                             // POST /api/ai/feedback
 ]);
 
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -74,6 +81,7 @@ export function requiredRoleFor(method, path) {
   const normalizedMethod = String(method || '').toUpperCase();
   if (READ_METHODS.has(normalizedMethod)) return 'viewer';
   const normalizedPath = normalizeApiPath(path);
+  if (VIEWER_WRITE_OPERATIONS.some(([m, pattern]) => m === normalizedMethod && pattern.test(normalizedPath))) return 'viewer';
   if (REVIEW_OPERATIONS.some(pattern => pattern.test(normalizedPath))) return 'reviewer';
   return 'submitter';
 }

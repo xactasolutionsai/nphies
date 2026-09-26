@@ -1,5 +1,6 @@
 import express from 'express';
 import priorAuthorizationsController from '../controllers/priorAuthorizationsController.js';
+import { registerCompareSuccessRoutes } from './ai/compareSuccess.js';
 
 const router = express.Router();
 
@@ -105,6 +106,9 @@ router.post('/:id/communications/:communicationId/poll-acknowledgment', (req, re
 router.post('/:id/communications/poll-all-acknowledgments', (req, res) => 
   priorAuthorizationsController.pollAllQueuedAcknowledgments(req, res)
 );
+
+// Compare a rejected request with the last accepted one (deterministic diff + optional AI explanation)
+registerCompareSuccessRoutes(router, 'prior-authorizations');
 
 export default router;
 

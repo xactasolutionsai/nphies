@@ -1,11 +1,74 @@
 import React from 'react';
 import { AlertCircle, AlertTriangle, Info, CheckCircle, XCircle } from 'lucide-react';
+import AIBadge from '@/components/ai/AIBadge';
+
+/**
+ * Deterministic duplicate-ingredient findings (source 'rules', from medication_codes.ingredients).
+ * Shown independently of the AI analysis, so they stay visible when the AI is disabled or down.
+ */
+export const RuleFindingsSection = ({ ruleFindings }) => {
+  if (!ruleFindings) return null;
+  if (ruleFindings.available === false) {
+    return (
+      <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-sm text-amber-900">
+        <p className="font-medium">Duplicate-ingredient check could not run — review manually.</p>
+        {ruleFindings.reason && <p>{ruleFindings.reason}</p>}
+      </div>
+    );
+  }
+  const findings = ruleFindings.findings || [];
+  const unmatched = ruleFindings.unmatchedCodes || [];
+  const noData = ruleFindings.codesWithoutIngredients || [];
+  return (
+    <div className="bg-white border border-slate-300 rounded-lg overflow-hidden">
+      <div className="bg-slate-100 px-4 py-3 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-md font-semibold text-gray-900">Duplicate active ingredients (rule check)</h4>
+        <AIBadge source={ruleFindings.source} certainty={ruleFindings.certainty} basis={ruleFindings.basis} />
+      </div>
+      <div className="p-4 space-y-2 text-sm">
+        {findings.length === 0 && unmatched.length === 0 && noData.length === 0 && (
+          <p className="text-gray-700">No shared active ingredient or repeated code among the checked items.</p>
+        )}
+        {findings.map((finding, idx) => (
+          <div key={idx} className="flex items-start gap-2 bg-yellow-50 border border-yellow-300 rounded p-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-700 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-gray-900">{finding.message}</p>
+              <p className="text-xs text-gray-600">Codes: {(finding.codes || []).join(', ')}</p>
+            </div>
+          </div>
+        ))}
+        {unmatched.length > 0 && (
+          <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+            Not in the local medication code list, so not checked: {unmatched.join(', ')}.
+          </p>
+        )}
+        {noData.length > 0 && (
+          <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+            No ingredient data for: {noData.join(', ')} — not checked.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 /**
  * MedicationSafetyPanel Component
- * Displays comprehensive medication safety analysis results
+ * Displays comprehensive medication safety analysis results.
+ * `ruleFindings` (optional) is the deterministic duplicate-ingredient check; it is shown even when
+ * the AI analysis is loading, failed or disabled.
  */
-const MedicationSafetyPanel = ({ analysis, isLoading, error }) => {
+const MedicationSafetyPanel = ({ analysis, isLoading, error, ruleFindings }) => {
+  const rules = ruleFindings ? <RuleFindingsSection ruleFindings={ruleFindings} /> : null;
+  if (rules && (isLoading || error || !analysis)) {
+    return (
+      <div className="space-y-4">
+        {rules}
+        {(isLoading || error) && <MedicationSafetyPanel analysis={analysis} isLoading={isLoading} error={error} />}
+      </div>
+    );
+  }
   if (isLoading) {
     return (
       <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -66,6 +129,7 @@ const MedicationSafetyPanel = ({ analysis, isLoading, error }) => {
 
   return (
     <div className="space-y-4">
+      {rules}
       {/* Overall Risk Assessment */}
       {analysisIncomplete ? (
         <div className="border rounded-lg p-4 bg-amber-50 border-amber-300">

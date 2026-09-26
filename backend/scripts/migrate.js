@@ -22,7 +22,7 @@
 //   3. feature tables (advanced authorizations, general requests, exams, approval forms);
 //   4. pgvector-based tables (skipped with a warning when the `vector` extension is not
 //      available; they stay pending and run once it is installed);
-//   5. data standardization, then the numbered migrations 029..068 in numeric order.
+//   5. data standardization, then the numbered migrations 029..069 in numeric order.
 // Files in migrations/ that are NOT listed are one-off data scripts or superseded files; they
 // are reported by --status with the reason (see NOT_MANAGED) and are never run automatically.
 import fs from 'node:fs/promises';
@@ -107,7 +107,8 @@ export const MIGRATIONS = [
   { file: 'migrations/065_payment_notice_attempts.sql' },
   { file: 'migrations/066_schema_consistency.sql', afterBaseline: true },
   { file: 'migrations/067_practitioner_fields.sql', afterBaseline: true },
-  { file: 'migrations/068_user_roles_extended.sql', afterBaseline: true }
+  { file: 'migrations/068_user_roles_extended.sql', afterBaseline: true },
+  { file: 'migrations/069_ai_foundation.sql', afterBaseline: true }
 ];
 
 // Files in migrations/ that the runner deliberately does not apply.

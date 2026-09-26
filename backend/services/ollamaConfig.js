@@ -14,6 +14,8 @@ import { Ollama } from 'ollama';
 
 export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
 export const DEFAULT_OLLAMA_TIMEOUT_MS = 120000;
+/** Default general model (OLLAMA_MODEL); shared by ollamaService and services/ai. */
+export const DEFAULT_OLLAMA_MODEL = 'thewindmom/llama3-med42-8b:latest';
 
 const isPrivateIPv4 = (host) => {
   const parts = host.split('.').map(Number);

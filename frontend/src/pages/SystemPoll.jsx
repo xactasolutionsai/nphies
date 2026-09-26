@@ -10,6 +10,7 @@ import {
   Inbox, Link2, HelpCircle, BarChart3, ArrowRight, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import PollTimingAdvisory from '@/components/ai/PollTimingAdvisory';
 
 const tableToRoute = {
   prior_authorizations: '/prior-authorizations',
@@ -251,6 +252,16 @@ function SystemPoll() {
           </Card>
         </div>
       )}
+
+      {/* Advisory poll timing statistics (read-only; the scheduler is not changed) */}
+      <Card>
+        <CardContent className="p-4">
+          <PollTimingAdvisory compact />
+          <Link to="/ai/insights" className="mt-2 inline-block text-xs text-blue-600 hover:underline">
+            Per-insurer response times on AI Insights
+          </Link>
+        </CardContent>
+      </Card>
 
       {/* Latest Poll Result */}
       {pollResult && (

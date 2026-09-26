@@ -11,6 +11,7 @@ import CreatableSelect from 'react-select/creatable';
 import AsyncSelect from 'react-select/async';
 import 'react-datepicker/dist/react-datepicker.css';
 import api, { extractErrorMessage } from '@/services/api';
+import aiApi from '@/services/aiApi';
 import { 
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
@@ -123,6 +124,8 @@ export default function PriorAuthorizationForm() {
   const [medicationSafetyAnalysis, setMedicationSafetyAnalysis] = useState(null);
   const [safetyLoading, setSafetyLoading] = useState(false);
   const [safetyError, setSafetyError] = useState(null);
+  // Deterministic duplicate-ingredient check (rules, no AI); runs even when AI features are off.
+  const [ruleFindings, setRuleFindings] = useState(null);
   const [medicationSuggestions, setMedicationSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState(null);
@@ -395,6 +398,29 @@ export default function PriorAuthorizationForm() {
 
     return () => clearTimeout(timer);
   }, [formData.auth_type, medicationSetKey, formData.patient_id, principalDiagnosisKey]);
+
+  // Duplicate active-ingredient rule check for pharmacy items (medication_codes.ingredients).
+  // Independent of AI_FEATURES_ENABLED: this is a deterministic check, not an AI call.
+  useEffect(() => {
+    if (formData.auth_type !== 'pharmacy' || !medicationSetKey) {
+      setRuleFindings(null);
+      return undefined;
+    }
+    let active = true;
+    const items = (formData.items || [])
+      .map((item, index) => ({ sequence: item.sequence || index + 1, code: item.medication_code }))
+      .filter(item => item.code);
+    const timer = setTimeout(async () => {
+      try {
+        const result = await aiApi.checkDuplicateIngredients(items);
+        if (active) setRuleFindings(result);
+      } catch (error) {
+        if (active) setRuleFindings({ available: false, reason: extractErrorMessage(error) });
+      }
+    }, 600);
+    return () => { active = false; clearTimeout(timer); };
+    // medicationSetKey captures the coded items; formData.items itself changes on every keystroke.
+  }, [formData.auth_type, medicationSetKey]);
 
   // Parse a date string as a LOCAL date (avoids timezone shift)
   const parseLocalDate = (dateStr) => {
@@ -5578,6 +5604,7 @@ export default function PriorAuthorizationForm() {
                       analysis={medicationSafetyAnalysis}
                       isLoading={safetyLoading}
                       error={safetyError}
+                      ruleFindings={ruleFindings}
                     />
                   </CardContent>
                 </Card>

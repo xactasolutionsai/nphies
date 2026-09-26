@@ -1,4 +1,6 @@
 import medbotService from './medbotService.js';
+import { checkDuplicateIngredients, toCodedItems } from './ingredientDuplicates.js';
+import { isAIFeatureEnabled } from './ai/config.js';
 
 /*
  * JSON schemas passed to Ollama as `format` (structured outputs) so the model is
@@ -167,6 +169,14 @@ Provide JSON response:
       };
     }
 
+    // 1. Deterministic rule check first (medication_codes.ingredients). It is returned even when
+    //    the language model is disabled or down.
+    const ruleFindings = await this.runRuleChecks(medications);
+
+    // 2. Optional LLM analysis. Failures are reported as an incomplete analysis (fail closed).
+    if (!isAIFeatureEnabled('medication_safety')) {
+      return this.withoutLlm(medications, ruleFindings, 'AI features are disabled');
+    }
     const prompt = this.buildSafetyAnalysisPrompt(medications, patientContext);
 
     try {
@@ -188,6 +198,8 @@ Provide JSON response:
       return {
         success: true,
         analysis,
+        ruleFindings,
+        ai: { available: true, source: 'llm', certainty: 'low' },
         metadata: {
           model: result.model || medbotService.model,
           responseTime: result.duration,
@@ -195,9 +207,58 @@ Provide JSON response:
         }
       };
     } catch (error) {
-      console.error('Error analyzing medication safety:', error);
-      throw error;
+      console.error('Error analyzing medication safety:', error.message);
+      return this.withoutLlm(medications, ruleFindings, 'The AI medication safety analysis is unavailable');
     }
+  }
+
+  /**
+   * Deterministic duplicate-ingredient check on the medication codes (source 'rules').
+   * Returns null when no item carries a code; a lookup failure is reported, not hidden.
+   * @private
+   */
+  async runRuleChecks(medications) {
+    const items = toCodedItems(medications.map((med, index) => ({
+      sequence: med.sequence ?? index + 1,
+      code: med.medicationCode || med.medication_code || med.code
+    })));
+    if (items.length === 0) return null;
+    try {
+      return await checkDuplicateIngredients(items);
+    } catch (error) {
+      console.error('Duplicate-ingredient rule check failed:', error.message);
+      return { available: false, reason: 'The duplicate-ingredient check could not be run; review manually.' };
+    }
+  }
+
+  /**
+   * Result when the LLM part is disabled or failed: the rule findings plus an analysis that is
+   * explicitly incomplete (never "safe").
+   * @private
+   */
+  withoutLlm(medications, ruleFindings, reason) {
+    const analysis = {
+      drugInteractions: [],
+      ageRelatedWarnings: [],
+      pregnancyWarnings: [],
+      duplicateIngredients: [],
+      sideEffectsOverview: { common: [], serious: [] },
+      overallRiskAssessment: 'unknown',
+      parsingError: false,
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      message: `${reason}. This is NOT a confirmation that the medications are safe; manual review required.`,
+      recommendations: []
+    };
+    const duplicates = this.detectDuplicateIngredients(medications);
+    if (duplicates.length > 0) analysis.duplicateIngredients = duplicates;
+    return {
+      success: true,
+      analysis,
+      ruleFindings,
+      ai: { available: false, reason },
+      metadata: { model: null, timestamp: new Date().toISOString() }
+    };
   }
 
   /**

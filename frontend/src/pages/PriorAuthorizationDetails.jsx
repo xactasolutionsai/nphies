@@ -16,6 +16,7 @@ import {
 // Import AI Medication Safety Panel
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
 import PractitionerSummary from '@/components/prior-auth/PractitionerSummary';
+import CompareWithAcceptedPanel from '@/components/ai/CompareWithAcceptedPanel';
 
 // Import Communication Panel for NPHIES communications
 import { CommunicationPanel } from '@/components/prior-auth';
@@ -1282,6 +1283,11 @@ const { can } = useAuth();
               </Card>
             );
           })()}
+
+          {/* Rejected / failed request: structural diff against the last accepted request (rules; AI explanation optional) */}
+          {['error', 'denied'].includes(priorAuth.status) && (
+            <CompareWithAcceptedPanel kind="prior-authorizations" recordId={priorAuth.id} />
+          )}
 
           {/* Tabs */}
           <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
