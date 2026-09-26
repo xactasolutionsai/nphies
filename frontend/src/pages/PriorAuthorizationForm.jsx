@@ -10,7 +10,7 @@ import Select from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 import AsyncSelect from 'react-select/async';
 import 'react-datepicker/dist/react-datepicker.css';
-import api, { extractErrorMessage } from '@/services/api';
+import api, { extractErrorMessage, AI_UNAVAILABLE_MESSAGE } from '@/services/api';
 import aiApi from '@/services/aiApi';
 import { 
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
@@ -54,6 +54,7 @@ import {
   ENCOUNTER_SERVICE_TYPE_OPTIONS,
   ENCOUNTER_PRIORITY_OPTIONS,
   EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS,
+  DISCHARGE_DISPOSITION_OPTIONS,
   LOINC_LAB_OPTIONS,
   SERVICE_CODE_SYSTEM_OPTIONS,
   getServiceCodeOptions,
@@ -174,6 +175,7 @@ export default function PriorAuthorizationForm() {
     service_type: '', // Service type: acute-care, sub-acute-care, etc.
     encounter_priority: '', // For EMER: EM, UR, S, etc.
     emergency_department_disposition: '', // BV-00728: Required for EMER when encounter end date is provided
+    discharge_disposition: '', // BV-00759: Required for institutional encounters with an end date (entered, never defaulted)
     // Newborn extension fields (per NPHIES Test Case 8)
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     is_newborn: false, // Flag indicating if this is a newborn patient authorization
@@ -376,7 +378,8 @@ export default function PriorAuthorizationForm() {
   }, [calculatedTotal]);
 
   // Auto-analyze medication safety when the pharmacy medication set changes
-  // NOTE: This is disabled when AI_FEATURES_ENABLED is false in api.js
+  // When the AI is disabled or down the backend still answers (rule check + analysis marked
+  // incomplete / manual review required), so the panel always states the AI status.
   useEffect(() => {
     // Only run for pharmacy auth type
     if (formData.auth_type !== 'pharmacy') {
@@ -400,7 +403,7 @@ export default function PriorAuthorizationForm() {
   }, [formData.auth_type, medicationSetKey, formData.patient_id, principalDiagnosisKey]);
 
   // Duplicate active-ingredient rule check for pharmacy items (medication_codes.ingredients).
-  // Independent of AI_FEATURES_ENABLED: this is a deterministic check, not an AI call.
+  // Independent of the AI status: this is a deterministic check, not an AI call.
   useEffect(() => {
     if (formData.auth_type !== 'pharmacy' || !medicationSetKey) {
       setRuleFindings(null);
@@ -502,9 +505,13 @@ export default function PriorAuthorizationForm() {
         }
       );
 
-      // Handle disabled AI features - don't show error, just silently skip
+      // AI unavailable: say so in the panel (never skip silently); the rule check stays visible
       if (response.disabled) {
-        setSafetyLoading(false);
+        setMedicationSafetyAnalysis({
+          analysisIncomplete: true,
+          requiresManualReview: true,
+          message: response.message || AI_UNAVAILABLE_MESSAGE
+        });
         return;
       }
 
@@ -548,7 +555,7 @@ export default function PriorAuthorizationForm() {
 
       // Handle disabled AI features
       if (response.disabled) {
-        setSuggestionsError('AI features are currently disabled');
+        setSuggestionsError(response.message || AI_UNAVAILABLE_MESSAGE);
         setSuggestionsLoading(false);
         return;
       }
@@ -692,9 +699,17 @@ export default function PriorAuthorizationForm() {
       const inferredMode = item.code_entry_mode || (hasManualCodeEntry ? 'manual' : 'nphies');
       const shouldClearStaleShadow = isOldRecord && !hasManualCodeEntry;
       const details = item.details || (item.is_package ? [] : undefined);
+      // Pharmacy medications saved before the backend kept medication_code in 'nphies' mode
+      // only carry product_or_service_code: show that code as the selected medication.
+      const restoreMedication = data.auth_type === 'pharmacy' && inferredMode === 'nphies' &&
+        item.item_type !== 'device' && !item.medication_code && item.product_or_service_code;
 
       return {
         ...item,
+        ...(restoreMedication ? {
+          medication_code: item.product_or_service_code,
+          medication_name: item.medication_name || item.product_or_service_display || ''
+        } : {}),
         _rowKey: item._rowKey || newRowKey(),
         manual_code_entry: hasManualCodeEntry,
         manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
@@ -1393,7 +1408,7 @@ export default function PriorAuthorizationForm() {
       if (response.disabled) {
         setAiValidationResult({
           success: false,
-          error: 'AI features are currently disabled',
+          error: response.message || AI_UNAVAILABLE_MESSAGE,
           isValid: null,
           aiUnavailable: true,
           requiresManualReview: true,
@@ -1557,7 +1572,7 @@ export default function PriorAuthorizationForm() {
       
       // Handle disabled AI features
       if (response.disabled) {
-        alert('AI features are currently disabled. Please enable them in the configuration.');
+        alert(response.message || AI_UNAVAILABLE_MESSAGE);
         setEnhancingField(null);
         return;
       }
@@ -1891,6 +1906,14 @@ export default function PriorAuthorizationForm() {
       }
     }
 
+    // BV-00759: institutional encounters with an end date need the discharge disposition
+    if (formData.auth_type === 'institutional' && formData.encounter_end && !formData.discharge_disposition) {
+      validationErrors.push({
+        field: 'discharge_disposition',
+        message: 'Discharge Disposition is required for institutional encounters that have an end date (BV-00759)'
+      });
+    }
+
     // Newborn requests require the birth weight
     if (formData.is_newborn) {
       const birthWeight = parseFloat(formData.birth_weight);
@@ -2132,6 +2155,8 @@ export default function PriorAuthorizationForm() {
       const value = payload[key] == null ? '' : String(payload[key]).trim();
       payload[key] = value || null;
     });
+    // Discharge disposition only applies to institutional encounters (BV-00759)
+    if (payload.auth_type !== 'institutional') payload.discharge_disposition = null;
     // Remove structured fields (already merged into supporting_info or handled separately)
     delete payload.vital_signs;
     delete payload.clinical_info;
@@ -2943,6 +2968,26 @@ export default function PriorAuthorizationForm() {
                           <p className="text-xs text-red-600">End date must be on or after the start date</p>
                         )}
                       </div>
+                      {formData.auth_type === 'institutional' && (
+                        <div className="space-y-2">
+                          <Label>Discharge Disposition{formData.encounter_end ? ' *' : ''}</Label>
+                          <Select
+                            value={DISCHARGE_DISPOSITION_OPTIONS.find(opt => opt.value === formData.discharge_disposition) || null}
+                            onChange={(option) => handleChange('discharge_disposition', option?.value || '')}
+                            options={DISCHARGE_DISPOSITION_OPTIONS}
+                            styles={selectStyles}
+                            menuPortalTarget={document.body}
+                            isClearable
+                            placeholder="Select discharge disposition..."
+                          />
+                          <p className="text-xs text-gray-500">
+                            Required when the encounter has an end date (BV-00759)
+                          </p>
+                          {errors.some(e => e.field === 'discharge_disposition') && (
+                            <p className="text-xs text-red-600">Select where the patient went on discharge</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

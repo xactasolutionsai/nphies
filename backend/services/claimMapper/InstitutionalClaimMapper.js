@@ -809,20 +809,21 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
   }
 
   /**
-   * Get display text for discharge disposition codes
+   * Display of http://nphies.sa/terminology/CodeSystem/discharge-disposition codes
+   * (docs/nphies CodeSystems.csv); unknown codes are shown as the code.
    */
   getDischargeDispositionDisplay(code) {
     const displays = {
-      'home': 'Home',
-      'other-hcf': 'Other healthcare facility',
-      'hosp': 'Hospitalization',
-      'long': 'Long-term care',
-      'aadvice': 'Left against advice',
-      'exp': 'Expired',
-      'psy': 'Psychiatric hospital',
-      'rehab': 'Rehabilitation',
-      'snf': 'Skilled nursing facility',
-      'oth': 'Other'
+      'acute-hospital': 'Discharge/transfer to an Acute Hospital',
+      'SDTC': 'Statistical Discharge-Type Change',
+      'SDFL': 'Statistical discharge from leave',
+      'home': 'Home/Other',
+      'DTRAS': 'Discharge /Transfer to a Residential Ageing Service',
+      'DTPH': 'Discharge/Transfer to a Psychiatric Hospital',
+      'DTOHA': 'Discharge /Transfer to Other Health Care Accommodation',
+      'LAMA': 'Left Against Medical Advice',
+      'died': 'Died',
+      'in-hospital': 'Patient still in hospital'
     };
     return displays[code] || code;
   }

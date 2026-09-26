@@ -578,7 +578,7 @@ export default function Layout({ children }) {
               <div className="flex items-center space-x-4">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900 tracking-wide">
-                    {[...masterDataItems, ...requestsAndClaimsItems, ...eligibilityItems, ...claimsPaymentsItems, ...toolsItems].find(item => item.href === location.pathname || location.pathname.startsWith(item.href + '/'))?.name || 'Dashboard'}
+                    {[...masterDataItems, ...adminItems, ...requestsAndClaimsItems, ...eligibilityItems, ...claimsPaymentsItems, ...toolsItems].find(item => item.href === location.pathname || location.pathname.startsWith(item.href + '/'))?.name || 'Dashboard'}
                   </h1>
                   <p className="text-sm text-gray-600 font-medium">Xacta Solutions</p>
                 </div>

@@ -2415,7 +2415,7 @@
                 {
                   "system": "http://nphies.sa/terminology/CodeSystem/discharge-disposition",
                   "code": "home",
-                  "display": "Home"
+                  "display": "Home/Other"
                 }
               ]
             }

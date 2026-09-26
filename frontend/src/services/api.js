@@ -1,10 +1,11 @@
 import { API_BASE_URL, apiFetch } from '@/services/http';
 import { filenameFromContentDisposition, saveBlob } from '@/utils/download';
 
-// AI Features Configuration
-// Set to false to disable AI medication safety analysis and suggestions
-// This prevents unnecessary API calls when the AI server (medbot) is not running
-export const AI_FEATURES_ENABLED = false;
+// AI availability is decided at runtime by the backend: GET /api/ai/health reports the
+// AI_FEATURES_ENABLED switch and whether Ollama is reachable (see hooks/useAIHealth.js).
+// There is no build-time switch. When AI is unavailable the callers say so (never skip silently).
+export const AI_UNAVAILABLE_MESSAGE = 'AI unavailable — manual review required';
+const aiUnavailable = () => ({ success: false, disabled: true, message: AI_UNAVAILABLE_MESSAGE });
 
 // Request throttling and caching
 const requestQueue = new Map();
@@ -1127,6 +1128,19 @@ class ApiService {
     return this.request(`/nphies-codes/medications/${encodeURIComponent(code)}`);
   }
 
+  /**
+   * True when GET /api/ai/health says the AI is enabled and Ollama is not known to be unreachable
+   * (GET responses are cached for 30 s). A failed health request counts as unavailable.
+   */
+  async aiAvailable() {
+    try {
+      const health = await this.request('/ai/health');
+      return Boolean(health && health.enabled === true && health.reachable !== false);
+    } catch {
+      return false;
+    }
+  }
+
   // Medication Safety Analysis (AI-powered)
   /**
    * Analyze medication safety using AI
@@ -1135,10 +1149,8 @@ class ApiService {
    * @param {Object} patientContext - Patient context (age, gender, pregnant, allergies, diagnosis)
    */
   async analyzeMedicationSafety(medications, patientContext = {}) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    // Always sent: the backend runs the deterministic duplicate-ingredient check and, when the AI
+    // is disabled or down, returns an analysis marked incomplete / manual review required.
     return this.request('/medication-safety/analyze', {
       method: 'POST',
       body: JSON.stringify({ medications, patientContext })
@@ -1153,10 +1165,7 @@ class ApiService {
    * @param {boolean} emergencyCase - Is this an emergency case
    */
   async getMedicationSuggestions(diagnosis, patientAge, patientGender, emergencyCase = false) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/medication-safety/suggest', {
       method: 'POST',
       body: JSON.stringify({ diagnosis, patientAge, patientGender, emergencyCase })
@@ -1168,10 +1177,7 @@ class ApiService {
    * @param {Array} medications - Array of medication objects
    */
   async checkDrugInteractions(medications) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/medication-safety/check-interactions', {
       method: 'POST',
       body: JSON.stringify({ medications })
@@ -1188,10 +1194,7 @@ class ApiService {
    * @param {Object} formData - Complete prior authorization form data
    */
   async validatePriorAuth(formData) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/ai-validation/validate-prior-auth', {
       method: 'POST',
       body: JSON.stringify(formData)
@@ -1206,10 +1209,7 @@ class ApiService {
    * @param {Object} context - Additional context (chief complaint, diagnosis, requested service)
    */
   async enhanceClinicalText(text, field, context = {}) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/ai-validation/enhance-clinical', {
       method: 'POST',
       body: JSON.stringify({ text, field, context })

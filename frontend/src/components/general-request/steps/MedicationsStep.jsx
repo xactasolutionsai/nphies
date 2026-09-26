@@ -1,4 +1,6 @@
-import api, { AI_FEATURES_ENABLED } from '@/services/api';
+import api, { AI_UNAVAILABLE_MESSAGE } from '@/services/api';
+import useAIHealth from '@/hooks/useAIHealth';
+import { aiActionsAvailable } from '@/services/aiApi';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Pill, Shield, Sparkles, RefreshCw } from 'lucide-react';
@@ -29,6 +31,9 @@ const MedicationsStep = React.memo(({
   const [suggestionsError, setSuggestionsError] = useState(null);
   
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // Runtime AI status from GET /api/ai/health (null while loading or unknown)
+  const { health: aiHealth, loading: aiHealthLoading } = useAIHealth();
+  const aiSuggestionsAvailable = aiActionsAvailable(aiHealth);
 
   // Medications that have a name, keeping their index in the full list so that
   // warnings are applied to the right rows (empty rows would otherwise shift them)
@@ -60,9 +65,9 @@ const MedicationsStep = React.memo(({
     return age;
   };
 
-  // Analyze medication safety (respects AI_FEATURES_ENABLED via api.analyzeMedicationSafety)
+  // Analyze medication safety. Always sent: with the AI disabled or down the backend answers with
+  // an analysis marked incomplete / manual review required, which the panel shows.
   const analyzeSafety = useCallback(async () => {
-    if (!AI_FEATURES_ENABLED) return;
     if (validMedications.length === 0) {
       setSafetyAnalysis(null);
       return;
@@ -87,7 +92,12 @@ const MedicationsStep = React.memo(({
           diagnosis: formData.service?.diagnosis
         }
       );
-      if (data?.disabled) return;
+      if (data?.disabled) {
+        const unavailable = { analysisIncomplete: true, requiresManualReview: true, message: data.message || AI_UNAVAILABLE_MESSAGE };
+        setSafetyAnalysis(unavailable);
+        setParentSafetyAnalysis(unavailable);
+        return;
+      }
       
       if (data.success && data.analysis) {
         // Store only the analysis part (not the whole response)
@@ -130,9 +140,8 @@ const MedicationsStep = React.memo(({
     }
   }, [validMedications, formData.patient, formData.service, setMedicationWarnings, setParentSafetyAnalysis]);
 
-  // Get AI medication suggestions (respects AI_FEATURES_ENABLED via api.getMedicationSuggestions)
+  // Get AI medication suggestions (api.getMedicationSuggestions checks /api/ai/health)
   const getSuggestions = useCallback(async () => {
-    if (!AI_FEATURES_ENABLED) return;
     if (!formData.service?.diagnosis) {
       setSuggestionsError('Diagnosis is required to generate suggestions');
       return;
@@ -150,7 +159,11 @@ const MedicationsStep = React.memo(({
         formData.patient?.gender,
         String(formData.service?.urgency || '').toLowerCase() === 'emergency'
       );
-      if (data?.disabled) return;
+      if (data?.disabled) {
+        setSuggestionsError(data.message || AI_UNAVAILABLE_MESSAGE);
+        setShowSuggestions(true);
+        return;
+      }
       
       if (data.success && data.suggestions) {
         setSuggestions(data.suggestions);
@@ -180,7 +193,6 @@ const MedicationsStep = React.memo(({
 
   // Auto-analyze when medications (names) change
   useEffect(() => {
-    if (!AI_FEATURES_ENABLED) return undefined;
     if (validMedications.length > 0) {
       const timer = setTimeout(() => {
         analyzeSafety();
@@ -209,7 +221,7 @@ const MedicationsStep = React.memo(({
               <Pill className="w-5 h-5" />
               Prescribed Medications
             </CardTitle>
-            {AI_FEATURES_ENABLED && validMedications.length > 0 && (
+            {validMedications.length > 0 && (
               <button
                 type="button"
                 onClick={analyzeSafety}
@@ -234,7 +246,12 @@ const MedicationsStep = React.memo(({
       </Card>
       
       {/* AI Suggestions Button */}
-      {AI_FEATURES_ENABLED && formData.service?.diagnosis && !showSuggestions && (
+      {formData.service?.diagnosis && !showSuggestions && !aiHealthLoading && !aiSuggestionsAvailable && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-900">
+          <p className="font-medium">AI medication suggestions: {AI_UNAVAILABLE_MESSAGE}</p>
+        </div>
+      )}
+      {aiSuggestionsAvailable && formData.service?.diagnosis && !showSuggestions && (
         <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
           <div className="flex items-start justify-between">
             <div>
@@ -277,7 +294,7 @@ const MedicationsStep = React.memo(({
       )}
       
       {/* Safety Analysis */}
-      {AI_FEATURES_ENABLED && validMedications.length > 0 && (
+      {validMedications.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

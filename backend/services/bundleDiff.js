@@ -9,13 +9,15 @@
  * placeholders: references -> "Patient/{id}", dates -> "{date}", money values -> "{amount}"
  * (unless includeAmounts), other free values -> "{value}". Only codes, systems, profiles, urls,
  * status-like codes, sequences and booleans keep their value; Patient-like resources keep only
- * systems/urls. Everything kept is passed through the PHI redactor, with the bundle's own patient
- * names and identifiers as known values.
+ * systems/urls. Kept values and path keys are structural (codes, systems, urls), so they are not
+ * run through the free-text PHI redactor (a name part "Patient" would turn "patient-history" into
+ * "[NAME]-history"); a kept value that is exactly one of the bundle's own patient identifiers or
+ * full names is still replaced (redactExactValue).
  *
  * diffBundles() reports { path, kind: 'missing'|'extra'|'different', failed, reference }:
  * a subtree present on one side only is reported once at its highest missing path.
  */
-import { redactText } from './ai/phi.js';
+import { redactExactValue } from './ai/phi.js';
 
 const DROP_KEYS = new Set(['id', 'fullUrl', 'timestamp', 'lastUpdated', 'created', 'div', 'versionId']);
 const KEEP_KEYS = new Set(['system', 'code', 'url', 'profile', 'use', 'status', 'currency', 'unit', 'mode', 'type', 'language',
@@ -71,14 +73,14 @@ function leafValue(key, value, ctx, parent) {
   }
   if (typeof value !== 'string') return '{value}';
   if (!keep) return DATE_LIKE.test(value) ? '{date}' : '{value}';
-  return redactText(value, ctx.phi);
+  return redactExactValue(value, ctx.phi);
 }
 
 function walk(node, path, ctx, out, parent = null, key = null) {
   if (node === null || node === undefined) return;
   if (Array.isArray(node)) {
     for (const element of node) {
-      if (element && typeof element === 'object') walk(element, `${path}[${redactText(elementKey(element), ctx.phi)}]`, ctx, out, node, key);
+      if (element && typeof element === 'object') walk(element, `${path}[${elementKey(element)}]`, ctx, out, node, key);
       else walk(element, path, ctx, out, parent, key);
     }
     return;

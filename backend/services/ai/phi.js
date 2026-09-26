@@ -11,6 +11,11 @@
  *   - patient names passed by the caller (full name and each part of 3+ letters) -> [NAME]
  * Codes (ICD-10, GTIN, NPHIES error codes) and amounts are left alone.
  *
+ * Only free-text values are redacted. Structural fields (FHIR paths, keys, codes, systems,
+ * urls, profiles: STRUCTURAL_KEYS) are never passed through redactText, because a name part
+ * such as "Patient" would otherwise turn "patient-history" into "[NAME]-history". Such fields
+ * are only checked by redactExactValue: a value that IS a known identifier or full name.
+ *
  * Send age/gender (minimizePatient) instead of name and date of birth.
  */
 
@@ -53,12 +58,32 @@ export function redactText(text, { names = [], identifiers = [] } = {}) {
   return out;
 }
 
-/** Redact every string inside an object/array (returns a copy). */
-export function redactDeep(value, options = {}) {
-  if (typeof value === 'string') return redactText(value, options);
-  if (Array.isArray(value)) return value.map(v => redactDeep(v, options));
+/** Object keys whose string values are structural (paths, codes, systems), not free text. */
+export const STRUCTURAL_KEYS = new Set(['path', 'key', 'code', 'system', 'url', 'profile', 'resourceType']);
+
+/**
+ * Redaction for a structural value (code, system, path segment): replaced only when the whole
+ * value equals a known identifier ([ID]) or a known full name ([NAME]), case-insensitively.
+ * No substring, name-part or pattern matching, so codes like "patient-history" stay intact.
+ */
+export function redactExactValue(value, { names = [], identifiers = [] } = {}) {
+  if (typeof value !== 'string') return value;
+  const text = value.trim().toLowerCase();
+  if (!text) return value;
+  if ((identifiers || []).some(id => String(id ?? '').trim().toLowerCase() === text)) return '[ID]';
+  if ((names || []).some(name => String(name ?? '').trim().length >= 3 && String(name).trim().toLowerCase() === text)) return '[NAME]';
+  return value;
+}
+
+/**
+ * Redact every free-text string inside an object/array (returns a copy). String values under a
+ * STRUCTURAL_KEYS key (and arrays of them) only get redactExactValue.
+ */
+export function redactDeep(value, options = {}, structural = false) {
+  if (typeof value === 'string') return structural ? redactExactValue(value, options) : redactText(value, options);
+  if (Array.isArray(value)) return value.map(v => redactDeep(v, options, structural));
   if (value && typeof value === 'object' && !(value instanceof Date)) {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redactDeep(v, options)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redactDeep(v, options, STRUCTURAL_KEYS.has(k))]));
   }
   return value;
 }

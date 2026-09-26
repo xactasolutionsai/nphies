@@ -16,8 +16,9 @@ import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
 import PractitionerSummary from '@/components/prior-auth/PractitionerSummary';
 import CompareWithAcceptedPanel from '@/components/ai/CompareWithAcceptedPanel';
-import { EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
+import { EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, DISCHARGE_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
 import { useAuth } from '@/context/AuthContext';
+import { formatDisplayDate, formatDisplayDateTime } from '@/utils/date';
 
 const SECTION_4_5_CODES = new Set(SHADOW_BILLING_CODES.map(c => c.value));
 
@@ -53,15 +54,9 @@ const formatAmount = (amount, currency = 'SAR') => {
   return `${parseFloat(amount).toFixed(2)} ${currency}`;
 };
 
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleDateString();
-};
-
-const formatDateTime = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleString();
-};
+// Date-only values (DATE columns) are shown without a time (utils/date.js)
+const formatDate = formatDisplayDate;
+const formatDateTime = formatDisplayDateTime;
 
 // Calculate age from birth date with appropriate units (days, months, years)
 const calculateAge = (birthDate) => {
@@ -1222,6 +1217,12 @@ export default function ClaimDetails() {
                           <p className="font-medium">
                             {formatDateTime(claim.encounter_start)} - {formatDateTime(claim.encounter_end)}
                           </p>
+                        </div>
+                      )}
+                      {claim.discharge_disposition && (
+                        <div>
+                          <Label className="text-gray-500">Discharge Disposition</Label>
+                          <p className="font-medium">{DISCHARGE_DISPOSITION_OPTIONS.find(o => o.value === claim.discharge_disposition)?.label || claim.discharge_disposition}</p>
                         </div>
                       )}
                       {(extractCodeValue(claim.encounter_class) === 'emergency' || extractCodeValue(claim.sub_type) === 'emr') && claim.emergency_department_disposition && (

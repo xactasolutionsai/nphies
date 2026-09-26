@@ -20,10 +20,11 @@ import CompareWithAcceptedPanel from '@/components/ai/CompareWithAcceptedPanel';
 
 // Import Communication Panel for NPHIES communications
 import { CommunicationPanel } from '@/components/prior-auth';
-import { PRIORITY_OPTIONS, EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
+import { PRIORITY_OPTIONS, EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, DISCHARGE_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
 import { selectStyles } from '@/components/prior-auth/styles';
 import Select from 'react-select';
 import { useAuth } from '@/context/AuthContext';
+import { formatDisplayDate, formatDisplayDateTime } from '@/utils/date';
 
 const SECTION_4_5_CODES = new Set(SHADOW_BILLING_CODES.map(c => c.value));
 
@@ -125,15 +126,9 @@ const calculateTotalFromItems = (items) => {
   return total > 0 ? total : null;
 };
 
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleDateString();
-};
-
-const formatDateTime = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleString();
-};
+// Date-only values (DATE columns) are shown without a time (utils/date.js)
+const formatDate = formatDisplayDate;
+const formatDateTime = formatDisplayDateTime;
 
 // Pull a normalized error list from a prior_authorization_responses row.
 // Prefers the structured `errors` column. Falls back to parsing the raw
@@ -1362,6 +1357,12 @@ const { can } = useAuth();
                     <Label className="text-gray-500">Outcome</Label>
                     <p className="font-medium capitalize">{priorAuth.outcome || '-'}</p>
                   </div>
+                  {priorAuth.discharge_disposition && (
+                    <div>
+                      <Label className="text-gray-500">Discharge Disposition</Label>
+                      <p className="font-medium">{DISCHARGE_DISPOSITION_OPTIONS.find(o => o.value === priorAuth.discharge_disposition)?.label || priorAuth.discharge_disposition}</p>
+                    </div>
+                  )}
                   {(priorAuth.encounter_class === 'emergency' || priorAuth.sub_type === 'emr') && priorAuth.emergency_department_disposition && (
                     <div>
                       <Label className="text-gray-500">ED Disposition</Label>

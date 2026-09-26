@@ -12,7 +12,7 @@ import CommunicationMapper from '../services/communicationMapper.js';
 import shadowBillingService from '../services/shadowBillingService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
 import { randomUUID } from 'node:crypto';
-import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, safeJsonParse, subTypeFromEncounterClass, practitionerFromRecord } from './controllerHelpers.js';
+import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, storedItemType, safeJsonParse, subTypeFromEncounterClass, practitionerFromRecord } from './controllerHelpers.js';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
@@ -238,7 +238,7 @@ class ClaimSubmissionsController extends BaseController {
       if (items?.length > 0) {
         sanitizePharmacyDeviceFields(items, cleanedData.claim_type);
         await shadowBillingService.processItems(items, cleanedData.claim_type, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(claimId, items);
+        await this.insertItems(claimId, items, cleanedData.claim_type);
       }
       if (supporting_info?.length > 0) await this.insertSupportingInfo(claimId, supporting_info);
       if (diagnoses?.length > 0) await this.insertDiagnoses(claimId, diagnoses);
@@ -401,6 +401,8 @@ class ClaimSubmissionsController extends BaseController {
         triage_date: pa.triage_date || null,
         encounter_priority: pa.encounter_priority || null,
         emergency_department_disposition: pa.emergency_department_disposition || null,
+        // Institutional discharge disposition (migration 070, BV-00759)
+        discharge_disposition: pa.discharge_disposition || null,
         // Offline authorization fields (per NPHIES extension-authorization-offline-date)
         authorization_offline_date: pa.authorization_offline_date || null,
         authorization_offline_reference: pa.authorization_offline_reference || null
@@ -449,7 +451,7 @@ class ClaimSubmissionsController extends BaseController {
         });
         sanitizePharmacyDeviceFields(items, pa.auth_type);
         await shadowBillingService.processItems(items, pa.auth_type, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(claimId, items);
+        await this.insertItems(claimId, items, pa.auth_type);
       }
 
       if (paDiagnosesResult.rows.length > 0) await this.insertDiagnoses(claimId, paDiagnosesResult.rows);
@@ -532,7 +534,7 @@ class ClaimSubmissionsController extends BaseController {
         const claimType = cleanedData.claim_type || existing.claim_type;
         sanitizePharmacyDeviceFields(items, claimType);
         await shadowBillingService.processItems(items, claimType, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(id, items);
+        await this.insertItems(id, items, claimType);
       }
       if (supporting_info?.length > 0) await this.insertSupportingInfo(id, supporting_info);
       if (diagnoses?.length > 0) await this.insertDiagnoses(id, diagnoses);
@@ -830,13 +832,14 @@ class ClaimSubmissionsController extends BaseController {
     return cleanedData;
   }
 
-  async insertItems(claimId, items) {
+  /** Insert items (claimType decides the stored item_type, see storedItemType). */
+  async insertItems(claimId, items, claimType) {
     for (const item of items) {
       const itemResult = await query(`
         INSERT INTO claim_submission_items (claim_id, sequence, product_or_service_code, product_or_service_system, product_or_service_display, tooth_number, tooth_surface, eye, medication_code, medication_system, days_supply, quantity, unit_price, factor, tax, patient_share, payer_share, net_amount, currency, serviced_date, serviced_period_start, serviced_period_end, body_site_code, body_site_system, sub_site_code, is_package, is_maternity, patient_invoice, description, notes, item_type, shadow_code, shadow_code_system, shadow_code_display, prescribed_medication_code, pharmacist_selection_reason, pharmacist_substitute)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
         RETURNING id
-      `, [claimId, item.sequence, item.product_or_service_code, item.product_or_service_system, item.product_or_service_display, item.tooth_number, item.tooth_surface, item.eye, item.medication_code, item.medication_system, item.days_supply, item.quantity, item.unit_price, item.factor || 1, item.tax || 0, item.patient_share || 0, item.payer_share, item.net_amount, item.currency || 'SAR', item.serviced_date, item.serviced_period_start, item.serviced_period_end, item.body_site_code, item.body_site_system, item.sub_site_code, item.is_package || false, item.is_maternity || false, item.patient_invoice, item.description, item.notes, item.item_type || 'medication', item.shadow_code || null, item.shadow_code_system || null, item.shadow_code_display || null, item.prescribed_medication_code || null, item.pharmacist_selection_reason || null, item.pharmacist_substitute || null]);
+      `, [claimId, item.sequence, item.product_or_service_code, item.product_or_service_system, item.product_or_service_display, item.tooth_number, item.tooth_surface, item.eye, item.medication_code, item.medication_system, item.days_supply, item.quantity, item.unit_price, item.factor || 1, item.tax || 0, item.patient_share || 0, item.payer_share, item.net_amount, item.currency || 'SAR', item.serviced_date, item.serviced_period_start, item.serviced_period_end, item.body_site_code, item.body_site_system, item.sub_site_code, item.is_package || false, item.is_maternity || false, item.patient_invoice, item.description, item.notes, storedItemType(item, claimType), item.shadow_code || null, item.shadow_code_system || null, item.shadow_code_display || null, item.prescribed_medication_code || null, item.pharmacist_selection_reason || null, item.pharmacist_substitute || null]);
       
       const itemId = itemResult.rows[0].id;
       

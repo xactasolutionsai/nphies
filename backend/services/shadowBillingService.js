@@ -263,6 +263,24 @@ class ShadowBillingService {
   }
 
   /**
+   * Pharmacy medication item in 'nphies' mode: the selected medication (medication_code /
+   * medication_name, what the form edits) is the NPHIES code, so product_or_service_code
+   * follows it. An item that only carries product_or_service_code (API clients, older rows)
+   * gets its medication fields from it. Device items keep product_or_service_code only.
+   */
+  _syncPharmacyMedication(item) {
+    if (item.item_type === 'device') return;
+    if (item.medication_code) {
+      item.product_or_service_code = item.medication_code;
+      if (item.medication_name) item.product_or_service_display = item.medication_name;
+      if (!item.product_or_service_system) item.product_or_service_system = 'http://nphies.sa/terminology/CodeSystem/medication-codes';
+    } else if (item.product_or_service_code) {
+      item.medication_code = item.product_or_service_code;
+      item.medication_name = item.medication_name || item.product_or_service_display || null;
+    }
+  }
+
+  /**
    * Process a single item for shadow billing auto-detection.
    *
    * Skips auto-detection when:
@@ -298,11 +316,10 @@ class ShadowBillingService {
         item.shadow_code_system = null;
         item.shadow_code_display = null;
       }
-      // Pharmacy: wipe stale medication_code so mappers use product_or_service_code
-      if (claimType === 'pharmacy' && item.product_or_service_code) {
-        item.medication_code = null;
-        item.medication_name = null;
-      }
+      // Pharmacy: keep medication_code / product_or_service_code in step (the form edits
+      // medication_code, the mappers and claims read both). Clearing medication_code here
+      // emptied the medication on reopen and disabled the duplicate-ingredient check.
+      if (claimType === 'pharmacy') this._syncPharmacyMedication(item);
       // Still process sub-items (package details may need auto-detection)
       if (item.details && Array.isArray(item.details)) {
         for (const detail of item.details) {

@@ -22,7 +22,7 @@
 //   3. feature tables (advanced authorizations, general requests, exams, approval forms);
 //   4. pgvector-based tables (skipped with a warning when the `vector` extension is not
 //      available; they stay pending and run once it is installed);
-//   5. data standardization, then the numbered migrations 029..069 in numeric order.
+//   5. data standardization, then the numbered migrations 029..070 in numeric order.
 // Files in migrations/ that are NOT listed are one-off data scripts or superseded files; they
 // are reported by --status with the reason (see NOT_MANAGED) and are never run automatically.
 import fs from 'node:fs/promises';
@@ -108,7 +108,8 @@ export const MIGRATIONS = [
   { file: 'migrations/066_schema_consistency.sql', afterBaseline: true },
   { file: 'migrations/067_practitioner_fields.sql', afterBaseline: true },
   { file: 'migrations/068_user_roles_extended.sql', afterBaseline: true },
-  { file: 'migrations/069_ai_foundation.sql', afterBaseline: true }
+  { file: 'migrations/069_ai_foundation.sql', afterBaseline: true },
+  { file: 'migrations/070_item_type_and_discharge_disposition.sql', afterBaseline: true }
 ];
 
 // Files in migrations/ that the runner deliberately does not apply.
@@ -118,6 +119,7 @@ export const NOT_MANAGED = {
   'fix_all_nphies_ids.sql': 'one-off data change of provider/insurer NPHIES IDs; run manually only if intended',
   'fix_nphies_test_ids.sql': 'one-off data change of provider/insurer NPHIES IDs; run manually only if intended',
   'update_nphies_test_ids.sql': 'one-off data change of provider/insurer NPHIES IDs; run manually only if intended',
+  'data_reset_non_pharmacy_item_type.sql': 'opt-in data fix after 070: resets item_type on old non-pharmacy items; run manually after reviewing the counts in the file',
   'update_pr_fhir_to_new_provider.sql': 'optional one-off data change; the file itself says not to run it by default',
   'seed_nphies_test_data.sql': 'test data seed, not schema',
   'add_nphies_example_providers.sql': 'example provider data, not schema'

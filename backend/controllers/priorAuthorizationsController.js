@@ -12,7 +12,7 @@ import nphiesDataService from '../services/nphiesDataService.js';
 import CommunicationMapper from '../services/communicationMapper.js';
 import shadowBillingService from '../services/shadowBillingService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
-import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, subTypeFromEncounterClass, practitionerFromRecord } from './controllerHelpers.js';
+import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, storedItemType, subTypeFromEncounterClass, practitionerFromRecord } from './controllerHelpers.js';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
@@ -222,6 +222,7 @@ class PriorAuthorizationsController extends BaseController {
         pa.claim_response_status, pa.claim_response_use, pa.claim_response_created,
         pa.practice_code, pa.service_event_type,
         pa.triage_category, pa.triage_date, pa.encounter_priority, pa.emergency_department_disposition,
+        pa.discharge_disposition,
         pa.eligibility_response_id, pa.eligibility_response_system,
         pa.medication_safety_analysis,
         pa.drug_interaction_justification,
@@ -439,7 +440,7 @@ class PriorAuthorizationsController extends BaseController {
       if (items && Array.isArray(items) && items.length > 0) {
         sanitizePharmacyDeviceFields(items, value.auth_type);
         await shadowBillingService.processItems(items, value.auth_type, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(priorAuthId, items);
+        await this.insertItems(priorAuthId, items, value.auth_type);
       }
 
       // Insert supporting info
@@ -658,7 +659,7 @@ class PriorAuthorizationsController extends BaseController {
         const authType = value.auth_type || existing.auth_type;
         sanitizePharmacyDeviceFields(items, authType);
         await shadowBillingService.processItems(items, authType, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(id, items);
+        await this.insertItems(id, items, authType);
       }
 
       // Re-insert supporting info
@@ -1120,7 +1121,7 @@ class PriorAuthorizationsController extends BaseController {
       if (newItems && newItems.length > 0) {
         sanitizePharmacyDeviceFields(newItems, existing.auth_type);
         await shadowBillingService.processItems(newItems, existing.auth_type, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(newId, newItems);
+        await this.insertItems(newId, newItems, existing.auth_type);
       }
       if (newSupportingInfo && newSupportingInfo.length > 0) {
         await this.insertSupportingInfo(newId, newSupportingInfo);
@@ -1318,7 +1319,7 @@ class PriorAuthorizationsController extends BaseController {
       if (existing.items && existing.items.length > 0) {
         sanitizePharmacyDeviceFields(existing.items, existing.auth_type);
         await shadowBillingService.processItems(existing.items, existing.auth_type, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(newId, existing.items);
+        await this.insertItems(newId, existing.items, existing.auth_type);
       }
       if (existing.supporting_info && existing.supporting_info.length > 0) {
         await this.insertSupportingInfo(newId, existing.supporting_info);
@@ -2227,9 +2228,9 @@ class PriorAuthorizationsController extends BaseController {
   }
 
   /**
-   * Insert items
+   * Insert items (authType decides the stored item_type, see storedItemType)
    */
-  async insertItems(priorAuthId, items) {
+  async insertItems(priorAuthId, items, authType) {
     for (const item of items) {
       const itemQuery = `
         INSERT INTO prior_authorization_items 
@@ -2277,7 +2278,7 @@ class PriorAuthorizationsController extends BaseController {
         item.patient_share || null,
         item.is_package || false,
         item.is_maternity || false,
-        item.item_type || 'medication', // Save item_type (medication or device)
+        storedItemType(item, authType), // medication/device for pharmacy, NULL otherwise
         item.shadow_code || null,
         item.shadow_code_system || null,
         item.shadow_code_display || null,

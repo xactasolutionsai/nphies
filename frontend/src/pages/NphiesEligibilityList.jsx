@@ -339,7 +339,7 @@ export default function NphiesEligibilityList() {
                   <span>Connected to NPHIES</span>
                 </div>
                 <div className="text-sm text-gray-500">
-                  Total: {stats.total} | Eligible: {stats.eligible} | Not Eligible: {stats.notEligible}
+                  Total: {stats.total} | On this page: Eligible {stats.eligible}, Not Eligible {stats.notEligible}
                 </div>
               </div>
             </div>
@@ -373,7 +373,7 @@ export default function NphiesEligibilityList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600">Eligible</p>
+                <p className="text-sm text-green-600">Eligible <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-green-700">{stats.eligible}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-400" />
@@ -384,7 +384,7 @@ export default function NphiesEligibilityList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-red-600">Not Eligible</p>
+                <p className="text-sm text-red-600">Not Eligible <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-red-700">{stats.notEligible}</p>
               </div>
               <XCircle className="h-8 w-8 text-red-400" />
@@ -395,7 +395,7 @@ export default function NphiesEligibilityList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600">Pending</p>
+                <p className="text-sm text-blue-600">Pending <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-blue-700">{stats.pending}</p>
               </div>
               <Clock className="h-8 w-8 text-blue-400" />

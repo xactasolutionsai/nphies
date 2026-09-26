@@ -129,6 +129,16 @@ export function sanitizePharmacyDeviceFields(items, type) {
 }
 
 /**
+ * item_type stored for an item: 'medication' or 'device' on pharmacy requests (untyped
+ * pharmacy items are medications), NULL on every other type, whose lines are services
+ * (they used to be stored as 'medication' and shown with a Medication badge).
+ */
+export function storedItemType(item, type) {
+  if (type !== 'pharmacy') return null;
+  return item?.item_type === 'device' ? 'device' : 'medication';
+}
+
+/**
  * Check out a pooled client for a tenant schema. search_path is switched only
  * when a (validated) schema was actually requested, through services/dbSchema.js
  * (bound set_config value, never interpolated), and is reset before the client

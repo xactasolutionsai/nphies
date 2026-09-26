@@ -12,6 +12,7 @@ import {
   Users, MapPin, DollarSign, Network, Hash
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { formatDisplayDate, formatDisplayDateTime } from '@/utils/date';
 
 // Status display helper
 const getStatusDisplay = (status) => {
@@ -60,15 +61,9 @@ const getSiteEligibilityColor = (code) => {
 };
 
 // Format date helper
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleDateString();
-};
-
-const formatDateTime = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleString();
-};
+// Date-only values (DATE columns) are shown without a time (utils/date.js)
+const formatDate = formatDisplayDate;
+const formatDateTime = formatDisplayDateTime;
 
 // Get gender display text
 const getGenderDisplay = (gender) => {

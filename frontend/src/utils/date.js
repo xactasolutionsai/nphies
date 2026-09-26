@@ -42,3 +42,29 @@ export function toDateInputValue(value) {
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return value.trim();
   return toLocalISODate(value);
 }
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Display a date for the UI. Date-only values ('YYYY-MM-DD', how the API returns DATE columns)
+ * are read as local calendar dates, so they do not shift a day west of UTC.
+ * @param {string|Date|null|undefined} value
+ * @returns {string} '-' when empty or invalid
+ */
+export function formatDisplayDate(value) {
+  const d = parseLocalISODate(typeof value === 'string' ? value.trim() : value);
+  return d ? d.toLocaleDateString() : '-';
+}
+
+/**
+ * Display a date-time for the UI. A date-only value has no time: it is shown as a date
+ * (new Date('2026-09-26') is UTC midnight, which rendered as "3:00:00 AM" in Riyadh).
+ * @param {string|Date|null|undefined} value
+ * @returns {string} '-' when empty or invalid
+ */
+export function formatDisplayDateTime(value) {
+  if (!value) return '-';
+  if (typeof value === 'string' && DATE_ONLY.test(value.trim())) return formatDisplayDate(value);
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? '-' : d.toLocaleString();
+}

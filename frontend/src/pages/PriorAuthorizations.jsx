@@ -417,7 +417,7 @@ export default function PriorAuthorizations() {
                   <span>Connected to NPHIES</span>
                 </div>
                 <div className="text-sm text-gray-500">
-                  Total: {stats.total} | Draft: {stats.draft} | Approved: {stats.approved}
+                  Total: {stats.total} | On this page: Draft {stats.draft}, Approved {stats.approved}
                 </div>
               </div>
             </div>
@@ -451,7 +451,7 @@ export default function PriorAuthorizations() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600">Pending</p>
+                <p className="text-sm text-blue-600">Pending <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-blue-700">{stats.pending}</p>
               </div>
               <Clock className="h-8 w-8 text-blue-400" />
@@ -462,7 +462,7 @@ export default function PriorAuthorizations() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600">Approved</p>
+                <p className="text-sm text-green-600">Approved <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-green-700">{stats.approved}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-400" />
@@ -473,7 +473,7 @@ export default function PriorAuthorizations() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-red-600">Denied</p>
+                <p className="text-sm text-red-600">Denied <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-red-700">{stats.denied}</p>
               </div>
               <XCircle className="h-8 w-8 text-red-400" />
@@ -484,7 +484,7 @@ export default function PriorAuthorizations() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-yellow-600">Draft</p>
+                <p className="text-sm text-yellow-600">Draft <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-yellow-700">{stats.draft}</p>
               </div>
               <FileText className="h-8 w-8 text-yellow-400" />

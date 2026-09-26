@@ -15,12 +15,14 @@ import { Label } from '@/components/ui/label';
 
 import AdvancedAuthCommunicationPanel from '@/components/advanced-auth/AdvancedAuthCommunicationPanel';
 import { useAuth } from '@/context/AuthContext';
+import { formatDisplayDate, formatDisplayDateTime } from '@/utils/date';
 
 // ============================================================================
 // HELPERS
 // ============================================================================
-const formatDate = (d) => d ? new Date(d).toLocaleDateString() : '-';
-const formatDateTime = (d) => d ? new Date(d).toLocaleString() : '-';
+// Date-only values (DATE columns) are shown without a time (utils/date.js)
+const formatDate = formatDisplayDate;
+const formatDateTime = formatDisplayDateTime;
 const formatAmount = (val, currency = 'SAR') => val != null ? `${parseFloat(val).toFixed(2)} ${currency}` : '-';
 
 const getAuthReasonDisplay = (r) => ({

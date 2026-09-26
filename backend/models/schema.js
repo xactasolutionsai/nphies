@@ -1,6 +1,9 @@
 // Database schema definitions and validation schemas
 import Joi from 'joi';
 
+// Codes of http://nphies.sa/terminology/CodeSystem/discharge-disposition (docs/nphies CodeSystems.csv).
+export const DISCHARGE_DISPOSITION_CODES = ['acute-hospital', 'SDTC', 'SDFL', 'home', 'DTRAS', 'DTPH', 'DTOHA', 'LAMA', 'died', 'in-hospital'];
+
 // Treating practitioner (migration 067), shared by prior authorizations and claims.
 // Identifier type codes are the v2-0203 codes the mappers can display (BaseMapper).
 export const PRACTITIONER_IDENTIFIER_TYPES = ['MD', 'NPI', 'PRN', 'TAX', 'DN', 'NIIP'];
@@ -255,6 +258,8 @@ export const validationSchemas = {
     triage_date: Joi.date().allow(null, '').optional(),
     encounter_priority: Joi.string().valid('EM', 'UR', 'S', 'A', 'R', 'EL', 'CR', 'CS', 'CSP', 'CSR', 'P', 'PRN', 'RR', 'T', 'UD').allow(null, '').optional(),
     emergency_department_disposition: Joi.string().valid('AH', 'NAD', 'NAR', 'DNW', 'LAOR', 'DED', 'DOA', 'R').allow(null, '').optional(),
+    // BV-00759: http://nphies.sa/terminology/CodeSystem/discharge-disposition (institutional encounter with an end date)
+    discharge_disposition: Joi.string().valid(...DISCHARGE_DISPOSITION_CODES).allow(null, '').optional(),
     
     // Eligibility Response Identifier (per NPHIES Claim-173086)
     eligibility_response_id: Joi.string().max(255).allow(null, '').optional(),
@@ -570,6 +575,8 @@ export const validationSchemas = {
     triage_date: Joi.date().allow(null, '').optional(),
     encounter_priority: Joi.string().valid('EM', 'UR', 'S', 'A', 'R', 'EL', 'CR', 'CS', 'CSP', 'CSR', 'P', 'PRN', 'RR', 'T', 'UD').allow(null, '').optional(),
     emergency_department_disposition: Joi.string().valid('AH', 'NAD', 'NAR', 'DNW', 'LAOR', 'DED', 'DOA', 'R').allow(null, '').optional(),
+    // BV-00759: http://nphies.sa/terminology/CodeSystem/discharge-disposition (institutional encounter with an end date)
+    discharge_disposition: Joi.string().valid(...DISCHARGE_DISPOSITION_CODES).allow(null, '').optional(),
     
     // Eligibility Reference
     eligibility_ref: Joi.string().max(100).allow(null, '').optional(),

@@ -333,6 +333,22 @@ export const EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS = [
   { value: 'R', label: 'R - Registered, advised, left without being attended' }
 ];
 
+// Discharge Disposition Options (BV-00759)
+// Reference: http://nphies.sa/terminology/CodeSystem/discharge-disposition (docs/nphies CodeSystems.csv)
+// Required for institutional encounters that have an end date; entered by the user, never defaulted
+export const DISCHARGE_DISPOSITION_OPTIONS = [
+  { value: 'home', label: 'home - Home/Other' },
+  { value: 'acute-hospital', label: 'acute-hospital - Discharge/transfer to an Acute Hospital' },
+  { value: 'DTPH', label: 'DTPH - Discharge/Transfer to a Psychiatric Hospital' },
+  { value: 'DTRAS', label: 'DTRAS - Discharge/Transfer to a Residential Ageing Service' },
+  { value: 'DTOHA', label: 'DTOHA - Discharge/Transfer to Other Health Care Accommodation' },
+  { value: 'LAMA', label: 'LAMA - Left Against Medical Advice' },
+  { value: 'died', label: 'died - Died' },
+  { value: 'in-hospital', label: 'in-hospital - Patient still in hospital' },
+  { value: 'SDTC', label: 'SDTC - Statistical Discharge-Type Change' },
+  { value: 'SDFL', label: 'SDFL - Statistical discharge from leave' }
+];
+
 // ============================================================================
 // NPHIES BILLING CODE SYSTEMS
 // Each CodeSystem has its own URL used in Claim.item.productOrService.coding.system
