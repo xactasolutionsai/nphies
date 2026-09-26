@@ -1,45 +1,52 @@
-import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
+import { WorkerPool } from './workerPool.js';
 
 const root = fileURLToPath(new URL('./', import.meta.url));
 const defaultPython = fileURLToPath(new URL(process.platform === 'win32'
   ? '../.venv-openmed/Scripts/python.exe' : '../.venv-openmed/bin/python', import.meta.url));
-let busy = false;
+const intEnv = (name, fallback) => {
+  const value = Number.parseInt(process.env[name] ?? '', 10);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+};
+
 export function runtimeReady() {
   return fs.existsSync(process.env.OPENMED_PYTHON || defaultPython) && ['medications', 'diseases'].every(mode =>
     fs.existsSync(`${root}/openmed-models/${mode}/nafes-model.json`));
 }
-export function runLocalAnalysis(text, mode) {
-  if (busy) throw Object.assign(new Error('OpenMed is busy; try again shortly'), { status: 429 });
-  if (!runtimeReady()) throw Object.assign(new Error('Local OpenMed models are not installed'), { status: 503 });
-  busy = true;
-  return new Promise((resolve, reject) => {
+
+let pool = null;
+/** The process-wide pool of persistent workers, created on first use from OPENMED_* settings. */
+export function getPool() {
+  if (!pool) {
     // Do not inherit database passwords, app JWTs, proxies, or provider credentials.
     const env = Object.fromEntries(['PATH', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'USERPROFILE']
       .filter(key => process.env[key]).map(key => [key, process.env[key]]));
-    const child = spawn(process.env.OPENMED_PYTHON || defaultPython, [`${root}/worker.py`],
-      { shell: false, windowsHide: true, env, stdio: ['pipe', 'pipe', 'pipe'] });
-    let output = '', failed = false;
-    const timer = setTimeout(() => { failed = true; child.kill(); }, 120000);
-    child.stderr.resume(); // Never log model diagnostics or clinical text.
-    child.stdout.on('data', data => {
-      output += data.toString();
-      if (output.length > 2000000) { failed = true; child.kill(); }
+    if (process.env.OPENMED_PRELOAD) env.OPENMED_PRELOAD = process.env.OPENMED_PRELOAD;
+    if (process.env.OPENMED_TORCH_THREADS) env.OPENMED_TORCH_THREADS = process.env.OPENMED_TORCH_THREADS;
+    pool = new WorkerPool({
+      command: process.env.OPENMED_PYTHON || defaultPython,
+      args: [`${root}/worker.py`],
+      env,
+      size: intEnv('OPENMED_WORKERS', 1),
+      maxQueue: intEnv('OPENMED_MAX_QUEUE', 8),
+      queueTimeoutMs: intEnv('OPENMED_QUEUE_TIMEOUT_MS', 30000),
+      requestTimeoutMs: intEnv('OPENMED_TIMEOUT_MS', 120000)
     });
-    child.stdin.on('error', () => { failed = true; });
-    child.on('error', () => { failed = true; });
-    child.on('close', code => {
-      clearTimeout(timer); busy = false;
-      try {
-        if (failed || code !== 0) throw new Error();
-        const result = JSON.parse(output);
-        if (!Array.isArray(result.entities) || result.advisory_only !== true) throw new Error();
-        resolve(result);
-      } catch {
-        reject(Object.assign(new Error('Local OpenMed analysis failed or timed out'), { status: 503 }));
-      }
-    });
-    child.stdin.end(JSON.stringify({ text, mode }));
-  });
+  }
+  return pool;
+}
+
+export function runtimeStatus() {
+  return pool ? pool.status() : { started: false };
+}
+
+export async function closeRuntime() {
+  if (pool) await pool.close();
+  pool = null;
+}
+
+export function runLocalAnalysis(text, mode, { signal } = {}) {
+  if (!runtimeReady()) return Promise.reject(Object.assign(new Error('Local OpenMed models are not installed'), { status: 503 }));
+  return getPool().analyze(text, mode, { signal });
 }

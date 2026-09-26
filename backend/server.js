@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { authenticateToken } from './middleware/auth.js';
 import { getJwtSecret } from './config/auth.js';
 import openmedRoutes from './openmed/routes.js';
+import { closeRuntime as closeOpenmedRuntime } from './openmed/inference.js';
 import clinicalAiAccessRoutes from './routes/clinicalAiAccess.js';
 import clinicalKnowledgeRoutes from './routes/clinicalKnowledge.js';
 import cors from 'cors';
@@ -299,6 +300,7 @@ async function start() {
     const force = setTimeout(() => process.exit(1), 10000);
     force.unref();
     server.close(async () => {
+      await closeOpenmedRuntime().catch(() => {});
       await closePool();
       process.exit(0);
     });

@@ -56,7 +56,8 @@ test('Approved sources, restricted retrieval and evidence-backed summaries', { s
   const patientA = randomUUID(), patientB = randomUUID();
   await owner.query('INSERT INTO public.patients VALUES ($1,$2,$3),($4,$5,$6)',
     [patientA, 'Synthetic A', 'SYN-A', patientB, 'Synthetic B', 'SYN-B']);
-  for (const file of ['064_openmed_advisory.sql', '071_clinical_ai_access_and_reviews.sql', '072_clinical_knowledge_sources.sql']) {
+  for (const file of ['064_openmed_advisory.sql', '071_clinical_ai_access_and_reviews.sql', '072_clinical_knowledge_sources.sql',
+    '073_openmed_idempotency.sql']) {
     const sql = await fs.readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8');
     await owner.query(sql);
     await owner.query(sql); // idempotent

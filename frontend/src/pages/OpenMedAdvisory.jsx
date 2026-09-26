@@ -5,7 +5,7 @@ import EvidenceSummary from '@/components/openmed/EvidenceSummary';
 
 async function request(path, options = {}) {
   const response = await apiFetch(`${API_BASE_URL}/openmed${path}`, {
-    ...options, headers: { 'Content-Type': 'application/json' }
+    ...options, headers: { 'Content-Type': 'application/json', ...options.headers }
   });
   // Check the status before parsing: an error page may not be JSON
   const body = await response.json().catch(() => null);
@@ -60,7 +60,8 @@ export default function OpenMedAdvisory() {
   async function analyze() {
     await action(async current => {
       const [source_type, sourceId] = source.split(':');
-      const result = await request('/analyses', { method: 'POST', body: JSON.stringify({
+      // One key per click: a repeated delivery of the same submission returns the first result.
+      const result = await request('/analyses', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({
         patient_id: patient.patient_id, source_type, source_id: sourceId ? Number(sourceId) : null, text, mode
       }) });
       if (current !== generation.current) return;

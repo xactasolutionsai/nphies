@@ -2,7 +2,8 @@ import express from 'express';
 import Joi from 'joi';
 import { randomUUID } from 'node:crypto';
 import { advisoryQuery } from './database.js';
-import { runLocalAnalysis, runtimeReady } from './inference.js';
+import { runLocalAnalysis, runtimeReady, runtimeStatus as poolStatus } from './inference.js';
+import { buildFingerprint } from './fingerprint.js';
 import { contextForOpenMed } from '../clinical-context/openmedAdapter.js';
 import { ENGINE } from '../clinical-context/index.js';
 import { buildSummary, patientFacts, queryTerms } from '../clinical-evidence/summary.js';
@@ -51,8 +52,28 @@ const reviewInput = Joi.object({
   note: Joi.string().max(2000).allow('').default('')
 }).unknown(false);
 
-export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocalAnalysis, ready = runtimeReady } = {}) {
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{8,100}$/;
+
+/** Per-user token bucket for model runs (in this process; several instances need a shared store). */
+export function createRateLimiter({ perMinute = 20, now = () => Date.now() } = {}) {
+  const buckets = new Map();
+  return userId => {
+    const t = now();
+    const bucket = buckets.get(userId) || { tokens: perMinute, at: t };
+    bucket.tokens = Math.min(perMinute, bucket.tokens + ((t - bucket.at) * perMinute) / 60000);
+    bucket.at = t;
+    buckets.set(userId, bucket);
+    if (bucket.tokens < 1) return Math.ceil(((1 - bucket.tokens) * 60000) / perMinute / 1000);
+    bucket.tokens -= 1;
+    return 0;
+  };
+}
+
+export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocalAnalysis, ready = runtimeReady,
+  runtimeStatus = poolStatus, fingerprint = buildFingerprint,
+  rateLimit = createRateLimiter({ perMinute: Number(process.env.OPENMED_RATE_PER_MINUTE) || 20 }) } = {}) {
   const router = express.Router();
+  const inFlight = new Map();          // `${user}:${idempotency key}` -> promise of the stored row
   const route = fn => async (req, res) => {
     try { await fn(req, res); }
     catch (error) { res.status(error.status || 503).json({ error: error.status ? error.message : 'OpenMed database is unavailable or not migrated' }); }
@@ -84,7 +105,7 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     await query('SELECT analysis_id FROM openmed_advisory.analysis_reviews LIMIT 0');
     res.json({ database: 'connected', runtime_ready: ready(), advisory_only: true, language: 'en', sdk_version: '2.3.0',
       context_engine: { name: ENGINE.name, version: ENGINE.version, languages: ENGINE.languages },
-      patient_access: 'explicit_grant' });
+      patient_access: 'explicit_grant', runtime: runtimeStatus(), build: fingerprint() });
   }));
   router.get('/patients', route(async (req, res) => {
     const search = validate(Joi.string().trim().min(2).max(100).required(), req.query.search);
@@ -130,14 +151,58 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     if (!patient.rows[0]) throw failure('Patient not found', 404);
     await requirePatientAccess(req.user.id, value.patient_id);
     if (value.source_type !== 'manual') await source(value.patient_id, value.source_type, value.source_id);
-    const analysis = await analyze(value.text, value.mode);
-    // Context (negation, family history, medication status...) is computed before anything is
-    // stored, so entities are never saved or shown without it. A context failure is stored as such.
-    const result = { ...analysis, context: contextForOpenMed(value.text, analysis, value.mode) };
-    const { rows } = await query(`INSERT INTO openmed_advisory.analyses
-      (id,user_id,patient_id,source_type,source_id,mode,input_text,result) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) RETURNING *`,
-    [randomUUID(), req.user.id, value.patient_id, value.source_type, value.source_id, value.mode, value.text, JSON.stringify(result)]);
-    res.status(201).json(rows[0]);
+
+    // Idempotency: the same key from the same user returns the first result (no second run).
+    const key = req.get('Idempotency-Key') ?? null;
+    if (key !== null && !IDEMPOTENCY_KEY.test(key)) throw failure('Invalid Idempotency-Key', 400);
+    const sameInput = row => row.patient_id === value.patient_id && row.mode === value.mode && row.input_text === value.text
+      && row.source_type === value.source_type && (row.source_id ?? null) === value.source_id;
+    const replay = row => {
+      if (!sameInput(row)) throw failure('Idempotency-Key was already used for a different request', 409);
+      res.set('Idempotent-Replay', 'true').status(200).json(row);
+    };
+    const existing = async () => key === null ? null : (await query(
+      'SELECT * FROM openmed_advisory.analyses WHERE user_id=$1 AND idempotency_key=$2', [req.user.id, key])).rows[0];
+    const stored = await existing();
+    if (stored) return replay(stored);
+    const flightKey = key === null ? null : `${req.user.id}:${key}`;
+    if (flightKey && inFlight.has(flightKey)) return replay(await inFlight.get(flightKey));
+
+    const retryAfter = rateLimit(req.user.id);
+    if (retryAfter > 0) {
+      res.set('Retry-After', String(retryAfter));
+      throw failure('Too many analyses; try again shortly', 429);
+    }
+
+    // A client that disconnects cancels its queued analysis instead of occupying a worker.
+    const controller = new AbortController();
+    res.on('close', () => { if (!res.writableFinished) controller.abort(); });
+    const run = (async () => {
+      const analysis = await analyze(value.text, value.mode, { signal: controller.signal });
+      // Context (negation, family history, medication status...) is computed before anything is
+      // stored, so entities are never saved or shown without it. A context failure is stored as such.
+      const result = { ...analysis, context: contextForOpenMed(value.text, analysis, value.mode) };
+      try {
+        const { rows } = await query(`INSERT INTO openmed_advisory.analyses
+          (id,user_id,patient_id,source_type,source_id,mode,input_text,result,idempotency_key)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9) RETURNING *`,
+        [randomUUID(), req.user.id, value.patient_id, value.source_type, value.source_id, value.mode, value.text,
+          JSON.stringify(result), key]);
+        return rows[0];
+      } catch (error) {
+        const winner = error.code === '23505' ? await existing() : null;   // another instance stored it first
+        if (winner) return winner;
+        throw error;
+      }
+    })();
+    if (flightKey) inFlight.set(flightKey, run);
+    try {
+      const row = await run;
+      if (key !== null && row.id && !sameInput(row)) return replay(row);
+      res.status(201).json(row);
+    } finally {
+      if (flightKey) inFlight.delete(flightKey);
+    }
   }));
   router.get('/analyses', route(async (req, res) => {
     const patient = validate(uuid, req.query.patient_id);

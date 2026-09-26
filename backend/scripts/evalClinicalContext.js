@@ -17,7 +17,10 @@
  * and do not change rules in response to its results (use 'validation' for that).
  */
 import fs from 'node:fs';
+import path from 'node:path';
 import { annotate, ENGINE } from '../clinical-context/index.js';
+import { languageOf, sha256, checkCriteria } from '../clinical-context/evalKit.js';
+import { computeFingerprint } from '../openmed/fingerprint.js';
 
 const ATTRIBUTES = ['assertion', 'experiencer', 'temporality', 'medication_status', 'type',
   'dose', 'unit', 'route', 'frequency', 'duration'];
@@ -107,33 +110,81 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--file') args.file = argv[++i];
     else if (argv[i] === '--split') args.split = argv[++i];
+    else if (argv[i] === '--manifest') args.manifest = argv[++i];
+    else if (argv[i] === '--criteria') args.criteria = argv[++i];
     else if (argv[i] === '--json') args.json = true;
     else if (argv[i] === '--held-out-confirmed') args.heldOutConfirmed = true;
   }
   return args;
 }
 
-const pct = v => (v === null ? '—' : `${(v * 100).toFixed(1)}%`);
+const refuse = message => Object.assign(new Error(message), { exitCode: 2 });
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  if (!args.file || !['dev', 'validation', 'test'].includes(args.split)) {
-    console.error('Usage: --file <jsonl> --split dev|validation|test [--json] [--held-out-confirmed]');
-    process.exit(2);
+/**
+ * Evaluate one split. With a manifest (scripts/clinicalEvalSplit.js) the file and the
+ * criteria must match the hashes recorded when the data was split; the test split requires
+ * both a manifest and --held-out-confirmed, and every test run is logged next to the manifest.
+ */
+export function runEvaluation({ file, split, manifest: manifestPath, criteria: criteriaPath, heldOutConfirmed }) {
+  if (!file || !['dev', 'validation', 'test'].includes(split)) {
+    throw refuse('Usage: --file <jsonl> --split dev|validation|test [--manifest m.json] [--criteria c.json] [--json] [--held-out-confirmed]');
   }
-  if (args.split === 'test' && !args.heldOutConfirmed) {
-    console.error('The test split is held out: pass --held-out-confirmed only for the single final run after rules are frozen.');
-    process.exit(2);
+  if (split === 'test' && !heldOutConfirmed) {
+    throw refuse('The test split is held out: pass --held-out-confirmed only for the single final run after rules are frozen.');
   }
-  const records = fs.readFileSync(args.file, 'utf8').split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
-  const selected = records.filter(r => r.split === args.split);
-  const report = { engine: ENGINE, split: args.split, records: selected.length, ...evaluate(selected),
-    caveat: args.split === 'dev'
+  if (split === 'test' && !manifestPath) throw refuse('The test split needs the manifest written when the data was split (--manifest).');
+  const content = fs.readFileSync(file);
+  let manifest = null, testRun = null;
+  if (manifestPath) {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (manifest.files?.[split]?.sha256 !== sha256(content)) {
+      throw refuse(`The ${split} file differs from the manifest: it was changed after the split.`);
+    }
+    if (manifest.criteria) {
+      if (!criteriaPath) throw refuse('The manifest registers success criteria: pass them with --criteria.');
+      if (sha256(fs.readFileSync(criteriaPath)) !== manifest.criteria.sha256) {
+        throw refuse('The criteria differ from the ones registered before the split.');
+      }
+    }
+  }
+  const records = content.toString('utf8').split('\n').filter(l => l.trim()).map(l => JSON.parse(l)).filter(r => r.split === split);
+  const build = computeFingerprint();
+  if (split === 'test') {
+    const log = path.join(path.dirname(manifestPath), 'test-runs.log');
+    const previous = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).length : 0;
+    fs.appendFileSync(log, `${JSON.stringify({ at: new Date().toISOString(), build: build.sha256, file: sha256(content) })}\n`);
+    testRun = { number: previous + 1, warning: previous ? `The test split was already evaluated ${previous} time(s); results may no longer be independent.` : null };
+  }
+  const groups = new Map();
+  for (const r of records) {
+    const lang = languageOf(r);
+    if (!groups.has(lang)) groups.set(lang, []);
+    groups.get(lang).push(r);
+  }
+  const byLanguage = Object.fromEntries([...groups].map(([lang, rows]) => {
+    const e = evaluate(rows);
+    return [lang, { records: rows.length, refused_or_invalid: e.invalid.length,
+      attributes: Object.fromEntries(Object.entries(e.attributes).map(([k, v]) => [k, { n: v.n, accuracy: v.accuracy, accuracy_ci95: v.accuracy_ci95 }])) }];
+  }));
+  const report = { engine: ENGINE, build, split, records: records.length, test_run: testRun, ...evaluate(records),
+    by_language: byLanguage,
+    caveat: split === 'dev'
       ? 'Development split: seen while writing rules; not an estimate of performance on new text.'
       : 'Only meaningful if annotated independently (clinicians) and not used to change rules.' };
-  if (args.json) { console.log(JSON.stringify(report, null, 2)); return; }
-  console.log(`${ENGINE.name} ${ENGINE.version} · split=${args.split} · records=${selected.length}`);
+  if (criteriaPath) report.criteria_results = checkCriteria(report, JSON.parse(fs.readFileSync(criteriaPath, 'utf8')));
+  return report;
+}
+
+const pct = v => (v === null || v === undefined ? '—' : `${(v * 100).toFixed(1)}%`);
+
+async function main() {
+  let report;
+  try { report = runEvaluation(parseArgs(process.argv.slice(2))); }
+  catch (error) { console.error(error.message); process.exit(error.exitCode || 1); }
+  if (process.argv.includes('--json')) { console.log(JSON.stringify(report, null, 2)); return; }
+  console.log(`${ENGINE.name} ${ENGINE.version} · build ${report.build.sha256.slice(0, 12)} · split=${report.split} · records=${report.records}`);
   console.log(report.caveat);
+  if (report.test_run?.warning) console.log(`WARNING: ${report.test_run.warning}`);
   for (const [a, r] of Object.entries(report.attributes)) {
     const ci = r.accuracy_ci95 ? `${pct(r.accuracy_ci95[0])}–${pct(r.accuracy_ci95[1])}` : '—';
     console.log(`\n${a}: ${r.correct}/${r.n} = ${pct(r.accuracy)} (95% CI ${ci}); unknown ${pct(r.unknown_rate)}`);
@@ -141,6 +192,15 @@ async function main() {
       console.log(`  ${c.padEnd(13)} support=${m.support} P=${pct(m.precision)} R=${pct(m.recall)} F1=${pct(m.f1)}`);
     }
     for (const e of r.errors) console.log(`  error ${e.id}#${e.entity}: gold=${e.gold} predicted=${e.pred}`);
+  }
+  console.log('\nBy language:');
+  for (const [lang, g] of Object.entries(report.by_language)) {
+    console.log(`  ${lang}: records=${g.records} refused/invalid=${g.refused_or_invalid} ` +
+      Object.entries(g.attributes).map(([k, v]) => `${k}=${pct(v.accuracy)} (n=${v.n})`).join(' '));
+  }
+  if (report.criteria_results) {
+    console.log('\nPre-registered criteria:');
+    for (const c of report.criteria_results) console.log(`  ${c.id}: ${c.result} (observed ${c.observed ?? '—'}, n=${c.n ?? 0})`);
   }
   if (report.invalid.length) console.log('\nInvalid records:', report.invalid);
 }

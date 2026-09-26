@@ -4,8 +4,8 @@ import express from 'express';
 import pg from 'pg';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
-import { createAdvisoryRouter } from '../openmed/routes.js';
-import { runLocalAnalysis } from '../openmed/inference.js';
+import { createAdvisoryRouter, createRateLimiter } from '../openmed/routes.js';
+import { runLocalAnalysis, closeRuntime } from '../openmed/inference.js';
 
 test('OpenMed rejects unauthenticated access before reading the database', async t => {
   const app = express();
@@ -56,6 +56,9 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
   const access = await fs.readFile(new URL('../migrations/071_clinical_ai_access_and_reviews.sql', import.meta.url), 'utf8');
   await owner.query(access);
   await owner.query(access); // idempotent
+  const idempotency = await fs.readFile(new URL('../migrations/073_openmed_idempotency.sql', import.meta.url), 'utf8');
+  await owner.query(idempotency);
+  await owner.query(idempotency); // idempotent
   // User 1 has an active grant for the synthetic patient; user 2 has none.
   await owner.query("INSERT INTO public.clinical_ai_patient_access (user_id,patient_id,reason,granted_by) VALUES (1,$1,'synthetic test grant',1)", [patientId]);
   // Generated identifiers/password contain only a-z0-9; no user SQL interpolation.
@@ -191,12 +194,97 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
     assert.deepEqual(after.result,original);
     assert.equal(after.review_status,'dismissed');
   });
+  // A second app on the same restricted login, with a counting / cancellable fake extractor
+  let calls = 0, sawAbort = false, release;
+  const app2 = express(); app2.use(express.json());
+  app2.use((req, res, next) => { req.user = { id: Number(req.get('test-user') || 1) }; next(); });
+  let clock = 0;
+  app2.use('/om2', createAdvisoryRouter({ query, ready: () => true,
+    rateLimit: createRateLimiter({ perMinute: 3, now: () => clock }),
+    runtimeStatus: () => ({ queued: 0, stats: { completed: calls } }),
+    analyze: async (text, mode, { signal } = {}) => {
+      calls++;
+      if (text.includes('slow')) {
+        await new Promise((resolve, reject) => {
+          release = resolve;
+          signal?.addEventListener('abort', () => { sawAbort = true; reject(Object.assign(new Error('Request cancelled'), { status: 499 })); });
+        });
+      }
+      return result;
+    } }));
+  const server2 = app2.listen(0, '127.0.0.1');
+  await new Promise(resolve => server2.once('listening', resolve));
+  t.after(() => new Promise(resolve => { server2.closeAllConnections(); server2.close(resolve); }));
+  const base2 = `http://127.0.0.1:${server2.address().port}/om2`;
+  const post2 = (body, key, user = 1, signal) => fetch(`${base2}/analyses`, { method: 'POST', signal,
+    headers: { 'Content-Type': 'application/json', 'test-user': String(user), ...(key ? { 'Idempotency-Key': key } : {}) },
+    body: JSON.stringify(body) });
+
+  await t.test('Idempotency-Key: a repeated submission returns the first result without a second run', async () => {
+    const manual = { ...payload, source_type: 'manual', source_id: null };
+    const first = await post2(manual, 'key-00000001');
+    assert.equal(first.status, 201);
+    const firstBody = await first.json();
+    const again = await post2(manual, 'key-00000001');
+    assert.equal(again.status, 200);
+    assert.equal(again.headers.get('idempotent-replay'), 'true');
+    assert.equal((await again.json()).id, firstBody.id);
+    assert.equal(calls, 1);
+    assert.equal((await post2({ ...manual, text: 'Different text.' }, 'key-00000001')).status, 409);
+    assert.equal((await post2(manual, 'bad key!')).status, 400);
+    // Two identical submissions at the same moment: one run, one stored row
+    const [a, b] = await Promise.all([post2(manual, 'key-00000002'), post2(manual, 'key-00000002')]);
+    const ids = [(await a.json()).id, (await b.json()).id];
+    assert.equal(ids[0], ids[1]);
+    assert.deepEqual([a.status, b.status].sort(), [200, 201]);
+    assert.equal(calls, 2);
+    assert.equal((await owner.query("SELECT count(*)::int AS n FROM openmed_advisory.analyses WHERE idempotency_key='key-00000002'")).rows[0].n, 1);
+  });
+
+  await t.test('Per-user rate limit answers 429 with Retry-After, and refills over time', async () => {
+    clock += 60000;                                   // full bucket of 3
+    const manual = { ...payload, source_type: 'manual', source_id: null };
+    const statuses = [];
+    for (let i = 0; i < 3; i++) statuses.push((await post2({ ...manual, text: `Metformin note ${i}.` }, null, 1)).status);
+    assert.deepEqual(statuses, [201, 201, 201]);
+    const limited = await post2({ ...manual, text: 'Another metformin note.' }, null, 1);
+    assert.equal(limited.status, 429);
+    assert.ok(Number(limited.headers.get('retry-after')) >= 1);
+    clock += 60000;
+    assert.equal((await post2({ ...manual, text: 'Metformin after refill.' }, null, 1)).status, 201);
+  });
+
+  await t.test('A client that disconnects cancels its analysis; nothing is stored', async () => {
+    clock += 60000;
+    const before = (await owner.query('SELECT count(*)::int AS n FROM openmed_advisory.analyses')).rows[0].n;
+    const controller = new AbortController();
+    const pending = post2({ ...payload, source_type: 'manual', source_id: null, text: 'slow metformin note' }, null, 1, controller.signal).catch(() => null);
+    const end = Date.now() + 2000;
+    while (!release && Date.now() < end) await new Promise(r => setTimeout(r, 10));
+    controller.abort();
+    await pending;
+    const stop = Date.now() + 2000;
+    while (!sawAbort && Date.now() < stop) await new Promise(r => setTimeout(r, 10));
+    assert.equal(sawAbort, true);
+    await new Promise(r => setTimeout(r, 50));
+    assert.equal((await owner.query('SELECT count(*)::int AS n FROM openmed_advisory.analyses')).rows[0].n, before);
+  });
+
+  await t.test('Status reports runtime metrics and the build fingerprint, never note text', async () => {
+    const res = await fetch(`${base2}/status`, { headers: { 'test-user': '1' } });
+    const body = await res.json();
+    assert.match(body.build.sha256, /^[0-9a-f]{64}$/);
+    assert.equal(body.runtime.queued, 0);
+    assert.ok(!JSON.stringify(body).toLowerCase().includes('metformin'));
+  });
+
   await t.test('All original patient and NPHIES source rows remain byte-equivalent as JSON', async () => {
     assert.deepEqual(await snapshot(),before);
   });
 });
 
-test('Real local disease model and long-note tail extraction', {skip:process.env.TEST_OPENMED_REAL_MODELS !== 'true'}, async () => {
+test('Real local disease model and long-note tail extraction', {skip:process.env.TEST_OPENMED_REAL_MODELS !== 'true'}, async t => {
+  t.after(closeRuntime);
   const result = await runLocalAnalysis('Routine follow up. '.repeat(140) + 'Patient has diabetes.', 'diseases');
   assert.ok(result.entities.some(entity => /diabetes/i.test(entity.text) && entity.start > 2400));
   assert.equal(result.advisory_only,true);

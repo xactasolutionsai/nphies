@@ -17,6 +17,7 @@
     "migrate": "node scripts/migrate.js",
     "migrate-review": "node scripts/applyReviewMigrations.js",
     "migrate-openmed": "node scripts/migrateOpenmed.js",
+    "clinical-ai:fingerprint": "node openmed/fingerprint.js",
     "ai:readiness": "node scripts/aiReadiness.js",
     "ai:data-report": "node scripts/aiDataVolumeReport.js"
   },
