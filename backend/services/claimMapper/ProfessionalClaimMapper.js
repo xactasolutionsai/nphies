@@ -45,6 +45,9 @@
 
 import ProfessionalPAMapper from '../priorAuthMapper/ProfessionalMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import {
+  cloneInput, mappingError, roundMoney, requireProviderLicense, requireInsurerLicense, formatSaudiDate, ICD10_SYSTEM
+} from '../priorAuthMapper/nphiesIdentity.js';
 
 class ProfessionalClaimMapper extends ProfessionalPAMapper {
   constructor() {
@@ -59,6 +62,11 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     return 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/professional-claim|1.0.0';
   }
 
+  /** Claims use Claim.use=claim and the provider's /claim identifier system. */
+  getClaimUse() {
+    return 'claim';
+  }
+
   /**
    * Build complete Claim Request Bundle for Professional type
    * Per NPHIES example Claim-173386.json:
@@ -67,7 +75,10 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
    * - preAuthRef may be included in insurance
    */
   buildClaimRequestBundle(data) {
-    const { claim, patient, provider, insurer, coverage, policyHolder, practitioner, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    // Deep copy: mapping must never mutate the caller's record
+    const claim = cloneInput(data.claim);
+    const practitioner = data.practitioner || claim.practitioner;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -80,6 +91,8 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       policyHolder: policyHolder?.id || this.generateId(),
       motherPatient: (claim.is_newborn && motherPatient) ? (motherPatient.patient_id || this.generateId()) : null
     };
+    const locationResource = this.buildFacilityLocationWithId(provider, this.generateId(), bundleResourceIds.provider);
+    bundleResourceIds.location = locationResource?.resource.id || null;
 
     // For newborn cases, patient is the newborn, and we also need mother patient resource
     const newbornPatientResource = this.buildPatientResourceWithId(patient, bundleResourceIds.patient);
@@ -102,7 +115,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       bundleResourceIds.motherPatient
     );
     const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: claim.practice_code || '08.00' },
+      practitioner,
       bundleResourceIds.practitioner
     );
     
@@ -131,6 +144,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       practitionerResource,
       providerResource,
       insurerResource,
+      locationResource, // Claim.facility target (when the provider has a location license)
       newbornPatientResource, // Newborn patient
       ...(motherPatientResource ? [motherPatientResource] : []) // Mother patient if present
     ].filter(Boolean);
@@ -152,8 +166,8 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
    */
   buildClaimMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+    const senderNphiesId = requireProviderLicense(provider);
+    const destinationNphiesId = requireInsurerLicense(insurer);
 
     return {
       fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -219,8 +233,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     const encounterRef = bundleResourceIds.encounter;
     const practitionerRef = bundleResourceIds.practitioner;
 
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build claim-level extensions per NPHIES example Claim-173386
     const extensions = [];
@@ -264,8 +277,8 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     // 4. AccountingPeriod (REQUIRED per error IC-01620)
     // Per NPHIES spec, this extension requires valueDate (NOT valuePeriod)
     // Per NPHIES error BV-01010, the day must be "01" (first day of month)
-    const accountingDate = new Date(claim.accounting_period_start || claim.service_date || new Date());
-    const accountingPeriodDate = `${accountingDate.getFullYear()}-${String(accountingDate.getMonth() + 1).padStart(2, '0')}-01`;
+    // Saudi calendar month (independent of the host timezone)
+    const accountingPeriodDate = `${formatSaudiDate(claim.accounting_period_start || claim.service_date || new Date()).slice(0, 7)}-01`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
       valueDate: accountingPeriodDate
@@ -337,7 +350,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     // Identifier (required)
     claimResource.identifier = [
       {
-        system: `${providerIdentifierSystem}/claim`,
+        system: this.getClaimIdentifierSystem(provider),
         value: claim.claim_number || `req_${Date.now()}`
       }
     ];
@@ -384,6 +397,12 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
 
     // Provider reference (required)
     claimResource.provider = { reference: `Organization/${providerRef}` };
+
+    // BV-00905: facility for ambulatory/virtual encounters; must reference a Location
+    const encounterClassCode = encounter?.class?.code;
+    if ((encounterClassCode === 'AMB' || encounterClassCode === 'VR') && bundleResourceIds.location) {
+      claimResource.facility = { reference: `Location/${bundleResourceIds.location}` };
+    }
 
     // Priority (required)
     claimResource.priority = {
@@ -437,17 +456,18 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     const supportingInfoResult = this.buildProfessionalClaimSupportingInfo(claim, providerIdentifierSystem);
     claimResource.supportingInfo = supportingInfoResult.supportingInfo;
     const supportingInfoSequences = supportingInfoResult.sequences;
+    const informationSequenceMap = supportingInfoResult.informationSequenceMap;
 
     // Diagnosis (required - at least one)
     // IMPORTANT: Per NPHIES error IB-00242, diagnosis system MUST be icd-10-am, NOT icd-10
     if (claim.diagnoses && claim.diagnoses.length > 0) {
       claimResource.diagnosis = claim.diagnoses.map((diag, idx) => {
         // Force correct ICD-10-AM system
-        let diagSystem = diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am';
+        let diagSystem = diag.diagnosis_system || ICD10_SYSTEM;
         if (diagSystem === 'http://hl7.org/fhir/sid/icd-10' || 
             diagSystem === 'icd-10' || 
             diagSystem === 'ICD-10') {
-          diagSystem = 'http://hl7.org/fhir/sid/icd-10-am';
+          diagSystem = ICD10_SYSTEM;
         }
         
         return {
@@ -497,7 +517,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     let builtItems = [];
     if (claim.items && claim.items.length > 0) {
       builtItems = claim.items.map((item, idx) => 
-        this.buildProfessionalClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim)
+        this.buildProfessionalClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim, informationSequenceMap)
       );
       claimResource.item = builtItems;
     }
@@ -512,7 +532,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       totalAmount = parseFloat(claim.total_amount);
     }
     claimResource.total = {
-      value: parseFloat(totalAmount.toFixed(2)),
+      value: roundMoney(totalAmount),
       currency: claim.currency || 'SAR'
     };
 
@@ -534,10 +554,24 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
    * - history-of-present-illness (REQUIRED - BV-00806)
    */
   buildProfessionalClaimSupportingInfo(claim, providerIdentifierSystem) {
-    const existingSupportingInfo = claim.supporting_info || [];
+    const existingSupportingInfo = this.tagCallerSupportingInfo(claim.supporting_info);
     let supportingInfoList = [];
     let sequenceNum = 1;
     const sequences = [];
+    // Caller entry -> final sequence, so item.information_sequences can be remapped
+    const numbered = [];
+    const add = (entry, sourceInfo = null) => {
+      entry.sequence = sequenceNum;
+      supportingInfoList.push(entry);
+      if (sourceInfo) numbered.push({ info: sourceInfo, sequence: sequenceNum });
+      sequences.push(sequenceNum++);
+    };
+    const category = code => ({
+      coding: [{
+        system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+        code
+      }]
+    });
 
     // Valid investigation-result codes per NPHIES CodeSystem
     const validInvestigationCodes = ['INP', 'IRA', 'other', 'NA', 'IRP'];
@@ -548,177 +582,57 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       'NA': 'Not applicable',
       'IRP': 'Investigation results pending'
     };
-
-    // Helper to check if a category exists in existing supporting info
-    const hasCategory = (cat) => existingSupportingInfo.some(info => 
-      (info.category || '').toLowerCase() === cat.toLowerCase()
-    );
     
     // Helper to get existing supporting info by category
     const getExisting = (cat) => existingSupportingInfo.find(info => 
       (info.category || '').toLowerCase() === cat.toLowerCase()
     );
+    const hasValue = value => value !== undefined && value !== null && value !== '';
 
-    const currentDateTime = this.formatDateTimeWithTimezone(new Date());
-
-    // 1. vital-sign-systolic
-    const existingSystolic = getExisting('vital-sign-systolic');
-    if (existingSystolic || claim.vital_signs?.systolic) {
-      supportingInfoList.push({
-        sequence: sequenceNum,
-        category: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: 'vital-sign-systolic'
-          }]
-        },
-        timingPeriod: {
-          start: currentDateTime,
-          end: currentDateTime
-        },
-        valueQuantity: {
-          value: parseInt(existingSystolic?.value_quantity || claim.vital_signs?.systolic || 120),
-          system: 'http://unitsofmeasure.org',
-          code: 'mm[Hg]'
-        }
-      });
-      sequences.push(sequenceNum++);
-    }
-
-    // 2. vital-sign-diastolic
-    const existingDiastolic = getExisting('vital-sign-diastolic');
-    if (existingDiastolic || claim.vital_signs?.diastolic) {
-      supportingInfoList.push({
-        sequence: sequenceNum,
-        category: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: 'vital-sign-diastolic'
-          }]
-        },
-        timingPeriod: {
-          start: currentDateTime,
-          end: currentDateTime
-        },
-        valueQuantity: {
-          value: parseInt(existingDiastolic?.value_quantity || claim.vital_signs?.diastolic || 80),
-          system: 'http://unitsofmeasure.org',
-          code: 'mm[Hg]'
-        }
-      });
-      sequences.push(sequenceNum++);
-    }
-
-    // 3. vital-sign-height
-    const existingHeight = getExisting('vital-sign-height');
-    if (existingHeight || claim.vital_signs?.height) {
-      supportingInfoList.push({
-        sequence: sequenceNum,
-        category: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: 'vital-sign-height'
-          }]
-        },
-        timingPeriod: {
-          start: currentDateTime,
-          end: currentDateTime
-        },
-        valueQuantity: {
-          value: parseInt(existingHeight?.value_quantity || claim.vital_signs?.height || 170),
-          system: 'http://unitsofmeasure.org',
-          code: 'cm'
-        }
-      });
-      sequences.push(sequenceNum++);
-    }
-
-    // 4. vital-sign-weight
-    const existingWeight = getExisting('vital-sign-weight');
-    if (existingWeight || claim.vital_signs?.weight) {
-      supportingInfoList.push({
-        sequence: sequenceNum,
-        category: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: 'vital-sign-weight'
-          }]
-        },
-        timingPeriod: {
-          start: currentDateTime,
-          end: currentDateTime
-        },
-        valueQuantity: {
-          value: parseInt(existingWeight?.value_quantity || claim.vital_signs?.weight || 70),
-          system: 'http://unitsofmeasure.org',
-          code: 'kg'
-        }
-      });
-      sequences.push(sequenceNum++);
-    }
-
-    // 5. pulse
-    const existingPulse = getExisting('pulse');
-    if (existingPulse || claim.vital_signs?.pulse) {
-      supportingInfoList.push({
-        sequence: sequenceNum,
-        category: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: 'pulse'
-          }]
-        },
-        timingPeriod: {
-          start: currentDateTime,
-          end: currentDateTime
-        },
-        valueQuantity: {
-          value: parseInt(existingPulse?.value_quantity || claim.vital_signs?.pulse || 72),
-          system: 'http://unitsofmeasure.org',
-          code: '/min'
-        }
-      });
-      sequences.push(sequenceNum++);
-    }
-
-    // 6. temperature
-    const existingTemperature = getExisting('temperature');
-    if (existingTemperature || claim.vital_signs?.temperature) {
-      supportingInfoList.push({
-        sequence: sequenceNum,
-        category: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: 'temperature'
-          }]
-        },
-        timingPeriod: {
-          start: currentDateTime,
-          end: currentDateTime
-        },
-        valueQuantity: {
-          value: parseFloat(existingTemperature?.value_quantity || claim.vital_signs?.temperature || 37),
-          system: 'http://unitsofmeasure.org',
-          code: 'Cel'
-        }
-      });
-      sequences.push(sequenceNum++);
-    }
-
-    // 7. chief-complaint (REQUIRED - BV-00779)
-    const existingChiefComplaint = getExisting('chief-complaint');
-    const chiefComplaintEntry = {
-      sequence: sequenceNum,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'chief-complaint'
-        }]
-      }
+    // Vital signs: only measured values, timed when they were taken (or the encounter start).
+    // Nothing is sent for a category without a value; no placeholder vitals.
+    const vitalTiming = existing => {
+      const start = existing?.timing_period_start || existing?.timing_start || existing?.timing_date || claim.encounter_start || claim.service_date;
+      if (!start) return {};
+      const end = existing?.timing_period_end || existing?.timing_end || start;
+      return { timingPeriod: { start: this.formatDateTimeWithTimezone(start), end: this.formatDateTimeWithTimezone(end) } };
     };
+    const addVital = (cat, vitalKey, ucum, parse = parseInt) => {
+      const existing = getExisting(cat);
+      const raw = hasValue(existing?.value_quantity) ? existing.value_quantity : claim.vital_signs?.[vitalKey];
+      if (!hasValue(raw) || !Number.isFinite(parse(raw))) return;
+      add({
+        category: category(cat),
+        ...vitalTiming(existing),
+        valueQuantity: {
+          value: parse(raw),
+          system: 'http://unitsofmeasure.org',
+          code: ucum
+        }
+      }, existing);
+    };
+    const requireNarrative = (cat, claimField, bvCode) => {
+      const existing = getExisting(cat);
+      const text = existing?.value_string || claim[claimField];
+      if (!hasValue(text)) {
+        throw mappingError(`Professional claim requires ${cat} (${bvCode}): supporting_info category ${cat} or ${claimField}`);
+      }
+      add({ category: category(cat), valueString: text }, existing);
+    };
+
+    addVital('vital-sign-systolic', 'systolic', 'mm[Hg]');
+    addVital('vital-sign-diastolic', 'diastolic', 'mm[Hg]');
+    addVital('vital-sign-height', 'height', 'cm');
+    addVital('vital-sign-weight', 'weight', 'kg');
+    addVital('pulse', 'pulse', '/min');
+    addVital('temperature', 'temperature', 'Cel', parseFloat);
+
+    // chief-complaint (REQUIRED - BV-00779); never a default complaint
+    const existingChiefComplaint = getExisting('chief-complaint');
+    const chiefComplaintEntry = { category: category('chief-complaint') };
     
     // Per NPHIES example Claim-173386, chief-complaint uses code.coding for SNOMED codes
-    if (existingChiefComplaint?.code || existingChiefComplaint?.code_system) {
+    if (existingChiefComplaint?.code) {
       chiefComplaintEntry.code = {
         coding: [{
           system: existingChiefComplaint.code_system || 'http://snomed.info/sct',
@@ -736,91 +650,28 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       };
     } else {
       // Free text format - use code.text per NPHIES spec
-      chiefComplaintEntry.code = {
-        text: existingChiefComplaint?.code_text || claim.chief_complaint || 'Patient presenting for evaluation'
-      };
+      const text = existingChiefComplaint?.code_text || existingChiefComplaint?.value_string || claim.chief_complaint;
+      if (!hasValue(text)) {
+        throw mappingError('Professional claim requires a chief complaint (BV-00779): supporting_info category chief-complaint or chief_complaint');
+      }
+      chiefComplaintEntry.code = { text };
     }
-    
-    supportingInfoList.push(chiefComplaintEntry);
-    sequences.push(sequenceNum++);
+    add(chiefComplaintEntry, existingChiefComplaint);
 
-    // 8. oxygen-saturation
-    const existingOxygenSaturation = getExisting('oxygen-saturation');
-    if (existingOxygenSaturation || claim.vital_signs?.oxygen_saturation) {
-      supportingInfoList.push({
-        sequence: sequenceNum,
-        category: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: 'oxygen-saturation'
-          }]
-        },
-        timingPeriod: {
-          start: currentDateTime,
-          end: currentDateTime
-        },
-        valueQuantity: {
-          value: parseInt(existingOxygenSaturation?.value_quantity || claim.vital_signs?.oxygen_saturation || 98),
-          system: 'http://unitsofmeasure.org',
-          code: '%'
-        }
-      });
-      sequences.push(sequenceNum++);
-    }
+    addVital('oxygen-saturation', 'oxygen_saturation', '%');
+    addVital('respiratory-rate', 'respiratory_rate', '/min');
 
-    // 9. respiratory-rate
-    const existingRespiratoryRate = getExisting('respiratory-rate');
-    if (existingRespiratoryRate || claim.vital_signs?.respiratory_rate) {
-      supportingInfoList.push({
-        sequence: sequenceNum,
-        category: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-            code: 'respiratory-rate'
-          }]
-        },
-        timingPeriod: {
-          start: currentDateTime,
-          end: currentDateTime
-        },
-        valueQuantity: {
-          value: parseInt(existingRespiratoryRate?.value_quantity || claim.vital_signs?.respiratory_rate || 16),
-          system: 'http://unitsofmeasure.org',
-          code: '/min'
-        }
-      });
-      sequences.push(sequenceNum++);
-    }
+    // patient-history (REQUIRED - BV-00804)
+    requireNarrative('patient-history', 'patient_history', 'BV-00804');
 
-    // 10. patient-history (REQUIRED - BV-00804)
-    const existingPatientHistory = getExisting('patient-history');
-    supportingInfoList.push({
-      sequence: sequenceNum,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'patient-history'
-        }]
-      },
-      valueString: existingPatientHistory?.value_string || claim.patient_history || 'No systemic disease'
-    });
-    sequences.push(sequenceNum++);
-
-    // 11. investigation-result (REQUIRED - BV-00752)
+    // investigation-result (REQUIRED - BV-00752): the user's own coded result only
     const existingInvestigation = getExisting('investigation-result');
-    let investigationResultCode = existingInvestigation?.code || claim.investigation_result_code || 'INP';
-    // Validate the code is in the allowed list
+    const investigationResultCode = existingInvestigation?.code || claim.investigation_result_code;
     if (!validInvestigationCodes.includes(investigationResultCode)) {
-      investigationResultCode = 'INP';
+      throw mappingError(`Professional claim requires an investigation-result code (BV-00752), one of ${validInvestigationCodes.join(', ')}`);
     }
-    supportingInfoList.push({
-      sequence: sequenceNum,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'investigation-result'
-        }]
-      },
+    add({
+      category: category('investigation-result'),
       code: {
         coding: [{
           system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
@@ -828,85 +679,35 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
           display: existingInvestigation?.code_display || investigationCodeDisplayMap[investigationResultCode]
         }]
       }
-    });
-    sequences.push(sequenceNum++);
+    }, existingInvestigation);
 
-    // 12. treatment-plan (REQUIRED - BV-00803)
-    const existingTreatmentPlan = getExisting('treatment-plan');
-    supportingInfoList.push({
-      sequence: sequenceNum,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'treatment-plan'
-        }]
-      },
-      valueString: existingTreatmentPlan?.value_string || claim.treatment_plan || 'Analgesic Drugs'
-    });
-    sequences.push(sequenceNum++);
-
-    // 13. physical-examination (REQUIRED - BV-00805)
-    const existingPhysicalExam = getExisting('physical-examination');
-    supportingInfoList.push({
-      sequence: sequenceNum,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'physical-examination'
-        }]
-      },
-      valueString: existingPhysicalExam?.value_string || claim.physical_examination || 'Stable'
-    });
-    sequences.push(sequenceNum++);
-
-    // 14. history-of-present-illness (REQUIRED - BV-00806)
-    const existingHistoryPresentIllness = getExisting('history-of-present-illness');
-    supportingInfoList.push({
-      sequence: sequenceNum,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'history-of-present-illness'
-        }]
-      },
-      valueString: existingHistoryPresentIllness?.value_string || claim.history_of_present_illness || 'No history'
-    });
-    sequences.push(sequenceNum++);
+    // treatment-plan (REQUIRED - BV-00803), physical-examination (BV-00805),
+    // history-of-present-illness (BV-00806): documented narrative only
+    requireNarrative('treatment-plan', 'treatment_plan', 'BV-00803');
+    requireNarrative('physical-examination', 'physical_examination', 'BV-00805');
+    requireNarrative('history-of-present-illness', 'history_of_present_illness', 'BV-00806');
 
     // Add birth-weight supportingInfo for newborn patients
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     // Per NPHIES Test Case 8: Newborn claim should include birth-weight
     // BV-00509: birth-weight valueQuantity SHALL use 'kg' code from UCUM
-    if (claim.is_newborn && claim.birth_weight) {
-      const hasBirthWeight = supportingInfoList.some(info => {
-        const categoryCode = info.category?.coding?.[0]?.code;
-        return categoryCode === 'birth-weight';
+    const existingBirthWeight = getExisting('birth-weight');
+    if (existingBirthWeight) {
+      add(this.buildSupportingInfo({ ...existingBirthWeight, sequence: sequenceNum }), existingBirthWeight);
+    } else if (claim.is_newborn && claim.birth_weight) {
+      // Convert grams to kilograms for NPHIES (BV-00509 requires kg)
+      add({
+        category: category('birth-weight'),
+        valueQuantity: {
+          value: parseFloat(claim.birth_weight) / 1000,
+          system: 'http://unitsofmeasure.org',
+          code: 'kg'
+        }
       });
-      if (!hasBirthWeight) {
-        // Convert grams to kilograms for NPHIES (BV-00509 requires kg)
-        const weightInKg = parseFloat(claim.birth_weight) / 1000;
-        supportingInfoList.push({
-          sequence: sequenceNum,
-          category: {
-            coding: [{
-              system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-              code: 'birth-weight'
-            }]
-          },
-          valueQuantity: {
-            value: weightInKg,
-            system: 'http://unitsofmeasure.org',
-            code: 'kg'
-          }
-        });
-        sequences.push(sequenceNum++);
-      }
     }
 
     // BV-00428: Onset requires both timingDate AND ICD-10 code for symptoms/illness
-    const existingOnset = existingSupportingInfo.find(info =>
-      (info.category || '').toLowerCase() === 'onset'
-    );
+    const existingOnset = getExisting('onset');
     if (existingOnset) {
       const onsetDate = existingOnset.timing_date || claim.encounter_start || claim.service_date;
       const principalDiag = (claim.diagnoses || []).find(d =>
@@ -914,30 +715,23 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       ) || (claim.diagnoses || [])[0];
 
       if (onsetDate && principalDiag?.diagnosis_code) {
-        const onsetEntry = {
-          sequence: sequenceNum,
-          category: {
-            coding: [{
-              system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-              code: 'onset'
-            }]
-          },
+        add({
+          category: category('onset'),
           code: {
             coding: [{
-              system: 'http://hl7.org/fhir/sid/icd-10-am',
+              system: ICD10_SYSTEM,
               code: principalDiag.diagnosis_code,
               display: principalDiag.diagnosis_display
             }]
           },
           timingDate: this.formatDate(onsetDate)
-        };
-        supportingInfoList.push(onsetEntry);
-        sequences.push(sequenceNum++);
+        }, existingOnset);
       }
     }
 
     // Pass through any remaining supporting info categories not explicitly handled above
     // (e.g., lab-test, reason-for-visit, attachment, etc.) so they are not silently dropped.
+    const handled = new Set(numbered.map(({ info }) => info));
     const handledCategories = new Set([
       'vital-sign-systolic', 'vital-sign-diastolic', 'vital-sign-height', 'vital-sign-weight',
       'pulse', 'temperature', 'chief-complaint', 'oxygen-saturation', 'respiratory-rate',
@@ -947,15 +741,15 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     ]);
     existingSupportingInfo.forEach(info => {
       const cat = (info.category || '').toLowerCase();
-      if (!handledCategories.has(cat)) {
-        supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence: sequenceNum }));
-        sequences.push(sequenceNum++);
+      if (!handledCategories.has(cat) && !handled.has(info)) {
+        add(this.buildSupportingInfo({ ...info, sequence: sequenceNum }), info);
       }
     });
 
     return {
       supportingInfo: supportingInfoList,
-      sequences: sequences
+      sequences: sequences,
+      informationSequenceMap: this.buildInformationSequenceMap(numbered)
     };
   }
 
@@ -970,7 +764,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
    * - extension-patientInvoice (Identifier) - REQUIRED for claims
    * - extension-maternity (boolean) - maternity related
    */
-  buildProfessionalClaimItem(item, itemIndex, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim) {
+  buildProfessionalClaimItem(item, itemIndex, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim, informationSequenceMap = null) {
     const sequence = item.sequence || itemIndex;
     
     const quantity = parseFloat(item.quantity || 1);
@@ -1032,6 +826,11 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1]
     };
+    // Supporting info the user linked to this item, remapped to the renumbered list
+    if (Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
+      const informationSequence = this.resolveInformationSequences(item, supportingInfoSequences, informationSequenceMap);
+      if (informationSequence) claimItem.informationSequence = informationSequence;
+    }
 
     // ProductOrService (required) - Use provided system or default to NPHIES services CodeSystem
     // Per NPHIES IB-00030: Professional Claims require codes from services ValueSet
@@ -1077,50 +876,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
     };
 
     // Serviced date - must be within encounter period per BV-00041
-    let servicedDate = item.serviced_date ? new Date(item.serviced_date) : 
-                       (encounterPeriod?.start ? new Date(encounterPeriod.start) : new Date());
-    
-    // Validate and auto-correct servicedDate to be within encounter period
-    // This prevents NPHIES error BV-00041: "Claim item serviced[x] is not within the encounter period"
-    // If serviced_date is date-only, default to current time
-    if (encounterPeriod?.start) {
-      const periodStart = new Date(encounterPeriod.start);
-      
-      // If servicedDate doesn't have a time component (is at midnight or was date-only),
-      // default to current time while keeping the date part
-      const isMidnight = servicedDate.getHours() === 0 && 
-                        servicedDate.getMinutes() === 0 && 
-                        servicedDate.getSeconds() === 0;
-      
-      // Check if original serviced_date was a date-only string (no time component)
-      const originalServicedDateStr = typeof item.serviced_date === 'string' 
-        ? item.serviced_date 
-        : (item.serviced_date instanceof Date ? item.serviced_date.toISOString() : String(item.serviced_date || ''));
-      const hasTimeInOriginal = originalServicedDateStr.includes('T') || originalServicedDateStr.match(/\d{2}:\d{2}/);
-      
-      if (isMidnight && item.serviced_date && !hasTimeInOriginal) {
-        // Date-only was provided, use current time with the same date
-        const now = new Date();
-        const datePart = servicedDate.toISOString().split('T')[0];
-        const timePart = now.toTimeString().split(' ')[0]; // Get HH:mm:ss
-        servicedDate = new Date(`${datePart}T${timePart}`);
-      }
-      
-      // Validate: serviced_date should be >= encounter_start (with time)
-      if (servicedDate < periodStart) {
-        servicedDate = periodStart; // Auto-correct to encounter start
-      }
-      
-      // Check if servicedDate is after encounter end (if end date exists)
-      if (encounterPeriod.end) {
-        const periodEnd = new Date(encounterPeriod.end);
-        if (servicedDate > periodEnd) {
-          servicedDate = periodEnd; // Auto-correct to encounter end
-        }
-      }
-    }
-    
-    claimItem.servicedDate = this.formatDate(servicedDate);
+    claimItem.servicedDate = this.resolveServicedDate(item.serviced_date, encounterPeriod);
 
     // Quantity (required)
     claimItem.quantity = { value: quantity };
@@ -1213,8 +969,11 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
 
     // For Emergency encounters (EMER), add required emergency-specific extensions
     if (encounterClass === 'emergency') {
-      // Triage Category - REQUIRED for EMER (BV-00734)
-      const triageCategory = claim.triage_category || 'U';
+      // Triage Category - REQUIRED for EMER (BV-00734); a clinical assessment, never defaulted
+      const triageCategory = claim.triage_category;
+      if (!triageCategory) {
+        throw mappingError('Emergency encounter requires a triage category (triage_category)');
+      }
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageCategory',
         valueCodeableConcept: {
@@ -1236,7 +995,10 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
       // Emergency Arrival Code - REQUIRED for EMER (BV-00732)
       // Per NPHIES ValueSet: https://portal.nphies.sa/ig/ValueSet-encounter-emergency-arrival.html
       // Valid codes: unknown, PV, ACDA, OGV, GCDA, other, MOHA, EMSAA, GMA, AMA, GEMSA, GPA, POV
-      const arrivalCode = claim.emergency_arrival_code || claim.arrival_code || 'PV'; // Default to Personal Vehicle
+      const arrivalCode = claim.emergency_arrival_code || claim.arrival_code;
+      if (!arrivalCode) {
+        throw mappingError('Emergency encounter requires an arrival code (emergency_arrival_code, BV-00732)');
+      }
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-emergencyArrivalCode',
         valueCodeableConcept: {
@@ -1256,31 +1018,38 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
         valueDateTime: this.formatDateTimeWithTimezone(emergencyServiceStart)
       });
 
-      // Transport Type for Emergency (optional)
-      const transportType = claim.transport_type || 'GEMA'; // Default to Ground EMS Ambulance
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transportType',
-        valueCodeableConcept: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/transport-type',
-            code: transportType,
-            display: this.getTransportTypeDisplay(transportType)
-          }]
-        }
-      });
+      // Transport Type for Emergency (optional) - only when documented
+      const transportType = claim.transport_type;
+      if (transportType) {
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-transportType',
+          valueCodeableConcept: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/transport-type',
+              code: transportType,
+              display: this.getTransportTypeDisplay(transportType)
+            }]
+          }
+        });
+      }
 
       // BV-00728: Emergency Department Disposition (required when EMER + encounter end date)
-      const edDisposition = claim.emergency_department_disposition || 'NAD';
-      extensions.push({
-        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-emergencyDepartmentDisposition',
-        valueCodeableConcept: {
-          coding: [{
-            system: 'http://nphies.sa/terminology/CodeSystem/emergency-department-disposition',
-            code: edDisposition,
-            display: this.getEDDispositionDisplay(edDisposition)
-          }]
-        }
-      });
+      const edDisposition = claim.emergency_department_disposition;
+      if (!edDisposition && claim.encounter_end) {
+        throw mappingError('Emergency encounter with an end date requires an emergency department disposition (emergency_department_disposition, BV-00728)');
+      }
+      if (edDisposition) {
+        extensions.push({
+          url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-emergencyDepartmentDisposition',
+          valueCodeableConcept: {
+            coding: [{
+              system: 'http://nphies.sa/terminology/CodeSystem/emergency-department-disposition',
+              code: edDisposition,
+              display: this.getEDDispositionDisplay(edDisposition)
+            }]
+          }
+        });
+      }
 
       // Diagnosis on Discharge for Emergency (optional)
       if (claim.discharge_diagnosis_code) {
@@ -1288,7 +1057,7 @@ class ProfessionalClaimMapper extends ProfessionalPAMapper {
           url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-diagnosisOnDischarge',
           valueCodeableConcept: {
             coding: [{
-              system: 'http://hl7.org/fhir/sid/icd-10-am',
+              system: ICD10_SYSTEM,
               code: claim.discharge_diagnosis_code,
               display: claim.discharge_diagnosis_display
             }]

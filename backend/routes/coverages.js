@@ -6,10 +6,26 @@ const router = express.Router();
 // GET /api/coverages - Get all coverages with pagination
 router.get('/', async (req, res) => {
   try {
-    const { limit = 100, offset = 0, search = '' } = req.query;
+    const rawLimit = Number.parseInt(req.query.limit, 10);
+    const rawOffset = Number.parseInt(req.query.offset, 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 500) : 100;
+    const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0) : 0;
+    const search = typeof req.query.search === 'string' ? req.query.search : '';
 
-    // Use DISTINCT ON to remove duplicates based on policy_number + insurer_id + plan_name
-    let queryText = `
+    const params = [];
+    let whereClause = '';
+    if (search) {
+      params.push(`%${search}%`);
+      whereClause = `WHERE pc.policy_number ILIKE $1
+        OR pc.member_id ILIKE $1
+        OR pc.plan_name ILIKE $1
+        OR p.name ILIKE $1
+        OR i.insurer_name ILIKE $1`;
+    }
+
+    // Use DISTINCT ON to remove duplicates based on policy_number + insurer_id + plan_name.
+    // The count is taken over the same de-duplicated set so total/hasMore are correct.
+    const dedupedQuery = `
       SELECT DISTINCT ON (COALESCE(pc.policy_number, pc.member_id), pc.insurer_id, pc.plan_name)
         pc.coverage_id,
         pc.patient_id,
@@ -33,43 +49,15 @@ router.get('/', async (req, res) => {
       FROM patient_coverage pc
       LEFT JOIN patients p ON pc.patient_id = p.patient_id
       LEFT JOIN insurers i ON pc.insurer_id = i.insurer_id
+      ${whereClause}
+      ORDER BY COALESCE(pc.policy_number, pc.member_id), pc.insurer_id, pc.plan_name, pc.created_at DESC
     `;
 
-    const params = [];
-    let paramIndex = 1;
-
-    if (search) {
-      queryText += ` WHERE pc.policy_number ILIKE $${paramIndex} 
-        OR pc.member_id ILIKE $${paramIndex}
-        OR pc.plan_name ILIKE $${paramIndex}
-        OR p.name ILIKE $${paramIndex}
-        OR i.insurer_name ILIKE $${paramIndex}`;
-      params.push(`%${search}%`);
-      paramIndex++;
-    }
-
-    // ORDER BY must start with DISTINCT ON columns
-    queryText += ` ORDER BY COALESCE(pc.policy_number, pc.member_id), pc.insurer_id, pc.plan_name, pc.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    params.push(parseInt(limit), parseInt(offset));
-
-    const result = await query(queryText, params);
-
-    // Get total count
-    let countQuery = 'SELECT COUNT(*) FROM patient_coverage pc';
-    const countParams = [];
-    
-    if (search) {
-      countQuery += ` LEFT JOIN patients p ON pc.patient_id = p.patient_id
-        LEFT JOIN insurers i ON pc.insurer_id = i.insurer_id
-        WHERE pc.policy_number ILIKE $1 
-        OR pc.member_id ILIKE $1
-        OR pc.plan_name ILIKE $1
-        OR p.name ILIKE $1
-        OR i.insurer_name ILIKE $1`;
-      countParams.push(`%${search}%`);
-    }
-
-    const countResult = await query(countQuery, countParams);
+    const result = await query(
+      `${dedupedQuery} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset]
+    );
+    const countResult = await query(`SELECT COUNT(*) FROM (${dedupedQuery}) deduped`, params);
     const total = parseInt(countResult.rows[0].count);
 
     res.json({
@@ -77,17 +65,16 @@ router.get('/', async (req, res) => {
       data: result.rows,
       pagination: {
         total,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        hasMore: parseInt(offset) + result.rows.length < total
+        limit,
+        offset,
+        hasMore: offset + result.rows.length < total
       }
     });
   } catch (error) {
     console.error('Error fetching coverages:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch coverages',
-      message: error.message
+      error: 'Failed to fetch coverages'
     });
   }
 });
@@ -125,8 +112,7 @@ router.get('/:id', async (req, res) => {
     console.error('Error fetching coverage:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch coverage',
-      message: error.message
+      error: 'Failed to fetch coverage'
     });
   }
 });

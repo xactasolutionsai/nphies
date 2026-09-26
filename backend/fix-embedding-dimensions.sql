@@ -1,25 +1,24 @@
--- Fix embedding dimension mismatch
--- The database was created for 768 dimensions (OpenAI)
--- But Ollama's nomic-embed-text model uses 4096 dimensions
+-- Fix embedding dimension mismatch for medical_knowledge: vector(768) -> vector(4096)
+-- (ragService stores 4096-dimension embeddings).
+--
+-- Idempotent and non-destructive: this file used to DROP and recreate the table,
+-- deleting all stored knowledge. Now it only changes the column type when it is
+-- not already vector(4096); embeddings of another dimension are set to NULL (they
+-- cannot be cast) and must be regenerated with `npm run seed-medical-knowledge`.
+-- The ivfflat index is dropped because pgvector indexes support at most 2000 dimensions.
 
--- Drop the existing table and recreate with correct dimensions
-DROP TABLE IF EXISTS medical_knowledge CASCADE;
+DO $$
+DECLARE
+    current_dim integer;
+BEGIN
+    SELECT a.atttypmod INTO current_dim
+    FROM pg_attribute a
+    WHERE a.attrelid = 'medical_knowledge'::regclass AND a.attname = 'embedding' AND NOT a.attisdropped;
 
-CREATE TABLE medical_knowledge (
-    id SERIAL PRIMARY KEY,
-    content TEXT NOT NULL,
-    category VARCHAR(255) DEFAULT 'ophthalmology',
-    source VARCHAR(255),
-    metadata JSONB DEFAULT '{}',
-    embedding vector(4096),  -- Changed from 768 to 4096 for Ollama
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Create index for vector similarity search
-CREATE INDEX IF NOT EXISTS medical_knowledge_embedding_idx 
-ON medical_knowledge USING hnsw (embedding vector_cosine_ops);
-
--- Verify
-SELECT 'medical_knowledge table recreated with 4096 dimensions' as status;
-
+    IF current_dim IS DISTINCT FROM 4096 THEN
+        DROP INDEX IF EXISTS medical_knowledge_embedding_idx;
+        UPDATE medical_knowledge SET embedding = NULL WHERE embedding IS NOT NULL;
+        ALTER TABLE medical_knowledge ALTER COLUMN embedding TYPE vector(4096);
+        RAISE NOTICE 'medical_knowledge.embedding changed to vector(4096); existing embeddings cleared';
+    END IF;
+END $$;

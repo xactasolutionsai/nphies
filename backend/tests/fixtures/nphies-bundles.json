@@ -1,7 +1,7 @@
 {
   "priorauth-professional": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000006",
+    "id": "00000000-0000-4000-8000-000000000007",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -11,10 +11,10 @@
     "timestamp": "2026-08-01T09:00:00.000Z",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000005",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000006",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -120,7 +120,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -137,6 +137,39 @@
           ],
           "name": "Test Insurer",
           "address": []
+        }
+      },
+      {
+        "fullUrl": "http://provider.com/Location/00000000-0000-4000-8000-000000000004",
+        "resource": {
+          "resourceType": "Location",
+          "id": "00000000-0000-4000-8000-000000000004",
+          "meta": {
+            "profile": [
+              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0"
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://nphies.sa/license/location-license",
+              "value": "TEST-LOCATION"
+            }
+          ],
+          "status": "active",
+          "name": "Test Hospital",
+          "type": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+                  "code": "GACH"
+                }
+              ]
+            }
+          ],
+          "managingOrganization": {
+            "reference": "Organization/22222222-2222-4222-8222-222222222222"
+          }
         }
       },
       {
@@ -192,7 +225,7 @@
             "reference": "Organization/22222222-2222-4222-8222-222222222222"
           },
           "facility": {
-            "reference": "Organization/22222222-2222-4222-8222-222222222222"
+            "reference": "Location/00000000-0000-4000-8000-000000000004"
           },
           "priority": {
             "coding": [
@@ -216,7 +249,7 @@
             {
               "sequence": 1,
               "provider": {
-                "reference": "Practitioner/00000000-0000-4000-8000-000000000003"
+                "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
               },
               "role": {
                 "coding": [
@@ -286,6 +319,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
@@ -347,8 +381,7 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -454,20 +487,6 @@
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
             }
           ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
-            }
-          ],
           "period": {
             "start": "2026-01-01",
             "end": "2026-12-31"
@@ -475,10 +494,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Practitioner/00000000-0000-4000-8000-000000000003",
+        "fullUrl": "http://provider.com/Practitioner/55555555-5555-4555-8555-555555555555",
         "resource": {
           "resourceType": "Practitioner",
-          "id": "00000000-0000-4000-8000-000000000003",
+          "id": "55555555-5555-4555-8555-555555555555",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -496,17 +515,17 @@
                 ]
               },
               "system": "http://nphies.sa/license/practitioner-license",
-              "value": "PRACT-00000000"
+              "value": "TEST-PRACTITIONER"
             }
           ],
           "active": true,
           "name": [
             {
               "use": "official",
-              "text": "Default Practitioner",
+              "text": "Test Practitioner",
               "family": "Practitioner",
               "given": [
-                "Default"
+                "Test"
               ]
             }
           ],
@@ -517,7 +536,7 @@
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
                     "code": "08.00",
-                    "display": "Healthcare Professional"
+                    "display": "Internal Medicine Specialty"
                   }
                 ]
               }
@@ -620,7 +639,7 @@
   },
   "claim-professional": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000006",
+    "id": "00000000-0000-4000-8000-000000000007",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -630,10 +649,10 @@
     "timestamp": "2026-08-01T09:00:00.000Z",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000005",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000006",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -744,6 +763,9 @@
           "provider": {
             "reference": "Organization/22222222-2222-4222-8222-222222222222"
           },
+          "facility": {
+            "reference": "Location/00000000-0000-4000-8000-000000000004"
+          },
           "priority": {
             "coding": [
               {
@@ -766,7 +788,7 @@
             {
               "sequence": 1,
               "provider": {
-                "reference": "Practitioner/00000000-0000-4000-8000-000000000003"
+                "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
               },
               "role": {
                 "coding": [
@@ -788,7 +810,6 @@
           ],
           "supportingInfo": [
             {
-              "sequence": 1,
               "category": {
                 "coding": [
                   {
@@ -798,11 +819,11 @@
                 ]
               },
               "code": {
-                "text": "Patient presenting for evaluation"
-              }
+                "text": "Synthetic test only"
+              },
+              "sequence": 1
             },
             {
-              "sequence": 2,
               "category": {
                 "coding": [
                   {
@@ -811,10 +832,10 @@
                   }
                 ]
               },
-              "valueString": "No systemic disease"
+              "valueString": "Synthetic patient history",
+              "sequence": 2
             },
             {
-              "sequence": 3,
               "category": {
                 "coding": [
                   {
@@ -827,14 +848,14 @@
                 "coding": [
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
-                    "code": "INP",
-                    "display": "Investigation(s) not performed"
+                    "code": "NA",
+                    "display": "Not applicable"
                   }
                 ]
-              }
+              },
+              "sequence": 3
             },
             {
-              "sequence": 4,
               "category": {
                 "coding": [
                   {
@@ -843,10 +864,10 @@
                   }
                 ]
               },
-              "valueString": "Analgesic Drugs"
+              "valueString": "Synthetic treatment plan",
+              "sequence": 4
             },
             {
-              "sequence": 5,
               "category": {
                 "coding": [
                   {
@@ -855,10 +876,10 @@
                   }
                 ]
               },
-              "valueString": "Stable"
+              "valueString": "Synthetic examination",
+              "sequence": 5
             },
             {
-              "sequence": 6,
               "category": {
                 "coding": [
                   {
@@ -867,7 +888,8 @@
                   }
                 ]
               },
-              "valueString": "No history"
+              "valueString": "Synthetic illness history",
+              "sequence": 6
             }
           ],
           "diagnosis": [
@@ -904,6 +926,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
@@ -962,8 +985,7 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -1073,20 +1095,6 @@
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
             }
           ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
-            }
-          ],
           "period": {
             "start": "2026-01-01",
             "end": "2026-12-31"
@@ -1094,10 +1102,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Practitioner/00000000-0000-4000-8000-000000000003",
+        "fullUrl": "http://provider.com/Practitioner/55555555-5555-4555-8555-555555555555",
         "resource": {
           "resourceType": "Practitioner",
-          "id": "00000000-0000-4000-8000-000000000003",
+          "id": "55555555-5555-4555-8555-555555555555",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -1115,17 +1123,17 @@
                 ]
               },
               "system": "http://nphies.sa/license/practitioner-license",
-              "value": "PRACT-00000000"
+              "value": "TEST-PRACTITIONER"
             }
           ],
           "active": true,
           "name": [
             {
               "use": "official",
-              "text": "Default Practitioner",
+              "text": "Test Practitioner",
               "family": "Practitioner",
               "given": [
-                "Default"
+                "Test"
               ]
             }
           ],
@@ -1136,7 +1144,7 @@
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
                     "code": "08.00",
-                    "display": "Healthcare Professional"
+                    "display": "Internal Medicine Specialty"
                   }
                 ]
               }
@@ -1211,7 +1219,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -1228,6 +1236,39 @@
           ],
           "name": "Test Insurer",
           "address": []
+        }
+      },
+      {
+        "fullUrl": "http://provider.com/Location/00000000-0000-4000-8000-000000000004",
+        "resource": {
+          "resourceType": "Location",
+          "id": "00000000-0000-4000-8000-000000000004",
+          "meta": {
+            "profile": [
+              "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0"
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://nphies.sa/license/location-license",
+              "value": "TEST-LOCATION"
+            }
+          ],
+          "status": "active",
+          "name": "Test Hospital",
+          "type": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+                  "code": "GACH"
+                }
+              ]
+            }
+          ],
+          "managingOrganization": {
+            "reference": "Organization/22222222-2222-4222-8222-222222222222"
+          }
         }
       },
       {
@@ -1325,7 +1366,7 @@
   },
   "priorauth-institutional": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000006",
+    "id": "00000000-0000-4000-8000-000000000005",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -1335,10 +1376,10 @@
     "timestamp": "2026-08-01T09:00:00.000Z",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000005",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000004",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000004",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -1451,7 +1492,7 @@
             {
               "sequence": 1,
               "provider": {
-                "reference": "Practitioner/00000000-0000-4000-8000-000000000003"
+                "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
               },
               "role": {
                 "coding": [
@@ -1548,6 +1589,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
@@ -1610,8 +1652,7 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -1737,20 +1778,6 @@
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
             }
           ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
-            }
-          ],
           "period": {
             "start": "2026-01-01",
             "end": "2026-12-31"
@@ -1758,10 +1785,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Practitioner/00000000-0000-4000-8000-000000000003",
+        "fullUrl": "http://provider.com/Practitioner/55555555-5555-4555-8555-555555555555",
         "resource": {
           "resourceType": "Practitioner",
-          "id": "00000000-0000-4000-8000-000000000003",
+          "id": "55555555-5555-4555-8555-555555555555",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -1779,17 +1806,17 @@
                 ]
               },
               "system": "http://nphies.sa/license/practitioner-license",
-              "value": "PRACT-00000000"
+              "value": "TEST-PRACTITIONER"
             }
           ],
           "active": true,
           "name": [
             {
               "use": "official",
-              "text": "Default Practitioner",
+              "text": "Test Practitioner",
               "family": "Practitioner",
               "given": [
-                "Default"
+                "Test"
               ]
             }
           ],
@@ -1800,7 +1827,7 @@
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
                     "code": "08.00",
-                    "display": "Healthcare Professional"
+                    "display": "Internal Medicine Specialty"
                   }
                 ]
               }
@@ -1875,7 +1902,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -1989,7 +2016,7 @@
   },
   "claim-institutional": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000006",
+    "id": "00000000-0000-4000-8000-000000000005",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -1999,10 +2026,10 @@
     "timestamp": "2026-08-01T09:00:00.000Z",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000005",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000004",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000004",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -2135,7 +2162,7 @@
             {
               "sequence": 1,
               "provider": {
-                "reference": "Practitioner/00000000-0000-4000-8000-000000000003"
+                "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
               },
               "role": {
                 "coding": [
@@ -2226,6 +2253,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
@@ -2287,8 +2315,7 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -2447,20 +2474,6 @@
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
             }
           ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
-            }
-          ],
           "period": {
             "start": "2026-01-01",
             "end": "2026-12-31"
@@ -2468,10 +2481,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Practitioner/00000000-0000-4000-8000-000000000003",
+        "fullUrl": "http://provider.com/Practitioner/55555555-5555-4555-8555-555555555555",
         "resource": {
           "resourceType": "Practitioner",
-          "id": "00000000-0000-4000-8000-000000000003",
+          "id": "55555555-5555-4555-8555-555555555555",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -2489,17 +2502,17 @@
                 ]
               },
               "system": "http://nphies.sa/license/practitioner-license",
-              "value": "PRACT-00000000"
+              "value": "TEST-PRACTITIONER"
             }
           ],
           "active": true,
           "name": [
             {
               "use": "official",
-              "text": "Default Practitioner",
+              "text": "Test Practitioner",
               "family": "Practitioner",
               "given": [
-                "Default"
+                "Test"
               ]
             }
           ],
@@ -2510,7 +2523,7 @@
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
                     "code": "08.00",
-                    "display": "Healthcare Professional"
+                    "display": "Internal Medicine Specialty"
                   }
                 ]
               }
@@ -2585,7 +2598,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -2699,7 +2712,7 @@
   },
   "priorauth-dental": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000006",
+    "id": "00000000-0000-4000-8000-000000000005",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -2709,10 +2722,10 @@
     "timestamp": "2026-08-01T09:00:00.000Z",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000005",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000004",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000004",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -2825,7 +2838,7 @@
             {
               "sequence": 1,
               "provider": {
-                "reference": "Practitioner/00000000-0000-4000-8000-000000000003"
+                "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
               },
               "role": {
                 "coding": [
@@ -2895,6 +2908,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
@@ -2965,8 +2979,7 @@
                     "display": "UPPER RIGHT; PERMANENT TEETH # 1"
                   }
                 ]
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -3081,20 +3094,6 @@
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
             }
           ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
-            }
-          ],
           "period": {
             "start": "2026-01-01",
             "end": "2026-12-31"
@@ -3102,10 +3101,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Practitioner/00000000-0000-4000-8000-000000000003",
+        "fullUrl": "http://provider.com/Practitioner/55555555-5555-4555-8555-555555555555",
         "resource": {
           "resourceType": "Practitioner",
-          "id": "00000000-0000-4000-8000-000000000003",
+          "id": "55555555-5555-4555-8555-555555555555",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -3123,17 +3122,17 @@
                 ]
               },
               "system": "http://nphies.sa/license/practitioner-license",
-              "value": "PRACT-00000000"
+              "value": "TEST-PRACTITIONER"
             }
           ],
           "active": true,
           "name": [
             {
               "use": "official",
-              "text": "Default Practitioner",
+              "text": "Test Practitioner",
               "family": "Practitioner",
               "given": [
-                "Default"
+                "Test"
               ]
             }
           ],
@@ -3143,8 +3142,8 @@
                 "coding": [
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
-                    "code": "22.00",
-                    "display": "Healthcare Professional"
+                    "code": "08.00",
+                    "display": "Internal Medicine Specialty"
                   }
                 ]
               }
@@ -3219,7 +3218,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -3333,7 +3332,7 @@
   },
   "claim-dental": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000006",
+    "id": "00000000-0000-4000-8000-000000000005",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -3343,10 +3342,10 @@
     "timestamp": "2026-08-01T09:00:00.000Z",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000005",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000004",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000004",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -3479,7 +3478,7 @@
             {
               "sequence": 1,
               "provider": {
-                "reference": "Practitioner/00000000-0000-4000-8000-000000000003"
+                "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
               },
               "role": {
                 "coding": [
@@ -3549,6 +3548,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
@@ -3583,6 +3583,9 @@
               "diagnosisSequence": [
                 1
               ],
+              "informationSequence": [
+                1
+              ],
               "productOrService": {
                 "coding": [
                   {
@@ -3612,8 +3615,7 @@
                     "display": "UPPER RIGHT; PERMANENT TEETH # 1"
                   }
                 ]
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -3649,7 +3651,7 @@
           "identifier": [
             {
               "system": "http://testhospital.com.sa/identifiers/encounter",
-              "value": "AB1234"
+              "value": "TEST-CLAIM-1"
             }
           ],
           "status": "finished",
@@ -3736,20 +3738,6 @@
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
             }
           ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
-            }
-          ],
           "period": {
             "start": "2026-01-01",
             "end": "2026-12-31"
@@ -3757,10 +3745,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Practitioner/00000000-0000-4000-8000-000000000003",
+        "fullUrl": "http://provider.com/Practitioner/55555555-5555-4555-8555-555555555555",
         "resource": {
           "resourceType": "Practitioner",
-          "id": "00000000-0000-4000-8000-000000000003",
+          "id": "55555555-5555-4555-8555-555555555555",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -3778,17 +3766,17 @@
                 ]
               },
               "system": "http://nphies.sa/license/practitioner-license",
-              "value": "PRACT-00000000"
+              "value": "TEST-PRACTITIONER"
             }
           ],
           "active": true,
           "name": [
             {
               "use": "official",
-              "text": "Default Practitioner",
+              "text": "Test Practitioner",
               "family": "Practitioner",
               "given": [
-                "Default"
+                "Test"
               ]
             }
           ],
@@ -3799,7 +3787,7 @@
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
                     "code": "08.00",
-                    "display": "Healthcare Professional"
+                    "display": "Internal Medicine Specialty"
                   }
                 ]
               }
@@ -3874,7 +3862,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -3988,7 +3976,7 @@
   },
   "priorauth-vision": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000006",
+    "id": "00000000-0000-4000-8000-000000000005",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -3998,10 +3986,10 @@
     "timestamp": "2026-08-01T09:00:00.000Z",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000005",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000004",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000004",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -4054,7 +4042,7 @@
             {
               "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescription",
               "valueReference": {
-                "reference": "VisionPrescription/00000000-0000-4000-8000-000000000003"
+                "reference": "VisionPrescription/00000000-0000-4000-8000-000000000002"
               }
             }
           ],
@@ -4111,13 +4099,13 @@
             }
           },
           "prescription": {
-            "reference": "VisionPrescription/00000000-0000-4000-8000-000000000003"
+            "reference": "VisionPrescription/00000000-0000-4000-8000-000000000002"
           },
           "careTeam": [
             {
               "sequence": 1,
               "provider": {
-                "reference": "Practitioner/00000000-0000-4000-8000-000000000002"
+                "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
               },
               "role": {
                 "coding": [
@@ -4187,6 +4175,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
@@ -4248,8 +4237,7 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -4259,10 +4247,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/VisionPrescription/00000000-0000-4000-8000-000000000003",
+        "fullUrl": "http://provider.com/VisionPrescription/00000000-0000-4000-8000-000000000002",
         "resource": {
           "resourceType": "VisionPrescription",
-          "id": "00000000-0000-4000-8000-000000000003",
+          "id": "00000000-0000-4000-8000-000000000002",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0"
@@ -4281,7 +4269,7 @@
           },
           "dateWritten": "2026-08-01",
           "prescriber": {
-            "reference": "Practitioner/00000000-0000-4000-8000-000000000002"
+            "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
           },
           "lensSpecification": [
             {
@@ -4350,20 +4338,6 @@
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
             }
           ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
-            }
-          ],
           "period": {
             "start": "2026-01-01",
             "end": "2026-12-31"
@@ -4371,10 +4345,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Practitioner/00000000-0000-4000-8000-000000000002",
+        "fullUrl": "http://provider.com/Practitioner/55555555-5555-4555-8555-555555555555",
         "resource": {
           "resourceType": "Practitioner",
-          "id": "00000000-0000-4000-8000-000000000002",
+          "id": "55555555-5555-4555-8555-555555555555",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -4392,17 +4366,17 @@
                 ]
               },
               "system": "http://nphies.sa/license/practitioner-license",
-              "value": "PRACT-00000000"
+              "value": "TEST-PRACTITIONER"
             }
           ],
           "active": true,
           "name": [
             {
               "use": "official",
-              "text": "Default Practitioner",
+              "text": "Test Practitioner",
               "family": "Practitioner",
               "given": [
-                "Default"
+                "Test"
               ]
             }
           ],
@@ -4412,8 +4386,8 @@
                 "coding": [
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
-                    "code": "11.00",
-                    "display": "Healthcare Professional"
+                    "code": "08.00",
+                    "display": "Internal Medicine Specialty"
                   }
                 ]
               }
@@ -4488,7 +4462,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -4602,7 +4576,7 @@
   },
   "claim-vision": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000006",
+    "id": "00000000-0000-4000-8000-000000000005",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -4612,10 +4586,10 @@
     "timestamp": "2026-08-01T09:00:00.000Z",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000005",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000004",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000004",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -4672,7 +4646,7 @@
             {
               "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-prescription",
               "valueReference": {
-                "reference": "VisionPrescription/00000000-0000-4000-8000-000000000003"
+                "reference": "VisionPrescription/00000000-0000-4000-8000-000000000002"
               }
             },
             {
@@ -4745,13 +4719,13 @@
             }
           },
           "prescription": {
-            "reference": "VisionPrescription/00000000-0000-4000-8000-000000000003"
+            "reference": "VisionPrescription/00000000-0000-4000-8000-000000000002"
           },
           "careTeam": [
             {
               "sequence": 1,
               "provider": {
-                "reference": "Practitioner/00000000-0000-4000-8000-000000000002"
+                "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
               },
               "role": {
                 "coding": [
@@ -4821,6 +4795,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
@@ -4874,8 +4849,7 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -4885,10 +4859,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/VisionPrescription/00000000-0000-4000-8000-000000000003",
+        "fullUrl": "http://provider.com/VisionPrescription/00000000-0000-4000-8000-000000000002",
         "resource": {
           "resourceType": "VisionPrescription",
-          "id": "00000000-0000-4000-8000-000000000003",
+          "id": "00000000-0000-4000-8000-000000000002",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-prescription|1.0.0"
@@ -4907,7 +4881,7 @@
           },
           "dateWritten": "2026-08-01",
           "prescriber": {
-            "reference": "Practitioner/00000000-0000-4000-8000-000000000002"
+            "reference": "Practitioner/55555555-5555-4555-8555-555555555555"
           },
           "lensSpecification": [
             {
@@ -4976,20 +4950,6 @@
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
             }
           ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
-            }
-          ],
           "period": {
             "start": "2026-01-01",
             "end": "2026-12-31"
@@ -4997,10 +4957,10 @@
         }
       },
       {
-        "fullUrl": "http://provider.com/Practitioner/00000000-0000-4000-8000-000000000002",
+        "fullUrl": "http://provider.com/Practitioner/55555555-5555-4555-8555-555555555555",
         "resource": {
           "resourceType": "Practitioner",
-          "id": "00000000-0000-4000-8000-000000000002",
+          "id": "55555555-5555-4555-8555-555555555555",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -5018,17 +4978,17 @@
                 ]
               },
               "system": "http://nphies.sa/license/practitioner-license",
-              "value": "PRACT-00000000"
+              "value": "TEST-PRACTITIONER"
             }
           ],
           "active": true,
           "name": [
             {
               "use": "official",
-              "text": "Default Practitioner",
+              "text": "Test Practitioner",
               "family": "Practitioner",
               "given": [
-                "Default"
+                "Test"
               ]
             }
           ],
@@ -5039,7 +4999,7 @@
                   {
                     "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
                     "code": "08.00",
-                    "display": "Healthcare Professional"
+                    "display": "Internal Medicine Specialty"
                   }
                 ]
               }
@@ -5114,7 +5074,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -5410,6 +5370,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package",
@@ -5476,8 +5437,7 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -5533,20 +5493,6 @@
           "payor": [
             {
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
-            }
-          ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
             }
           ],
           "period": {
@@ -5622,7 +5568,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -5892,7 +5838,6 @@
           },
           "supportingInfo": [
             {
-              "sequence": 1,
               "category": {
                 "coding": [
                   {
@@ -5909,10 +5854,10 @@
                     "display": "Not applicable"
                   }
                 ]
-              }
+              },
+              "sequence": 1
             },
             {
-              "sequence": 2,
               "category": {
                 "coding": [
                   {
@@ -5921,10 +5866,10 @@
                   }
                 ]
               },
-              "valueString": "Medication therapy as prescribed"
+              "valueString": "Synthetic treatment plan",
+              "sequence": 2
             },
             {
-              "sequence": 3,
               "category": {
                 "coding": [
                   {
@@ -5933,10 +5878,10 @@
                   }
                 ]
               },
-              "valueString": "No significant past medical history"
+              "valueString": "Synthetic patient history",
+              "sequence": 3
             },
             {
-              "sequence": 4,
               "category": {
                 "coding": [
                   {
@@ -5945,10 +5890,10 @@
                   }
                 ]
               },
-              "valueString": "Within normal limits"
+              "valueString": "Synthetic examination",
+              "sequence": 4
             },
             {
-              "sequence": 5,
               "category": {
                 "coding": [
                   {
@@ -5957,10 +5902,25 @@
                   }
                 ]
               },
-              "valueString": "Patient presents with symptoms requiring medication"
+              "valueString": "Synthetic illness history",
+              "sequence": 5
             },
             {
               "sequence": 6,
+              "category": {
+                "coding": [
+                  {
+                    "system": "http://nphies.sa/terminology/CodeSystem/claim-information-category",
+                    "code": "chief-complaint"
+                  }
+                ]
+              },
+              "code": {
+                "text": "Synthetic test only"
+              }
+            },
+            {
+              "sequence": 7,
               "category": {
                 "coding": [
                   {
@@ -6010,6 +5970,7 @@
           ],
           "item": [
             {
+              "factor": 1,
               "extension": [
                 {
                   "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
@@ -6068,7 +6029,7 @@
                 1
               ],
               "informationSequence": [
-                6
+                7
               ],
               "productOrService": {
                 "coding": [
@@ -6090,8 +6051,7 @@
               "net": {
                 "value": 100,
                 "currency": "SAR"
-              },
-              "factor": 1
+              }
             }
           ],
           "total": {
@@ -6147,20 +6107,6 @@
           "payor": [
             {
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
-            }
-          ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "default-plan",
-              "name": "Insurance Plan"
             }
           ],
           "period": {
@@ -6236,7 +6182,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -6393,7 +6339,7 @@
             }
           },
           "source": {
-            "endpoint": "http://testhospital.com"
+            "endpoint": "http://provider.com"
           },
           "focus": [
             {
@@ -6414,8 +6360,8 @@
           },
           "identifier": [
             {
-              "system": "http://testhospital.com/identifiers/task",
-              "value": "Cancel_TEST-PA-1"
+              "system": "http://testhospital.com.sa/identifiers/task",
+              "value": "Cancel_TEST-PA-1_00000000-0000-4000-8000-000000000001"
             }
           ],
           "status": "requested",
@@ -6432,7 +6378,7 @@
           "focus": {
             "type": "Claim",
             "identifier": {
-              "system": "http://testhospital.com/identifiers/authorization",
+              "system": "http://testhospital.com.sa/identifiers/authorization",
               "value": "TEST-PA-1"
             }
           },
@@ -6477,7 +6423,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -6552,7 +6498,7 @@
       ]
     },
     "type": "message",
-    "timestamp": "2026-08-01T09:00:00.000Z",
+    "timestamp": "2026-08-01T12:00:00+03:00",
     "entry": [
       {
         "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000002",
@@ -6703,20 +6649,20 @@
   },
   "eligibility": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000003",
+    "id": "00000000-0000-4000-8000-000000000005",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
       ]
     },
     "type": "message",
-    "timestamp": "2026-08-01T09:00:00.000Z",
+    "timestamp": "2026-08-01T12:00:00+03:00",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000002",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000004",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000002",
+          "id": "00000000-0000-4000-8000-000000000004",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -6728,12 +6674,12 @@
           },
           "destination": [
             {
-              "endpoint": "http://nphies.sa/license/payer-license/INS-FHIR",
+              "endpoint": "http://nphies.sa/license/payer-license/TEST-INSURER",
               "receiver": {
                 "type": "Organization",
                 "identifier": {
                   "system": "http://nphies.sa/license/payer-license",
-                  "value": "INS-FHIR"
+                  "value": "TEST-INSURER"
                 }
               }
             }
@@ -6750,16 +6696,16 @@
           },
           "focus": [
             {
-              "reference": "http://provider.com/CoverageEligibilityRequest/00000"
+              "reference": "http://provider.com/CoverageEligibilityRequest/00000000-0000-4000-8000-000000000003"
             }
           ]
         }
       },
       {
-        "fullUrl": "http://provider.com/CoverageEligibilityRequest/00000",
+        "fullUrl": "http://provider.com/CoverageEligibilityRequest/00000000-0000-4000-8000-000000000003",
         "resource": {
           "resourceType": "CoverageEligibilityRequest",
-          "id": "00000",
+          "id": "00000000-0000-4000-8000-000000000003",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/eligibility-request|1.0.0"
@@ -6768,7 +6714,7 @@
           "identifier": [
             {
               "system": "http://provider.com/identifiers/coverageeligibilityrequest",
-              "value": "req_800000"
+              "value": "req_00000000-0000-4000-8000-000000000002"
             }
           ],
           "status": "active",
@@ -6856,20 +6802,6 @@
           "payor": [
             {
               "reference": "Organization/33333333-3333-4333-8333-333333333333"
-            }
-          ],
-          "class": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                    "code": "plan"
-                  }
-                ]
-              },
-              "value": "Standard",
-              "name": "Insurance Plan"
             }
           ]
         }
@@ -7032,7 +6964,7 @@
                 ]
               },
               "system": "http://nphies.sa/license/payer-license",
-              "value": "INS-FHIR"
+              "value": "TEST-INSURER"
             }
           ],
           "active": true,
@@ -7064,7 +6996,7 @@
           "identifier": [
             {
               "system": "http://nphies.sa/license/location-license",
-              "value": "GACH"
+              "value": "TEST-LOCATION"
             }
           ],
           "status": "active",
@@ -7088,7 +7020,7 @@
   },
   "batch": {
     "resourceType": "Bundle",
-    "id": "00000000-0000-4000-8000-000000000013",
+    "id": "00000000-0000-4000-8000-000000000015",
     "meta": {
       "profile": [
         "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -7098,10 +7030,10 @@
     "timestamp": "2026-08-01T12:00:00+03:00",
     "entry": [
       {
-        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000014",
+        "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000016",
         "resource": {
           "resourceType": "MessageHeader",
-          "id": "00000000-0000-4000-8000-000000000014",
+          "id": "00000000-0000-4000-8000-000000000016",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -7135,19 +7067,19 @@
           },
           "focus": [
             {
-              "reference": "http://PR-FHIR.com.sa/Bundle/00000000-0000-4000-8000-000000000006"
+              "reference": "http://PR-FHIR.com.sa/Bundle/00000000-0000-4000-8000-000000000007"
             },
             {
-              "reference": "http://PR-FHIR.com.sa/Bundle/00000000-0000-4000-8000-000000000012"
+              "reference": "http://PR-FHIR.com.sa/Bundle/00000000-0000-4000-8000-000000000014"
             }
           ]
         }
       },
       {
-        "fullUrl": "http://PR-FHIR.com.sa/Bundle/00000000-0000-4000-8000-000000000006",
+        "fullUrl": "http://PR-FHIR.com.sa/Bundle/00000000-0000-4000-8000-000000000007",
         "resource": {
           "resourceType": "Bundle",
-          "id": "00000000-0000-4000-8000-000000000006",
+          "id": "00000000-0000-4000-8000-000000000007",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -7157,10 +7089,10 @@
           "timestamp": "2026-08-01T09:00:00.000Z",
           "entry": [
             {
-              "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000005",
+              "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000006",
               "resource": {
                 "resourceType": "MessageHeader",
-                "id": "00000000-0000-4000-8000-000000000005",
+                "id": "00000000-0000-4000-8000-000000000006",
                 "meta": {
                   "profile": [
                     "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -7239,7 +7171,8 @@
                   {
                     "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
                     "valueIdentifier": {
-                      "system": "http://PR-FHIR.com.sa/identifiers/batch"
+                      "system": "http://PR-FHIR.com.sa/identifiers/batch",
+                      "value": "TEST-BATCH"
                     }
                   },
                   {
@@ -7249,8 +7182,8 @@
                   {
                     "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period",
                     "valuePeriod": {
-                      "start": null,
-                      "end": null
+                      "start": "2026-08-01",
+                      "end": "2026-08-01"
                     }
                   }
                 ],
@@ -7288,6 +7221,9 @@
                 "provider": {
                   "reference": "http://PR-FHIR.com.sa/Organization/22222222-2222-4222-8222-222222222222"
                 },
+                "facility": {
+                  "reference": "http://PR-FHIR.com.sa/Location/00000000-0000-4000-8000-000000000004"
+                },
                 "priority": {
                   "coding": [
                     {
@@ -7310,7 +7246,7 @@
                   {
                     "sequence": 1,
                     "provider": {
-                      "reference": "http://PR-FHIR.com.sa/Practitioner/00000000-0000-4000-8000-000000000003"
+                      "reference": "http://PR-FHIR.com.sa/Practitioner/55555555-5555-4555-8555-555555555555"
                     },
                     "role": {
                       "coding": [
@@ -7332,7 +7268,6 @@
                 ],
                 "supportingInfo": [
                   {
-                    "sequence": 1,
                     "category": {
                       "coding": [
                         {
@@ -7342,11 +7277,11 @@
                       ]
                     },
                     "code": {
-                      "text": "Patient presenting for evaluation"
-                    }
+                      "text": "Synthetic test only"
+                    },
+                    "sequence": 1
                   },
                   {
-                    "sequence": 2,
                     "category": {
                       "coding": [
                         {
@@ -7355,10 +7290,10 @@
                         }
                       ]
                     },
-                    "valueString": "No systemic disease"
+                    "valueString": "Synthetic patient history",
+                    "sequence": 2
                   },
                   {
-                    "sequence": 3,
                     "category": {
                       "coding": [
                         {
@@ -7371,14 +7306,14 @@
                       "coding": [
                         {
                           "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
-                          "code": "INP",
-                          "display": "Investigation(s) not performed"
+                          "code": "NA",
+                          "display": "Not applicable"
                         }
                       ]
-                    }
+                    },
+                    "sequence": 3
                   },
                   {
-                    "sequence": 4,
                     "category": {
                       "coding": [
                         {
@@ -7387,10 +7322,10 @@
                         }
                       ]
                     },
-                    "valueString": "Analgesic Drugs"
+                    "valueString": "Synthetic treatment plan",
+                    "sequence": 4
                   },
                   {
-                    "sequence": 5,
                     "category": {
                       "coding": [
                         {
@@ -7399,10 +7334,10 @@
                         }
                       ]
                     },
-                    "valueString": "Stable"
+                    "valueString": "Synthetic examination",
+                    "sequence": 5
                   },
                   {
-                    "sequence": 6,
                     "category": {
                       "coding": [
                         {
@@ -7411,7 +7346,8 @@
                         }
                       ]
                     },
-                    "valueString": "No history"
+                    "valueString": "Synthetic illness history",
+                    "sequence": 6
                   }
                 ],
                 "diagnosis": [
@@ -7448,6 +7384,7 @@
                 ],
                 "item": [
                   {
+                    "factor": 1,
                     "extension": [
                       {
                         "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
@@ -7506,8 +7443,7 @@
                     "net": {
                       "value": 100,
                       "currency": "SAR"
-                    },
-                    "factor": 1
+                    }
                   }
                 ],
                 "total": {
@@ -7617,20 +7553,6 @@
                     "reference": "http://PR-FHIR.com.sa/Organization/33333333-3333-4333-8333-333333333333"
                   }
                 ],
-                "class": [
-                  {
-                    "type": {
-                      "coding": [
-                        {
-                          "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                          "code": "plan"
-                        }
-                      ]
-                    },
-                    "value": "default-plan",
-                    "name": "Insurance Plan"
-                  }
-                ],
                 "period": {
                   "start": "2026-01-01",
                   "end": "2026-12-31"
@@ -7638,10 +7560,10 @@
               }
             },
             {
-              "fullUrl": "http://PR-FHIR.com.sa/Practitioner/00000000-0000-4000-8000-000000000003",
+              "fullUrl": "http://PR-FHIR.com.sa/Practitioner/55555555-5555-4555-8555-555555555555",
               "resource": {
                 "resourceType": "Practitioner",
-                "id": "00000000-0000-4000-8000-000000000003",
+                "id": "55555555-5555-4555-8555-555555555555",
                 "meta": {
                   "profile": [
                     "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -7659,17 +7581,17 @@
                       ]
                     },
                     "system": "http://nphies.sa/license/practitioner-license",
-                    "value": "PRACT-00000000"
+                    "value": "TEST-PRACTITIONER"
                   }
                 ],
                 "active": true,
                 "name": [
                   {
                     "use": "official",
-                    "text": "Default Practitioner",
+                    "text": "Test Practitioner",
                     "family": "Practitioner",
                     "given": [
-                      "Default"
+                      "Test"
                     ]
                   }
                 ],
@@ -7680,7 +7602,7 @@
                         {
                           "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
                           "code": "08.00",
-                          "display": "Healthcare Professional"
+                          "display": "Internal Medicine Specialty"
                         }
                       ]
                     }
@@ -7755,7 +7677,7 @@
                       ]
                     },
                     "system": "http://nphies.sa/license/payer-license",
-                    "value": "INS-FHIR"
+                    "value": "TEST-INSURER"
                   }
                 ],
                 "active": true,
@@ -7772,6 +7694,39 @@
                 ],
                 "name": "Test Insurer",
                 "address": []
+              }
+            },
+            {
+              "fullUrl": "http://PR-FHIR.com.sa/Location/00000000-0000-4000-8000-000000000004",
+              "resource": {
+                "resourceType": "Location",
+                "id": "00000000-0000-4000-8000-000000000004",
+                "meta": {
+                  "profile": [
+                    "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0"
+                  ]
+                },
+                "identifier": [
+                  {
+                    "system": "http://nphies.sa/license/location-license",
+                    "value": "TEST-LOCATION"
+                  }
+                ],
+                "status": "active",
+                "name": "Test Hospital",
+                "type": [
+                  {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+                        "code": "GACH"
+                      }
+                    ]
+                  }
+                ],
+                "managingOrganization": {
+                  "reference": "http://PR-FHIR.com.sa/Organization/22222222-2222-4222-8222-222222222222"
+                }
               }
             },
             {
@@ -7869,10 +7824,10 @@
         }
       },
       {
-        "fullUrl": "http://PR-FHIR.com.sa/Bundle/00000000-0000-4000-8000-000000000012",
+        "fullUrl": "http://PR-FHIR.com.sa/Bundle/00000000-0000-4000-8000-000000000014",
         "resource": {
           "resourceType": "Bundle",
-          "id": "00000000-0000-4000-8000-000000000012",
+          "id": "00000000-0000-4000-8000-000000000014",
           "meta": {
             "profile": [
               "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0"
@@ -7882,10 +7837,10 @@
           "timestamp": "2026-08-01T09:00:00.000Z",
           "entry": [
             {
-              "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000011",
+              "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000013",
               "resource": {
                 "resourceType": "MessageHeader",
-                "id": "00000000-0000-4000-8000-000000000011",
+                "id": "00000000-0000-4000-8000-000000000013",
                 "meta": {
                   "profile": [
                     "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0"
@@ -7919,16 +7874,16 @@
                 },
                 "focus": [
                   {
-                    "reference": "http://PR-FHIR.com.sa/Claim/00000000-0000-4000-8000-000000000007"
+                    "reference": "http://PR-FHIR.com.sa/Claim/00000000-0000-4000-8000-000000000008"
                   }
                 ]
               }
             },
             {
-              "fullUrl": "http://PR-FHIR.com.sa/Claim/00000000-0000-4000-8000-000000000007",
+              "fullUrl": "http://PR-FHIR.com.sa/Claim/00000000-0000-4000-8000-000000000008",
               "resource": {
                 "resourceType": "Claim",
-                "id": "00000000-0000-4000-8000-000000000007",
+                "id": "00000000-0000-4000-8000-000000000008",
                 "meta": {
                   "profile": [
                     "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/professional-claim|1.0.0"
@@ -7938,7 +7893,7 @@
                   {
                     "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-encounter",
                     "valueReference": {
-                      "reference": "http://PR-FHIR.com.sa/Encounter/00000000-0000-4000-8000-000000000008"
+                      "reference": "http://PR-FHIR.com.sa/Encounter/00000000-0000-4000-8000-000000000009"
                     }
                   },
                   {
@@ -7964,7 +7919,8 @@
                   {
                     "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-identifier",
                     "valueIdentifier": {
-                      "system": "http://PR-FHIR.com.sa/identifiers/batch"
+                      "system": "http://PR-FHIR.com.sa/identifiers/batch",
+                      "value": "TEST-BATCH"
                     }
                   },
                   {
@@ -7974,8 +7930,8 @@
                   {
                     "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-batch-period",
                     "valuePeriod": {
-                      "start": null,
-                      "end": null
+                      "start": "2026-08-01",
+                      "end": "2026-08-01"
                     }
                   }
                 ],
@@ -8013,6 +7969,9 @@
                 "provider": {
                   "reference": "http://PR-FHIR.com.sa/Organization/22222222-2222-4222-8222-222222222222"
                 },
+                "facility": {
+                  "reference": "http://PR-FHIR.com.sa/Location/00000000-0000-4000-8000-000000000011"
+                },
                 "priority": {
                   "coding": [
                     {
@@ -8035,7 +7994,7 @@
                   {
                     "sequence": 1,
                     "provider": {
-                      "reference": "http://PR-FHIR.com.sa/Practitioner/00000000-0000-4000-8000-000000000009"
+                      "reference": "http://PR-FHIR.com.sa/Practitioner/55555555-5555-4555-8555-555555555555"
                     },
                     "role": {
                       "coding": [
@@ -8057,7 +8016,6 @@
                 ],
                 "supportingInfo": [
                   {
-                    "sequence": 1,
                     "category": {
                       "coding": [
                         {
@@ -8067,11 +8025,11 @@
                       ]
                     },
                     "code": {
-                      "text": "Patient presenting for evaluation"
-                    }
+                      "text": "Synthetic test only"
+                    },
+                    "sequence": 1
                   },
                   {
-                    "sequence": 2,
                     "category": {
                       "coding": [
                         {
@@ -8080,10 +8038,10 @@
                         }
                       ]
                     },
-                    "valueString": "No systemic disease"
+                    "valueString": "Synthetic patient history",
+                    "sequence": 2
                   },
                   {
-                    "sequence": 3,
                     "category": {
                       "coding": [
                         {
@@ -8096,14 +8054,14 @@
                       "coding": [
                         {
                           "system": "http://nphies.sa/terminology/CodeSystem/investigation-result",
-                          "code": "INP",
-                          "display": "Investigation(s) not performed"
+                          "code": "NA",
+                          "display": "Not applicable"
                         }
                       ]
-                    }
+                    },
+                    "sequence": 3
                   },
                   {
-                    "sequence": 4,
                     "category": {
                       "coding": [
                         {
@@ -8112,10 +8070,10 @@
                         }
                       ]
                     },
-                    "valueString": "Analgesic Drugs"
+                    "valueString": "Synthetic treatment plan",
+                    "sequence": 4
                   },
                   {
-                    "sequence": 5,
                     "category": {
                       "coding": [
                         {
@@ -8124,10 +8082,10 @@
                         }
                       ]
                     },
-                    "valueString": "Stable"
+                    "valueString": "Synthetic examination",
+                    "sequence": 5
                   },
                   {
-                    "sequence": 6,
                     "category": {
                       "coding": [
                         {
@@ -8136,7 +8094,8 @@
                         }
                       ]
                     },
-                    "valueString": "No history"
+                    "valueString": "Synthetic illness history",
+                    "sequence": 6
                   }
                 ],
                 "diagnosis": [
@@ -8173,6 +8132,7 @@
                 ],
                 "item": [
                   {
+                    "factor": 1,
                     "extension": [
                       {
                         "url": "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-patient-share",
@@ -8231,8 +8191,7 @@
                     "net": {
                       "value": 100,
                       "currency": "SAR"
-                    },
-                    "factor": 1
+                    }
                   }
                 ],
                 "total": {
@@ -8242,10 +8201,10 @@
               }
             },
             {
-              "fullUrl": "http://PR-FHIR.com.sa/Encounter/00000000-0000-4000-8000-000000000008",
+              "fullUrl": "http://PR-FHIR.com.sa/Encounter/00000000-0000-4000-8000-000000000009",
               "resource": {
                 "resourceType": "Encounter",
-                "id": "00000000-0000-4000-8000-000000000008",
+                "id": "00000000-0000-4000-8000-000000000009",
                 "meta": {
                   "profile": [
                     "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter|1.0.0"
@@ -8342,20 +8301,6 @@
                     "reference": "http://PR-FHIR.com.sa/Organization/33333333-3333-4333-8333-333333333333"
                   }
                 ],
-                "class": [
-                  {
-                    "type": {
-                      "coding": [
-                        {
-                          "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
-                          "code": "plan"
-                        }
-                      ]
-                    },
-                    "value": "default-plan",
-                    "name": "Insurance Plan"
-                  }
-                ],
                 "period": {
                   "start": "2026-01-01",
                   "end": "2026-12-31"
@@ -8363,10 +8308,10 @@
               }
             },
             {
-              "fullUrl": "http://PR-FHIR.com.sa/Practitioner/00000000-0000-4000-8000-000000000009",
+              "fullUrl": "http://PR-FHIR.com.sa/Practitioner/55555555-5555-4555-8555-555555555555",
               "resource": {
                 "resourceType": "Practitioner",
-                "id": "00000000-0000-4000-8000-000000000009",
+                "id": "55555555-5555-4555-8555-555555555555",
                 "meta": {
                   "profile": [
                     "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/practitioner|1.0.0"
@@ -8384,17 +8329,17 @@
                       ]
                     },
                     "system": "http://nphies.sa/license/practitioner-license",
-                    "value": "PRACT-00000000"
+                    "value": "TEST-PRACTITIONER"
                   }
                 ],
                 "active": true,
                 "name": [
                   {
                     "use": "official",
-                    "text": "Default Practitioner",
+                    "text": "Test Practitioner",
                     "family": "Practitioner",
                     "given": [
-                      "Default"
+                      "Test"
                     ]
                   }
                 ],
@@ -8405,7 +8350,7 @@
                         {
                           "system": "http://nphies.sa/terminology/CodeSystem/practice-codes",
                           "code": "08.00",
-                          "display": "Healthcare Professional"
+                          "display": "Internal Medicine Specialty"
                         }
                       ]
                     }
@@ -8480,7 +8425,7 @@
                       ]
                     },
                     "system": "http://nphies.sa/license/payer-license",
-                    "value": "INS-FHIR"
+                    "value": "TEST-INSURER"
                   }
                 ],
                 "active": true,
@@ -8497,6 +8442,39 @@
                 ],
                 "name": "Test Insurer",
                 "address": []
+              }
+            },
+            {
+              "fullUrl": "http://PR-FHIR.com.sa/Location/00000000-0000-4000-8000-000000000011",
+              "resource": {
+                "resourceType": "Location",
+                "id": "00000000-0000-4000-8000-000000000011",
+                "meta": {
+                  "profile": [
+                    "http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/location|1.0.0"
+                  ]
+                },
+                "identifier": [
+                  {
+                    "system": "http://nphies.sa/license/location-license",
+                    "value": "TEST-LOCATION"
+                  }
+                ],
+                "status": "active",
+                "name": "Test Hospital",
+                "type": [
+                  {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+                        "code": "GACH"
+                      }
+                    ]
+                  }
+                ],
+                "managingOrganization": {
+                  "reference": "http://PR-FHIR.com.sa/Organization/22222222-2222-4222-8222-222222222222"
+                }
               }
             },
             {

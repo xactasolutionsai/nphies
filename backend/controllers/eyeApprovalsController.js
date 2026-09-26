@@ -1,5 +1,15 @@
 import { eyeFields } from '../models/approvalFields.js';
 import { selectInputFields, validateNestedArrays } from '../utils/inputFields.js';
+
+function parseJsonField(value, field) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    const error = new Error(`${field} must be valid JSON`);
+    error.status = 400;
+    throw error;
+  }
+}
 import { atomicMethods } from '../utils/atomicController.js';
 import { BaseController } from './baseController.js';
 import { query } from '../db.js';
@@ -40,6 +50,8 @@ class EyeApprovalsController extends BaseController {
       }
 
       const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+      // The count query has no LIMIT/OFFSET, so its placeholders start at $1 instead of $3
+      const countWhereClause = whereClause.replace(/\$(\d+)/g, (_, n) => `$${Number(n) - 2}`);
 
       // Get total count
       const countQuery = `
@@ -48,7 +60,7 @@ class EyeApprovalsController extends BaseController {
         LEFT JOIN patients p ON ea.patient_id = p.patient_id
         LEFT JOIN providers pr ON ea.provider_id = pr.provider_id
         LEFT JOIN insurers i ON ea.insurer_id = i.insurer_id
-        ${whereClause}
+        ${countWhereClause}
       `;
       const countResult = await query(countQuery, countParams);
       const total = parseInt(countResult.rows[0].total);
@@ -171,13 +183,13 @@ class EyeApprovalsController extends BaseController {
 
       // Handle JSONB fields - ensure they are proper JSON objects
       if (cleanedData.right_eye_specs && typeof cleanedData.right_eye_specs === 'string') {
-        cleanedData.right_eye_specs = JSON.parse(cleanedData.right_eye_specs);
+        cleanedData.right_eye_specs = parseJsonField(cleanedData.right_eye_specs, 'right_eye_specs');
       }
       if (cleanedData.left_eye_specs && typeof cleanedData.left_eye_specs === 'string') {
-        cleanedData.left_eye_specs = JSON.parse(cleanedData.left_eye_specs);
+        cleanedData.left_eye_specs = parseJsonField(cleanedData.left_eye_specs, 'left_eye_specs');
       }
       if (cleanedData.lens_specifications && typeof cleanedData.lens_specifications === 'string') {
-        cleanedData.lens_specifications = JSON.parse(cleanedData.lens_specifications);
+        cleanedData.lens_specifications = parseJsonField(cleanedData.lens_specifications, 'lens_specifications');
       }
 
       // Convert empty strings to null for all other string fields
@@ -252,11 +264,9 @@ class EyeApprovalsController extends BaseController {
           errors: [{ field: fieldName, message: `Invalid ${fieldName} reference` }]
         });
       } else {
-        // Return detailed error message
-        const errorMessage = error.message || 'Failed to create eye approval';
-        res.status(500).json({ 
-          error: errorMessage,
-          details: error.detail || error.hint || null
+        // Never echo raw database error text to the client
+        res.status(error.status || 500).json({
+          error: error.status ? error.message : 'Failed to create eye approval'
         });
       }
     }
@@ -270,7 +280,7 @@ class EyeApprovalsController extends BaseController {
 
       // Clean up empty strings: convert empty strings to null for dates and numbers
       validateNestedArrays(req.body, ["procedures"]);
-      const cleanedData = selectInputFields(formData, eyeFields, ['patient_name', 'patient_identifier', 'insurer_name']);
+      const cleanedData = selectInputFields(formData, eyeFields, ['patient_name', 'patient_identifier', 'insurer_name', 'provider_name_joined']);
       const dateFields = ['date_of_visit', 'expiry_date', 'provider_date'];
       const numberFields = ['age', 'duration_of_illness_days', 'number_of_pairs'];
       
@@ -293,13 +303,13 @@ class EyeApprovalsController extends BaseController {
 
       // Handle JSONB fields - ensure they are proper JSON objects
       if (cleanedData.right_eye_specs && typeof cleanedData.right_eye_specs === 'string') {
-        cleanedData.right_eye_specs = JSON.parse(cleanedData.right_eye_specs);
+        cleanedData.right_eye_specs = parseJsonField(cleanedData.right_eye_specs, 'right_eye_specs');
       }
       if (cleanedData.left_eye_specs && typeof cleanedData.left_eye_specs === 'string') {
-        cleanedData.left_eye_specs = JSON.parse(cleanedData.left_eye_specs);
+        cleanedData.left_eye_specs = parseJsonField(cleanedData.left_eye_specs, 'left_eye_specs');
       }
       if (cleanedData.lens_specifications && typeof cleanedData.lens_specifications === 'string') {
-        cleanedData.lens_specifications = JSON.parse(cleanedData.lens_specifications);
+        cleanedData.lens_specifications = parseJsonField(cleanedData.lens_specifications, 'lens_specifications');
       }
 
       // Convert empty strings to null for all other string fields
@@ -370,11 +380,9 @@ class EyeApprovalsController extends BaseController {
           errors: [{ field: fieldName, message: `Invalid ${fieldName} reference` }]
         });
       } else {
-        // Return detailed error message
-        const errorMessage = error.message || 'Failed to update eye approval';
-        res.status(500).json({ 
-          error: errorMessage,
-          details: error.detail || error.hint || null
+        // Never echo raw database error text to the client
+        res.status(error.status || 500).json({
+          error: error.status ? error.message : 'Failed to update eye approval'
         });
       }
     }

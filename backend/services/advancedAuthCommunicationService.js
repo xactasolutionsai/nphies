@@ -15,11 +15,12 @@
  * - Acknowledgment polling
  */
 
-import { randomUUID } from 'crypto';
-import pool from '../db.js';
 import nphiesService from './nphiesService.js';
 import CommunicationMapper from './communicationMapper.js';
+import systemPollService from './systemPollService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
+import { connectWithSchema, releaseSchemaClient, withSchemaClient } from './dbSchema.js';
+import { sendAndRecordCommunication } from './communicationOutbox.js';
 
 class AdvancedAuthCommunicationService {
   constructor() {
@@ -226,10 +227,8 @@ class AdvancedAuthCommunicationService {
   // ============================================================================
 
   async previewCommunicationBundle(advAuthId, payloads, type = 'unsolicited', communicationRequestId = null, schemaName) {
-    const client = await pool.connect();
-
+    const client = await connectWithSchema(schemaName);
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
       const { advAuth, patient, provider, insurer, coverage } = await this.getAdvancedAuthWithEntities(client, advAuthId);
 
       const authIdentifier = advAuth.identifier_value || advAuth.pre_auth_ref;
@@ -250,7 +249,6 @@ class AdvancedAuthCommunicationService {
           insurer,
           coverage,
           payloads,
-          messageEventCode: 'priorauth-request',
           communicationStatus: 'completed'
         });
       } else if (type === 'solicited' && communicationRequestId) {
@@ -285,7 +283,6 @@ class AdvancedAuthCommunicationService {
           insurer,
           coverage,
           payloads,
-          messageEventCode: 'priorauth-request',
           communicationStatus: 'completed'
         });
       } else {
@@ -300,7 +297,7 @@ class AdvancedAuthCommunicationService {
         coverage
       };
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -308,400 +305,155 @@ class AdvancedAuthCommunicationService {
   // SEND COMMUNICATIONS
   // ============================================================================
 
+  // The MessageHeader event is the mapper default, 'communication': the focus of
+  // these bundles is a Communication, not a prior-authorization Claim.
+
   async sendUnsolicitedCommunication(advAuthId, payloads, schemaName) {
-    const client = await pool.connect();
-
     try {
-      await client.query('BEGIN');
-      await client.query(`SET search_path TO ${schemaName}`);
+      const { communicationBundle, provider, insurer, requestIdentifier } = await withSchemaClient(schemaName, async client => {
+        const { advAuth, patient, provider, insurer, coverage } = await this.getAdvancedAuthWithEntities(client, advAuthId);
+        const authIdentifier = advAuth.identifier_value || advAuth.pre_auth_ref;
+        const claimResponse = advAuth.response_bundle;
+        const requestIdentifier = claimResponse?.request?.identifier?.value || authIdentifier;
 
-      const { advAuth, patient, provider, insurer, coverage } = await this.getAdvancedAuthWithEntities(client, advAuthId);
-      const authIdentifier = advAuth.identifier_value || advAuth.pre_auth_ref;
-      const claimResponse = advAuth.response_bundle;
-      const requestIdentifier = claimResponse?.request?.identifier?.value || authIdentifier;
+        const communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
+          priorAuth: {
+            nphies_request_id: requestIdentifier,
+            request_number: requestIdentifier,
+            pre_auth_ref: advAuth.pre_auth_ref || authIdentifier
+          },
+          patient,
+          provider,
+          insurer,
+          coverage,
+          payloads,
+          communicationStatus: 'completed'
+        });
+        return { communicationBundle, provider, insurer, requestIdentifier };
+      });
 
-      const communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
-        priorAuth: {
-          nphies_request_id: requestIdentifier,
-          request_number: requestIdentifier,
-          pre_auth_ref: advAuth.pre_auth_ref || authIdentifier
-        },
-        patient,
-        provider,
-        insurer,
-        coverage,
+      // Record, send (outside any transaction) and store the outcome
+      return await sendAndRecordCommunication({
+        schemaName,
+        communicationBundle,
         payloads,
-        messageEventCode: 'priorauth-request',
-        communicationStatus: 'completed'
-      });
-
-      const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
-
-      console.log(`[AdvAuthCommService] Unsolicited NPHIES response:`, {
-        success: nphiesResponse.success,
-        status: nphiesResponse.status,
-        hasData: !!nphiesResponse.data
-      });
-
-      // Extract Communication ID from our request bundle
-      const communicationResource = communicationBundle.entry?.find(
-        e => e.resource?.resourceType === 'Communication'
-      )?.resource;
-      const communicationId = communicationResource?.id || randomUUID();
-
-      // Extract NPHIES acknowledgment from response
-      let nphiesCommunicationId = null;
-      let acknowledgmentReceived = false;
-      let acknowledgmentStatus = null;
-      let isQueuedMessage = false;
-
-      if (nphiesResponse.data && nphiesResponse.data.entry) {
-        const responseMessageHeader = nphiesResponse.data.entry.find(
-          e => e.resource?.resourceType === 'MessageHeader'
-        )?.resource;
-
-        if (responseMessageHeader) {
-          const metaTags = responseMessageHeader.meta?.tag || [];
-          isQueuedMessage = metaTags.some(
-            tag => tag.code === 'queued-messages' ||
-                   tag.system === 'http://nphies.sa/terminology/CodeSystem/meta-tags'
-          );
-
-          if (responseMessageHeader.response?.code) {
-            if (isQueuedMessage) {
-              acknowledgmentReceived = false;
-              acknowledgmentStatus = 'queued';
-            } else {
-              acknowledgmentReceived = true;
-              acknowledgmentStatus = responseMessageHeader.response.code;
-            }
-          }
-
-          if (responseMessageHeader.id) {
-            nphiesCommunicationId = responseMessageHeader.id;
-          }
-        }
-
-        const responseCommunication = nphiesResponse.data.entry.find(
-          e => e.resource?.resourceType === 'Communication'
-        )?.resource;
-        if (responseCommunication?.id) {
-          nphiesCommunicationId = responseCommunication.id;
-        }
-      }
-
-      // Store Communication in database
-      const insertResult = await client.query(`
-        INSERT INTO nphies_communications (
-          communication_id, nphies_communication_id,
-          prior_auth_id, claim_id, advanced_authorization_id,
-          patient_id, communication_type, status, category, priority,
-          about_reference, about_type, sender_identifier, recipient_identifier,
-          sent_at, acknowledgment_received, acknowledgment_at, acknowledgment_status,
-          request_bundle, response_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-        RETURNING *
-      `, [
-        communicationId,
-        nphiesCommunicationId,
-        null, // prior_auth_id
-        null, // claim_id
-        advAuthId,
-        null, // patient_id - advanced auth patients don't have local DB records
-        'unsolicited',
-        nphiesResponse.success ? 'completed' : 'entered-in-error',
-        'alert',
-        'routine',
-        `http://provider.com/Claim/${requestIdentifier}`,
-        'Claim',
-        provider.nphies_id,
-        insurer.nphies_id,
-        new Date(),
-        acknowledgmentReceived,
-        acknowledgmentReceived ? new Date() : null,
-        acknowledgmentStatus,
-        JSON.stringify(communicationBundle),
-        nphiesResponse.data
-          ? JSON.stringify(nphiesResponse.data)
-          : nphiesResponse.error
-            ? JSON.stringify({ _fallback: true, error: nphiesResponse.error, status: nphiesResponse.status })
-            : null
-      ]);
-
-      const communication = insertResult.rows[0];
-
-      // Store payloads
-      for (let i = 0; i < payloads.length; i++) {
-        const payload = payloads[i];
-        await client.query(`
-          INSERT INTO nphies_communication_payloads (
-            communication_id, sequence, content_type, content_string,
-            attachment_content_type, attachment_data, attachment_url,
-            attachment_title, claim_item_sequences
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [
-          communication.id, i + 1, payload.contentType,
-          payload.contentString || null,
-          payload.attachment?.contentType || null,
-          payload.attachment?.data || null,
-          payload.attachment?.url || null,
-          payload.attachment?.title || null,
-          payload.claimItemSequences || null
-        ]);
-      }
-
-      await client.query('COMMIT');
-
-      return {
-        success: nphiesResponse.success,
-        communication: {
-          id: communication.id,
-          communicationId: communication.communication_id,
-          type: 'unsolicited',
-          status: communication.status,
-          sentAt: communication.sent_at,
-          payloadCount: payloads.length
+        record: {
+          advanced_authorization_id: advAuthId,
+          patient_id: null, // advanced auth patients don't have local DB records
+          communication_type: 'unsolicited',
+          about_reference: `http://provider.com/Claim/${requestIdentifier}`,
+          about_type: 'Claim',
+          sender_identifier: provider.nphies_id,
+          recipient_identifier: insurer.nphies_id
         },
-        nphiesResponse: {
-          status: nphiesResponse.status,
-          success: nphiesResponse.success,
-          error: nphiesResponse.error
-        }
-      };
+        logPrefix: '[AdvAuthCommService]'
+      });
 
     } catch (error) {
-      await client.query('ROLLBACK');
       console.error('[AdvAuthCommService] Error sending unsolicited communication:', error);
       throw error;
-    } finally {
-      client.release();
     }
   }
 
   async sendSolicitedCommunication(communicationRequestId, payloads, schemaName) {
-    const client = await pool.connect();
-
     try {
-      await client.query('BEGIN');
-      await client.query(`SET search_path TO ${schemaName}`);
+      const { commRequest, advAuthId, communicationBundle, provider, insurer } = await withSchemaClient(schemaName, async client => {
+        // Get CommunicationRequest with advanced auth data
+        const crResult = await client.query(`
+          SELECT cr.*, aa.id as aa_id, aa.identifier_value, aa.pre_auth_ref,
+                 aa.response_bundle, aa.patient_reference, aa.insurer_reference,
+                 aa.service_provider_reference
+          FROM nphies_communication_requests cr
+          LEFT JOIN advanced_authorizations aa ON cr.advanced_authorization_id = aa.id
+          WHERE cr.id = $1
+        `, [communicationRequestId]);
 
-      // Get CommunicationRequest with advanced auth data
-      const crResult = await client.query(`
-        SELECT cr.*, aa.id as aa_id, aa.identifier_value, aa.pre_auth_ref,
-               aa.response_bundle, aa.patient_reference, aa.insurer_reference,
-               aa.service_provider_reference
-        FROM nphies_communication_requests cr
-        LEFT JOIN advanced_authorizations aa ON cr.advanced_authorization_id = aa.id
-        WHERE cr.id = $1
-      `, [communicationRequestId]);
+        if (crResult.rows.length === 0) {
+          throw new Error('CommunicationRequest not found');
+        }
 
-      if (crResult.rows.length === 0) {
-        throw new Error('CommunicationRequest not found');
-      }
+        const commRequest = crResult.rows[0];
+        const advAuthId = commRequest.aa_id || commRequest.advanced_authorization_id;
 
-      const commRequest = crResult.rows[0];
-      const advAuthId = commRequest.aa_id || commRequest.advanced_authorization_id;
+        // Extract entity data from the advanced auth
+        let patient, provider, insurer, coverage;
+        if (advAuthId) {
+          const entities = await this.getAdvancedAuthWithEntities(client, advAuthId);
+          patient = entities.patient;
+          provider = entities.provider;
+          insurer = entities.insurer;
+          coverage = entities.coverage;
+        } else {
+          // Fallback if no advanced auth linked
+          provider = {
+            provider_id: NPHIES_CONFIG.DEFAULT_PROVIDER_ID,
+            provider_name: 'Healthcare Provider',
+            nphies_id: NPHIES_CONFIG.DEFAULT_PROVIDER_ID,
+            provider_type: null,
+            address: null
+          };
+          insurer = {
+            insurer_id: null,
+            insurer_name: 'Insurance Company',
+            nphies_id: NPHIES_CONFIG.DEFAULT_INSURER_ID,
+            address: null
+          };
+          patient = {
+            patient_id: null, identifier: null, identifier_type: 'national_id',
+            name: null, gender: null, birth_date: null, phone: null, address: null
+          };
+        }
 
-      // Extract entity data from the advanced auth
-      let patient, provider, insurer, coverage;
-      if (advAuthId) {
-        const entities = await this.getAdvancedAuthWithEntities(client, advAuthId);
-        patient = entities.patient;
-        provider = entities.provider;
-        insurer = entities.insurer;
-        coverage = entities.coverage;
-      } else {
-        // Fallback if no advanced auth linked
-        provider = {
-          provider_id: NPHIES_CONFIG.DEFAULT_PROVIDER_ID,
-          provider_name: 'Healthcare Provider',
-          nphies_id: NPHIES_CONFIG.DEFAULT_PROVIDER_ID,
-          provider_type: null,
-          address: null
-        };
-        insurer = {
-          insurer_id: null,
-          insurer_name: 'Insurance Company',
-          nphies_id: NPHIES_CONFIG.DEFAULT_INSURER_ID,
-          address: null
-        };
-        patient = {
-          patient_id: null, identifier: null, identifier_type: 'national_id',
-          name: null, gender: null, birth_date: null, phone: null, address: null
-        };
-      }
+        const authIdentifier = commRequest.identifier_value || commRequest.pre_auth_ref;
+        const claimResponseBundle = commRequest.response_bundle;
+        const requestIdentifier = claimResponseBundle?.request?.identifier?.value || authIdentifier;
 
-      const authIdentifier = commRequest.identifier_value || commRequest.pre_auth_ref;
-      const claimResponseBundle = commRequest.response_bundle;
-      const requestIdentifier = claimResponseBundle?.request?.identifier?.value || authIdentifier;
-
-      const communicationBundle = this.mapper.buildSolicitedCommunicationBundle({
-        communicationRequest: {
-          request_id: commRequest.request_id,
-          about_reference: commRequest.about_reference,
-          about_identifier: commRequest.about_identifier,
-          about_identifier_system: commRequest.about_identifier_system,
-          about_type: commRequest.about_type,
-          cr_identifier: commRequest.cr_identifier,
-          cr_identifier_system: commRequest.cr_identifier_system
-        },
-        priorAuth: {
-          nphies_request_id: requestIdentifier,
-          request_number: requestIdentifier,
-          pre_auth_ref: commRequest.pre_auth_ref || authIdentifier
-        },
-        patient,
-        provider,
-        insurer,
-        coverage,
-        payloads,
-        messageEventCode: 'priorauth-request',
-        communicationStatus: 'completed'
+        const communicationBundle = this.mapper.buildSolicitedCommunicationBundle({
+          communicationRequest: {
+            request_id: commRequest.request_id,
+            about_reference: commRequest.about_reference,
+            about_identifier: commRequest.about_identifier,
+            about_identifier_system: commRequest.about_identifier_system,
+            about_type: commRequest.about_type,
+            cr_identifier: commRequest.cr_identifier,
+            cr_identifier_system: commRequest.cr_identifier_system
+          },
+          priorAuth: {
+            nphies_request_id: requestIdentifier,
+            request_number: requestIdentifier,
+            pre_auth_ref: commRequest.pre_auth_ref || authIdentifier
+          },
+          patient,
+          provider,
+          insurer,
+          coverage,
+          payloads,
+          communicationStatus: 'completed'
+        });
+        return { commRequest, advAuthId, communicationBundle, provider, insurer };
       });
 
-      const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
-
-      // Extract Communication ID
-      const communicationResource = communicationBundle.entry?.find(
-        e => e.resource?.resourceType === 'Communication'
-      )?.resource;
-      const communicationId = communicationResource?.id || randomUUID();
-
-      // Extract acknowledgment
-      let nphiesCommunicationId = null;
-      let acknowledgmentReceived = false;
-      let acknowledgmentStatus = null;
-
-      if (nphiesResponse.data && nphiesResponse.data.entry) {
-        const responseMessageHeader = nphiesResponse.data.entry.find(
-          e => e.resource?.resourceType === 'MessageHeader'
-        )?.resource;
-
-        if (responseMessageHeader) {
-          const metaTags = responseMessageHeader.meta?.tag || [];
-          const isQueued = metaTags.some(
-            tag => tag.code === 'queued-messages' ||
-                   tag.system === 'http://nphies.sa/terminology/CodeSystem/meta-tags'
-          );
-
-          if (responseMessageHeader.response?.code) {
-            if (isQueued) {
-              acknowledgmentReceived = false;
-              acknowledgmentStatus = 'queued';
-            } else {
-              acknowledgmentReceived = true;
-              acknowledgmentStatus = responseMessageHeader.response.code;
-            }
-          }
-
-          if (responseMessageHeader.id) {
-            nphiesCommunicationId = responseMessageHeader.id;
-          }
-        }
-
-        const responseCommunication = nphiesResponse.data.entry.find(
-          e => e.resource?.resourceType === 'Communication'
-        )?.resource;
-        if (responseCommunication?.id) {
-          nphiesCommunicationId = responseCommunication.id;
-        }
-      }
-
-      // Store Communication
-      const insertResult = await client.query(`
-        INSERT INTO nphies_communications (
-          communication_id, nphies_communication_id,
-          prior_auth_id, claim_id, advanced_authorization_id,
-          patient_id, communication_type, based_on_request_id,
-          status, category, priority,
-          about_reference, about_type, sender_identifier, recipient_identifier,
-          sent_at, acknowledgment_received, acknowledgment_at, acknowledgment_status,
-          request_bundle, response_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-        RETURNING *
-      `, [
-        communicationId,
-        nphiesCommunicationId,
-        null, // prior_auth_id
-        null, // claim_id
-        advAuthId,
-        null, // patient_id - advanced auth patients don't have local DB records
-        'solicited',
+      // Record, send (outside any transaction) and store the outcome
+      return await sendAndRecordCommunication({
+        schemaName,
+        communicationBundle,
+        payloads,
         communicationRequestId,
-        nphiesResponse.success ? 'completed' : 'entered-in-error',
-        'alert',
-        'routine',
-        commRequest.about_reference,
-        commRequest.about_type,
-        provider.nphies_id,
-        insurer.nphies_id,
-        new Date(),
-        acknowledgmentReceived,
-        acknowledgmentReceived ? new Date() : null,
-        acknowledgmentStatus,
-        JSON.stringify(communicationBundle),
-        nphiesResponse.data
-          ? JSON.stringify(nphiesResponse.data)
-          : nphiesResponse.error
-            ? JSON.stringify({ _fallback: true, error: nphiesResponse.error, status: nphiesResponse.status })
-            : null
-      ]);
-
-      const communication = insertResult.rows[0];
-
-      // Store payloads
-      for (let i = 0; i < payloads.length; i++) {
-        const payload = payloads[i];
-        await client.query(`
-          INSERT INTO nphies_communication_payloads (
-            communication_id, sequence, content_type, content_string,
-            attachment_content_type, attachment_data, attachment_url,
-            attachment_title, claim_item_sequences
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [
-          communication.id, i + 1, payload.contentType,
-          payload.contentString || null,
-          payload.attachment?.contentType || null,
-          payload.attachment?.data || null,
-          payload.attachment?.url || null,
-          payload.attachment?.title || null,
-          payload.claimItemSequences || null
-        ]);
-      }
-
-      // Update CommunicationRequest as responded
-      await client.query(`
-        UPDATE nphies_communication_requests
-        SET responded_at = NOW(), response_communication_id = $1
-        WHERE id = $2
-      `, [communication.id, communicationRequestId]);
-
-      await client.query('COMMIT');
-
-      return {
-        success: nphiesResponse.success,
-        communication: {
-          id: communication.id,
-          communicationId: communication.communication_id,
-          type: 'solicited',
-          basedOnRequestId: communicationRequestId,
-          status: communication.status,
-          sentAt: communication.sent_at,
-          payloadCount: payloads.length
+        record: {
+          advanced_authorization_id: advAuthId,
+          patient_id: null, // advanced auth patients don't have local DB records
+          communication_type: 'solicited',
+          about_reference: commRequest.about_reference,
+          about_type: commRequest.about_type,
+          sender_identifier: provider.nphies_id,
+          recipient_identifier: insurer.nphies_id
         },
-        nphiesResponse: {
-          status: nphiesResponse.status,
-          success: nphiesResponse.success,
-          error: nphiesResponse.error
-        }
-      };
+        logPrefix: '[AdvAuthCommService]'
+      });
 
     } catch (error) {
-      await client.query('ROLLBACK');
       console.error('[AdvAuthCommService] Error sending solicited communication:', error);
       throw error;
-    } finally {
-      client.release();
     }
   }
 
@@ -710,9 +462,8 @@ class AdvancedAuthCommunicationService {
   // ============================================================================
 
   async getCommunicationRequests(advAuthId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
       const result = await client.query(`
         SELECT cr.*,
                c.communication_id as response_communication_uuid,
@@ -729,7 +480,7 @@ class AdvancedAuthCommunicationService {
 
       return result.rows;
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -761,9 +512,8 @@ class AdvancedAuthCommunicationService {
   }
 
   async getCommunications(advAuthId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
       const result = await client.query(`
         SELECT c.*,
                cr.request_id as based_on_request_nphies_id,
@@ -785,14 +535,13 @@ class AdvancedAuthCommunicationService {
 
       return result.rows;
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
   async getCommunication(communicationId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
       const isUUID = typeof communicationId === 'string' && communicationId.includes('-');
 
       const result = await client.query(`
@@ -816,7 +565,7 @@ class AdvancedAuthCommunicationService {
 
       return comm;
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -825,24 +574,30 @@ class AdvancedAuthCommunicationService {
   // ============================================================================
 
   async pollCommunicationAcknowledgment(advAuthId, communicationId, schemaName) {
-    const client = await pool.connect();
-
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
+      // Get the communication and the provider used for the poll
+      const { comm, providerNphiesId, providerName } = await withSchemaClient(schemaName, async client => {
+        const commResult = await client.query(`
+          SELECT c.*, aa.identifier_value
+          FROM nphies_communications c
+          LEFT JOIN advanced_authorizations aa ON c.advanced_authorization_id = aa.id
+          WHERE c.communication_id = $1 AND c.advanced_authorization_id = $2
+        `, [communicationId, advAuthId]);
 
-      // Get the communication with provider info
-      const commResult = await client.query(`
-        SELECT c.*, aa.identifier_value
-        FROM nphies_communications c
-        LEFT JOIN advanced_authorizations aa ON c.advanced_authorization_id = aa.id
-        WHERE c.communication_id = $1 AND c.advanced_authorization_id = $2
-      `, [communicationId, advAuthId]);
+        const provResult = await client.query(
+          `SELECT nphies_id, provider_name FROM providers WHERE nphies_id = $1 LIMIT 1`,
+          [NPHIES_CONFIG.DEFAULT_PROVIDER_ID]
+        );
+        return {
+          comm: commResult.rows[0] || null,
+          providerNphiesId: provResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID,
+          providerName: provResult.rows[0]?.provider_name || 'Healthcare Provider'
+        };
+      });
 
-      if (commResult.rows.length === 0) {
+      if (!comm) {
         throw new Error('Communication not found');
       }
-
-      const comm = commResult.rows[0];
 
       if (comm.acknowledgment_received && comm.acknowledgment_status === 'ok') {
         return {
@@ -852,14 +607,6 @@ class AdvancedAuthCommunicationService {
           message: 'Communication was already acknowledged'
         };
       }
-
-      // Get provider for poll
-      const provResult = await client.query(
-        `SELECT nphies_id, provider_name FROM providers WHERE nphies_id = $1 LIMIT 1`,
-        [NPHIES_CONFIG.DEFAULT_PROVIDER_ID]
-      );
-      const providerNphiesId = provResult.rows[0]?.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-      const providerName = provResult.rows[0]?.provider_name || 'Healthcare Provider';
 
       const pollBundle = this.mapper.buildPollRequestBundle(providerNphiesId, providerName);
 
@@ -874,39 +621,47 @@ class AdvancedAuthCommunicationService {
         };
       }
 
-      const communications = nphiesService.extractCommunicationsFromPoll(pollResponse.data);
-
+      // Look for our acknowledgment; every other message is handed to the
+      // system poll path instead of being discarded.
+      const messages = systemPollService.extractPollMessages(pollResponse.data);
+      const otherMessages = [];
       let acknowledgmentFound = false;
       let acknowledgmentStatus = null;
 
-      for (const respComm of communications) {
-        const parsed = this.mapper.parseCommunication(respComm);
-
-        if (parsed.inResponseTo) {
-          const responseToId = this.mapper.extractIdFromReference(parsed.inResponseTo);
+      for (const message of messages) {
+        const respComm = message.resource;
+        let isOurAck = false;
+        if (!acknowledgmentFound && respComm?.resourceType === 'Communication') {
+          const parsed = this.mapper.parseCommunication(respComm);
+          const responseToId = parsed.inResponseTo ? this.mapper.extractIdFromReference(parsed.inResponseTo) : null;
 
           if (responseToId === communicationId) {
+            isOurAck = true;
             acknowledgmentFound = true;
             acknowledgmentStatus = parsed.status;
 
-            await client.query(`
+            await withSchemaClient(schemaName, client => client.query(`
               UPDATE nphies_communications
               SET acknowledgment_received = TRUE,
                   acknowledgment_at = NOW(),
                   acknowledgment_status = $1,
                   acknowledgment_bundle = $2
               WHERE communication_id = $3
-            `, [acknowledgmentStatus, JSON.stringify(respComm), communicationId]);
-
-            break;
+            `, [acknowledgmentStatus, JSON.stringify(respComm), communicationId]));
           }
         }
+        if (!isOurAck) otherMessages.push(message);
       }
+
+      const routed = await this.routeOtherMessages(
+        otherMessages, pollBundle, pollResponse.data, schemaName, `advanced authorization #${advAuthId} acknowledgment poll`
+      );
 
       return {
         success: true,
         acknowledgmentFound,
         acknowledgmentStatus,
+        otherMessages: routed,
         pollBundle,
         responseBundle: pollResponse.data,
         message: acknowledgmentFound
@@ -917,25 +672,46 @@ class AdvancedAuthCommunicationService {
     } catch (error) {
       console.error('[AdvAuthCommService] Error polling for acknowledgment:', error);
       throw error;
-    } finally {
-      client.release();
+    }
+  }
+
+  /**
+   * Hand messages that are not our acknowledgment to the system poll processing
+   * path (correlator + updater) so they are not lost after leaving the queue.
+   */
+  async routeOtherMessages(messages, pollBundle, responseData, schemaName, source) {
+    if (!messages.length) return { count: 0 };
+    try {
+      const routed = await systemPollService.processForeignMessages(messages, pollBundle, responseData, schemaName, source);
+      return {
+        count: messages.length,
+        processed: routed.processed,
+        matched: routed.matched,
+        unmatched: routed.unmatched,
+        pollLogId: routed.pollLogId,
+        errors: routed.errors.length > 0 ? routed.errors : undefined
+      };
+    } catch (error) {
+      console.error(`[AdvAuthCommService] Could not route ${messages.length} message(s) from ${source}:`, error);
+      return { count: messages.length, error: error.message };
     }
   }
 
   async pollAllQueuedAcknowledgments(advAuthId, schemaName) {
-    const client = await pool.connect();
-
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
+      // The list is read on a client that is released before the per-communication
+      // polls, which acquire their own connections.
+      const rows = await withSchemaClient(schemaName, async client => {
+        const commsResult = await client.query(`
+          SELECT c.communication_id
+          FROM nphies_communications c
+          WHERE c.advanced_authorization_id = $1
+            AND (c.acknowledgment_status = 'queued' OR (c.acknowledgment_received = FALSE AND c.status = 'completed'))
+        `, [advAuthId]);
+        return commsResult.rows;
+      });
 
-      const commsResult = await client.query(`
-        SELECT c.communication_id
-        FROM nphies_communications c
-        WHERE c.advanced_authorization_id = $1
-          AND (c.acknowledgment_status = 'queued' OR (c.acknowledgment_received = FALSE AND c.status = 'completed'))
-      `, [advAuthId]);
-
-      if (commsResult.rows.length === 0) {
+      if (rows.length === 0) {
         return {
           success: true,
           totalPolled: 0,
@@ -950,7 +726,7 @@ class AdvancedAuthCommunicationService {
       let acknowledged = 0;
       let stillQueued = 0;
 
-      for (const row of commsResult.rows) {
+      for (const row of rows) {
         try {
           const pollResult = await this.pollCommunicationAcknowledgment(
             advAuthId, row.communication_id, schemaName
@@ -967,18 +743,16 @@ class AdvancedAuthCommunicationService {
 
       return {
         success: true,
-        totalPolled: commsResult.rows.length,
+        totalPolled: rows.length,
         acknowledged,
         stillQueued,
         results,
-        message: `Polled ${commsResult.rows.length} communication(s): ${acknowledged} acknowledged, ${stillQueued} still queued`
+        message: `Polled ${rows.length} communication(s): ${acknowledged} acknowledged, ${stillQueued} still queued`
       };
 
     } catch (error) {
       console.error('[AdvAuthCommService] Error polling all acknowledgments:', error);
       throw error;
-    } finally {
-      client.release();
     }
   }
 }

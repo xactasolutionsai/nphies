@@ -12,11 +12,12 @@
  * be received depending on whether HIC needs additional info.
  */
 
-import { randomUUID } from 'crypto';
-import pool from '../db.js';
 import nphiesService from './nphiesService.js';
 import CommunicationMapper from './communicationMapper.js';
-import { NPHIES_CONFIG } from '../config/nphies.js';
+import systemPollService from './systemPollService.js';
+import { mapClaimResponseStatus } from './messageUpdater.js';
+import { connectWithSchema, releaseSchemaClient, withSchemaClient } from './dbSchema.js';
+import { sendAndRecordCommunication } from './communicationOutbox.js';
 
 class ClaimCommunicationService {
   constructor() {
@@ -36,10 +37,9 @@ class ClaimCommunicationService {
    * @returns {Object} Status check bundle for preview
    */
   async previewStatusCheck(claimId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       // Get Claim with related data
       const claimResult = await client.query(`
@@ -102,7 +102,7 @@ class ClaimCommunicationService {
       console.error('[ClaimCommunicationService] Error generating status check preview:', error);
       throw error;
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -115,10 +115,9 @@ class ClaimCommunicationService {
    * @returns {Object} Result with status check response
    */
   async sendStatusCheck(claimId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       // 1. Get Claim with related data including provider/insurer details for NPHIES bundle
       const claimResult = await client.query(`
@@ -256,7 +255,7 @@ class ClaimCommunicationService {
       console.error('[ClaimCommunicationService] Error sending status check:', error);
       throw error;
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -277,10 +276,15 @@ class ClaimCommunicationService {
    * @returns {Object} Poll results with categorized messages
    */
   async pollForMessages(claimId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
+    // Messages NPHIES returned that belong to other records; handed to the system
+    // poll path after this client is released.
+    const otherMessages = [];
+    let results;
+    let pollBundle;
+    let pollResponse;
     
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       // 1. Get Claim with provider info
       const claimResult = await client.query(`
@@ -313,7 +317,7 @@ class ClaimCommunicationService {
         }
       };
 
-      const pollBundle = this.mapper.buildPollRequestBundle(
+      pollBundle = this.mapper.buildPollRequestBundle(
         claim.provider_nphies_id,
         claim.provider_name || 'Healthcare Provider',
         undefined,
@@ -323,7 +327,7 @@ class ClaimCommunicationService {
       console.log(`[ClaimCommunicationService] Polling for messages for claim ${claim.claim_number}`);
 
       // 3. Send poll request
-      const pollResponse = await nphiesService.sendPoll(pollBundle);
+      pollResponse = await nphiesService.sendPoll(pollBundle);
 
       // IMPORTANT: Check for errors even if HTTP status is 200
       if (!pollResponse.success || (pollResponse.errors && pollResponse.errors.length > 0)) {
@@ -342,45 +346,63 @@ class ClaimCommunicationService {
         };
       }
 
-      // 4. Extract and categorize responses (paired with their message bundles)
-      const claimResponsePairs = nphiesService.extractClaimResponsesWithBundlesFromPoll(pollResponse.data);
-      const communicationRequests = nphiesService.extractCommunicationRequestsFromPoll(pollResponse.data);
-      const communications = nphiesService.extractCommunicationsFromPoll(pollResponse.data);
+      // 4. Split the response into messages and keep only those about THIS claim
+      //    (mirrors the prior-auth filter). Everything else is routed through the
+      //    system poll correlator below instead of being written onto this claim.
+      const claimIdentifiers = this.getClaimIdentifiers(claim);
+      const messages = systemPollService.extractPollMessages(pollResponse.data);
 
-      console.log(`[ClaimCommunicationService] Poll returned: ${claimResponsePairs.length} ClaimResponse(s), ${communicationRequests.length} CommunicationRequest(s), ${communications.length} Communication(s)`);
-
-      const results = {
+      results = {
         success: true,
         claimResponses: [],
         communicationRequests: [],
         acknowledgments: [],
         pollBundle,
         responseBundle: pollResponse.data,
-        hasCommunicationRequests: communicationRequests.length > 0,
-        hasClaimResponse: claimResponsePairs.length > 0,
         errors: pollResponse.errors || [],
         responseCode: pollResponse.responseCode
       };
 
-      // 5. Process ClaimResponses (final adjudicated responses) with their full message bundles
-      for (const { claimResponse, messageBundle } of claimResponsePairs) {
-        const processed = await this.processClaimResponse(client, claimId, claimResponse, messageBundle);
-        results.claimResponses.push(processed);
-      }
-
-      // 6. Process CommunicationRequests (HIC asking for info - CONDITIONAL)
-      for (const commReq of communicationRequests) {
-        const processed = await this.storeCommunicationRequest(client, claimId, commReq);
-        results.communicationRequests.push(processed);
-      }
-
-      // 7. Process Communications (acknowledgments)
-      for (const comm of communications) {
-        const processed = await this.processAcknowledgment(client, comm);
-        if (processed) {
-          results.acknowledgments.push(processed);
+      for (const message of messages) {
+        const resource = message.resource;
+        switch (resource?.resourceType) {
+          case 'ClaimResponse':
+            if (this.claimResponseMatchesClaim(resource, claimIdentifiers)) {
+              // 5. Final adjudicated response for this claim, with its full message bundle
+              const processed = await this.inTransaction(client, () =>
+                this.processClaimResponse(client, claimId, resource, message.direct ? null : message.messageBundle));
+              results.claimResponses.push(processed);
+            } else {
+              otherMessages.push(message);
+            }
+            break;
+          case 'CommunicationRequest':
+            if (this.isAboutClaim(resource, claimIdentifiers)) {
+              // 6. HIC asking for info about this claim (CONDITIONAL)
+              results.communicationRequests.push(await this.storeCommunicationRequest(client, claimId, resource));
+            } else {
+              otherMessages.push(message);
+            }
+            break;
+          case 'Communication': {
+            // 7. Acknowledgments of our Communications
+            const processed = await this.processAcknowledgment(client, resource);
+            if (processed) {
+              results.acknowledgments.push(processed);
+            } else {
+              otherMessages.push(message);
+            }
+            break;
+          }
+          default:
+            otherMessages.push(message);
         }
       }
+
+      results.hasClaimResponse = results.claimResponses.length > 0;
+      results.hasCommunicationRequests = results.communicationRequests.length > 0;
+
+      console.log(`[ClaimCommunicationService] Poll returned ${messages.length} message(s): ${results.claimResponses.length} ClaimResponse(s), ${results.communicationRequests.length} CommunicationRequest(s), ${results.acknowledgments.length} acknowledgment(s) for this claim; ${otherMessages.length} for other records`);
 
       // 8. Generate appropriate message based on what was received
       if (results.hasClaimResponse) {
@@ -391,13 +413,76 @@ class ClaimCommunicationService {
         results.message = 'No new messages. The insurer may still be processing.';
       }
 
-      return results;
-
     } catch (error) {
       console.error('[ClaimCommunicationService] Error polling for messages:', error);
       throw error;
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
+    }
+
+    results.otherMessages = await this.routeOtherMessages(
+      otherMessages, pollBundle, pollResponse?.data, schemaName, `claim #${claimId} poll`
+    );
+    return results;
+  }
+
+  /** Identifiers this claim may be referenced by in NPHIES messages. */
+  getClaimIdentifiers(claim) {
+    return new Set(
+      [claim.claim_number, claim.nphies_claim_id, claim.nphies_request_id]
+        .filter(v => v !== null && v !== undefined && v !== '')
+        .map(String)
+    );
+  }
+
+  /** ClaimResponse.request.identifier must name this claim. */
+  claimResponseMatchesClaim(claimResponse, claimIdentifiers) {
+    const value = claimResponse?.request?.identifier?.value;
+    return value !== undefined && value !== null && claimIdentifiers.has(String(value));
+  }
+
+  /** CommunicationRequest.about[] must reference this claim (identifier or reference). */
+  isAboutClaim(commRequest, claimIdentifiers) {
+    return (commRequest?.about || []).some(about => {
+      const identifierValue = about.identifier?.value;
+      if (identifierValue !== undefined && identifierValue !== null && claimIdentifiers.has(String(identifierValue))) return true;
+      const refId = this.mapper.extractIdFromReference(about.reference);
+      return !!refId && claimIdentifiers.has(String(refId));
+    });
+  }
+
+  /** Run fn inside BEGIN/COMMIT on an already schema-scoped client. */
+  async inTransaction(client, fn) {
+    await client.query('BEGIN');
+    try {
+      const result = await fn();
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    }
+  }
+
+  /**
+   * Hand messages that are not for this claim to the system poll processing path
+   * (correlator + updater) so they are not lost after being taken off the queue.
+   */
+  async routeOtherMessages(messages, pollBundle, responseData, schemaName, source) {
+    if (!messages.length) return { count: 0 };
+    try {
+      const routed = await systemPollService.processForeignMessages(messages, pollBundle, responseData, schemaName, source);
+      return {
+        count: messages.length,
+        processed: routed.processed,
+        matched: routed.matched,
+        unmatched: routed.unmatched,
+        pollLogId: routed.pollLogId,
+        errors: routed.errors.length > 0 ? routed.errors : undefined
+      };
+    } catch (error) {
+      console.error(`[ClaimCommunicationService] Could not route ${messages.length} message(s) from ${source}:`, error);
+      return { count: messages.length, error: error.message };
     }
   }
 
@@ -412,56 +497,14 @@ class ClaimCommunicationService {
    * @param {Object|null} messageBundle - The full message bundle containing related resources
    */
   async processClaimResponse(client, claimId, claimResponse, messageBundle = null) {
-    const outcome = claimResponse.outcome;
-    let status = 'pending';
-    let adjudicationOutcome = null;
-
-    // Extract adjudication outcome from extension (authoritative)
-    const adjudicationExt = claimResponse.extension?.find(
-      ext => ext.url?.includes('extension-adjudication-outcome')
-    );
-    adjudicationOutcome = adjudicationExt?.valueCodeableConcept?.coding?.[0]?.code;
-
-    switch (outcome) {
-      case 'complete': {
-        if (adjudicationOutcome === 'approved') {
-          status = 'approved';
-        } else if (adjudicationOutcome === 'rejected') {
-          status = 'denied';
-        } else if (adjudicationOutcome === 'partial') {
-          status = 'partial';
-        } else {
-          // Fall back to disposition if no extension
-          const disposition = claimResponse.disposition?.toLowerCase() || '';
-          if (disposition.includes('approved') || disposition.includes('accept')) {
-            status = 'approved';
-            if (!adjudicationOutcome) adjudicationOutcome = 'approved';
-          } else if (disposition.includes('denied') || disposition.includes('reject')) {
-            status = 'denied';
-            if (!adjudicationOutcome) adjudicationOutcome = 'rejected';
-          } else {
-            status = 'approved';
-            if (!adjudicationOutcome) adjudicationOutcome = 'approved';
-          }
-        }
-        break;
-      }
-      case 'partial':
-        status = 'partial';
-        if (!adjudicationOutcome) adjudicationOutcome = 'partial';
-        break;
-      case 'queued':
-        status = 'queued';
-        break;
-      case 'error':
-        status = 'error';
-        break;
-    }
+    // Same interpretation as the system poll: unclear responses stay 'pending' for
+    // review, never defaulted to approved.
+    const { status, outcome, adjudicationOutcome, needsReview } = mapClaimResponseStatus(claimResponse);
 
     // Extract all financial totals from ClaimResponse
     const benefitAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'benefit')?.amount?.value;
     const eligibleAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'eligible')?.amount?.value;
-    const approvedAmount = benefitAmount || eligibleAmount;
+    const approvedAmount = benefitAmount ?? eligibleAmount;
     const copayAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'copay')?.amount?.value;
     const taxAmount = claimResponse.total?.find(t => t.category?.coding?.[0]?.code === 'tax')?.amount?.value;
 
@@ -493,11 +536,11 @@ class ClaimCommunicationService {
       adjudicationOutcome,
       claimResponse.disposition,
       nphiesClaimId,
-      approvedAmount || null,
-      eligibleAmount || null,
-      benefitAmount || null,
-      copayAmount || null,
-      taxAmount || null,
+      approvedAmount ?? null,
+      eligibleAmount ?? null,
+      benefitAmount ?? null,
+      copayAmount ?? null,
+      taxAmount ?? null,
       JSON.stringify(bundleToStore),
       claimId
     ]);
@@ -528,10 +571,10 @@ class ClaimCommunicationService {
         WHERE claim_id = $6 AND sequence = $7
       `, [
         adjudicationStatus,
-        itemBenefitAmount || itemEligibleAmount || null,
-        itemEligibleAmount || null,
-        itemCopayAmount || null,
-        itemApprovedQty || null,
+        itemBenefitAmount ?? itemEligibleAmount ?? null,
+        itemEligibleAmount ?? null,
+        itemCopayAmount ?? null,
+        itemApprovedQty ?? null,
         claimId,
         item.itemSequence
       ]);
@@ -562,6 +605,7 @@ class ClaimCommunicationService {
       outcome,
       status,
       adjudicationOutcome,
+      needsReview,
       disposition: claimResponse.disposition,
       approvedAmount
     };
@@ -606,6 +650,7 @@ class ClaimCommunicationService {
         authored_on,
         request_bundle
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      ON CONFLICT (request_id) DO NOTHING
       RETURNING *
     `, [
       commRequest.id,
@@ -627,6 +672,12 @@ class ClaimCommunicationService {
       parsed.authoredOn,
       JSON.stringify(commRequest)
     ]);
+
+    if (result.rows.length === 0) {
+      // Stored concurrently by another poll
+      const stored = await client.query(`SELECT id FROM nphies_communication_requests WHERE request_id = $1`, [commRequest.id]);
+      return { id: stored.rows[0]?.id, alreadyStored: true };
+    }
 
     return {
       id: result.rows[0].id,
@@ -715,213 +766,100 @@ class ClaimCommunicationService {
    * @returns {Object} Result with communication data
    */
   async sendUnsolicitedCommunication(claimId, payloads, schemaName) {
-    const client = await pool.connect();
-    
     try {
-      await client.query('BEGIN');
-      await client.query(`SET search_path TO ${schemaName}`);
+      // 1. Get Claim with related data and build the bundle (no transaction open)
+      const { claim, communicationBundle, claimIdentifier } = await withSchemaClient(schemaName, async client => {
+        const claimResult = await client.query(`
+          SELECT 
+            cs.*,
+            p.patient_id,
+            p.name as patient_name,
+            p.identifier as patient_identifier,
+            p.identifier_type as patient_identifier_type,
+            p.gender as patient_gender,
+            p.birth_date as patient_birth_date,
+            p.phone as patient_phone,
+            p.address as patient_address,
+            pr.provider_id,
+            pr.provider_name,
+            pr.nphies_id as provider_nphies_id,
+            pr.provider_type,
+            pr.address as provider_address,
+            i.insurer_id,
+            i.insurer_name,
+            i.nphies_id as insurer_nphies_id,
+            i.address as insurer_address
+          FROM claim_submissions cs
+          LEFT JOIN patients p ON cs.patient_id = p.patient_id
+          LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
+          LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
+          WHERE cs.id = $1
+        `, [claimId]);
 
-      // 1. Get Claim with related data
-      const claimResult = await client.query(`
-        SELECT 
-          cs.*,
-          p.patient_id,
-          p.name as patient_name,
-          p.identifier as patient_identifier,
-          p.identifier_type as patient_identifier_type,
-          p.gender as patient_gender,
-          p.birth_date as patient_birth_date,
-          p.phone as patient_phone,
-          p.address as patient_address,
-          pr.provider_id,
-          pr.provider_name,
-          pr.nphies_id as provider_nphies_id,
-          pr.provider_type,
-          pr.address as provider_address,
-          i.insurer_id,
-          i.insurer_name,
-          i.nphies_id as insurer_nphies_id,
-          i.address as insurer_address
-        FROM claim_submissions cs
-        LEFT JOIN patients p ON cs.patient_id = p.patient_id
-        LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
-        LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
-        WHERE cs.id = $1
-      `, [claimId]);
+        if (claimResult.rows.length === 0) {
+          throw new Error('Claim not found');
+        }
 
-      if (claimResult.rows.length === 0) {
-        throw new Error('Claim not found');
-      }
+        const claim = claimResult.rows[0];
 
-      const claim = claimResult.rows[0];
-
-      // 2. Build Communication bundle
-      const claimIdentifier = claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id;
-      
-      const communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
-        priorAuth: {
-          nphies_request_id: claim.nphies_request_id,
-          request_number: claim.claim_number,
-          pre_auth_ref: claimIdentifier
-        },
-        patient: {
-          patient_id: claim.patient_id,
-          identifier: claim.patient_identifier,
-          identifier_type: claim.patient_identifier_type || 'national_id',
-          name: claim.patient_name,
-          gender: claim.patient_gender,
-          birth_date: claim.patient_birth_date,
-          phone: claim.patient_phone,
-          address: claim.patient_address
-        },
-        provider: {
-          provider_id: claim.provider_id,
-          provider_name: claim.provider_name,
-          nphies_id: claim.provider_nphies_id,
-          provider_type: claim.provider_type,
-          address: claim.provider_address
-        },
-        insurer: {
-          insurer_id: claim.insurer_id,
-          insurer_name: claim.insurer_name,
-          nphies_id: claim.insurer_nphies_id,
-          address: claim.insurer_address
-        },
-        coverage: null,
-        payloads
+        // 2. Build Communication bundle
+        const claimIdentifier = claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id;
+        
+        const communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
+          priorAuth: {
+            nphies_request_id: claim.nphies_request_id,
+            request_number: claim.claim_number,
+            pre_auth_ref: claimIdentifier
+          },
+          patient: {
+            patient_id: claim.patient_id,
+            identifier: claim.patient_identifier,
+            identifier_type: claim.patient_identifier_type || 'national_id',
+            name: claim.patient_name,
+            gender: claim.patient_gender,
+            birth_date: claim.patient_birth_date,
+            phone: claim.patient_phone,
+            address: claim.patient_address
+          },
+          provider: {
+            provider_id: claim.provider_id,
+            provider_name: claim.provider_name,
+            nphies_id: claim.provider_nphies_id,
+            provider_type: claim.provider_type,
+            address: claim.provider_address
+          },
+          insurer: {
+            insurer_id: claim.insurer_id,
+            insurer_name: claim.insurer_name,
+            nphies_id: claim.insurer_nphies_id,
+            address: claim.insurer_address
+          },
+          coverage: null,
+          payloads
+        });
+        return { claim, communicationBundle, claimIdentifier };
       });
 
-      // 3. Send to NPHIES
-      const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
-
-      // 4. Extract Communication ID
-      const communicationResource = communicationBundle.entry?.find(
-        e => e.resource?.resourceType === 'Communication'
-      )?.resource;
-      const communicationId = communicationResource?.id || randomUUID();
-
-      // 5. Extract acknowledgment from response
-      let nphiesCommunicationId = null;
-      let acknowledgmentReceived = false;
-      let acknowledgmentStatus = null;
-      
-      if (nphiesResponse.data && nphiesResponse.data.entry) {
-        const responseMessageHeader = nphiesResponse.data.entry.find(
-          e => e.resource?.resourceType === 'MessageHeader'
-        )?.resource;
-        
-        if (responseMessageHeader) {
-          if (responseMessageHeader.response?.code) {
-            acknowledgmentReceived = true;
-            acknowledgmentStatus = responseMessageHeader.response.code;
-          }
-          if (responseMessageHeader.id) {
-            nphiesCommunicationId = responseMessageHeader.id;
-          }
-        }
-      }
-
-      // 6. Store Communication in database
-      const insertResult = await client.query(`
-        INSERT INTO nphies_communications (
-          communication_id,
-          nphies_communication_id,
-          prior_auth_id,
-          claim_id,
-          patient_id,
-          communication_type,
-          status,
-          category,
-          priority,
-          about_reference,
-          about_type,
-          sender_identifier,
-          recipient_identifier,
-          sent_at,
-          acknowledgment_received,
-          acknowledgment_at,
-          acknowledgment_status,
-          request_bundle,
-          response_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-        RETURNING *
-      `, [
-        communicationId,
-        nphiesCommunicationId,
-        null, // No prior_auth_id for claims
-        claimId,
-        claim.patient_id,
-        'unsolicited',
-        nphiesResponse.success ? 'completed' : 'entered-in-error',
-        'alert',
-        'routine',
-        `http://provider.com/Claim/${claimIdentifier}`,
-        'Claim',
-        claim.provider_nphies_id,
-        claim.insurer_nphies_id,
-        new Date(),
-        acknowledgmentReceived,
-        acknowledgmentReceived ? new Date() : null,
-        acknowledgmentStatus,
-        JSON.stringify(communicationBundle),
-        nphiesResponse.data ? JSON.stringify(nphiesResponse.data) : null
-      ]);
-
-      const communication = insertResult.rows[0];
-
-      // 7. Store payloads
-      for (let i = 0; i < payloads.length; i++) {
-        const payload = payloads[i];
-        await client.query(`
-          INSERT INTO nphies_communication_payloads (
-            communication_id,
-            sequence,
-            content_type,
-            content_string,
-            attachment_content_type,
-            attachment_data,
-            attachment_url,
-            attachment_title,
-            claim_item_sequences
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [
-          communication.id,
-          i + 1,
-          payload.contentType,
-          payload.contentString || null,
-          payload.attachment?.contentType || null,
-          payload.attachment?.data || null,
-          payload.attachment?.url || null,
-          payload.attachment?.title || null,
-          payload.claimItemSequences || null
-        ]);
-      }
-
-      await client.query('COMMIT');
-
-      return {
-        success: nphiesResponse.success,
-        communication: {
-          id: communication.id,
-          communicationId: communication.communication_id,
-          type: 'unsolicited',
-          status: communication.status,
-          sentAt: communication.sent_at,
-          payloadCount: payloads.length
+      // 3. Record, send (outside any transaction) and store the outcome
+      return await sendAndRecordCommunication({
+        schemaName,
+        communicationBundle,
+        payloads,
+        record: {
+          claim_id: claimId,
+          patient_id: claim.patient_id,
+          communication_type: 'unsolicited',
+          about_reference: `http://provider.com/Claim/${claimIdentifier}`,
+          about_type: 'Claim',
+          sender_identifier: claim.provider_nphies_id,
+          recipient_identifier: claim.insurer_nphies_id
         },
-        nphiesResponse: {
-          status: nphiesResponse.status,
-          success: nphiesResponse.success,
-          error: nphiesResponse.error
-        }
-      };
+        logPrefix: '[ClaimCommunicationService]'
+      });
 
     } catch (error) {
-      await client.query('ROLLBACK');
       console.error('[ClaimCommunicationService] Error sending unsolicited communication:', error);
       throw error;
-    } finally {
-      client.release();
     }
   }
 
@@ -935,240 +873,115 @@ class ClaimCommunicationService {
    * @returns {Object} Result with communication data
    */
   async sendSolicitedCommunication(communicationRequestId, payloads, schemaName) {
-    const client = await pool.connect();
-    
     try {
-      await client.query('BEGIN');
-      await client.query(`SET search_path TO ${schemaName}`);
+      // 1. Get CommunicationRequest with claim data and build the bundle
+      const { commRequest, communicationBundle } = await withSchemaClient(schemaName, async client => {
+        const crResult = await client.query(`
+          SELECT cr.*, 
+                 cs.id as claim_id, 
+                 cs.claim_number,
+                 cs.nphies_request_id,
+                 cs.nphies_claim_id,
+                 cs.patient_id,
+                 cs.provider_id,
+                 cs.insurer_id,
+                 p.identifier as patient_identifier,
+                 p.identifier_type as patient_identifier_type,
+                 p.name as patient_name,
+                 p.gender as patient_gender,
+                 p.birth_date as patient_birth_date,
+                 p.phone as patient_phone,
+                 p.address as patient_address,
+                 pr.nphies_id as provider_nphies_id,
+                 pr.provider_name,
+                 pr.provider_type,
+                 pr.address as provider_address,
+                 i.nphies_id as insurer_nphies_id,
+                 i.insurer_name,
+                 i.address as insurer_address
+          FROM nphies_communication_requests cr
+          LEFT JOIN claim_submissions cs ON cr.claim_id = cs.id
+          LEFT JOIN patients p ON cs.patient_id = p.patient_id
+          LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
+          LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
+          WHERE cr.id = $1
+        `, [communicationRequestId]);
 
-      // 1. Get CommunicationRequest with claim data
-      const crResult = await client.query(`
-        SELECT cr.*, 
-               cs.id as claim_id, 
-               cs.claim_number,
-               cs.nphies_request_id,
-               cs.nphies_claim_id,
-               cs.patient_id,
-               cs.provider_id,
-               cs.insurer_id,
-               p.identifier as patient_identifier,
-               p.identifier_type as patient_identifier_type,
-               p.name as patient_name,
-               p.gender as patient_gender,
-               p.birth_date as patient_birth_date,
-               p.phone as patient_phone,
-               p.address as patient_address,
-               pr.nphies_id as provider_nphies_id,
-               pr.provider_name,
-               pr.provider_type,
-               pr.address as provider_address,
-               i.nphies_id as insurer_nphies_id,
-               i.insurer_name,
-               i.address as insurer_address
-        FROM nphies_communication_requests cr
-        LEFT JOIN claim_submissions cs ON cr.claim_id = cs.id
-        LEFT JOIN patients p ON cs.patient_id = p.patient_id
-        LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
-        LEFT JOIN insurers i ON cs.insurer_id = i.insurer_id
-        WHERE cr.id = $1
-      `, [communicationRequestId]);
+        if (crResult.rows.length === 0) {
+          throw new Error('CommunicationRequest not found');
+        }
 
-      if (crResult.rows.length === 0) {
-        throw new Error('CommunicationRequest not found');
-      }
+        const commRequest = crResult.rows[0];
 
-      const commRequest = crResult.rows[0];
-
-      // 2. Allow multiple solicited responses to the same CommunicationRequest
-      // (responded_at is tracked for audit but does not block further responses)
-
-      // 3. Build Communication bundle
-      const claimIdentifier = commRequest.claim_number || commRequest.nphies_claim_id || commRequest.nphies_request_id;
-      
-      const communicationBundle = this.mapper.buildSolicitedCommunicationBundle({
-        communicationRequest: {
-          request_id: commRequest.request_id,
-          about_reference: commRequest.about_reference,
-          about_identifier: commRequest.about_identifier,
-          about_identifier_system: commRequest.about_identifier_system,
-          about_type: commRequest.about_type || 'Claim',
-          cr_identifier: commRequest.cr_identifier,
-          cr_identifier_system: commRequest.cr_identifier_system
-        },
-        priorAuth: {
-          nphies_request_id: commRequest.nphies_request_id,
-          request_number: commRequest.claim_number,
-          pre_auth_ref: claimIdentifier
-        },
-        patient: {
-          patient_id: commRequest.patient_id,
-          identifier: commRequest.patient_identifier,
-          identifier_type: commRequest.patient_identifier_type || 'national_id',
-          name: commRequest.patient_name,
-          gender: commRequest.patient_gender,
-          birth_date: commRequest.patient_birth_date,
-          phone: commRequest.patient_phone,
-          address: commRequest.patient_address
-        },
-        provider: {
-          provider_id: commRequest.provider_id,
-          provider_name: commRequest.provider_name,
-          nphies_id: commRequest.provider_nphies_id,
-          provider_type: commRequest.provider_type,
-          address: commRequest.provider_address
-        },
-        insurer: {
-          insurer_id: commRequest.insurer_id,
-          insurer_name: commRequest.insurer_name,
-          nphies_id: commRequest.insurer_nphies_id,
-          address: commRequest.insurer_address
-        },
-        coverage: null,
-        payloads
+        // Multiple solicited responses to the same CommunicationRequest are allowed
+        // (responded_at is tracked for audit but does not block further responses)
+        const claimIdentifier = commRequest.claim_number || commRequest.nphies_claim_id || commRequest.nphies_request_id;
+        
+        const communicationBundle = this.mapper.buildSolicitedCommunicationBundle({
+          communicationRequest: {
+            request_id: commRequest.request_id,
+            about_reference: commRequest.about_reference,
+            about_identifier: commRequest.about_identifier,
+            about_identifier_system: commRequest.about_identifier_system,
+            about_type: commRequest.about_type || 'Claim',
+            cr_identifier: commRequest.cr_identifier,
+            cr_identifier_system: commRequest.cr_identifier_system
+          },
+          priorAuth: {
+            nphies_request_id: commRequest.nphies_request_id,
+            request_number: commRequest.claim_number,
+            pre_auth_ref: claimIdentifier
+          },
+          patient: {
+            patient_id: commRequest.patient_id,
+            identifier: commRequest.patient_identifier,
+            identifier_type: commRequest.patient_identifier_type || 'national_id',
+            name: commRequest.patient_name,
+            gender: commRequest.patient_gender,
+            birth_date: commRequest.patient_birth_date,
+            phone: commRequest.patient_phone,
+            address: commRequest.patient_address
+          },
+          provider: {
+            provider_id: commRequest.provider_id,
+            provider_name: commRequest.provider_name,
+            nphies_id: commRequest.provider_nphies_id,
+            provider_type: commRequest.provider_type,
+            address: commRequest.provider_address
+          },
+          insurer: {
+            insurer_id: commRequest.insurer_id,
+            insurer_name: commRequest.insurer_name,
+            nphies_id: commRequest.insurer_nphies_id,
+            address: commRequest.insurer_address
+          },
+          coverage: null,
+          payloads
+        });
+        return { commRequest, communicationBundle };
       });
 
-      // 4. Send to NPHIES
-      const nphiesResponse = await nphiesService.sendCommunication(communicationBundle);
-
-      // 5. Extract Communication ID
-      const communicationResource = communicationBundle.entry?.find(
-        e => e.resource?.resourceType === 'Communication'
-      )?.resource;
-      const communicationId = communicationResource?.id || randomUUID();
-
-      // 6. Extract acknowledgment
-      let nphiesCommunicationId = null;
-      let acknowledgmentReceived = false;
-      let acknowledgmentStatus = null;
-      
-      if (nphiesResponse.data && nphiesResponse.data.entry) {
-        const responseMessageHeader = nphiesResponse.data.entry.find(
-          e => e.resource?.resourceType === 'MessageHeader'
-        )?.resource;
-        
-        if (responseMessageHeader) {
-          if (responseMessageHeader.response?.code) {
-            acknowledgmentReceived = true;
-            acknowledgmentStatus = responseMessageHeader.response.code;
-          }
-          if (responseMessageHeader.id) {
-            nphiesCommunicationId = responseMessageHeader.id;
-          }
-        }
-      }
-
-      // 7. Store Communication
-      const insertResult = await client.query(`
-        INSERT INTO nphies_communications (
-          communication_id,
-          nphies_communication_id,
-          prior_auth_id,
-          claim_id,
-          patient_id,
-          communication_type,
-          based_on_request_id,
-          status,
-          category,
-          priority,
-          about_reference,
-          about_type,
-          sender_identifier,
-          recipient_identifier,
-          sent_at,
-          acknowledgment_received,
-          acknowledgment_at,
-          acknowledgment_status,
-          request_bundle,
-          response_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-        RETURNING *
-      `, [
-        communicationId,
-        nphiesCommunicationId,
-        null,
-        commRequest.claim_id,
-        commRequest.patient_id,
-        'solicited',
+      // 2. Record, send (outside any transaction) and store the outcome
+      return await sendAndRecordCommunication({
+        schemaName,
+        communicationBundle,
+        payloads,
         communicationRequestId,
-        nphiesResponse.success ? 'completed' : 'entered-in-error',
-        'alert',
-        'routine',
-        commRequest.about_reference,
-        commRequest.about_type || 'Claim',
-        commRequest.provider_nphies_id,
-        commRequest.insurer_nphies_id,
-        new Date(),
-        acknowledgmentReceived,
-        acknowledgmentReceived ? new Date() : null,
-        acknowledgmentStatus,
-        JSON.stringify(communicationBundle),
-        nphiesResponse.data ? JSON.stringify(nphiesResponse.data) : null
-      ]);
-
-      const communication = insertResult.rows[0];
-
-      // 8. Store payloads
-      for (let i = 0; i < payloads.length; i++) {
-        const payload = payloads[i];
-        await client.query(`
-          INSERT INTO nphies_communication_payloads (
-            communication_id,
-            sequence,
-            content_type,
-            content_string,
-            attachment_content_type,
-            attachment_data,
-            attachment_url,
-            attachment_title,
-            claim_item_sequences
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [
-          communication.id,
-          i + 1,
-          payload.contentType,
-          payload.contentString || null,
-          payload.attachment?.contentType || null,
-          payload.attachment?.data || null,
-          payload.attachment?.url || null,
-          payload.attachment?.title || null,
-          payload.claimItemSequences || null
-        ]);
-      }
-
-      // 9. Update CommunicationRequest as responded
-      await client.query(`
-        UPDATE nphies_communication_requests
-        SET responded_at = NOW(),
-            response_communication_id = $1
-        WHERE id = $2
-      `, [communication.id, communicationRequestId]);
-
-      await client.query('COMMIT');
-
-      return {
-        success: nphiesResponse.success,
-        communication: {
-          id: communication.id,
-          communicationId: communication.communication_id,
-          type: 'solicited',
-          basedOnRequestId: communicationRequestId,
-          status: communication.status,
-          sentAt: communication.sent_at,
-          payloadCount: payloads.length
+        record: {
+          claim_id: commRequest.claim_id,
+          patient_id: commRequest.patient_id,
+          communication_type: 'solicited',
+          about_reference: commRequest.about_reference,
+          about_type: commRequest.about_type || 'Claim',
+          sender_identifier: commRequest.provider_nphies_id,
+          recipient_identifier: commRequest.insurer_nphies_id
         },
-        nphiesResponse: {
-          status: nphiesResponse.status,
-          success: nphiesResponse.success,
-          error: nphiesResponse.error
-        }
-      };
+        logPrefix: '[ClaimCommunicationService]'
+      });
 
     } catch (error) {
-      await client.query('ROLLBACK');
       console.error('[ClaimCommunicationService] Error sending solicited communication:', error);
       throw error;
-    } finally {
-      client.release();
     }
   }
 
@@ -1181,10 +994,9 @@ class ClaimCommunicationService {
    * These are requests from HIC that need responses
    */
   async getPendingCommunicationRequests(claimId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       const result = await client.query(`
         SELECT *
@@ -1197,7 +1009,7 @@ class ClaimCommunicationService {
       return result.rows;
 
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -1205,10 +1017,9 @@ class ClaimCommunicationService {
    * Get all CommunicationRequests for a Claim
    */
   async getCommunicationRequests(claimId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       const result = await client.query(`
         SELECT cr.*,
@@ -1227,7 +1038,7 @@ class ClaimCommunicationService {
       return result.rows;
 
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -1262,10 +1073,9 @@ class ClaimCommunicationService {
    * Get all Communications sent for a Claim
    */
   async getCommunications(claimId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       const result = await client.query(`
         SELECT c.*,
@@ -1290,7 +1100,7 @@ class ClaimCommunicationService {
       return result.rows;
 
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -1298,10 +1108,9 @@ class ClaimCommunicationService {
    * Get a single CommunicationRequest by ID
    */
   async getCommunicationRequest(requestId, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       const result = await client.query(`
         SELECT cr.*,
@@ -1318,7 +1127,7 @@ class ClaimCommunicationService {
       return result.rows[0] || null;
 
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -1338,10 +1147,9 @@ class ClaimCommunicationService {
    * @returns {Object} Preview bundle and metadata
    */
   async previewCommunicationBundle(claimId, payloads, type = 'unsolicited', communicationRequestId = null, schemaName = 'public') {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       // Get Claim with related data
       const claimResult = await client.query(`
@@ -1490,7 +1298,7 @@ class ClaimCommunicationService {
         error: error.message
       };
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -1504,25 +1312,22 @@ class ClaimCommunicationService {
    * @returns {Object} Poll result with acknowledgment status
    */
   async pollCommunicationAcknowledgment(claimId, communicationId, schemaName = 'public') {
-    const client = await pool.connect();
-    
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
-
       // 1. Get the communication
-      const commResult = await client.query(`
-        SELECT c.*, cs.claim_number, pr.nphies_id as provider_nphies_id, pr.provider_name
-        FROM nphies_communications c
-        LEFT JOIN claim_submissions cs ON c.claim_id = cs.id
-        LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
-        WHERE c.communication_id = $1 AND c.claim_id = $2
-      `, [communicationId, claimId]);
+      const comm = await withSchemaClient(schemaName, async client => {
+        const commResult = await client.query(`
+          SELECT c.*, cs.claim_number, pr.nphies_id as provider_nphies_id, pr.provider_name
+          FROM nphies_communications c
+          LEFT JOIN claim_submissions cs ON c.claim_id = cs.id
+          LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
+          WHERE c.communication_id = $1 AND c.claim_id = $2
+        `, [communicationId, claimId]);
+        return commResult.rows[0] || null;
+      });
 
-      if (commResult.rows.length === 0) {
+      if (!comm) {
         throw new Error('Communication not found');
       }
-
-      const comm = commResult.rows[0];
 
       // 2. Check if already acknowledged
       if (comm.acknowledgment_received && comm.acknowledgment_status === 'ok') {
@@ -1540,7 +1345,7 @@ class ClaimCommunicationService {
         comm.provider_name || 'Healthcare Provider'
       );
 
-      // 4. Send poll request
+      // 4. Send poll request (no database client held during the HTTP call)
       const pollResponse = await nphiesService.sendPoll(pollBundle);
 
       if (!pollResponse.success) {
@@ -1552,41 +1357,46 @@ class ClaimCommunicationService {
         };
       }
 
-      // 5. Look for acknowledgment in response
-      const communications = nphiesService.extractCommunicationsFromPoll(pollResponse.data);
-      
+      // 5. Look for our acknowledgment; every other message in the response is
+      //    handed to the system poll path instead of being discarded.
+      const messages = systemPollService.extractPollMessages(pollResponse.data);
+      const otherMessages = [];
       let acknowledgmentFound = false;
       let acknowledgmentStatus = null;
 
-      for (const respComm of communications) {
-        const parsed = this.mapper.parseCommunication(respComm);
-        
-        if (parsed.inResponseTo) {
-          const responseToId = this.mapper.extractIdFromReference(parsed.inResponseTo);
-          
+      for (const message of messages) {
+        const respComm = message.resource;
+        let isOurAck = false;
+        if (!acknowledgmentFound && respComm?.resourceType === 'Communication') {
+          const parsed = this.mapper.parseCommunication(respComm);
+          const responseToId = parsed.inResponseTo ? this.mapper.extractIdFromReference(parsed.inResponseTo) : null;
           if (responseToId === communicationId) {
+            isOurAck = true;
             acknowledgmentFound = true;
             acknowledgmentStatus = parsed.status;
 
-            // Update communication with acknowledgment
-            await client.query(`
+            await withSchemaClient(schemaName, client => client.query(`
               UPDATE nphies_communications
               SET acknowledgment_received = TRUE,
                   acknowledgment_at = NOW(),
                   acknowledgment_status = $1,
                   acknowledgment_bundle = $2
               WHERE communication_id = $3
-            `, [acknowledgmentStatus, JSON.stringify(respComm), communicationId]);
-
-            break;
+            `, [acknowledgmentStatus, JSON.stringify(respComm), communicationId]));
           }
         }
+        if (!isOurAck) otherMessages.push(message);
       }
+
+      const routed = await this.routeOtherMessages(
+        otherMessages, pollBundle, pollResponse.data, schemaName, `claim #${claimId} acknowledgment poll`
+      );
 
       return {
         success: true,
         acknowledgmentFound,
         acknowledgmentStatus,
+        otherMessages: routed,
         pollBundle,
         responseBundle: pollResponse.data,
         message: acknowledgmentFound 
@@ -1597,8 +1407,6 @@ class ClaimCommunicationService {
     } catch (error) {
       console.error('[ClaimCommunicationService] Error polling for acknowledgment:', error);
       throw error;
-    } finally {
-      client.release();
     }
   }
 
@@ -1610,20 +1418,21 @@ class ClaimCommunicationService {
    * @returns {Object} Results for all polled communications
    */
   async pollAllQueuedAcknowledgments(claimId, schemaName = 'public') {
-    const client = await pool.connect();
-    
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
+      // 1. Get all communications with queued acknowledgments. The client is
+      //    released before polling, so the per-communication polls below never
+      //    wait for a second pooled connection while holding this one.
+      const rows = await withSchemaClient(schemaName, async client => {
+        const commsResult = await client.query(`
+          SELECT c.communication_id
+          FROM nphies_communications c
+          WHERE c.claim_id = $1
+            AND (c.acknowledgment_status = 'queued' OR (c.acknowledgment_received = FALSE AND c.status = 'completed'))
+        `, [claimId]);
+        return commsResult.rows;
+      });
 
-      // 1. Get all communications with queued acknowledgments
-      const commsResult = await client.query(`
-        SELECT c.communication_id
-        FROM nphies_communications c
-        WHERE c.claim_id = $1
-          AND (c.acknowledgment_status = 'queued' OR (c.acknowledgment_received = FALSE AND c.status = 'completed'))
-      `, [claimId]);
-
-      if (commsResult.rows.length === 0) {
+      if (rows.length === 0) {
         return {
           success: true,
           totalPolled: 0,
@@ -1640,7 +1449,7 @@ class ClaimCommunicationService {
       let stillQueued = 0;
       const errors = [];
 
-      for (const row of commsResult.rows) {
+      for (const row of rows) {
         try {
           const pollResult = await this.pollCommunicationAcknowledgment(
             claimId,
@@ -1668,19 +1477,17 @@ class ClaimCommunicationService {
 
       return {
         success: true,
-        totalPolled: commsResult.rows.length,
+        totalPolled: rows.length,
         acknowledged,
         stillQueued,
         errors: errors.length > 0 ? errors : undefined,
         results,
-        message: `Polled ${commsResult.rows.length} communication(s): ${acknowledged} acknowledged, ${stillQueued} still queued`
+        message: `Polled ${rows.length} communication(s): ${acknowledged} acknowledged, ${stillQueued} still queued`
       };
 
     } catch (error) {
       console.error('[ClaimCommunicationService] Error polling all acknowledgments:', error);
       throw error;
-    } finally {
-      client.release();
     }
   }
 }

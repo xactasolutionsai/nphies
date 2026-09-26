@@ -21,6 +21,7 @@
 
 import BaseMapper from './BaseMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import { cloneInput, mappingError, roundMoney } from './nphiesIdentity.js';
 
 class InstitutionalMapper extends BaseMapper {
   constructor() {
@@ -32,7 +33,10 @@ class InstitutionalMapper extends BaseMapper {
    * Build complete Prior Authorization Request Bundle for Institutional type
    */
   buildPriorAuthRequestBundle(data) {
-    const { priorAuth, patient, provider, insurer, coverage, policyHolder, practitioner, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    // Deep copy: mapping must never mutate the caller's record
+    const priorAuth = cloneInput(data.priorAuth);
+    const practitioner = data.practitioner || priorAuth.practitioner;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -67,7 +71,7 @@ class InstitutionalMapper extends BaseMapper {
       bundleResourceIds.motherPatient
     );
     const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: '08.00' },
+      practitioner,
       bundleResourceIds.practitioner
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
@@ -113,8 +117,7 @@ class InstitutionalMapper extends BaseMapper {
     const encounterRef = bundleResourceIds.encounter;
     const practitionerRef = bundleResourceIds.practitioner;
 
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build extensions
     const extensions = [];
@@ -231,7 +234,7 @@ class InstitutionalMapper extends BaseMapper {
 
     claim.identifier = [
       {
-        system: `${providerIdentifierSystem}/authorization`,
+        system: this.getClaimIdentifierSystem(provider),
         value: priorAuth.request_number || `req_${Date.now()}`
       }
     ];
@@ -350,28 +353,34 @@ class InstitutionalMapper extends BaseMapper {
 
     // SupportingInfo with REQUIRED institutional fields
     let supportingInfoSequences = [];
-    let supportingInfoList = [...(priorAuth.supporting_info || [])];
+    let supportingInfoList = this.tagCallerSupportingInfo(priorAuth.supporting_info);
     
-    // BV-00770: chief-complaint is REQUIRED for institutional
+    // BV-00770: chief-complaint is REQUIRED for institutional (never a default complaint)
     const hasChiefComplaint = supportingInfoList.some(info => info.category === 'chief-complaint');
     if (!hasChiefComplaint) {
+      if (!priorAuth.chief_complaint_code) {
+        throw mappingError('Institutional request requires a chief complaint (supporting_info category chief-complaint or chief_complaint_code)');
+      }
       supportingInfoList.unshift({
         category: 'chief-complaint',
-        code: priorAuth.chief_complaint_code || '418799008',
-        code_display: priorAuth.chief_complaint_display || 'General symptom',
+        code: priorAuth.chief_complaint_code,
+        code_display: priorAuth.chief_complaint_display,
         code_system: 'http://snomed.info/sct',
         timing_date: priorAuth.request_date || new Date()
       });
     }
     
-    // BV-00802: estimated-Length-of-Stay is REQUIRED for institutional
+    // BV-00802: estimated-Length-of-Stay is REQUIRED for institutional (never a default of 1 day)
     const hasLengthOfStay = supportingInfoList.some(info => 
       info.category === 'estimated-Length-of-Stay' || info.category === 'estimated-length-of-stay'
     );
     if (!hasLengthOfStay) {
+      if (priorAuth.estimated_length_of_stay === null || priorAuth.estimated_length_of_stay === undefined || priorAuth.estimated_length_of_stay === '') {
+        throw mappingError('Institutional request requires an estimated length of stay (supporting_info category estimated-Length-of-Stay or estimated_length_of_stay)');
+      }
       supportingInfoList.push({
         category: 'estimated-Length-of-Stay',
-        value_quantity: priorAuth.estimated_length_of_stay || 1,
+        value_quantity: priorAuth.estimated_length_of_stay,
         value_quantity_unit: 'd',
         timing_date: priorAuth.request_date || new Date()
       });
@@ -452,13 +461,14 @@ class InstitutionalMapper extends BaseMapper {
       });
     }
     
-    if (supportingInfoList.length > 0) {
-      claim.supportingInfo = supportingInfoList.map((info, idx) => {
-        const seq = idx + 1;
-        supportingInfoSequences.push(seq);
+    const numberedSupportingInfo = supportingInfoList.map((info, idx) => ({ info, sequence: idx + 1 }));
+    const informationSequenceMap = this.buildInformationSequenceMap(numberedSupportingInfo);
+    if (numberedSupportingInfo.length > 0) {
+      claim.supportingInfo = numberedSupportingInfo.map(({ info, sequence }) => {
+        supportingInfoSequences.push(sequence);
         
         // Note: Attachments are standalone and not linked to supportingInfo via valueReference
-        return this.buildSupportingInfo({ ...info, sequence: seq });
+        return this.buildSupportingInfo({ ...info, sequence });
       });
     }
 
@@ -481,7 +491,7 @@ class InstitutionalMapper extends BaseMapper {
     
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
-        this.buildClaimItem(item, 'institutional', idx + 1, supportingInfoSequences, encounterPeriod)
+        this.buildClaimItem(item, 'institutional', idx + 1, supportingInfoSequences, encounterPeriod, informationSequenceMap)
       );
     }
 
@@ -497,7 +507,7 @@ class InstitutionalMapper extends BaseMapper {
       }, 0);
     }
     claim.total = {
-      value: parseFloat(totalAmount || 0),
+      value: roundMoney(totalAmount),
       currency: priorAuth.currency || 'SAR'
     };
 

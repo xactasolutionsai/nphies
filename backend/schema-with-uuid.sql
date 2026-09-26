@@ -1,3 +1,6 @@
+-- LEGACY / DO NOT USE for new databases: this standalone schema predates the migrations and does
+-- not match the application (column names, key types, table names). Build a database with
+-- `npm run migrate` (scripts/migrate.js) instead. Kept for reference only.
 -- Nafes Healthcare Management System Database Schema with UUIDs
 -- PostgreSQL Database Schema for the Healthcare Management System with NPHIES compliance
 

@@ -10,7 +10,10 @@ const source = file => fs.readFileSync(new URL(`../../frontend/src/${file}`, imp
 // Only replace Vite's compile-time environment/alias; execute the real service code.
 const httpUrl = moduleUrl(source('services/http.js').replace('import.meta.env.VITE_API_URL', "'https://app.example.test/api'"));
 const http = await import(httpUrl);
-const { default: api } = await import(moduleUrl(source('services/api.js').replace("'@/services/http'", JSON.stringify(httpUrl))));
+const downloadUrl = moduleUrl(source('utils/download.js'));
+const { default: api } = await import(moduleUrl(source('services/api.js')
+  .replace("'@/services/http'", JSON.stringify(httpUrl))
+  .replace("'@/utils/download'", JSON.stringify(downloadUrl))));
 const chat = await import(moduleUrl(source('services/chatService.js').replace("'@/services/http'", JSON.stringify(httpUrl))));
 const draft = await import('../../frontend/src/utils/draftManager.js');
 

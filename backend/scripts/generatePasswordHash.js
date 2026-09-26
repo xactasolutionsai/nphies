@@ -1,21 +1,13 @@
+// Print a bcrypt hash for a password without touching the database.
+// Usage: ADMIN_PASSWORD='<strong password>' node scripts/generatePasswordHash.js
 import bcrypt from 'bcryptjs';
+import { readAdminPassword } from './adminCredentials.js';
 
-async function generateHash() {
-  const password = '123123';
-  const saltRounds = 10;
-  const hash = await bcrypt.hash(password, saltRounds);
-  
-  console.log('Password: 123123');
-  console.log('Bcrypt Hash:', hash);
-  console.log('\nSQL Query:');
-  console.log(`INSERT INTO users (email, password_hash) 
-VALUES (
-  'eng.anasshamia@gmail.com',
-  '${hash}'
-)
-ON CONFLICT (email) DO UPDATE 
-SET password_hash = EXCLUDED.password_hash;`);
+try {
+  // The password is read from ADMIN_PASSWORD or the first argument (argv[2]).
+  const password = readAdminPassword([process.argv[0], process.argv[1], undefined, process.argv[2]]);
+  console.log(await bcrypt.hash(password, 12));
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
 }
-
-generateHash().catch(console.error);
-

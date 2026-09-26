@@ -1,52 +1,62 @@
-import { Ollama } from 'ollama';
 import dotenv from 'dotenv';
+import { getOllamaConfig, createOllamaClient, isTimeoutError } from './ollamaConfig.js';
 
 dotenv.config();
 
 /**
  * Medbot Service
- * Handles medical information generation using the Goosedev/medbot model
- * Separated from ollamaService for better organization
+ * Handles medical information generation (medicine info, medication safety).
+ * The model is MEDBOT_MODEL, falling back to OLLAMA_MODEL; the name reported in
+ * logs and result metadata is always the model actually used.
  */
 class MedbotService {
   constructor() {
-    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://206.168.83.244:11434';
-    this.model = process.env.OLLAMA_MODEL || 'thewindmom/llama3-med42-8b:latest';
-    this.timeout = parseInt(process.env.OLLAMA_TIMEOUT) || 120000;
+    const { baseUrl, timeoutMs, configError } = getOllamaConfig();
+    this.baseUrl = baseUrl;
+    this.configError = configError;
+    this.model = process.env.MEDBOT_MODEL || process.env.OLLAMA_MODEL || 'thewindmom/llama3-med42-8b:latest';
+    this.timeout = timeoutMs;
     this.maxRetries = 3;
     
-    this.client = new Ollama({
-      host: this.baseUrl
-    });
+    // Requests are aborted after this.timeout so retries never stack.
+    this.client = createOllamaClient({ baseUrl, timeoutMs });
     
-    console.log('✅ Medbot Service initialized with model: Goosedev/medbot');
+    if (configError) {
+      console.error(`❌ Medbot Service disabled: ${configError.message}`);
+    } else {
+      console.log(`✅ Medbot Service initialized with model: ${this.model}`);
+    }
   }
 
   /**
-   * Generate a completion from the Goosedev/medbot model
+   * Generate a completion from the configured medbot model
    * @param {string} prompt - The prompt to send to the model
-   * @param {object} options - Additional options for the completion
+   * @param {object} options - Additional options for the completion. `format` may be
+   *   'json' or a JSON schema (Ollama structured outputs) and is sent top-level.
    * @returns {Promise<object>} - The completion response
    */
   async generateCompletion(prompt, options = {}) {
+    if (this.configError) throw this.configError;
     const startTime = Date.now();
     let lastError = null;
+    const { format, ...modelOptions } = options;
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        console.log(`🤖 Medbot request (attempt ${attempt}/${this.maxRetries})`);
+        console.log(`🤖 Medbot request (attempt ${attempt}/${this.maxRetries}, model ${this.model})`);
         
         const response = await this.client.generate({
           model: this.model,
           prompt: prompt,
           stream: false,
+          ...(format ? { format } : {}),
           options: {
-            temperature: options.temperature || 0.3,
-            top_p: options.top_p || 0.9,
-            top_k: options.top_k || 40,
-            num_predict: options.num_predict || 4000,
-            repeat_penalty: options.repeat_penalty || 1.1,
-            ...options
+            temperature: modelOptions.temperature ?? 0.3,
+            top_p: modelOptions.top_p ?? 0.9,
+            top_k: modelOptions.top_k ?? 40,
+            num_predict: modelOptions.num_predict ?? 4000,
+            repeat_penalty: modelOptions.repeat_penalty ?? 1.1,
+            ...modelOptions
           }
         });
 
@@ -55,14 +65,16 @@ class MedbotService {
 
         return {
           response: response.response,
-          model: response.model,
+          model: response.model || this.model,
           duration: duration,
           done: response.done
         };
 
       } catch (error) {
-        lastError = error;
-        console.error(`❌ Medbot request failed (attempt ${attempt}/${this.maxRetries}):`, error.message);
+        lastError = isTimeoutError(error)
+          ? new Error(`Medbot request timed out after ${this.timeout}ms`)
+          : error;
+        console.error(`❌ Medbot request failed (attempt ${attempt}/${this.maxRetries}):`, lastError.message);
         
         if (attempt < this.maxRetries) {
           const waitTime = Math.pow(2, attempt) * 1000;
@@ -76,7 +88,7 @@ class MedbotService {
   }
 
   /**
-   * Get detailed medicine information using AI (Goosedev/medbot)
+   * Get detailed medicine information using the configured medbot model
    * @param {object} medicineData - Medicine data object
    * @returns {Promise<object>} - Detailed medicine information
    */
@@ -98,11 +110,7 @@ class MedbotService {
         repeat_penalty: 1.1
       });
 
-      console.log('\n📥 ==> RAW AI RESPONSE <==');
-      console.log('─'.repeat(80));
-      console.log(result.response);
-      console.log('─'.repeat(80));
-      console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s\n`);
+      console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s (${result.response?.length || 0} chars)\n`);
 
       // Parse the AI response into structured format
       const medicineInfo = this.parseMedicineInfoResponse(result.response, medicineData);
@@ -123,7 +131,7 @@ class MedbotService {
         ...medicineInfo,
         fullDescription: result.response, // Always include full natural language response
         metadata: {
-          model: this.model,
+          model: result.model || this.model,
           responseTime: `${(result.duration / 1000).toFixed(2)}s`,
           timestamp: new Date().toISOString(),
           rawResponse: result.response,
@@ -360,7 +368,6 @@ Provide accurate, evidence-based information. Use bullet points with * for lists
 
     } catch (error) {
       console.error('❌ Error parsing medicine information response:', error.message);
-      console.error('Response text:', responseText.substring(0, 500)); // Log first 500 chars for debugging
     }
 
     return result;
@@ -429,7 +436,8 @@ Provide accurate, evidence-based information. Use bullet points with * for lists
    */
   async healthCheck() {
     try {
-      const response = await this.client.generate({
+      if (this.configError) throw this.configError;
+      await this.client.generate({
         model: this.model,
         prompt: 'Health check',
         stream: false,

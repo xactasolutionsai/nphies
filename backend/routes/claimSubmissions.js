@@ -75,6 +75,12 @@ router.post('/:id/status-check', (req, res) => claimSubmissionsController.sendSt
 router.post('/:id/poll', (req, res) => claimSubmissionsController.pollMessages(req, res));
 
 /**
+ * GET /api/claim-submissions/:id/poll/preview
+ * Preview the poll bundle that /poll would send (no NPHIES call)
+ */
+router.get('/:id/poll/preview', (req, res) => claimSubmissionsController.previewPollBundle(req, res));
+
+/**
  * Send Unsolicited Communication
  * POST /api/claim-submissions/:id/communication/unsolicited
  * 

@@ -1,3 +1,6 @@
+-- LEGACY / DO NOT USE for new databases: this standalone schema predates the migrations and does
+-- not match the application (column names, key types, table names). Build a database with
+-- `npm run migrate` (scripts/migrate.js) instead. Kept for reference only.
 -- Nafes Healthcare Management System Database Schema
 -- PostgreSQL Database Schema for the Healthcare Management System
 
@@ -307,9 +310,9 @@ CREATE TRIGGER update_standard_approvals_claims_updated_at BEFORE UPDATE ON stan
 
 -- Insert sample data for testing
 INSERT INTO patients (name, identifier, gender, birth_date, phone, email, address) VALUES
-('أحمد محمد العلي', '1234567890', 'Male', '1985-03-15', '+966501234567', 'ahmed.ali@example.com', 'الرياض، المملكة العربية السعودية'),
-('فاطمة عبدالله السعد', '0987654321', 'Female', '1990-07-22', '+966502345678', 'fatima.saad@example.com', 'جدة، المملكة العربية السعودية'),
-('محمد خالد القحطاني', '1122334455', 'Male', '1978-12-10', '+966503456789', 'mohammed.qhtani@example.com', 'الدمام، المملكة العربية السعودية')
+('أحمد محمد العلي', '1234567890', 'male', '1985-03-15', '+966501234567', 'ahmed.ali@example.com', 'الرياض، المملكة العربية السعودية'),
+('فاطمة عبدالله السعد', '0987654321', 'female', '1990-07-22', '+966502345678', 'fatima.saad@example.com', 'جدة، المملكة العربية السعودية'),
+('محمد خالد القحطاني', '1122334455', 'male', '1978-12-10', '+966503456789', 'mohammed.qhtani@example.com', 'الدمام، المملكة العربية السعودية')
 ON CONFLICT (identifier) DO NOTHING;
 
 INSERT INTO providers (name, type, nphies_id, address, phone, email, contact_person) VALUES
@@ -408,5 +411,3 @@ GROUP BY i.id, i.name, i.nphies_id, i.status;
 -- Grant permissions (adjust as needed for your setup)
 -- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO your_app_user;
 -- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO your_app_user;
-
-COMMIT;

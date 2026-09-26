@@ -4,9 +4,20 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/**
+ * Expected embedding dimension of the pgvector columns. It must match both the
+ * embedding model (OLLAMA_EMBED_MODEL) and the vector(N) column definitions.
+ */
+export function resolveEmbeddingDimension(env = process.env) {
+  const value = parseInt(env.EMBEDDING_DIM, 10);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
 class RAGService {
   constructor() {
-    this.embeddingDimension = 4096; // Dimension for cniongolo/biomistral model
+    // null = not configured: any dimension returned by the model is accepted and
+    // the database column type is the final check.
+    this.embeddingDimension = resolveEmbeddingDimension();
     this.similarityThreshold = 0.7;
     this.maxRetrievalResults = 5;
     
@@ -14,56 +25,32 @@ class RAGService {
   }
 
   /**
-   * Generate embedding for text using Ollama
+   * Generate embedding for text using Ollama.
+   * There is deliberately no fallback: a made-up (e.g. hash-based) vector would be
+   * stored or compared as if it were a real embedding and silently corrupt search.
    * @param {string} text - Text to embed
    * @returns {Promise<array>} - Embedding vector
+   * @throws {Error} when no real embedding can be produced
    */
   async generateEmbedding(text) {
+    let embedding;
     try {
-      // For models that support embeddings
-      const embedding = await ollamaService.generateEmbedding(text);
-      return embedding;
+      embedding = await ollamaService.generateEmbedding(text);
     } catch (error) {
-      // Fallback: use a hash-based simple embedding (not ideal, but better than nothing)
-      console.warn('⚠️ Embedding generation failed, using fallback method');
-      return this.generateSimpleEmbedding(text);
+      throw new Error(`Embedding generation failed (model ${ollamaService.embeddingModel}): ${error.message}`);
     }
-  }
 
-  /**
-   * Fallback: Generate a simple embedding using TF-IDF-like approach
-   * Note: This is not as good as model-based embeddings but serves as a fallback
-   * @private
-   */
-  generateSimpleEmbedding(text) {
-    // Create a simple embedding based on text features (dimension matches current model)
-    const embedding = new Array(this.embeddingDimension).fill(0);
-    const words = text.toLowerCase().split(/\s+/);
-    
-    // Use word frequencies and positions to create a simple vector
-    words.forEach((word, idx) => {
-      const hash = this.simpleHash(word);
-      const position = idx % this.embeddingDimension;
-      embedding[position] += (hash % 100) / 100;
-    });
-    
-    // Normalize the vector
-    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-    return embedding.map(val => magnitude > 0 ? val / magnitude : 0);
-  }
-
-  /**
-   * Simple hash function for words
-   * @private
-   */
-  simpleHash(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
+    if (!Array.isArray(embedding) || embedding.length === 0 ||
+        !embedding.every(v => typeof v === 'number' && Number.isFinite(v))) {
+      throw new Error('Embedding generation failed: the model returned an invalid vector');
     }
-    return Math.abs(hash);
+    if (this.embeddingDimension && embedding.length !== this.embeddingDimension) {
+      throw new Error(
+        `Embedding dimension mismatch: model ${ollamaService.embeddingModel} returned ${embedding.length}, ` +
+        `EMBEDDING_DIM is ${this.embeddingDimension}`
+      );
+    }
+    return embedding;
   }
 
   /**

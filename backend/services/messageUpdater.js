@@ -6,12 +6,74 @@
  * logic that was previously scattered across multiple controllers/services.
  */
 
-import pool, { transaction } from '../db.js';
+import { transaction } from '../db.js';
 import advancedAuthParser from './advancedAuthParser.js';
 import CommunicationMapper from './communicationMapper.js';
 import PaymentReconciliationService from './paymentReconciliationService.js';
+import { setLocalSearchPath, withSchemaClient, withSchemaTransaction } from './dbSchema.js';
 
 const mapper = new CommunicationMapper();
+
+// Negative phrases are checked first so "not approved" is never read as approved.
+const NEGATIVE_DISPOSITION = /\b(not\s+(?:been\s+)?(?:approved|accepted|authori[sz]ed|covered)|unapproved|disapproved|denied|declined|rejected|reject)\b/i;
+const POSITIVE_DISPOSITION = /\b(approved|accepted|authori[sz]ed)\b/i;
+const EXTENSION_STATUS = { approved: 'approved', rejected: 'denied', partial: 'partial', pended: 'queued' };
+
+/**
+ * Map a ClaimResponse to our record status. Shared by the system poll and the
+ * per-record polls so prior authorizations and claims are interpreted the same way.
+ *
+ * - outcome queued/error win (queued / error).
+ * - The adjudication-outcome extension is authoritative when present.
+ * - Without it, a "complete" response is only approved/denied when the
+ *   disposition clearly says so; anything else stays 'pending' with
+ *   needsReview=true. It is never defaulted to approved.
+ *
+ * @returns {{status: string, outcome: string|null, adjudicationOutcome: string|null, needsReview: boolean}}
+ */
+export function mapClaimResponseStatus(claimResponse) {
+  const outcome = claimResponse?.outcome ?? null;
+  const extensionCode = claimResponse?.extension?.find(
+    ext => ext.url?.includes('extension-adjudication-outcome')
+  )?.valueCodeableConcept?.coding?.[0]?.code || null;
+
+  let adjudicationOutcome = EXTENSION_STATUS[extensionCode] ? extensionCode : null;
+  let status = 'pending';
+  let needsReview = false;
+
+  if (outcome === 'queued') {
+    status = 'queued';
+  } else if (outcome === 'error') {
+    status = 'error';
+  } else if (adjudicationOutcome) {
+    status = EXTENSION_STATUS[adjudicationOutcome];
+  } else if (outcome === 'partial') {
+    status = 'partial';
+    adjudicationOutcome = 'partial';
+  } else if (outcome === 'complete') {
+    const disposition = claimResponse.disposition || '';
+    if (NEGATIVE_DISPOSITION.test(disposition)) {
+      status = 'denied';
+      adjudicationOutcome = 'rejected';
+    } else if (POSITIVE_DISPOSITION.test(disposition)) {
+      status = 'approved';
+      adjudicationOutcome = 'approved';
+    } else {
+      needsReview = true;
+    }
+  } else {
+    needsReview = true;
+  }
+
+  if (extensionCode && !EXTENSION_STATUS[extensionCode]) needsReview = true;
+  if (needsReview) {
+    console.warn(`[MessageUpdater] ClaimResponse ${claimResponse?.id || ''} has no clear adjudication (outcome=${outcome}); left as '${status}' for review`);
+  }
+
+  return { status, outcome, adjudicationOutcome, needsReview };
+}
+
+const COMMUNICATION_STATUSES = new Set(['preparation', 'in-progress', 'not-done', 'on-hold', 'stopped', 'completed', 'entered-in-error', 'unknown']);
 
 class MessageUpdater {
 
@@ -26,53 +88,9 @@ class MessageUpdater {
    */
   async updatePriorAuthorization(recordId, claimResponse, responseBundle, schemaName) {
     return transaction(async client => {
-      await client.query(`SET LOCAL search_path TO ${schemaName}`);
+      await setLocalSearchPath(client, schemaName);
 
-      const outcome = claimResponse.outcome;
-      let status = 'pending';
-      let adjudicationOutcome = null;
-
-      // Extract adjudication outcome from extension
-      const adjudicationExt = claimResponse.extension?.find(
-        ext => ext.url?.includes('extension-adjudication-outcome')
-      );
-      adjudicationOutcome = adjudicationExt?.valueCodeableConcept?.coding?.[0]?.code;
-
-      switch (outcome) {
-        case 'complete': {
-          const disposition = claimResponse.disposition?.toLowerCase() || '';
-          if (disposition.includes('approved') || disposition.includes('accept')) {
-            status = 'approved';
-            if (!adjudicationOutcome) adjudicationOutcome = 'approved';
-          } else if (disposition.includes('denied') || disposition.includes('reject')) {
-            status = 'denied';
-            if (!adjudicationOutcome) adjudicationOutcome = 'rejected';
-          } else {
-            status = 'approved';
-            if (!adjudicationOutcome) adjudicationOutcome = 'approved';
-          }
-          break;
-        }
-        case 'partial':
-          status = 'partial';
-          if (!adjudicationOutcome) adjudicationOutcome = 'partial';
-          break;
-        case 'queued':
-          status = 'queued';
-          break;
-        case 'error':
-          status = 'error';
-          break;
-      }
-
-      // The adjudication extension is the authoritative verdict from NPHIES;
-      // override the disposition-based status when the extension is present.
-      if (adjudicationOutcome) {
-        if (adjudicationOutcome === 'rejected') status = 'denied';
-        else if (adjudicationOutcome === 'approved') status = 'approved';
-        else if (adjudicationOutcome === 'partial') status = 'partial';
-        else if (adjudicationOutcome === 'pended') status = 'queued';
-      }
+      const { status, outcome, adjudicationOutcome, needsReview } = mapClaimResponseStatus(claimResponse);
 
       // Extract financial totals
       const totals = claimResponse.total?.map(total => ({
@@ -168,6 +186,7 @@ class MessageUpdater {
         status,
         outcome,
         adjudicationOutcome,
+        needsReview,
         disposition: claimResponse.disposition
       };
 
@@ -179,20 +198,9 @@ class MessageUpdater {
    */
   async updateClaimSubmission(recordId, claimResponse, responseBundle, schemaName) {
     return transaction(async client => {
-      await client.query(`SET LOCAL search_path TO ${schemaName}`);
+      await setLocalSearchPath(client, schemaName);
 
-      const outcome = claimResponse.outcome;
-      let adjudicationOutcome = null;
-
-      const adjudicationExt = claimResponse.extension?.find(
-        ext => ext.url?.includes('extension-adjudication-outcome')
-      );
-      adjudicationOutcome = adjudicationExt?.valueCodeableConcept?.coding?.[0]?.code;
-
-      const newStatus = outcome === 'queued' ? 'queued' :
-                        adjudicationOutcome === 'approved' ? 'approved' :
-                        adjudicationOutcome === 'rejected' ? 'denied' :
-                        outcome === 'complete' ? 'approved' : 'pending';
+      const { status: newStatus, outcome, adjudicationOutcome, needsReview } = mapClaimResponseStatus(claimResponse);
 
       const nphiesClaimId = claimResponse.identifier?.[0]?.value || claimResponse.id;
 
@@ -313,6 +321,7 @@ class MessageUpdater {
         status: newStatus,
         outcome,
         adjudicationOutcome,
+        needsReview,
         disposition: claimResponse.disposition
       };
 
@@ -329,12 +338,13 @@ class MessageUpdater {
    * @param {string} schemaName
    */
   async updateClaimBatch(recordId, claimResponse, correlationResult, schemaName) {
-    const client = await pool.connect();
-    try {
-      await client.query(`SET search_path TO ${schemaName}`);
+    // One transaction with the batch row locked, so concurrent polls cannot
+    // overwrite each other's polledResponses.
+    return transaction(async client => {
+      await setLocalSearchPath(client, schemaName);
 
       const batchResult = await client.query(
-        `SELECT request_bundle, response_bundle, total_claims FROM claim_batches WHERE id = $1`,
+        `SELECT request_bundle, response_bundle, total_claims FROM claim_batches WHERE id = $1 FOR UPDATE`,
         [recordId]
       );
       if (batchResult.rows.length === 0) {
@@ -362,7 +372,8 @@ class MessageUpdater {
         )?.valuePositiveInt;
 
       const outcome = claimResponse.outcome || 'complete';
-      const nphiesClaimId = claimResponse.identifier?.[0]?.value || claimResponse.id;
+      // Response identifier: used to recognise a re-delivered response.
+      const nphiesClaimId = claimResponse.identifier?.[0]?.value || claimResponse.id || null;
       const itemId = batchNumber ? itemIds[batchNumber - 1] : null;
 
       let existingResponseBundle = {};
@@ -370,7 +381,7 @@ class MessageUpdater {
         existingResponseBundle = typeof batch.response_bundle === 'string'
           ? JSON.parse(batch.response_bundle) : batch.response_bundle;
       }
-      if (!existingResponseBundle.polledResponses) {
+      if (!Array.isArray(existingResponseBundle.polledResponses)) {
         existingResponseBundle.polledResponses = [];
       }
 
@@ -385,7 +396,7 @@ class MessageUpdater {
       const copayAmount = totals.find(t => t.category === 'copay')?.amount;
       const claimApprovedAmount = benefitAmount ?? eligibleAmount ?? 0;
 
-      existingResponseBundle.polledResponses.push({
+      const polledEntry = {
         batchNumber,
         itemId,
         outcome,
@@ -398,7 +409,20 @@ class MessageUpdater {
         copayAmount: copayAmount ?? 0,
         errors: [],
         receivedAt: new Date().toISOString()
-      });
+      };
+
+      // Dedupe: the same response (same identifier) or a newer response for the
+      // same claim in the batch (same batch number) replaces the earlier entry.
+      const existingIndex = existingResponseBundle.polledResponses.findIndex(pr =>
+        (nphiesClaimId && pr.nphiesClaimId === nphiesClaimId) ||
+        (batchNumber != null && pr.batchNumber != null && Number(pr.batchNumber) === Number(batchNumber))
+      );
+      const duplicate = existingIndex !== -1;
+      if (duplicate) {
+        existingResponseBundle.polledResponses[existingIndex] = polledEntry;
+      } else {
+        existingResponseBundle.polledResponses.push(polledEntry);
+      }
 
       // Compute batch-level stats from all polledResponses
       let approved = 0, rejected = 0, totalApprovedAmount = 0;
@@ -416,6 +440,11 @@ class MessageUpdater {
       }
 
       const totalClaims = batch.total_claims || 0;
+      if (totalClaims > 0) {
+        // Never report more processed claims than the batch contains.
+        approved = Math.min(approved, totalClaims);
+        rejected = Math.min(rejected, totalClaims - approved);
+      }
       const processedCount = approved + rejected;
       let batchStatus = 'Submitted';
       if (processedCount === totalClaims && totalClaims > 0) {
@@ -471,7 +500,7 @@ class MessageUpdater {
         `, [adjStatus, itemBenefitAmount ?? null, itemId]);
       }
 
-      console.log(`[MessageUpdater] Updated claim_batch #${recordId}: batchNumber=${batchNumber}, outcome=${outcome}, adjudication=${adjudicationOutcome}`);
+      console.log(`[MessageUpdater] Updated claim_batch #${recordId}: batchNumber=${batchNumber}, outcome=${outcome}, adjudication=${adjudicationOutcome}${duplicate ? ' (replaced earlier response)' : ''}`);
 
       return {
         table: 'claim_batches',
@@ -479,11 +508,10 @@ class MessageUpdater {
         status: batchStatus,
         outcome,
         adjudicationOutcome,
-        batchNumber
+        batchNumber,
+        duplicate
       };
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**
@@ -493,12 +521,17 @@ class MessageUpdater {
   async saveAdvancedAuthorization(claimResponse, pollBundle, responseBundle, schemaName) {
     const parsed = advancedAuthParser.parseAdvancedAuthorization(claimResponse);
 
-    const client = await pool.connect();
-    try {
-      await client.query(`SET search_path TO ${schemaName}`);
+    // Check-then-insert runs in one transaction under an advisory lock on the
+    // identifier, so two concurrent polls cannot both insert the same authorization.
+    return transaction(async client => {
+      await setLocalSearchPath(client, schemaName);
 
       // Check if already exists by identifier
       if (parsed.identifier_value) {
+        await client.query(
+          'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+          [`advanced_authorizations:${parsed.identifier_value}`]
+        );
         const existing = await client.query(
           'SELECT id FROM advanced_authorizations WHERE identifier_value = $1',
           [parsed.identifier_value]
@@ -597,10 +630,7 @@ class MessageUpdater {
         isNew: true,
         record: insertResult.rows[0]
       };
-
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**
@@ -611,19 +641,7 @@ class MessageUpdater {
    * @param {string} schemaName
    */
   async storeCommunicationRequest(commRequest, correlationResult, schemaName) {
-    const client = await pool.connect();
-    try {
-      await client.query(`SET search_path TO ${schemaName}`);
-
-      // Check if already stored
-      const existing = await client.query(
-        `SELECT id FROM nphies_communication_requests WHERE request_id = $1`,
-        [commRequest.id]
-      );
-      if (existing.rows.length > 0) {
-        return { id: existing.rows[0].id, alreadyStored: true, table: 'nphies_communication_requests' };
-      }
-
+    return withSchemaClient(schemaName, async client => {
       const parsed = mapper.parseCommunicationRequest(commRequest);
 
       const priorAuthId = correlationResult?.table === 'prior_authorizations' ? correlationResult.recordId : null;
@@ -631,6 +649,8 @@ class MessageUpdater {
       const advancedAuthId = correlationResult?.table === 'advanced_authorizations' ? correlationResult.recordId : null;
 
       const attachment = parsed.payloadAttachment || {};
+      // request_id is UNIQUE: ON CONFLICT makes a re-delivered request a no-op
+      // even when two polls store it at the same time.
       const result = await client.query(`
         INSERT INTO nphies_communication_requests (
           request_id, prior_auth_id, claim_id, advanced_authorization_id,
@@ -642,6 +662,7 @@ class MessageUpdater {
           payload_attachment_url, payload_attachment_title,
           sender_identifier, recipient_identifier, authored_on, request_bundle
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        ON CONFLICT (request_id) DO NOTHING
         RETURNING *
       `, [
         commRequest.id,
@@ -669,6 +690,14 @@ class MessageUpdater {
         JSON.stringify(commRequest)
       ]);
 
+      if (result.rows.length === 0) {
+        const existing = await client.query(
+          `SELECT id FROM nphies_communication_requests WHERE request_id = $1`,
+          [commRequest.id]
+        );
+        return { id: existing.rows[0]?.id, alreadyStored: true, table: 'nphies_communication_requests' };
+      }
+
       console.log(`[MessageUpdater] Stored CommunicationRequest: id=${commRequest.id}, prior_auth=${priorAuthId}, claim=${claimId}, advanced_auth=${advancedAuthId}`);
 
       // Return the parent (correlated) record info for the link,
@@ -687,27 +716,50 @@ class MessageUpdater {
         newRecordId: result.rows[0].id,
         isNew: true
       };
-
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**
-   * Store a Communication (acknowledgment or payer-initiated)
+   * Store a Communication received from NPHIES.
+   *
+   * - An acknowledgment (inResponseTo one of our Communications) updates that
+   *   Communication's acknowledgment fields.
+   * - Any other Communication is stored as a new, payer-originated row linked to
+   *   the correlated PA / claim / advanced authorization / CommunicationRequest.
    */
   async storeCommunication(communication, correlationResult, schemaName) {
-    const client = await pool.connect();
-    try {
-      await client.query(`SET search_path TO ${schemaName}`);
+    return withSchemaTransaction(schemaName, async client => {
+      const parentOf = row => {
+        const table = row.prior_auth_id ? 'prior_authorizations' :
+                      row.claim_id ? 'claim_submissions' :
+                      row.advanced_authorization_id ? 'advanced_authorizations' : null;
+        return { table, recordId: row.prior_auth_id || row.claim_id || row.advanced_authorization_id || null };
+      };
 
-      // Check if already stored
-      const existing = await client.query(
-        `SELECT id FROM nphies_communications WHERE communication_id = $1`,
-        [communication.id]
-      );
-      if (existing.rows.length > 0) {
-        return { id: existing.rows[0].id, alreadyStored: true, table: 'nphies_communications' };
+      // 1. Acknowledgment of a Communication we sent
+      const inResponseTo = communication.inResponseTo?.[0]?.reference;
+      const ourCommunicationId = inResponseTo ? mapper.extractIdFromReference(inResponseTo) : null;
+      if (ourCommunicationId) {
+        const ack = await client.query(`
+          UPDATE nphies_communications
+          SET acknowledgment_received = TRUE,
+              acknowledgment_at = NOW(),
+              acknowledgment_status = $1,
+              acknowledgment_bundle = $2
+          WHERE communication_id = $3
+          RETURNING id, prior_auth_id, claim_id, advanced_authorization_id
+        `, [communication.status || 'completed', JSON.stringify(communication), ourCommunicationId]);
+        if (ack.rows.length > 0) {
+          const parent = parentOf(ack.rows[0]);
+          console.log(`[MessageUpdater] Acknowledgment stored for Communication ${ourCommunicationId}`);
+          return {
+            id: ack.rows[0].id,
+            table: parent.table || 'nphies_communications',
+            recordId: parent.recordId || ack.rows[0].id,
+            acknowledgment: true,
+            isNew: false
+          };
+        }
       }
 
       const priorAuthId = correlationResult?.relatedPriorAuthId || 
@@ -718,62 +770,59 @@ class MessageUpdater {
                              (correlationResult?.table === 'advanced_authorizations' ? correlationResult.recordId : null);
       const communicationRequestId = correlationResult?.relatedCommunicationRequestId || null;
 
-      // If this is an acknowledgment for a communication request, update its status
-      if (communicationRequestId) {
-        await client.query(`
-          UPDATE nphies_communication_requests
-          SET acknowledgment_received = true,
-              acknowledgment_at = NOW(),
-              acknowledgment_status = 'completed'
-          WHERE id = $1
-        `, [communicationRequestId]);
-      }
+      const about = communication.about?.[0] || {};
+      const aboutType = about.type || mapper.extractTypeFromReference(about.reference);
+      const status = COMMUNICATION_STATUSES.has(communication.status) ? communication.status : 'unknown';
 
+      // 2. Store as a new Communication (communication_id is UNIQUE: re-delivery is a no-op)
       const result = await client.query(`
         INSERT INTO nphies_communications (
           communication_id, prior_auth_id, claim_id, advanced_authorization_id,
-          communication_request_id,
-          status, category, payload_content_type, payload_content_string,
-          sender_identifier, recipient_identifier, sent_date,
-          communication_bundle
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          communication_type, based_on_request_id,
+          status, category, about_reference, about_type,
+          sender_identifier, recipient_identifier, sent_at,
+          request_bundle
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ON CONFLICT (communication_id) DO NOTHING
         RETURNING *
       `, [
         communication.id,
         priorAuthId,
         claimId,
         advancedAuthId,
+        (communicationRequestId || communication.basedOn?.length) ? 'solicited' : 'unsolicited',
         communicationRequestId,
-        communication.status || 'completed',
-        communication.category?.[0]?.coding?.[0]?.code || null,
-        communication.payload?.[0]?.contentString ? 'string' : 'attachment',
-        communication.payload?.[0]?.contentString || null,
+        status,
+        communication.category?.[0]?.coding?.[0]?.code || 'alert',
+        about.reference || about.identifier?.value || null,
+        ['Claim', 'ClaimResponse'].includes(aboutType) ? aboutType : null,
         communication.sender?.identifier?.value || null,
         communication.recipient?.[0]?.identifier?.value || null,
         communication.sent || null,
         JSON.stringify(communication)
       ]);
 
+      if (result.rows.length === 0) {
+        const existing = await client.query(
+          `SELECT id FROM nphies_communications WHERE communication_id = $1`,
+          [communication.id]
+        );
+        return { id: existing.rows[0]?.id, alreadyStored: true, table: 'nphies_communications' };
+      }
+
       console.log(`[MessageUpdater] Stored Communication: id=${communication.id}, prior_auth=${priorAuthId}, claim=${claimId}, advanced_auth=${advancedAuthId}`);
 
       // Return the parent (correlated) record info for the link
-      const parentTable = priorAuthId ? 'prior_authorizations' :
-                          claimId ? 'claim_submissions' :
-                          advancedAuthId ? 'advanced_authorizations' : null;
-      const parentRecordId = priorAuthId || claimId || advancedAuthId || null;
-
+      const parent = parentOf(result.rows[0]);
       return {
         id: result.rows[0].id,
-        table: parentTable || 'nphies_communications',
-        recordId: parentRecordId || result.rows[0].id,
+        table: parent.table || 'nphies_communications',
+        recordId: parent.recordId || result.rows[0].id,
         newRecordTable: 'nphies_communications',
         newRecordId: result.rows[0].id,
         isNew: true
       };
-
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**

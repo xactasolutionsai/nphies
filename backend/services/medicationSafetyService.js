@@ -1,8 +1,106 @@
 import medbotService from './medbotService.js';
 
+/*
+ * JSON schemas passed to Ollama as `format` (structured outputs) so the model is
+ * constrained to the contract the parsers below expect. The tolerant parsers stay
+ * as a fallback for servers/models that ignore the schema.
+ */
+const INTERACTION_ITEM_SCHEMA = {
+  type: 'object',
+  properties: {
+    severity: { type: 'string', enum: ['severe', 'moderate', 'mild'] },
+    affectedDrugs: { type: 'array', items: { type: 'string' } },
+    interaction: { type: 'string' },
+    clinicalSignificance: { type: 'string' },
+    recommendation: { type: 'string' }
+  },
+  required: ['severity', 'affectedDrugs', 'interaction', 'recommendation']
+};
+
+export const INTERACTIONS_SCHEMA = {
+  type: 'object',
+  properties: {
+    hasInteractions: { type: 'boolean' },
+    interactions: { type: 'array', items: INTERACTION_ITEM_SCHEMA }
+  },
+  required: ['hasInteractions', 'interactions']
+};
+
+const MED_WARNING_SCHEMA = {
+  type: 'object',
+  properties: {
+    medication: { type: 'string' },
+    category: { type: 'string' },
+    warning: { type: 'string' },
+    recommendation: { type: 'string' }
+  },
+  required: ['medication', 'warning', 'recommendation']
+};
+
+export const SAFETY_ANALYSIS_SCHEMA = {
+  type: 'object',
+  properties: {
+    drugInteractions: { type: 'array', items: INTERACTION_ITEM_SCHEMA },
+    ageRelatedWarnings: { type: 'array', items: MED_WARNING_SCHEMA },
+    pregnancyWarnings: { type: 'array', items: MED_WARNING_SCHEMA },
+    sideEffectsOverview: {
+      type: 'object',
+      properties: {
+        common: { type: 'array', items: { type: 'string' } },
+        serious: { type: 'array', items: { type: 'string' } }
+      },
+      required: ['common', 'serious']
+    },
+    overallRiskAssessment: { type: 'string', enum: ['low', 'moderate', 'high'] },
+    recommendations: { type: 'array', items: { type: 'string' } }
+  },
+  required: ['drugInteractions', 'ageRelatedWarnings', 'pregnancyWarnings', 'sideEffectsOverview', 'overallRiskAssessment', 'recommendations']
+};
+
+export const SUGGESTIONS_SCHEMA = {
+  type: 'object',
+  properties: {
+    suggestions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          medicationClass: { type: 'string' },
+          genericName: { type: 'string' },
+          brandNamesExamples: { type: 'array', items: { type: 'string' } },
+          typicalDosage: { type: 'string' },
+          reasoning: { type: 'string' },
+          ageAppropriate: { type: 'boolean' },
+          contraindications: { type: 'string' },
+          monitoringRequired: { type: 'string' }
+        },
+        required: ['genericName', 'reasoning']
+      }
+    }
+  },
+  required: ['suggestions']
+};
+
+/** Parse a model reply as JSON, tolerating prose around a single JSON object. */
+function parseJsonReply(responseText) {
+  if (typeof responseText !== 'string') return null;
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch {
+      return null;
+    }
+  }
+}
+
 /**
  * Medication Safety Service
- * Uses Goosedev/medbot for comprehensive medication safety analysis
+ * Uses the configured medbot model for medication safety analysis. Any reply that
+ * cannot be read is reported as an incomplete analysis, never as "no interactions".
  */
 class MedicationSafetyService {
   /**
@@ -44,7 +142,8 @@ Provide JSON response:
     try {
       const result = await medbotService.generateCompletion(prompt, {
         temperature: 0.2,
-        num_predict: 2000
+        num_predict: 2000,
+        format: INTERACTIONS_SCHEMA
       });
 
       return this.parseInteractionsResponse(result.response);
@@ -71,10 +170,11 @@ Provide JSON response:
     const prompt = this.buildSafetyAnalysisPrompt(medications, patientContext);
 
     try {
-      console.log('🔍 Analyzing medication safety with Medbot...');
+      console.log(`🔍 Analyzing medication safety with ${medbotService.model}...`);
       const result = await medbotService.generateCompletion(prompt, {
         temperature: 0.2,
-        num_predict: 3000
+        num_predict: 3000,
+        format: SAFETY_ANALYSIS_SCHEMA
       });
 
       const analysis = this.parseSafetyAnalysisResponse(result.response);
@@ -89,7 +189,7 @@ Provide JSON response:
         success: true,
         analysis,
         metadata: {
-          model: 'Goosedev/medbot',
+          model: result.model || medbotService.model,
           responseTime: result.duration,
           timestamp: new Date().toISOString()
         }
@@ -127,7 +227,8 @@ Provide JSON response:
       console.log(`💊 Generating medication suggestions for: ${diagnosis}`);
       const result = await medbotService.generateCompletion(prompt, {
         temperature: 0.3,
-        num_predict: 2500
+        num_predict: 2500,
+        format: SUGGESTIONS_SCHEMA
       });
 
       const suggestions = this.parseSuggestionsResponse(result.response);
@@ -136,7 +237,7 @@ Provide JSON response:
         success: true,
         suggestions,
         metadata: {
-          model: 'Goosedev/medbot',
+          model: result.model || medbotService.model,
           responseTime: result.duration,
           timestamp: new Date().toISOString()
         }
@@ -275,44 +376,36 @@ GUIDELINES:
   }
 
   /**
-   * Parse drug interactions response
+   * Parse drug interactions response.
+   * Fails closed: an unreadable reply is `analysisIncomplete` with
+   * `hasInteractions: null` (unknown), never `false`.
    * @private
    */
   parseInteractionsResponse(responseText) {
-    try {
-      // Try direct JSON parse
-      const parsed = JSON.parse(responseText);
-      if (parsed.interactions !== undefined) {
-        return {
-          hasInteractions: parsed.hasInteractions || parsed.interactions.length > 0,
-          interactions: parsed.interactions || []
-        };
-      }
-    } catch (e) {
-      // Try to extract JSON
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return {
-            hasInteractions: parsed.hasInteractions || parsed.interactions?.length > 0,
-            interactions: parsed.interactions || []
-          };
-        } catch (e2) {
-          console.error('Failed to parse interactions JSON');
-        }
-      }
+    const parsed = parseJsonReply(responseText);
+    if (parsed && Array.isArray(parsed.interactions)) {
+      return {
+        hasInteractions: parsed.hasInteractions === true || parsed.interactions.length > 0,
+        interactions: parsed.interactions,
+        analysisIncomplete: false
+      };
     }
 
+    console.error('Failed to parse interactions JSON; reporting analysis as incomplete');
     return {
-      hasInteractions: false,
+      hasInteractions: null,
       interactions: [],
-      parsingError: true
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      parsingError: true,
+      message: 'The AI interaction check could not be read. This is NOT a confirmation that there are no interactions; review manually.'
     };
   }
 
   /**
-   * Parse comprehensive safety analysis response
+   * Parse comprehensive safety analysis response.
+   * Fails closed: an unreadable reply (or one missing the drugInteractions list)
+   * is flagged `analysisIncomplete` with an unknown overall risk.
    * @private
    */
   parseSafetyAnalysisResponse(responseText) {
@@ -325,41 +418,33 @@ GUIDELINES:
         common: [],
         serious: []
       },
-      overallRiskAssessment: 'moderate',
+      overallRiskAssessment: 'unknown',
       recommendations: [],
-      parsingError: false
+      parsingError: false,
+      analysisIncomplete: false
     };
 
-    try {
-      // Try direct JSON parse
-      const parsed = JSON.parse(responseText);
+    const parsed = parseJsonReply(responseText);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.drugInteractions)) {
+      const risk = ['low', 'moderate', 'high'].includes(parsed.overallRiskAssessment)
+        ? parsed.overallRiskAssessment : 'unknown';
       return {
         ...defaultResult,
         ...parsed,
-        parsingError: false
+        overallRiskAssessment: risk,
+        parsingError: false,
+        analysisIncomplete: risk === 'unknown',
+        ...(risk === 'unknown' ? { requiresManualReview: true } : {})
       };
-    } catch (e) {
-      // Try to extract JSON
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return {
-            ...defaultResult,
-            ...parsed,
-            parsingError: false
-          };
-        } catch (e2) {
-          console.error('Failed to parse safety analysis JSON');
-        }
-      }
     }
 
-    console.warn('Could not parse safety analysis, returning defaults');
+    console.warn('Could not parse safety analysis; reporting analysis as incomplete');
     return {
       ...defaultResult,
       parsingError: true,
-      recommendations: ['Unable to parse AI response. Manual review recommended.']
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      recommendations: ['AI safety analysis could not be read. This is NOT a confirmation that the medications are safe; manual review required.']
     };
   }
 
@@ -368,27 +453,11 @@ GUIDELINES:
    * @private
    */
   parseSuggestionsResponse(responseText) {
-    try {
-      // Try direct JSON parse
-      const parsed = JSON.parse(responseText);
-      if (parsed.suggestions) {
-        return parsed.suggestions;
-      }
-    } catch (e) {
-      // Try to extract JSON
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.suggestions) {
-            return parsed.suggestions;
-          }
-        } catch (e2) {
-          console.error('Failed to parse suggestions JSON');
-        }
-      }
+    const parsed = parseJsonReply(responseText);
+    if (parsed && Array.isArray(parsed.suggestions)) {
+      return parsed.suggestions;
     }
-
+    console.error('Failed to parse suggestions JSON');
     return [];
   }
 

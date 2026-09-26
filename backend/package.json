@@ -13,6 +13,7 @@
     "import-icd10": "node scripts/importIcd10Codes.js",
     "import-medications": "node scripts/importMedicationCodes.js",
     "grant-admin": "node scripts/grantAdmin.js",
+    "migrate": "node scripts/migrate.js",
     "migrate-review": "node scripts/applyReviewMigrations.js",
     "migrate-openmed": "node scripts/migrateOpenmed.js"
   },

@@ -57,14 +57,17 @@ class MedicalValidationService {
     } catch (error) {
       console.error('❌ Error in medical validation:', error.message);
       
-      // Return error response with safe defaults
+      // Fail closed: when the AI could not review the form we must not report it
+      // as valid. The workflow can continue, but the result is flagged for review.
       return {
-        isValid: true, // Default to valid on error to not block workflow
+        isValid: null,
+        aiUnavailable: true,
+        requiresManualReview: true,
         confidenceScore: 0,
         warnings: [{
           field: 'system',
-          message: `AI validation unavailable: ${error.message}`,
-          severity: 'low'
+          message: `AI validation unavailable: ${error.message}. The form has NOT been validated.`,
+          severity: 'high'
         }],
         recommendations: ['Manual review recommended due to AI validation error'],
         missingAnalyses: [],
@@ -83,7 +86,9 @@ class MedicalValidationService {
    */
   getDisabledResponse() {
     return {
-      isValid: true,
+      isValid: null,
+      aiUnavailable: true,
+      requiresManualReview: true,
       confidenceScore: 0,
       warnings: [],
       recommendations: [],

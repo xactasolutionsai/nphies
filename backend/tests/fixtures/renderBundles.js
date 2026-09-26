@@ -3,8 +3,9 @@ import crypto from 'node:crypto';
 import { syncBuiltinESMExports } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { clinicalInput } from './clinicalInput.js';
+import { clinicalInput as baseClinicalInput } from './clinicalInput.js';
 
+process.env.NODE_ENV = 'test'; // Mappers only; no database connection is made.
 process.env.TZ = 'Asia/Riyadh';
 process.env.NPHIES_PROVIDER_ID = 'TEST-PROVIDER';
 process.env.NPHIES_INSURER_ID = 'TEST-INSURER';
@@ -24,6 +25,13 @@ console.log = () => {};
 console.warn = () => {};
 const root = process.argv[2] || path.resolve(import.meta.dirname, '../..');
 const moduleAt = file => import(pathToFileURL(path.join(root, file)).href);
+// The provider's location license makes professional bundles carry a Location for Claim.facility.
+// (Added here rather than in clinicalInput.js, whose provider shape is inserted positionally elsewhere.)
+const clinicalInput = type => {
+  const data = baseClinicalInput(type);
+  data.provider.location_license = 'TEST-LOCATION';
+  return data;
+};
 const { getMapper } = await moduleAt('services/priorAuthMapper/index.js');
 const { getClaimMapper, batchClaimMapper } = await moduleAt('services/claimMapper/index.js');
 const { default: CommunicationMapper } = await moduleAt('services/communicationMapper.js');
@@ -44,7 +52,7 @@ sequence = 0;
 output.eligibility = eligibilityMapper.buildEligibilityRequestBundle({ ...input, purpose: ['validation'], servicedDate: '2026-08-01' });
 sequence = 0;
 output.batch = batchClaimMapper.buildBatchRequestBundle({
-  batch: { batch_identifier: 'TEST-BATCH', batch_period_start: '2026-08-01', batch_period_end: '2026-08-01' },
+  batchIdentifier: 'TEST-BATCH', batchPeriodStart: '2026-08-01', batchPeriodEnd: '2026-08-01',
   provider: input.provider, insurer: input.insurer,
   claims: [input, { ...clinicalInput(), claim: { ...input.claim, id: 2, claim_number: 'TEST-CLAIM-2' } }]
 });

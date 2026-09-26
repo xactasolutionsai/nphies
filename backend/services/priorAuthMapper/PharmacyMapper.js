@@ -37,46 +37,14 @@
 
 import BaseMapper from './BaseMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import { cloneInput, mappingError, roundMoney } from './nphiesIdentity.js';
+
+const isDaysSupplyCategory = category => category === 'days-supply' || category === 'days_supply';
 
 class PharmacyMapper extends BaseMapper {
   constructor() {
     super();
     this.authType = 'pharmacy';
-  }
-
-  /**
-   * Get medication code system - NPHIES uses unified medication-codes system
-   * Reference: http://nphies.sa/terminology/CodeSystem/medication-codes
-   * This system includes GTIN, NUPCO, MOH, NHIC codes
-   */
-  getMedicationCodeSystem(codeType) {
-    // NPHIES uses a unified medication-codes system for all medication codes
-    // The codeType parameter is kept for backward compatibility but the system is unified
-    const systems = {
-      'gtin': 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-      'nupco': 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-      'moh': 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-      'nhic': 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-      'scientific': 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-      'medication': 'http://nphies.sa/terminology/CodeSystem/medication-codes',
-      'default': 'http://nphies.sa/terminology/CodeSystem/medication-codes'
-    };
-    return systems[codeType?.toLowerCase()] || systems['default'];
-  }
-
-  /**
-   * Get pharmacist selection reason display text
-   * Reference: http://nphies.sa/terminology/CodeSystem/pharmacist-selection-reason
-   */
-  getPharmacistSelectionReasonDisplay(code) {
-    const displays = {
-      'patient-request': 'patient request',
-      'out-of-stock': 'out of stock',
-      'formulary-drug': 'formulary drug',
-      'therapeutic-alternative': 'therapeutic alternative',
-      'other': 'other'
-    };
-    return displays[code] || code;
   }
 
   /**
@@ -101,7 +69,9 @@ class PharmacyMapper extends BaseMapper {
    * - NO careTeam in Claim
    */
   buildPriorAuthRequestBundle(data) {
-    const { priorAuth, patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    // Deep copy: mapping must never mutate the caller's record
+    const priorAuth = cloneInput(data.priorAuth);
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -139,13 +109,6 @@ class PharmacyMapper extends BaseMapper {
     
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
 
-    const binaryResources = [];
-    if (priorAuth.attachments && priorAuth.attachments.length > 0) {
-      priorAuth.attachments.forEach(attachment => {
-        binaryResources.push(this.buildBinaryResource(attachment));
-      });
-    }
-
     // Bundle entries per NPHIES example - NO Encounter, NO Practitioner
     // For newborn cases, add both newborn and mother patient resources
     const entries = [
@@ -155,8 +118,7 @@ class PharmacyMapper extends BaseMapper {
       providerResource,
       insurerResource,
       newbornPatientResource, // Newborn patient
-      ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present
-      ...binaryResources
+      ...(motherPatientResource ? [motherPatientResource] : []) // Mother patient if present
     ];
 
     return {
@@ -192,8 +154,7 @@ class PharmacyMapper extends BaseMapper {
     const insurerRef = bundleResourceIds.insurer;
     const coverageRef = bundleResourceIds.coverage;
 
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build claim-level extensions (optional for pharmacy)
     // NOTE: Per NPHIES example Claim-483074.json, NO extensions are present
@@ -304,7 +265,7 @@ class PharmacyMapper extends BaseMapper {
     // Identifier (required)
     claim.identifier = [
       {
-        system: `${providerIdentifierSystem}/authorization`,
+        system: this.getClaimIdentifierSystem(provider),
         value: priorAuth.request_number || `req_${Date.now()}`
       }
     ];
@@ -413,57 +374,43 @@ class PharmacyMapper extends BaseMapper {
     // Non-days-supply entries (attachment, vital signs, info, etc.) are global.
     let supportingInfoList = [];
     let currentSequence = 1;
+    const callerSupportingInfo = this.tagCallerSupportingInfo(priorAuth.supporting_info)
+      .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    const numberedSupportingInfo = [];
     
     // STEP 1: Process NON-days-supply supporting_info entries first (global entries)
     // These are shared across all items (attachments, vital signs, patient history, etc.)
-    if (priorAuth.supporting_info && priorAuth.supporting_info.length > 0) {
-      const sortedSupportingInfo = [...priorAuth.supporting_info].sort((a, b) => 
-        (a.sequence || 0) - (b.sequence || 0)
-      );
-      
-      sortedSupportingInfo.forEach(info => {
-        const cat = info.category;
-        // Skip days-supply entries here -- they will be created per-item in Step 2
-        if (cat === 'days-supply' || cat === 'days_supply') {
-          return;
-        }
-        const sequence = currentSequence++;
-        supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence: sequence }));
-      });
-    }
+    callerSupportingInfo.forEach(info => {
+      // days-supply entries are re-created per item in Step 2 (keeping the user's value)
+      if (isDaysSupplyCategory(info.category)) return;
+      const sequence = currentSequence++;
+      numberedSupportingInfo.push({ info, sequence });
+      supportingInfoList.push(this.buildSupportingInfo({ ...info, sequence }));
+    });
+
+    // Attachments are embedded as supportingInfo valueAttachment rather than unreferenced Binary entries
+    (priorAuth.attachments || []).forEach(attachment => {
+      if (attachment && attachment.base64_content && attachment.content_type) {
+        supportingInfoList.push(this.buildSupportingInfo({
+          sequence: currentSequence++,
+          category: 'attachment',
+          value_attachment: {
+            contentType: attachment.content_type,
+            data: attachment.base64_content,
+            title: attachment.file_name || attachment.title || 'Attachment',
+            creation: attachment.uploaded_at ? this.formatDate(attachment.uploaded_at) : this.formatDate(new Date())
+          }
+        }));
+      }
+    });
+    const informationSequenceMap = this.buildInformationSequenceMap(numberedSupportingInfo);
 
     // STEP 2: Create one days-supply entry PER item (1-to-1 mapping)
     // Each item gets its own days-supply supportingInfo with a unique sequence.
     // The item's informationSequence will point to its dedicated days-supply entry.
-    const itemDaysSupplyMap = {}; // Maps item index -> days-supply sequence number
-    
-    if (priorAuth.items && priorAuth.items.length > 0) {
-      priorAuth.items.forEach((item, idx) => {
-        const daysSupplyValue = parseInt(
-          item.days_supply || priorAuth.days_supply || 30
-        );
-        const daysSupplySequence = currentSequence++;
-        
-        supportingInfoList.push({
-          sequence: daysSupplySequence,
-          category: {
-            coding: [{
-              system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-              code: 'days-supply'
-            }]
-          },
-          timingDate: this.formatDate(priorAuth.request_date || new Date()),
-          valueQuantity: {
-            value: daysSupplyValue,
-            unit: 'd',
-            system: 'http://unitsofmeasure.org',
-            code: 'd'
-          }
-        });
-        
-        itemDaysSupplyMap[idx] = daysSupplySequence;
-      });
-    }
+    const { itemDaysSupplyMap, itemInformationSequences } = this.buildItemDaysSupply(
+      priorAuth, callerSupportingInfo, informationSequenceMap, supportingInfoList, () => currentSequence++
+    );
     
     // Sort supportingInfoList by sequence to ensure proper ordering
     supportingInfoList.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
@@ -510,7 +457,7 @@ class PharmacyMapper extends BaseMapper {
     if (priorAuth.items && priorAuth.items.length > 0) {
       // Build items with per-item days-supply linking via itemDaysSupplyMap
       claim.item = priorAuth.items.map((item, idx) => 
-        this.buildPharmacyClaimItem(item, idx + 1, supportingInfoList, encounterPeriod, itemDaysSupplyMap[idx])
+        this.buildPharmacyClaimItem(item, idx + 1, supportingInfoList, encounterPeriod, itemDaysSupplyMap[idx], itemInformationSequences[idx])
       );
     }
 
@@ -526,7 +473,7 @@ class PharmacyMapper extends BaseMapper {
       }, 0);
     }
     claim.total = {
-      value: parseFloat(totalAmount || 0),
+      value: roundMoney(totalAmount),
       currency: priorAuth.currency || 'SAR'
     };
 
@@ -534,6 +481,64 @@ class PharmacyMapper extends BaseMapper {
       fullUrl: `http://provider.com/Claim/${claimId}`,
       resource: claim
     };
+  }
+
+  /**
+   * Days supply for one item, from (in order): a days-supply entry the item explicitly
+   * references, item.days_supply, the only days-supply entry supplied for the request,
+   * or the request-level days_supply. Never a default (days supply is prescription data).
+   */
+  resolveItemDaysSupply(item, itemIndex, priorAuth, daysSupplyEntries) {
+    const requested = (item.information_sequences || []).map(Number);
+    const referenced = daysSupplyEntries.find(info => requested.includes(Number(info._callerSequence)));
+    const candidates = [
+      referenced?.value_quantity,
+      item.days_supply,
+      daysSupplyEntries.length === 1 ? daysSupplyEntries[0].value_quantity : undefined,
+      priorAuth.days_supply
+    ];
+    const value = candidates.find(v => v !== undefined && v !== null && v !== '' && Number.isFinite(parseInt(v)));
+    if (value === undefined) {
+      throw mappingError(`Days supply is required for pharmacy item ${item.sequence || itemIndex + 1} (item.days_supply or a days-supply supporting info entry)`);
+    }
+    return parseInt(value);
+  }
+
+  /**
+   * Create one days-supply supportingInfo entry per item (BV-00376, 1-to-1 mapping) and
+   * resolve every item's informationSequence against the renumbered supportingInfo.
+   */
+  buildItemDaysSupply(priorAuth, callerSupportingInfo, informationSequenceMap, supportingInfoList, nextSequence, { timing = true, unit = true } = {}) {
+    const daysSupplyEntries = callerSupportingInfo.filter(info => isDaysSupplyCategory(info.category));
+    const itemDaysSupplyMap = {};
+    const itemInformationSequences = {};
+    (priorAuth.items || []).forEach((item, idx) => {
+      const daysSupplyValue = this.resolveItemDaysSupply(item, idx, priorAuth, daysSupplyEntries);
+      const daysSupplySequence = nextSequence();
+      supportingInfoList.push({
+        sequence: daysSupplySequence,
+        category: {
+          coding: [{
+            system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+            code: 'days-supply'
+          }]
+        },
+        ...(timing && { timingDate: this.formatDate(priorAuth.request_date || new Date()) }),
+        valueQuantity: {
+          value: daysSupplyValue,
+          ...(unit && { unit: 'd' }),
+          system: 'http://unitsofmeasure.org',
+          code: 'd'
+        }
+      });
+      itemDaysSupplyMap[idx] = daysSupplySequence;
+      // Other entries the item selected keep pointing at the same entries after renumbering
+      const selected = Array.isArray(item.information_sequences) && item.information_sequences.length
+        ? this.resolveInformationSequences(item, [], informationSequenceMap) || []
+        : [];
+      itemInformationSequences[idx] = [...selected, daysSupplySequence];
+    });
+    return { itemDaysSupplyMap, itemInformationSequences };
   }
 
   /**
@@ -558,7 +563,7 @@ class PharmacyMapper extends BaseMapper {
    * IMPORTANT: informationSequence MUST reference the days-supply supportingInfo (BV-00376)
    * Each item receives its pre-assigned days-supply sequence via itemDaysSupplySequence.
    */
-  buildPharmacyClaimItem(item, itemIndex, supportingInfoList, encounterPeriod, itemDaysSupplySequence) {
+  buildPharmacyClaimItem(item, itemIndex, supportingInfoList, encounterPeriod, itemDaysSupplySequence, resolvedInformationSequences = null) {
     const sequence = item.sequence || itemIndex;
     
     const quantity = parseFloat(item.quantity || 1);
@@ -690,9 +695,9 @@ class PharmacyMapper extends BaseMapper {
     // ALL pharmacy items (medications AND devices) must link to their own days-supply entry (BV-00376)
     let informationSequences = [];
     
-    if (item.information_sequences && Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
-      // Use explicitly provided sequences from item (if user manually selected)
-      informationSequences = item.information_sequences;
+    if (resolvedInformationSequences && resolvedInformationSequences.length > 0) {
+      // Caller's selections remapped to the renumbered supportingInfo, plus the item's days-supply
+      informationSequences = resolvedInformationSequences;
     } else if (itemDaysSupplySequence) {
       // Use the pre-assigned per-item days-supply sequence (1-to-1 mapping)
       informationSequences = [itemDaysSupplySequence];
@@ -753,56 +758,7 @@ class PharmacyMapper extends BaseMapper {
       coding: productOrServiceCodings
     };
 
-    // Determine serviced date
-    let servicedDate;
-    if (item.serviced_date) {
-      servicedDate = new Date(item.serviced_date);
-    } else if (encounterPeriod?.start) {
-      servicedDate = new Date(encounterPeriod.start);
-    } else {
-      servicedDate = new Date();
-    }
-    
-    // Validate servicedDate is within encounter period (with time validation)
-    // If serviced_date is date-only, default to current time
-    if (encounterPeriod?.start) {
-      const periodStart = new Date(encounterPeriod.start);
-      
-      // If servicedDate doesn't have a time component (is at midnight or was date-only),
-      // default to current time while keeping the date part
-      const isMidnight = servicedDate.getHours() === 0 && 
-                        servicedDate.getMinutes() === 0 && 
-                        servicedDate.getSeconds() === 0;
-      
-      // Check if original serviced_date was a date-only string (no time component)
-      const originalServicedDateStr = typeof item.serviced_date === 'string' 
-        ? item.serviced_date 
-        : (item.serviced_date instanceof Date ? item.serviced_date.toISOString() : String(item.serviced_date || ''));
-      const hasTimeInOriginal = originalServicedDateStr.includes('T') || originalServicedDateStr.match(/\d{2}:\d{2}/);
-      
-      if (isMidnight && item.serviced_date && !hasTimeInOriginal) {
-        // Date-only was provided, use current time with the same date
-        const now = new Date();
-        const datePart = servicedDate.toISOString().split('T')[0];
-        const timePart = now.toTimeString().split(' ')[0]; // Get HH:mm:ss
-        servicedDate = new Date(`${datePart}T${timePart}`);
-      }
-      
-      // Validate: serviced_date should be >= encounter_start (with time)
-      if (servicedDate < periodStart) {
-        servicedDate = periodStart; // Auto-correct to encounter start
-      }
-      
-      // Check if servicedDate is after encounter end (if end date exists)
-      if (encounterPeriod.end) {
-        const periodEnd = new Date(encounterPeriod.end);
-        if (servicedDate > periodEnd) {
-          servicedDate = periodEnd; // Auto-correct to encounter end
-        }
-      }
-    }
-    
-    claimItem.servicedDate = this.formatDate(servicedDate);
+    claimItem.servicedDate = this.resolveServicedDate(item.serviced_date, encounterPeriod);
 
     // Quantity (required)
     claimItem.quantity = { value: quantity };
@@ -822,126 +778,6 @@ class PharmacyMapper extends BaseMapper {
     };
 
     return claimItem;
-  }
-
-  /**
-   * Build Encounter resource for Pharmacy auth type
-   * 
-   * NOTE: Per NPHIES example Claim-483074.json, Encounter is NOT included
-   * in pharmacy prior authorization requests. This method is kept for
-   * backwards compatibility but is NOT called in buildPriorAuthRequestBundle.
-   * 
-   * Reference: https://portal.nphies.sa/ig/StructureDefinition-encounter-auth-AMB.html
-   * Profile: http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB
-   * @deprecated Not used for pharmacy claims per NPHIES example
-   */
-  buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds) {
-    const encounterId = bundleResourceIds.encounter;
-    const patientId = bundleResourceIds.patient;
-    const providerId = bundleResourceIds.provider;
-    
-    // Pharmacy MUST use ambulatory (AMB) encounter class
-    const encounterIdentifier = priorAuth.encounter_identifier || 
-                                priorAuth.request_number || 
-                                `ENC-${encounterId.substring(0, 8)}`;
-
-    const encounter = {
-      resourceType: 'Encounter',
-      id: encounterId,
-      meta: {
-        // Use AMB-specific profile for pharmacy encounters
-        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/encounter-auth-AMB|1.0.0']
-      },
-      identifier: [
-        {
-          system: `http://${NPHIES_CONFIG.PROVIDER_DOMAIN || 'provider'}.com.sa/identifiers/encounter`,
-          value: encounterIdentifier
-        }
-      ],
-      // Status: 'planned' for prior auth, 'finished' for claims
-      status: priorAuth.encounter_status || 'planned',
-      // Class: MUST be AMB for pharmacy
-      class: {
-        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-        code: 'AMB',
-        display: 'ambulatory'
-      }
-    };
-
-    // Subject (required)
-    encounter.subject = { reference: `Patient/${patientId}` };
-
-    // Period - date-only format for AMB encounters per NPHIES spec
-    const startDateRaw = priorAuth.encounter_start || new Date();
-    let dateOnlyStart;
-    if (typeof startDateRaw === 'string' && startDateRaw.includes('T')) {
-      dateOnlyStart = startDateRaw.split('T')[0];
-    } else {
-      dateOnlyStart = this.formatDate(startDateRaw);
-    }
-    
-    encounter.period = { start: dateOnlyStart };
-
-    // ServiceProvider (required)
-    encounter.serviceProvider = { reference: `Organization/${providerId}` };
-
-    // ServiceType (optional but recommended for pharmacy)
-    if (priorAuth.service_type) {
-      encounter.serviceType = {
-        coding: [
-          {
-            system: 'http://nphies.sa/terminology/CodeSystem/service-type',
-            code: priorAuth.service_type,
-            display: this.getServiceTypeDisplay(priorAuth.service_type)
-          }
-        ]
-      };
-    }
-
-    return {
-      fullUrl: `http://provider.com/Encounter/${encounterId}`,
-      resource: encounter
-    };
-  }
-
-  /**
-   * Validate pharmacy prior authorization data before building
-   * Returns array of validation errors
-   */
-  validatePharmacyData(data) {
-    const errors = [];
-    const { priorAuth, patient, provider, insurer } = data;
-
-    // Required fields validation
-    if (!patient) {
-      errors.push('Patient data is required');
-    }
-    if (!provider) {
-      errors.push('Provider data is required');
-    }
-    if (!insurer) {
-      errors.push('Insurer data is required');
-    }
-
-    // Pharmacy-specific validations
-    if (!priorAuth.items || priorAuth.items.length === 0) {
-      errors.push('At least one medication item is required for pharmacy prior authorization');
-    }
-
-    if (!priorAuth.diagnoses || priorAuth.diagnoses.length === 0) {
-      errors.push('At least one diagnosis is required for pharmacy prior authorization');
-    }
-
-    // Validate medication codes
-    if (priorAuth.items) {
-      priorAuth.items.forEach((item, idx) => {
-        if (!item.medication_code && !item.product_or_service_code) {
-          errors.push(`Item ${idx + 1}: Medication code is required`);
-        }
-      });
-    }
-
-    return errors;
   }
 }
 

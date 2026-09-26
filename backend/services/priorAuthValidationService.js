@@ -6,7 +6,7 @@ dotenv.config();
 
 /**
  * Prior Authorization Validation Service
- * Uses biomistral AI model to validate and enhance prior authorization data
+ * Uses the configured Ollama model to validate and enhance prior authorization data
  * before NPHIES submission to reduce rejection rates
  */
 class PriorAuthValidationService {
@@ -91,43 +91,57 @@ class PriorAuthValidationService {
    * @returns {Promise<object>} - Validation result with risk scores and suggestions
    */
   async validatePriorAuth(formData) {
-    if (!this.enabled) {
-      return this.getDisabledResponse();
-    }
-
     const startTime = Date.now();
     const authType = formData.auth_type || 'professional';
     const rules = this.validationRules[authType] || this.validationRules.professional;
 
+    // Rule-based checks never depend on the AI and are always returned.
+    let basicValidation, vitalsValidation, timeValidation;
     try {
+      basicValidation = this.performBasicValidation(formData, rules);
+      vitalsValidation = this.validateVitalsPlausibility(formData.vital_signs);
+      timeValidation = this.validateTimeRelevance(formData);
+    } catch (error) {
+      console.error('❌ Error in rule-based prior auth validation:', error.message);
+      return {
+        success: false,
+        isValid: false,
+        requiresManualReview: true,
+        error: error.message,
+        riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
+        suggestions: [],
+        metadata: {
+          error: true,
+          errorMessage: error.message,
+          timestamp: new Date().toISOString()
+        }
+      };
+    }
+
+    let aiValidation;
+    let guidelines = [];
+    if (!this.enabled) {
+      aiValidation = this.getUnavailableAIValidation('AI validation is currently disabled');
+    } else {
       console.log(`🏥 Starting prior auth validation for ${authType} type...`);
+      aiValidation = await this.performAIValidation(formData, authType);
+      guidelines = aiValidation.aiUnavailable ? [] : await this.retrieveRelevantGuidelines(formData);
+    }
 
-      // Step 1: Basic validation (non-AI)
-      const basicValidation = this.performBasicValidation(formData, rules);
-      
-      // Step 2: Vitals plausibility check
-      const vitalsValidation = this.validateVitalsPlausibility(formData.vital_signs);
-      
-      // Step 3: Time relevance check
-      const timeValidation = this.validateTimeRelevance(formData);
-      
-      // Step 4: AI-powered validation using biomistral
-      const aiValidation = await this.performAIValidation(formData, authType);
-      
-      // Step 5: Retrieve relevant medical guidelines
-      const guidelines = await this.retrieveRelevantGuidelines(formData);
-      
-      // Step 6: Calculate risk scores
+    try {
       const riskScores = this.calculateRiskScores(basicValidation, vitalsValidation, timeValidation, aiValidation);
-      
-      // Step 7: Generate suggestions
       const suggestions = this.generateSuggestions(basicValidation, vitalsValidation, aiValidation, formData);
-
-      const duration = Date.now() - startTime;
+      const ruleBasedValid = riskScores.overall < 0.5;
+      const aiUnavailable = aiValidation.aiUnavailable === true;
 
       return {
         success: true,
-        isValid: riskScores.overall < 0.5,
+        // Without the AI review the request is not reported as valid: it needs a
+        // human to review it. The rule-based verdict is still returned separately.
+        isValid: ruleBasedValid && !aiUnavailable,
+        ruleBasedValid,
+        aiUnavailable,
+        requiresManualReview: aiUnavailable || aiValidation.analysisIncomplete === true,
         authType,
         riskScores,
         validation: {
@@ -139,8 +153,9 @@ class PriorAuthValidationService {
         suggestions,
         guidelines: guidelines.slice(0, 3), // Top 3 relevant guidelines
         metadata: {
-          validationDuration: duration,
+          validationDuration: Date.now() - startTime,
           model: ollamaService.model,
+          enabled: this.enabled,
           timestamp: new Date().toISOString()
         }
       };
@@ -149,9 +164,17 @@ class PriorAuthValidationService {
       console.error('❌ Error in prior auth validation:', error.message);
       return {
         success: false,
-        isValid: true, // Default to valid on error to not block workflow
+        isValid: false,
+        aiUnavailable: aiValidation?.aiUnavailable === true,
+        requiresManualReview: true,
         error: error.message,
-        riskScores: { overall: 0, categories: {} },
+        riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
+        validation: {
+          basic: basicValidation,
+          vitals: vitalsValidation,
+          time: timeValidation,
+          ai: aiValidation
+        },
         suggestions: [],
         metadata: {
           error: true,
@@ -160,6 +183,24 @@ class PriorAuthValidationService {
         }
       };
     }
+  }
+
+  /**
+   * AI result used when the model could not be consulted. It carries every field
+   * the scoring/suggestion code reads, with "unknown" values instead of passes.
+   */
+  getUnavailableAIValidation(reason) {
+    return {
+      passed: null,
+      aiUnavailable: true,
+      medicalNecessityScore: null,
+      consistencyCheck: { passed: null, explanation: '' },
+      documentationGaps: [],
+      rejectionRisks: [],
+      recommendations: [],
+      justificationNarrative: '',
+      error: reason
+    };
   }
 
   /**
@@ -403,13 +444,7 @@ class PriorAuthValidationService {
 
     } catch (error) {
       console.error('❌ AI validation error:', error.message);
-      return {
-        passed: true,
-        issues: [],
-        recommendations: [],
-        medicalNecessityScore: 0.5,
-        error: error.message
-      };
+      return this.getUnavailableAIValidation(`AI validation unavailable: ${error.message}`);
     }
   }
 
@@ -573,10 +608,11 @@ JUSTIFICATION_NARRATIVE:
    * Parse AI validation response
    */
   parseAIValidationResponse(responseText, formData) {
+    // Nothing passes by default: values stay unknown (null) until the reply states them.
     const result = {
-      passed: true,
-      medicalNecessityScore: 0.5,
-      consistencyCheck: { passed: true, explanation: '' },
+      passed: null,
+      medicalNecessityScore: null,
+      consistencyCheck: { passed: null, explanation: '' },
       documentationGaps: [],
       rejectionRisks: [],
       recommendations: [],
@@ -586,11 +622,10 @@ JUSTIFICATION_NARRATIVE:
     try {
       // Extract medical necessity score
       const scoreMatch = responseText.match(/MEDICAL_NECESSITY_SCORE:\s*([\d.]+)/i);
-      if (scoreMatch) {
-        result.medicalNecessityScore = parseFloat(scoreMatch[1]);
-        if (result.medicalNecessityScore < 0.6) {
-          result.passed = false;
-        }
+      const score = scoreMatch ? parseFloat(scoreMatch[1]) : NaN;
+      if (Number.isFinite(score)) {
+        result.medicalNecessityScore = Math.min(1, Math.max(0, score));
+        result.passed = result.medicalNecessityScore >= 0.6;
       }
 
       // Extract consistency check
@@ -657,6 +692,12 @@ JUSTIFICATION_NARRATIVE:
       console.error('❌ Error parsing AI response:', error.message);
     }
 
+    if (result.medicalNecessityScore === null || result.consistencyCheck.passed === null) {
+      // The reply did not follow the contract: flag it rather than treat it as a pass.
+      result.analysisIncomplete = true;
+      result.passed = result.passed === false || result.consistencyCheck.passed === false ? false : null;
+    }
+
     return result;
   }
 
@@ -678,13 +719,10 @@ JUSTIFICATION_NARRATIVE:
         return [];
       }
 
+      // General knowledge search: retrieveRelevantGuidelines() is the eye-form
+      // (ophthalmology-only) retrieval and must not be used for prior authorizations.
       const query = queryParts.join(', ');
-      const guidelines = await ragService.retrieveRelevantGuidelines({ 
-        chief_complaints: query,
-        diagnoses: diagnoses.map(d => d.diagnosis_display).join(', ')
-      });
-
-      return guidelines;
+      return await ragService.searchKnowledge(query, ragService.maxRetrievalResults);
 
     } catch (error) {
       console.error('❌ Error retrieving guidelines:', error.message);
@@ -735,19 +773,22 @@ JUSTIFICATION_NARRATIVE:
       scores.supportingEvidence += 0.15;
     });
 
-    // Add AI validation risks
-    if (aiValidation.medicalNecessityScore < 0.6) {
-      scores.medicalNecessity += (1 - aiValidation.medicalNecessityScore) * 0.5;
+    // Add AI validation risks (unknown AI values add nothing; the result is
+    // flagged aiUnavailable/analysisIncomplete instead)
+    const necessityScore = aiValidation?.medicalNecessityScore;
+    if (typeof necessityScore === 'number' && necessityScore < 0.6) {
+      scores.medicalNecessity += (1 - necessityScore) * 0.5;
     }
 
-    if (!aiValidation.consistencyCheck.passed) {
+    if (aiValidation?.consistencyCheck?.passed === false) {
       scores.medicalNecessity += 0.2;
     }
 
-    aiValidation.rejectionRisks.forEach(risk => {
-      if (risk.code.startsWith('MN')) scores.medicalNecessity += 0.15;
-      else if (risk.code.startsWith('SE')) scores.supportingEvidence += 0.15;
-      else if (risk.code.startsWith('CV')) scores.coverage += 0.15;
+    (aiValidation?.rejectionRisks || []).forEach(risk => {
+      const code = typeof risk?.code === 'string' ? risk.code : '';
+      if (code.startsWith('MN')) scores.medicalNecessity += 0.15;
+      else if (code.startsWith('SE')) scores.supportingEvidence += 0.15;
+      else if (code.startsWith('CV')) scores.coverage += 0.15;
     });
 
     // Cap scores at 1.0
@@ -801,8 +842,24 @@ JUSTIFICATION_NARRATIVE:
       });
     });
 
+    if (aiValidation?.aiUnavailable) {
+      suggestions.push({
+        type: 'ai_unavailable',
+        message: 'AI clinical review was not performed. Only rule-based checks ran; manual clinical review is required.',
+        severity: 'high',
+        action: 'review'
+      });
+    } else if (aiValidation?.analysisIncomplete) {
+      suggestions.push({
+        type: 'ai_incomplete',
+        message: 'The AI clinical review could not be fully read. Manual clinical review is required.',
+        severity: 'high',
+        action: 'review'
+      });
+    }
+
     // Suggestions from AI validation
-    aiValidation.recommendations.forEach(rec => {
+    (aiValidation?.recommendations || []).forEach(rec => {
       suggestions.push({
         type: 'ai_recommendation',
         message: rec,
@@ -812,7 +869,7 @@ JUSTIFICATION_NARRATIVE:
     });
 
     // Add justification narrative suggestion if available
-    if (aiValidation.justificationNarrative && aiValidation.justificationNarrative.length > 20) {
+    if (aiValidation?.justificationNarrative && aiValidation.justificationNarrative.length > 20) {
       suggestions.push({
         type: 'justification',
         field: 'clinical_info.treatment_plan',
@@ -824,7 +881,7 @@ JUSTIFICATION_NARRATIVE:
     }
 
     // Add consistency warning if needed
-    if (!aiValidation.consistencyCheck.passed) {
+    if (aiValidation?.consistencyCheck?.passed === false) {
       suggestions.push({
         type: 'consistency',
         message: `Clinical consistency issue: ${aiValidation.consistencyCheck.explanation || 'Chief complaint, diagnoses, and requested services may not align'}`,
@@ -1171,8 +1228,10 @@ SUGGESTED_JUSTIFICATION: [A sentence that could be added to support medical nece
   getDisabledResponse() {
     return {
       success: true,
-      isValid: true,
-      riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+      isValid: null,
+      aiUnavailable: true,
+      requiresManualReview: true,
+      riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
       validation: {},
       suggestions: [],
       metadata: {

@@ -16,8 +16,8 @@ import nphiesService from './nphiesService.js';
 import CommunicationMapper from './communicationMapper.js';
 import messageCorrelator from './messageCorrelator.js';
 import messageUpdater from './messageUpdater.js';
-import advancedAuthParser from './advancedAuthParser.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
+import { withSchemaClient, validateSchemaName } from './dbSchema.js';
 
 const mapper = new CommunicationMapper();
 
@@ -31,6 +31,7 @@ class SystemPollService {
    * @returns {Object} Poll execution result with full details
    */
   async executePoll(schemaName = 'public', triggerType = 'manual') {
+    // schemaName is validated by resolveProvider() inside the try block below.
     const pollId = randomUUID();
     const startedAt = new Date();
     let pollLogId = null;
@@ -72,6 +73,7 @@ class SystemPollService {
           responseBundle: pollResponse.data || null,
           responseCode: pollResponse.responseCode || null,
           errors: [{ type: 'nphies_error', details: errorDetails }],
+          startedAt,
           completedAt: new Date()
         });
 
@@ -110,6 +112,7 @@ class SystemPollService {
         messagesUnmatched: processingResult.messagesUnmatched,
         processingSummary: processingResult.summary,
         errors: processingResult.errors.length > 0 ? processingResult.errors : null,
+        startedAt,
         completedAt
       });
 
@@ -145,6 +148,7 @@ class SystemPollService {
         await this.updatePollLog(pollLogId, {
           status: 'error',
           errors: [{ type: 'fatal', message: error.message, stack: error.stack }],
+          startedAt,
           completedAt: new Date()
         }).catch(e => console.error('[SystemPoll] Failed to update poll log on error:', e));
       }
@@ -243,7 +247,7 @@ class SystemPollService {
   /**
    * Process a single message bundle
    */
-  async processMessage(messageBundle, pollBundle, pollLogId, schemaName) {
+  async processMessage(messageBundle, pollBundle, pollLogId, schemaName, { forceUnsolicited = false } = {}) {
     // Extract MessageHeader and payload resource
     const messageHeader = messageCorrelator.extractMessageHeader(messageBundle);
     const payloadResource = messageCorrelator.extractPayloadResource(messageBundle);
@@ -253,8 +257,8 @@ class SystemPollService {
     console.log(`[SystemPoll] Processing message: event=${eventCode}, resource=${resourceType}`);
 
     // Classify as solicited or unsolicited
-    const messageType = messageCorrelator.classifyMessage(messageHeader);
-    const responseIdentifier = messageHeader?.response?.identifier || null;
+    const messageType = forceUnsolicited ? 'unsolicited' : messageCorrelator.classifyMessage(messageHeader);
+    const responseIdentifier = forceUnsolicited ? null : (messageHeader?.response?.identifier || null);
 
     let correlationResult;
     let updateResult;
@@ -436,17 +440,20 @@ class SystemPollService {
 
       // Check for direct ClaimResponse, CommunicationRequest, Communication, PaymentReconciliation
       if (['ClaimResponse', 'CommunicationRequest', 'Communication', 'PaymentReconciliation'].includes(resource.resourceType)) {
+        const isPayment = resource.resourceType === 'PaymentReconciliation';
+        // Wrap in its own message bundle for consistent processing. A
+        // PaymentReconciliation is always payer-initiated: it gets its own message
+        // context (never the poll-response MessageHeader, whose response.identifier
+        // would make it look like a reply to one of our requests).
+        const ownBundle = isPayment
+          ? this.buildPaymentReconciliationContext(responseData, entry)
+          : { resourceType: 'Bundle', type: 'message', entry: [{ resource }] };
+        result.messagesReceived++;
         try {
-          // Wrap in a fake message bundle for consistent processing
-          const fakeBundle = {
-            resourceType: 'Bundle',
-            type: 'message',
-            entry: [{ resource }]
-          };
-
-          const messageResult = await this.processMessage(resource.resourceType === 'PaymentReconciliation' ? responseData : fakeBundle, pollBundle, pollLogId, schemaName);
+          const messageResult = await this.processMessage(
+            ownBundle, pollBundle, pollLogId, schemaName, { forceUnsolicited: isPayment }
+          );
           result.messagesProcessed++;
-          result.messagesReceived++;
 
           if (messageResult.matched) {
             result.messagesMatched++;
@@ -462,9 +469,142 @@ class SystemPollService {
             message: error.message,
             resourceType: resource.resourceType
           });
+          await this.logPollMessage(pollLogId, {
+            messageHeaderId: null,
+            responseIdentifier: null,
+            eventCode: null,
+            resourceType: resource.resourceType,
+            resourceData: ownBundle,
+            messageType: isPayment ? 'unsolicited' : 'unknown',
+            matched: false,
+            processingStatus: 'error',
+            processingError: error.message
+          }).catch(e => console.error('[SystemPoll] Failed to log message:', e));
         }
       }
     }
+  }
+
+  /**
+   * Build the message context for a top-level PaymentReconciliation.
+   * If the response itself is the payer's payment-reconciliation message it is
+   * used as-is; otherwise the resource is wrapped in its own bundle together with
+   * the other top-level resources (e.g. Organizations it references), but without
+   * the poll-response MessageHeader.
+   */
+  buildPaymentReconciliationContext(responseData, paymentEntry) {
+    const header = messageCorrelator.extractMessageHeader(responseData);
+    const headerEvent = header?.eventCoding?.code || header?.event?.coding?.[0]?.code;
+    if (headerEvent === 'payment-reconciliation') return responseData;
+
+    return {
+      resourceType: 'Bundle',
+      type: 'message',
+      entry: [
+        paymentEntry,
+        ...(responseData.entry || []).filter(e =>
+          e !== paymentEntry && e.resource &&
+          !['MessageHeader', 'Bundle', 'PaymentReconciliation'].includes(e.resource.resourceType))
+      ]
+    };
+  }
+
+  /**
+   * Split a poll response into individual messages: every nested message Bundle,
+   * plus each top-level payload resource wrapped in its own bundle.
+   * @returns {Array<{messageBundle: Object, resource: Object|null, direct: boolean}>}
+   */
+  extractPollMessages(responseData) {
+    if (!responseData || responseData.resourceType !== 'Bundle') return [];
+    const messages = this.extractMessageBundles(responseData).map(messageBundle => ({
+      messageBundle,
+      resource: messageCorrelator.extractPayloadResource(messageBundle),
+      direct: false
+    }));
+    for (const entry of responseData.entry || []) {
+      const resource = entry.resource;
+      if (!resource || !['ClaimResponse', 'CommunicationRequest', 'Communication', 'PaymentReconciliation'].includes(resource.resourceType)) continue;
+      messages.push({
+        messageBundle: resource.resourceType === 'PaymentReconciliation'
+          ? this.buildPaymentReconciliationContext(responseData, entry)
+          : { resourceType: 'Bundle', type: 'message', entry: [{ resource }] },
+        resource,
+        direct: true
+      });
+    }
+    return messages;
+  }
+
+  /**
+   * Process messages that a per-record poll (PA / claim / advanced-auth
+   * communication screens) pulled from the NPHIES queue but that do not belong to
+   * that record. They go through the same correlator/updater path as the system
+   * poll and are recorded in poll_logs/poll_messages, so nothing taken off the
+   * queue is dropped.
+   *
+   * @param {Array<{messageBundle: Object, direct?: boolean, resource?: Object}>} messages
+   * @param {Object} pollBundle - the poll request that returned them
+   * @param {Object} responseData - the full poll response (audit)
+   * @param {string} schemaName
+   * @param {string} source - short label of the caller, for the poll log
+   */
+  async processForeignMessages(messages, pollBundle, responseData, schemaName, source) {
+    if (!messages || messages.length === 0) {
+      return { processed: 0, matched: 0, unmatched: 0, errors: [], pollLogId: null };
+    }
+    validateSchemaName(schemaName);
+    const startedAt = new Date();
+    const pollLogId = await this.createPollLog({
+      pollId: randomUUID(),
+      schemaName,
+      providerNphiesId: null,
+      triggerType: 'manual',
+      pollBundle,
+      startedAt
+    });
+
+    const summary = { processed: 0, matched: 0, unmatched: 0, errors: [], pollLogId, details: [] };
+    for (const message of messages) {
+      const isPayment = message.resource?.resourceType === 'PaymentReconciliation';
+      try {
+        const result = await this.processMessage(
+          message.messageBundle, pollBundle, pollLogId, schemaName, { forceUnsolicited: isPayment }
+        );
+        summary.processed++;
+        if (result.matched) summary.matched++; else summary.unmatched++;
+        summary.details.push(result);
+      } catch (error) {
+        console.error(`[SystemPoll] Error processing message handed over by ${source}:`, error);
+        summary.errors.push({ type: 'message_processing', message: error.message });
+        await this.logPollMessage(pollLogId, {
+          messageHeaderId: null,
+          responseIdentifier: null,
+          eventCode: null,
+          resourceType: message.resource?.resourceType || 'unknown',
+          resourceData: message.messageBundle,
+          messageType: 'unknown',
+          matched: false,
+          processingStatus: 'error',
+          processingError: error.message
+        }).catch(e => console.error('[SystemPoll] Failed to log message:', e));
+      }
+    }
+
+    await this.updatePollLog(pollLogId, {
+      status: summary.errors.length > 0 ? 'error' : 'success',
+      responseBundle: responseData,
+      messagesReceived: messages.length,
+      messagesProcessed: summary.processed,
+      messagesMatched: summary.matched,
+      messagesUnmatched: summary.unmatched,
+      processingSummary: { source },
+      errors: summary.errors.length > 0 ? summary.errors : null,
+      startedAt,
+      completedAt: new Date()
+    });
+
+    console.log(`[SystemPoll] ${source}: routed ${messages.length} unrelated message(s) through the system poll path (${summary.matched} matched)`);
+    return summary;
   }
 
   // =========================================================================
@@ -492,9 +632,7 @@ class SystemPollService {
    * Resolve the provider to use for poll requests
    */
   async resolveProvider(schemaName) {
-    const client = await pool.connect();
-    try {
-      await client.query(`SET search_path TO ${schemaName}`);
+    return withSchemaClient(schemaName, async client => {
 
       // Try configured provider ID first
       let result = await client.query(
@@ -520,9 +658,7 @@ class SystemPollService {
         nphiesId: NPHIES_CONFIG.DEFAULT_PROVIDER_ID,
         name: 'Healthcare Provider'
       };
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**
@@ -666,10 +802,11 @@ class SystemPollService {
     };
   }
 
-  async getPollLog(pollLogId) {
+  async getPollLog(pollLogId, schemaName = 'public') {
+    // Scoped to the caller's schema, like getPollLogs/getPollStats.
     const logResult = await pool.query(
-      `SELECT * FROM poll_logs WHERE id = $1`,
-      [pollLogId]
+      `SELECT * FROM poll_logs WHERE id = $1 AND schema_name = $2`,
+      [pollLogId, schemaName || 'public']
     );
 
     if (logResult.rows.length === 0) return null;
@@ -719,12 +856,14 @@ class SystemPollService {
   /**
    * Get poll messages for a specific record (used by detail pages)
    */
-  async getPollMessagesForRecord(matchedTable, matchedRecordId, { page = 1, limit = 10 } = {}) {
+  async getPollMessagesForRecord(matchedTable, matchedRecordId, { page = 1, limit = 10, schemaName = 'public' } = {}) {
     const offset = (page - 1) * limit;
 
     const countResult = await pool.query(
-      `SELECT COUNT(*) FROM poll_messages WHERE matched_table = $1 AND matched_record_id = $2`,
-      [matchedTable, matchedRecordId]
+      `SELECT COUNT(*) FROM poll_messages pm
+       JOIN poll_logs pl ON pm.poll_log_id = pl.id
+       WHERE pm.matched_table = $1 AND pm.matched_record_id = $2 AND pl.schema_name = $3`,
+      [matchedTable, matchedRecordId, schemaName || 'public']
     );
     const total = parseInt(countResult.rows[0].count);
 
@@ -732,10 +871,10 @@ class SystemPollService {
       `SELECT pm.*, pl.poll_id, pl.trigger_type, pl.started_at as poll_started_at
        FROM poll_messages pm
        JOIN poll_logs pl ON pm.poll_log_id = pl.id
-       WHERE pm.matched_table = $1 AND pm.matched_record_id = $2
+       WHERE pm.matched_table = $1 AND pm.matched_record_id = $2 AND pl.schema_name = $3
        ORDER BY pm.created_at DESC
-       LIMIT $3 OFFSET $4`,
-      [matchedTable, matchedRecordId, limit, offset]
+       LIMIT $4 OFFSET $5`,
+      [matchedTable, matchedRecordId, schemaName || 'public', limit, offset]
     );
 
     return {

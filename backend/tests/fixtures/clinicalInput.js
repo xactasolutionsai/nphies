@@ -9,7 +9,12 @@ export function clinicalInput(type = 'professional') {
     coverage_id: coverage.coverage_id, status: 'draft', priority: 'normal', currency: 'SAR', total_amount: 100,
     encounter_class: type === 'institutional' ? 'inpatient' : 'outpatient',
     encounter_start: '2026-08-01T08:00:00+03:00', encounter_end: '2026-08-01T10:00:00+03:00',
-    service_date: '2026-08-01', practice_code: '08.00', pre_auth_ref: 'TEST-AUTH-REF',
+    service_date: '2026-08-01', practice_code: '08.00', pre_auth_ref: 'TEST-AUTH-REF', estimated_length_of_stay: 1,
+    // Synthetic narratives for claim supporting info the mappers no longer invent
+    patient_history: 'Synthetic patient history', treatment_plan: 'Synthetic treatment plan',
+    physical_examination: 'Synthetic examination', history_of_present_illness: 'Synthetic illness history',
+    investigation_result_code: 'NA', discharge_disposition: 'home', chief_complaint: 'Synthetic test only',
+    practitioner: { practitioner_id: '55555555-5555-4555-8555-555555555555', name: 'Test Practitioner', license_number: 'TEST-PRACTITIONER', specialty_code: '08.00' },
     items: [{ sequence: 1, product_or_service_code: 'TEST-CODE', product_or_service_display: 'Test service',
       product_or_service_system: 'http://nphies.sa/terminology/CodeSystem/procedures',
       quantity: 1, unit_price: 100, net_amount: 100, factor: 1, currency: 'SAR', tax: 0,

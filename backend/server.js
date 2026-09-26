@@ -7,8 +7,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import { query } from './db.js';
+import { query, closePool } from './db.js';
 import { initializeQueryLoader } from './db/queryLoader.js';
+import { restrictAdminOperations } from './middleware/requireRole.js';
+import { requirePublicRegistrationEnabled } from './middleware/publicRegistration.js';
+import { validateContactRequest } from './utils/contactValidation.js';
 
 // Import routes
 import patientsRoutes from './routes/patients.js';
@@ -40,7 +43,7 @@ import systemPollRoutes from './routes/systemPoll.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import contactsRoutes from './routes/contacts.js';
-import { startPollScheduler } from './scheduler/pollScheduler.js';
+import { startPollScheduler, stopPollScheduler } from './scheduler/pollScheduler.js';
 
 // Load environment variables
 dotenv.config();
@@ -56,7 +59,6 @@ if (process.env.NODE_ENV === 'production') app.set('trust proxy', 'loopback');
 app.use(helmet());
 
 // CORS configuration (must be before rate limiting)
-// CORS configuration (FIXED)
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
   : [
@@ -74,7 +76,7 @@ app.use(cors({
       return callback(null, true);
     }
 
-    return callback(new Error(`CORS blocked: ${origin}`));
+    return callback(Object.assign(new Error('Origin not allowed by CORS policy'), { status: 403, code: 'CORS_ORIGIN_REJECTED' }));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -116,20 +118,26 @@ app.get('/health', async (req, res) => {
       database: 'connected'
     });
   } catch (error) {
+    // Public endpoint: log the cause, never return it.
+    console.error('Health check database error:', error.message);
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
-      database: 'disconnected',
-      error: error.message
+      database: 'disconnected'
     });
   }
 });
 
 // API routes
+// Self-registration is opt-in (ENABLE_PUBLIC_REGISTRATION=true).
+app.post('/api/auth/register', requirePublicRegistrationEnabled);
 app.use('/api/auth', authRoutes);
 // Auth and public contact submissions are registered before the protected API.
+app.post('/api/contacts', validateContactRequest);
 app.use('/api/contacts', contactsRoutes);
 app.use('/api', authenticateToken);
+// Deletes, system polls, code-cache refresh, raw NPHIES relay and user administration need the admin role.
+app.use('/api', restrictAdminOperations);
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 app.use('/api/openmed', openmedRoutes);
 app.use('/api/users', usersRoutes);
@@ -222,6 +230,11 @@ app.use('*', (req, res) => {
 
 // Global error handler
 app.use((error, req, res, next) => {
+  if (error.code === 'CORS_ORIGIN_REJECTED') {
+    console.warn(`CORS origin rejected: ${req.headers.origin}`);
+    return res.status(403).json({ error: 'Forbidden', message: 'Origin not allowed' });
+  }
+
   console.error('Global error handler:', error);
   
   // Handle specific error types
@@ -253,29 +266,44 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
-
-// Start server
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) app.listen(PORT, HOST, async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`📚 API Documentation: http://localhost:${PORT}/`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  
-  // Initialize dynamic query loader
+// Start server (only when run directly, not when imported by tests)
+async function start() {
+  // Load queries before accepting requests so the first dashboard call cannot race the loader.
   await initializeQueryLoader();
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    console.log(`📚 API Documentation: http://localhost:${PORT}/`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 
-  // Start optional scheduled polling (disabled by default)
-  startPollScheduler();
-});
+    // Start optional scheduled polling (disabled by default)
+    startPollScheduler();
+  });
+
+  // Single graceful shutdown path: stop polling, stop accepting connections, then close the pool.
+  let shuttingDown = false;
+  const shutdown = signal => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} received, shutting down gracefully`);
+    stopPollScheduler();
+    const force = setTimeout(() => process.exit(1), 10000);
+    force.unref();
+    server.close(async () => {
+      await closePool();
+      process.exit(0);
+    });
+    server.closeIdleConnections?.();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  start().catch(error => {
+    console.error('Failed to start server:', error.message);
+    process.exit(1);
+  });
+}
 
 export default app;

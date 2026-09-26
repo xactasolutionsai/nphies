@@ -1,3 +1,8 @@
+-- LEGACY and DESTRUCTIVE: drops the core tables (CASCADE, which also drops dependent
+-- objects) and recreates an old layout that does not match the application (for example
+-- eligibility_requests and payments.payment_ref_number/total_paid_amount instead of
+-- eligibility and payments.payment_ref/amount). Never run it against a database with data.
+-- Use `npm run migrate` to build a database.
 -- Reset database for new UUID schema
 -- This will drop all existing tables and recreate them
 

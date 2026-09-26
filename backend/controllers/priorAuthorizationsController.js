@@ -12,22 +12,34 @@ import nphiesDataService from '../services/nphiesDataService.js';
 import CommunicationMapper from '../services/communicationMapper.js';
 import shadowBillingService from '../services/shadowBillingService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
+import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, subTypeFromEncounterClass } from './controllerHelpers.js';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
-function sanitizePharmacyDeviceFields(items, authType) {
-  if (authType !== 'pharmacy' || !Array.isArray(items)) return;
-  for (const item of items) {
-    if ((item.item_type || 'medication') === 'device') {
-      item.prescribed_medication_code = null;
-      item.pharmacist_selection_reason = null;
-      item.pharmacist_substitute = null;
-      item.days_supply = null;
-      item.medication_code = null;
-      item.medication_name = null;
-      item.medication_system = null;
-    }
+// Columns populated from NPHIES responses / send bookkeeping, or joined for display.
+// A follow-up (update/transfer) draft must never inherit them from the source record.
+const NON_CLONABLE_FIELDS = [
+  'id', 'items', 'supporting_info', 'diagnoses', 'attachments', 'responses',
+  'patient_name', 'patient_identifier', 'patient_gender', 'patient_birth_date',
+  'provider_name', 'provider_nphies_id', 'provider_type', 'insurer_name', 'insurer_nphies_id',
+  'request_bundle', 'response_bundle', 'outcome', 'adjudication_outcome', 'disposition',
+  'approved_amount', 'eligible_amount', 'benefit_amount', 'copay_amount',
+  'pre_auth_period_start', 'pre_auth_period_end', 'nphies_request_id', 'nphies_response_id',
+  'nphies_message_id', 'nphies_response_code', 'original_request_identifier',
+  'insurance_sequence', 'insurance_focal', 'claim_response_status', 'claim_response_use',
+  'claim_response_created', 'is_nphies_generated', 'is_cancelled', 'cancellation_reason',
+  'transfer_auth_number', 'transfer_period_start', 'transfer_period_end',
+  'request_date', 'response_date', 'created_at', 'updated_at'
+];
+// Only an adjudicated authorization can be followed up (updated) or transferred.
+const FOLLOW_UP_SOURCE_STATUSES = ['approved', 'partial'];
+
+function buildFollowUpRecord(existing, overrides) {
+  const record = {};
+  for (const [key, value] of Object.entries(existing)) {
+    if (!NON_CLONABLE_FIELDS.includes(key) && value !== undefined) record[key] = value;
   }
+  return { ...record, is_resubmission: false, ...overrides };
 }
 
 class PriorAuthorizationsController extends BaseController {
@@ -41,27 +53,7 @@ class PriorAuthorizationsController extends BaseController {
    * This ensures consistency between Prior Auth and Claims
    */
   getSubTypeFromEncounterClass(encounterClass, authType) {
-    // Map encounter class to claim subtype
-    const subTypes = {
-      'inpatient': 'ip',
-      'outpatient': 'op',
-      'daycase': 'ip',
-      'emergency': 'emr',
-      'ambulatory': 'op',
-      'home': 'op',
-      'telemedicine': 'op'
-    };
-    
-    // Default based on auth type if encounter class not found
-    const defaultByAuthType = {
-      'institutional': 'ip',
-      'professional': 'op',
-      'pharmacy': 'op',
-      'dental': 'op',
-      'vision': 'op'
-    };
-    
-    return subTypes[encounterClass] || defaultByAuthType[authType] || 'op';
+    return subTypeFromEncounterClass(encounterClass, authType);
   }
 
   /**
@@ -75,16 +67,8 @@ class PriorAuthorizationsController extends BaseController {
     if (coverageId) return getSelectedCoverage(patientId, insurerId, coverageId);
     try {
       let coverageResult;
-      
-      if (coverageId) {
-        // Get specific coverage by ID
-        coverageResult = await query(`
-          SELECT pc.*, i.insurer_name, i.nphies_id as insurer_nphies_id
-          FROM patient_coverage pc
-          LEFT JOIN insurers i ON pc.insurer_id = i.insurer_id
-          WHERE pc.coverage_id = $1
-        `, [coverageId]);
-      } else if (patientId && insurerId) {
+
+      if (patientId && insurerId) {
         // Get coverage by patient + insurer
         coverageResult = await query(`
           SELECT pc.*, i.insurer_name, i.nphies_id as insurer_nphies_id
@@ -343,7 +327,7 @@ class PriorAuthorizationsController extends BaseController {
 
     return {
       ...priorAuth,
-      items: itemsWithDetails || itemsResult.rows,
+      items: itemsWithDetails,
       supporting_info: supportingInfoResult.rows,
       attachments: attachmentsResult.rows,
       diagnoses: diagnosesResult.rows,
@@ -456,10 +440,9 @@ class PriorAuthorizationsController extends BaseController {
         await this.insertItems(priorAuthId, items);
       }
 
-      // Insert supporting info and get sequence -> ID mapping
-      let supportingInfoSequenceMap = {};
+      // Insert supporting info
       if (supporting_info && Array.isArray(supporting_info) && supporting_info.length > 0) {
-        supportingInfoSequenceMap = await this.insertSupportingInfo(priorAuthId, supporting_info);
+        await this.insertSupportingInfo(priorAuthId, supporting_info);
       }
 
       // Insert diagnoses
@@ -676,10 +659,9 @@ class PriorAuthorizationsController extends BaseController {
         await this.insertItems(id, items);
       }
 
-      // Re-insert supporting info and get sequence -> ID mapping
-      let supportingInfoSequenceMap = {};
+      // Re-insert supporting info
       if (supporting_info && Array.isArray(supporting_info) && supporting_info.length > 0) {
-        supportingInfoSequenceMap = await this.insertSupportingInfo(id, supporting_info);
+        await this.insertSupportingInfo(id, supporting_info);
       }
 
       // Re-insert diagnoses
@@ -736,9 +718,9 @@ class PriorAuthorizationsController extends BaseController {
    * Send prior authorization to NPHIES
    */
   async sendToNphies(req, res) {
+    const { id } = req.params;
+    let reservedPending = false;
     try {
-      const { id } = req.params;
-
       // Get full prior authorization data
       const priorAuth = await this.getByIdInternal(id);
       if (!priorAuth) {
@@ -845,6 +827,7 @@ class PriorAuthorizationsController extends BaseController {
       `, [nphiesRequestId, JSON.stringify(bundle), outboundMessageHeaderId, id]);
 
       if (reserved.rowCount !== 1) return res.status(409).json({ error: 'Prior authorization is already being sent or its status changed' });
+      reservedPending = true;
 
       // Send to NPHIES (use submitPriorAuth for prior authorization requests)
       const nphiesResponse = await nphiesService.submitPriorAuth(bundle);
@@ -870,11 +853,9 @@ class PriorAuthorizationsController extends BaseController {
 
         // Update prior authorization with response
         // Use adjudicationOutcome (approved/rejected) for status determination
-        const newStatus = parsedResponse.outcome === 'queued' ? 'queued' : 
-                         parsedResponse.adjudicationOutcome === 'approved' ? 'approved' :
-                         parsedResponse.adjudicationOutcome === 'rejected' ? 'denied' :
-                         parsedResponse.outcome === 'partial' ? 'partial' : 
-                         parsedResponse.success ? 'approved' : 'denied';
+        // Validation errors (OperationOutcome, ClaimResponse.error, parse failure) become 'error' so the
+        // record can be corrected and resent; only an adjudicated rejection is 'denied'.
+        const newStatus = statusFromParsedResponse(parsedResponse);
 
         // Debug logging for status determination
         console.log('[PriorAuth] Calculated newStatus:', newStatus);
@@ -1071,6 +1052,7 @@ class PriorAuthorizationsController extends BaseController {
       }
     } catch (error) {
       console.error('Error sending prior authorization to NPHIES:', error);
+      if (reservedPending) await markSendFailed('prior_authorizations', id, error);
       res.status(error.status || 500).json({ error: error.message || 'Failed to send prior authorization' });
     }
   }
@@ -1081,12 +1063,19 @@ class PriorAuthorizationsController extends BaseController {
   async submitUpdate(req, res) {
     try {
       const { id } = req.params;
+      validateNestedArrays(req.body, ['items', 'supporting_info', 'diagnoses', 'attachments']);
       const { items, supporting_info, diagnoses, attachments } = req.body;
 
       // Get existing prior authorization
       const existing = await this.getByIdInternal(id);
       if (!existing) {
         return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      if (!FOLLOW_UP_SOURCE_STATUSES.includes(existing.status)) {
+        return res.status(400).json({
+          error: `Cannot create an update for a prior authorization with status: ${existing.status}`
+        });
       }
 
       // For follow-up/update, we need the original request_number to reference the original Claim
@@ -1097,31 +1086,23 @@ class PriorAuthorizationsController extends BaseController {
         });
       }
 
-      // Create new prior authorization record for the update
-      const updateData = {
-        ...existing,
-        id: undefined,
+      // Create new prior authorization record for the update (request-side fields only)
+      const updateData = buildFollowUpRecord(existing, {
         request_number: `PA-UPD-${Date.now()}`,
         status: 'draft',
         is_update: true,
         related_auth_id: id,
         related_claim_identifier: existing.request_number, // Original request_number for Claim.related
-        pre_auth_ref: existing.pre_auth_ref, // Keep for reference but not used in Claim.related
-        items: items || existing.items,
-        supporting_info: supporting_info || existing.supporting_info,
-        diagnoses: diagnoses || existing.diagnoses,
-        attachments: attachments || existing.attachments
-      };
+        pre_auth_ref: existing.pre_auth_ref // Keep for reference but not used in Claim.related
+      });
+      const newItems = items || existing.items;
+      const newSupportingInfo = supporting_info || existing.supporting_info;
+      const newDiagnoses = diagnoses || existing.diagnoses;
+      const newAttachments = attachments || existing.attachments;
 
       await persistCoverageInput(updateData);
       // Create the update record
-      const columns = Object.keys(updateData).filter(key => 
-        !['items', 'supporting_info', 'diagnoses', 'attachments', 'responses', 
-          'patient_name', 'patient_identifier', 'patient_gender', 'patient_birth_date',
-          'provider_name', 'provider_nphies_id', 'provider_type',
-          'insurer_name', 'insurer_nphies_id', 'request_bundle', 'response_bundle'].includes(key) &&
-        updateData[key] !== undefined
-      );
+      const columns = Object.keys(updateData).filter(key => updateData[key] !== undefined);
       const values = columns.map(col => updateData[col]);
 
       const insertQuery = `
@@ -1133,19 +1114,19 @@ class PriorAuthorizationsController extends BaseController {
       const newId = result.rows[0].id;
 
       // Insert nested data (with shadow billing auto-detection)
-      if (updateData.items && updateData.items.length > 0) {
-        sanitizePharmacyDeviceFields(updateData.items, existing.auth_type);
-        await shadowBillingService.processItems(updateData.items, existing.auth_type, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(newId, updateData.items);
+      if (newItems && newItems.length > 0) {
+        sanitizePharmacyDeviceFields(newItems, existing.auth_type);
+        await shadowBillingService.processItems(newItems, existing.auth_type, PROVIDER_SHADOW_DOMAIN);
+        await this.insertItems(newId, newItems);
       }
-      if (updateData.supporting_info && updateData.supporting_info.length > 0) {
-        const supportingInfoSequenceMap = await this.insertSupportingInfo(newId, updateData.supporting_info);
+      if (newSupportingInfo && newSupportingInfo.length > 0) {
+        await this.insertSupportingInfo(newId, newSupportingInfo);
       }
-      if (updateData.diagnoses && updateData.diagnoses.length > 0) {
-        await this.insertDiagnoses(newId, updateData.diagnoses);
+      if (newDiagnoses && newDiagnoses.length > 0) {
+        await this.insertDiagnoses(newId, newDiagnoses);
       }
-      if (updateData.attachments && updateData.attachments.length > 0) {
-        await this.insertAttachments(newId, updateData.attachments);
+      if (newAttachments && newAttachments.length > 0) {
+        await this.insertAttachments(newId, newAttachments);
       }
 
       const completeData = await this.getByIdInternal(newId);
@@ -1272,12 +1253,18 @@ class PriorAuthorizationsController extends BaseController {
   async transfer(req, res) {
     try {
       const { id } = req.params;
-      const { transfer_provider_id, reason } = req.body;
+      const { transfer_provider_id } = req.body;
 
       // Get existing prior authorization
       const existing = await this.getByIdInternal(id);
       if (!existing) {
         return res.status(404).json({ error: 'Prior authorization not found' });
+      }
+
+      if (!FOLLOW_UP_SOURCE_STATUSES.includes(existing.status)) {
+        return res.status(400).json({
+          error: `Cannot transfer a prior authorization with status: ${existing.status}`
+        });
       }
 
       // Must have pre_auth_ref to transfer
@@ -1287,10 +1274,21 @@ class PriorAuthorizationsController extends BaseController {
         });
       }
 
-      // Create transfer request (similar to update but with transfer flag)
-      const transferData = {
-        ...existing,
-        id: undefined,
+      if (!transfer_provider_id || typeof transfer_provider_id !== 'string') {
+        return res.status(400).json({ error: 'transfer_provider_id is required' });
+      }
+      if (transfer_provider_id === existing.provider_id) {
+        return res.status(400).json({ error: 'Transfer provider must differ from the current provider' });
+      }
+      const targetProvider = await query(
+        'SELECT provider_id FROM providers WHERE provider_id::text = $1', [transfer_provider_id]
+      );
+      if (targetProvider.rows.length === 0) {
+        return res.status(400).json({ error: 'Transfer provider not found' });
+      }
+
+      // Create transfer request (similar to update but with transfer flag; request-side fields only)
+      const transferData = buildFollowUpRecord(existing, {
         request_number: `PA-TRF-${Date.now()}`,
         status: 'draft',
         is_transfer: true,
@@ -1298,17 +1296,11 @@ class PriorAuthorizationsController extends BaseController {
         related_auth_id: id,
         transfer_provider_id,
         pre_auth_ref: existing.pre_auth_ref
-      };
+      });
 
       await persistCoverageInput(transferData);
       // Create the transfer record
-      const columns = Object.keys(transferData).filter(key => 
-        !['items', 'supporting_info', 'diagnoses', 'attachments', 'responses',
-          'patient_name', 'patient_identifier', 'patient_gender', 'patient_birth_date',
-          'provider_name', 'provider_nphies_id', 'provider_type',
-          'insurer_name', 'insurer_nphies_id', 'request_bundle', 'response_bundle'].includes(key) &&
-        transferData[key] !== undefined
-      );
+      const columns = Object.keys(transferData).filter(key => transferData[key] !== undefined);
       const values = columns.map(col => transferData[col]);
 
       const insertQuery = `
@@ -1330,6 +1322,9 @@ class PriorAuthorizationsController extends BaseController {
       }
       if (existing.diagnoses && existing.diagnoses.length > 0) {
         await this.insertDiagnoses(newId, existing.diagnoses);
+      }
+      if (existing.attachments && existing.attachments.length > 0) {
+        await this.insertAttachments(newId, existing.attachments);
       }
 
       const completeData = await this.getByIdInternal(newId);
@@ -1672,42 +1667,7 @@ class PriorAuthorizationsController extends BaseController {
    * Download an attachment from a CommunicationRequest payload
    */
   async downloadCommunicationRequestAttachment(req, res) {
-    try {
-      const { requestId, payloadIndex } = req.params;
-      const schemaName = req.schemaName || 'public';
-
-      await query(`SET search_path TO ${schemaName}`);
-      const result = await query(
-        'SELECT request_bundle FROM nphies_communication_requests WHERE id = $1',
-        [parseInt(requestId)]
-      );
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Communication request not found' });
-      }
-
-      const bundle = typeof result.rows[0].request_bundle === 'string'
-        ? JSON.parse(result.rows[0].request_bundle)
-        : result.rows[0].request_bundle;
-
-      const idx = parseInt(payloadIndex);
-      const payload = bundle?.payload?.[idx];
-      if (!payload?.contentAttachment?.data) {
-        return res.status(404).json({ error: 'Attachment not found at the specified payload index' });
-      }
-
-      const att = payload.contentAttachment;
-      const buffer = Buffer.from(att.data, 'base64');
-      const filename = att.title || `attachment_${idx}`;
-      const contentType = att.contentType || 'application/octet-stream';
-
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Length', buffer.length);
-      res.send(buffer);
-    } catch (error) {
-      console.error('Error downloading communication request attachment:', error);
-      res.status(error.status || 500).json({ error: error.message || 'Failed to download attachment' });
-    }
+    return sendCommunicationRequestAttachment(req, res, 'prior_auth_id');
   }
 
   /**
@@ -2042,15 +2002,17 @@ class PriorAuthorizationsController extends BaseController {
         motherPatient: motherPatient
       });
 
-      // If we have an existing record ID, save the request bundle to the database
+      // If we have an existing unsent record ID, save the request bundle to the database.
+      // A record that was already sent keeps the bundle that was actually submitted.
+      let savedToRecord = null;
       if (existingId && existingId !== 'preview') {
         try {
-          await query(`
+          const saved = await query(`
             UPDATE prior_authorizations 
             SET request_bundle = $1, updated_at = CURRENT_TIMESTAMP
-            WHERE id = $2
+            WHERE id = $2 AND status IN ('draft', 'error')
           `, [JSON.stringify(bundle), existingId]);
-          console.log(`[Preview] Saved request bundle to prior authorization ID ${existingId}`);
+          if (saved.rowCount === 1) savedToRecord = existingId;
         } catch (saveError) {
           console.error('[Preview] Error saving request bundle:', saveError);
           // Don't fail the request, just log the error
@@ -2082,7 +2044,7 @@ class PriorAuthorizationsController extends BaseController {
           diagnosesCount: formData.diagnoses?.length || 0
         },
         fhirBundle: bundle,
-        savedToRecord: existingId && existingId !== 'preview' ? existingId : null
+        savedToRecord
       });
     } catch (error) {
       console.error('Error generating preview bundle:', error);
@@ -2502,8 +2464,7 @@ class PriorAuthorizationsController extends BaseController {
           base64_length: att?.base64_content?.length,
           has_base64: !!att?.base64_content
         });
-        // Continue with other attachments instead of failing completely
-        throw error; // Re-throw to surface the error
+        throw error; // Re-throw so the surrounding transaction rolls back
       }
     }
   }

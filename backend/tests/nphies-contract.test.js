@@ -49,7 +49,7 @@ test('HTTP 400 is not retried; FHIR request and content type are preserved', asy
   assert.equal(post.mock.callCount(), 1);
 });
 
-test('Transient upstream failure still retries the identical message', async t => {
+test('Connection failure that proves nothing was sent retries the identical message', async t => {
   let count = 0;
   const originalUrl = nphiesService.baseURL;
   nphiesService.baseURL = 'https://nphies.invalid';
@@ -58,13 +58,25 @@ test('Transient upstream failure still retries the identical message', async t =
   t.mock.method(nphiesService, 'validatePriorAuthResponse', () => ({ valid: true }));
   t.mock.method(axios, 'post', async (url, body) => {
     assert.deepEqual(body, expected['priorauth-professional']);
-    if (++count === 1) { const e = new Error('Temporary failure'); e.response = { status: 503 }; throw e; }
+    if (++count === 1) { const e = new Error('connect ECONNREFUSED'); e.code = 'ECONNREFUSED'; throw e; }
     return { status: 200, headers: {}, data: response };
   });
   t.mock.method(nphiesService, 'sleep', async () => {});
   const result = await nphiesService.submitPriorAuth(expected['priorauth-professional']);
   assert.equal(result.success, true);
   assert.equal(count, 2);
+});
+
+test('Prior authorization is not re-sent after a 5xx that may have reached NPHIES', async t => {
+  const originalUrl = nphiesService.baseURL;
+  nphiesService.baseURL = 'https://nphies.invalid';
+  t.after(() => { nphiesService.baseURL = originalUrl; });
+  const post = t.mock.method(axios, 'post', async () => { const e = new Error('Temporary failure'); e.response = { status: 503 }; throw e; });
+  t.mock.method(nphiesService, 'sleep', async () => {});
+  const result = await nphiesService.submitPriorAuth(expected['priorauth-professional']);
+  assert.equal(result.success, false);
+  assert.equal(result.deliveryState, 'unknown');
+  assert.equal(post.mock.callCount(), 1);
 });
 
 for (const method of ['updatePriorAuthorization', 'updateClaimSubmission']) {

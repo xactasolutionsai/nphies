@@ -1,12 +1,10 @@
 import express from 'express';
 import usersController from '../controllers/usersController.js';
-import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-
-// Apply authentication middleware to all routes
-router.use(authenticateToken);
+// Authentication is applied globally in server.js (app.use('/api', authenticateToken));
+// running it again here only repeated the user lookup.
 
 // GET /api/users - Get all users (admin only)
 router.get('/', usersController.getAll.bind(usersController));

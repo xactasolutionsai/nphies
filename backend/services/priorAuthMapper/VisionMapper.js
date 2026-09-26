@@ -23,6 +23,15 @@
 
 import BaseMapper from './BaseMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import { cloneInput, mappingError, roundMoney, parseJsonField } from './nphiesIdentity.js';
+
+// UCUM codes for lens duration units
+const DURATION_UCUM = {
+  year: 'a', years: 'a', a: 'a',
+  month: 'mo', months: 'mo', mo: 'mo',
+  week: 'wk', weeks: 'wk', wk: 'wk',
+  day: 'd', days: 'd', d: 'd'
+};
 
 class VisionMapper extends BaseMapper {
   constructor() {
@@ -31,26 +40,14 @@ class VisionMapper extends BaseMapper {
   }
 
   /**
-   * Get vision product type display
-   */
-  getVisionProductDisplay(productCode) {
-    const products = {
-      'lens': 'Lens',
-      'contact': 'Contact Lens',
-      'frame': 'Frame',
-      'services': 'Services',
-      'glasses': 'Glasses',
-      'sunglasses': 'Sunglasses'
-    };
-    return products[productCode] || productCode;
-  }
-
-  /**
    * Build complete Prior Authorization Request Bundle for Vision type
    * Note: Vision claims do NOT include Encounter resource (BV-00354)
    */
   buildPriorAuthRequestBundle(data) {
-    const { priorAuth, patient, provider, insurer, coverage, policyHolder, practitioner, visionPrescription, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, visionPrescription, motherPatient } = data;
+    // Deep copy: mapping must never mutate the caller's record
+    const priorAuth = cloneInput(data.priorAuth);
+    const practitioner = data.practitioner || priorAuth.practitioner;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -85,13 +82,13 @@ class VisionMapper extends BaseMapper {
       bundleResourceIds.motherPatient
     );
     const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: '11.00' }, // Ophthalmology specialty
+      practitioner,
       bundleResourceIds.practitioner
     );
     
     // VisionPrescription resource
     const visionPrescriptionResource = this.buildVisionPrescriptionResource(
-      visionPrescription || priorAuth.vision_prescription || {},
+      visionPrescription || parseJsonField(priorAuth.vision_prescription, 'vision_prescription') || {},
       bundleResourceIds.patient,
       bundleResourceIds.practitioner,
       bundleResourceIds.visionPrescription,
@@ -108,13 +105,6 @@ class VisionMapper extends BaseMapper {
     
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
 
-    const binaryResources = [];
-    if (priorAuth.attachments && priorAuth.attachments.length > 0) {
-      priorAuth.attachments.forEach(attachment => {
-        binaryResources.push(this.buildBinaryResource(attachment));
-      });
-    }
-
     // Vision bundle: NO Encounter, but includes VisionPrescription
     const entries = [
       messageHeader,
@@ -125,8 +115,7 @@ class VisionMapper extends BaseMapper {
       providerResource,
       insurerResource,
       newbornPatientResource, // Newborn patient
-      ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present
-      ...binaryResources
+      ...(motherPatientResource ? [motherPatientResource] : []) // Mother patient if present
     ];
 
     return {
@@ -153,8 +142,7 @@ class VisionMapper extends BaseMapper {
     const practitionerRef = bundleResourceIds.practitioner;
     const visionPrescriptionRef = bundleResourceIds.visionPrescription;
 
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build extensions - NO encounter extension for vision
     const extensions = [];
@@ -271,7 +259,7 @@ class VisionMapper extends BaseMapper {
 
     claim.identifier = [
       {
-        system: `${providerIdentifierSystem}/authorization`,
+        system: this.getClaimIdentifierSystem(provider),
         value: priorAuth.request_number || `req_${Date.now()}`
       }
     ];
@@ -386,7 +374,7 @@ class VisionMapper extends BaseMapper {
 
     // SupportingInfo
     let supportingInfoSequences = [];
-    let supportingInfoList = [...(priorAuth.supporting_info || [])];
+    let supportingInfoList = this.tagCallerSupportingInfo(priorAuth.supporting_info);
 
     // Add birth-weight supportingInfo for newborn patients
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
@@ -405,11 +393,27 @@ class VisionMapper extends BaseMapper {
       }
     }
     
-    if (supportingInfoList.length > 0) {
-      claim.supportingInfo = supportingInfoList.map((info, idx) => {
-        const seq = idx + 1;
-        supportingInfoSequences.push(seq);
-        return this.buildSupportingInfo({ ...info, sequence: seq });
+    // Attachments are embedded as supportingInfo valueAttachment rather than unreferenced Binary entries
+    (priorAuth.attachments || []).forEach(attachment => {
+      if (attachment && attachment.base64_content && attachment.content_type) {
+        supportingInfoList.push({
+          category: 'attachment',
+          value_attachment: {
+            contentType: attachment.content_type,
+            data: attachment.base64_content,
+            title: attachment.file_name || attachment.title || 'Attachment',
+            creation: attachment.uploaded_at ? this.formatDate(attachment.uploaded_at) : this.formatDate(new Date())
+          }
+        });
+      }
+    });
+
+    const numberedSupportingInfo = supportingInfoList.map((info, idx) => ({ info, sequence: idx + 1 }));
+    const informationSequenceMap = this.buildInformationSequenceMap(numberedSupportingInfo);
+    if (numberedSupportingInfo.length > 0) {
+      claim.supportingInfo = numberedSupportingInfo.map(({ info, sequence }) => {
+        supportingInfoSequences.push(sequence);
+        return this.buildSupportingInfo({ ...info, sequence });
       });
     }
 
@@ -429,7 +433,7 @@ class VisionMapper extends BaseMapper {
     
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
-        this.buildVisionClaimItem(item, idx + 1, supportingInfoSequences, servicedDate)
+        this.buildVisionClaimItem(item, idx + 1, supportingInfoSequences, servicedDate, informationSequenceMap)
       );
     }
 
@@ -445,7 +449,7 @@ class VisionMapper extends BaseMapper {
       }, 0);
     }
     claim.total = {
-      value: parseFloat(totalAmount || 0),
+      value: roundMoney(totalAmount),
       currency: priorAuth.currency || 'SAR'
     };
 
@@ -458,7 +462,7 @@ class VisionMapper extends BaseMapper {
   /**
    * Build claim item for Vision - NO bodySite allowed (BV-00374)
    */
-  buildVisionClaimItem(item, itemIndex, supportingInfoSequences, servicedDate) {
+  buildVisionClaimItem(item, itemIndex, supportingInfoSequences, servicedDate, informationSequenceMap = null) {
     const sequence = item.sequence || itemIndex;
     
     const quantity = parseFloat(item.quantity || 1);
@@ -485,13 +489,16 @@ class VisionMapper extends BaseMapper {
       }
     });
 
-    itemExtensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share',
-      valueMoney: {
-        value: item.payer_share !== undefined ? parseFloat(item.payer_share) : (calculatedNet - patientShare),
-        currency: item.currency || 'SAR'
-      }
-    });
+    const payerShare = this.parsePayerShare(item.payer_share);
+    if (payerShare !== null) {
+      itemExtensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share',
+        valueMoney: {
+          value: payerShare,
+          currency: item.currency || 'SAR'
+        }
+      });
+    }
 
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity',
@@ -512,7 +519,7 @@ class VisionMapper extends BaseMapper {
       sequence: sequence,
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
-      informationSequence: item.information_sequences || supportingInfoSequences,
+      informationSequence: this.resolveInformationSequences(item, supportingInfoSequences, informationSequenceMap),
       productOrService: {
         coding: (() => {
           // IB-00030: Vision claims use 'procedures' CodeSystem, NOT 'scientific-codes'
@@ -596,11 +603,9 @@ class VisionMapper extends BaseMapper {
       });
     }
 
-    // Ensure at least one lens specification exists
+    // At least one lens specification is required; never invent a plano right-eye lens
     if (resource.lensSpecification.length === 0) {
-      resource.lensSpecification.push(
-        this.buildLensSpecification({ sphere: 0 }, 'right', prescription.product_type || 'lens')
-      );
+      throw mappingError('Vision request requires a lens specification (vision_prescription.right_eye, left_eye or lens_specifications)');
     }
 
     return {
@@ -627,8 +632,11 @@ class VisionMapper extends BaseMapper {
           }
         ]
       },
-      eye: eye || data.eye || 'right'
+      eye: eye || data.eye
     };
+    if (!lensSpec.eye) {
+      throw mappingError('Lens specification requires the eye (right or left)');
+    }
 
     // Helper to check if value is valid for numeric field (not null, undefined, empty string, or NaN)
     const isValidNumeric = (val) => val !== undefined && val !== null && val !== '' && !isNaN(parseFloat(val));
@@ -638,7 +646,7 @@ class VisionMapper extends BaseMapper {
     if (isValidNumeric(data.sphere)) {
       lensSpec.sphere = parseFloat(data.sphere);
     } else if (resolvedProduct === 'lens') {
-      lensSpec.sphere = 0;
+      throw mappingError(`Lens specification for the ${lensSpec.eye} eye requires a sphere value`);
     }
 
     // Cylinder (CYL)
@@ -673,11 +681,16 @@ class VisionMapper extends BaseMapper {
 
     // Duration
     if (isValidNumeric(data.duration_value)) {
+      const durationUnit = (data.duration_unit || 'month').toString().toLowerCase();
+      const durationCode = DURATION_UCUM[durationUnit];
+      if (!durationCode) {
+        throw mappingError(`Unsupported lens duration unit '${data.duration_unit}' (use day, week, month or year)`);
+      }
       lensSpec.duration = {
         value: parseFloat(data.duration_value),
         unit: data.duration_unit || 'month',
         system: 'http://unitsofmeasure.org',
-        code: data.duration_unit === 'year' ? 'a' : 'mo'
+        code: durationCode
       };
     }
 

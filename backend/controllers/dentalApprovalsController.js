@@ -40,6 +40,8 @@ class DentalApprovalsController extends BaseController {
       }
 
       const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+      // The count query has no LIMIT/OFFSET, so its placeholders start at $1 instead of $3
+      const countWhereClause = whereClause.replace(/\$(\d+)/g, (_, n) => `$${Number(n) - 2}`);
 
       // Get total count
       const countQuery = `
@@ -48,7 +50,7 @@ class DentalApprovalsController extends BaseController {
         LEFT JOIN patients p ON da.patient_id = p.patient_id
         LEFT JOIN providers pr ON da.provider_id = pr.provider_id
         LEFT JOIN insurers i ON da.insurer_id = i.insurer_id
-        ${whereClause}
+        ${countWhereClause}
       `;
       const countResult = await query(countQuery, countParams);
       const total = parseInt(countResult.rows[0].total);
@@ -260,11 +262,9 @@ class DentalApprovalsController extends BaseController {
           errors: [{ field: fieldName, message: `Invalid ${fieldName} reference` }]
         });
       } else {
-        // Return detailed error message
-        const errorMessage = error.message || 'Failed to create dental approval';
-        res.status(500).json({ 
-          error: errorMessage,
-          details: error.detail || error.hint || null
+        // Never echo raw database error text to the client
+        res.status(error.status || 500).json({
+          error: error.status ? error.message : 'Failed to create dental approval'
         });
       }
     }
@@ -278,7 +278,7 @@ class DentalApprovalsController extends BaseController {
 
       // Clean up empty strings: convert empty strings to null for dates and numbers
       validateNestedArrays(req.body, ["procedures","medications"]);
-      const cleanedData = selectInputFields(formData, dentalFields, ['patient_name', 'patient_identifier', 'insurer_name']);
+      const cleanedData = selectInputFields(formData, dentalFields, ['patient_name', 'patient_identifier', 'insurer_name', 'provider_name_joined']);
       const dateFields = ['date_of_visit', 'expiry_date', 'provider_date'];
       const numberFields = ['age', 'duration_of_illness_days'];
       
@@ -378,11 +378,9 @@ class DentalApprovalsController extends BaseController {
           errors: [{ field: fieldName, message: `Invalid ${fieldName} reference` }]
         });
       } else {
-        // Return detailed error message
-        const errorMessage = error.message || 'Failed to update dental approval';
-        res.status(500).json({ 
-          error: errorMessage,
-          details: error.detail || error.hint || null
+        // Never echo raw database error text to the client
+        res.status(error.status || 500).json({
+          error: error.status ? error.message : 'Failed to update dental approval'
         });
       }
     }

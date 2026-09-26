@@ -39,6 +39,9 @@
 
 import DentalMapper from '../priorAuthMapper/DentalMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import {
+  cloneInput, mappingError, roundMoney, requireProviderLicense, requireInsurerLicense, formatSaudiDate, ICD10_SYSTEM
+} from '../priorAuthMapper/nphiesIdentity.js';
 
 class OralClaimMapper extends DentalMapper {
   constructor() {
@@ -53,12 +56,20 @@ class OralClaimMapper extends DentalMapper {
     return 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/oral-claim|1.0.0';
   }
 
+  /** Claims use Claim.use=claim and the provider's /claim identifier system. */
+  getClaimUse() {
+    return 'claim';
+  }
+
   /**
    * Build complete Claim Request Bundle for Oral (Dental) type
    * Includes Encounter resource (unlike Vision claims)
    */
   buildClaimRequestBundle(data) {
-    const { claim, patient, provider, insurer, coverage, policyHolder, practitioner, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    // Deep copy: mapping must never mutate the caller's record
+    const claim = cloneInput(data.claim);
+    const practitioner = data.practitioner || claim.practitioner;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -93,7 +104,7 @@ class OralClaimMapper extends DentalMapper {
       bundleResourceIds.motherPatient
     );
     const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: claim.practice_code || '22.00' }, // Dental
+      practitioner,
       bundleResourceIds.practitioner
     );
     
@@ -137,8 +148,8 @@ class OralClaimMapper extends DentalMapper {
    */
   buildClaimMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+    const senderNphiesId = requireProviderLicense(provider);
+    const destinationNphiesId = requireInsurerLicense(insurer);
 
     return {
       fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -189,8 +200,7 @@ class OralClaimMapper extends DentalMapper {
    */
   buildOralClaimResource(claim, patient, provider, insurer, coverage, practitioner, bundleResourceIds) {
     const claimId = bundleResourceIds.claim;
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build extensions per NPHIES validation requirements
     // Note: AccountingPeriod may be required by NPHIES validation even if not shown in examples
@@ -198,8 +208,8 @@ class OralClaimMapper extends DentalMapper {
 
     // 1. AccountingPeriod extension (required per NPHIES validation IC-01620)
     // BV-01010: Day must be defaulted to "01" (e.g., "2025-12-01" not "2025-12-08")
-    const serviceDate = new Date(claim.service_date || claim.request_date || new Date());
-    const accountingPeriodDate = `${serviceDate.getFullYear()}-${String(serviceDate.getMonth() + 1).padStart(2, '0')}-01`;
+    // Saudi calendar month (independent of the host timezone)
+    const accountingPeriodDate = `${formatSaudiDate(claim.service_date || claim.request_date || new Date()).slice(0, 7)}-01`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
       valueDate: accountingPeriodDate
@@ -280,7 +290,7 @@ class OralClaimMapper extends DentalMapper {
       meta: { profile: [this.getClaimProfileUrl()] },
       extension: extensions,
       identifier: [{ 
-        system: `${providerIdentifierSystem}/claim`, 
+        system: this.getClaimIdentifierSystem(provider), 
         value: claim.claim_number || `req_${Date.now()}` 
       }],
       status: 'active',
@@ -340,7 +350,7 @@ class OralClaimMapper extends DentalMapper {
 
     // SupportingInfo - chief-complaint is REQUIRED for oral claims
     let supportingInfoSequences = [];
-    let supportingInfoList = [...(claim.supporting_info || [])];
+    let supportingInfoList = this.tagCallerSupportingInfo(claim.supporting_info);
     
     // Add birth-weight supportingInfo for newborn patients
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
@@ -372,22 +382,26 @@ class OralClaimMapper extends DentalMapper {
           category: 'chief-complaint',
           code_text: clinicalInfo.chief_complaint_text
         });
-      } else {
+      } else if (clinicalInfo.chief_complaint_code) {
         // SNOMED code format per Claim-173094 example
         supportingInfoList.unshift({
           category: 'chief-complaint',
-          code: clinicalInfo.chief_complaint_code || '27355003',
-          code_display: clinicalInfo.chief_complaint_display || 'Toothache',
+          code: clinicalInfo.chief_complaint_code,
+          code_display: clinicalInfo.chief_complaint_display,
           code_system: 'http://snomed.info/sct'
         });
+      } else {
+        // Never a default complaint
+        throw mappingError('Oral claim requires a chief complaint (supporting_info category chief-complaint or clinical_info.chief_complaint_text/code)');
       }
     }
     
-    if (supportingInfoList.length > 0) {
-      claimResource.supportingInfo = supportingInfoList.map((info, idx) => {
-        const seq = idx + 1;
-        supportingInfoSequences.push(seq);
-        return this.buildOralSupportingInfo({ ...info, sequence: seq });
+    const numberedSupportingInfo = supportingInfoList.map((info, idx) => ({ info, sequence: idx + 1 }));
+    const informationSequenceMap = this.buildInformationSequenceMap(numberedSupportingInfo);
+    if (numberedSupportingInfo.length > 0) {
+      claimResource.supportingInfo = numberedSupportingInfo.map(({ info, sequence }) => {
+        supportingInfoSequences.push(sequence);
+        return this.buildOralSupportingInfo({ ...info, sequence });
       });
     }
 
@@ -397,7 +411,7 @@ class OralClaimMapper extends DentalMapper {
         sequence: diag.sequence || idx + 1,
         diagnosisCodeableConcept: { 
           coding: [{ 
-            system: 'http://hl7.org/fhir/sid/icd-10-am', 
+            system: ICD10_SYSTEM, 
             code: diag.diagnosis_code, 
             display: diag.diagnosis_display 
           }] 
@@ -426,7 +440,7 @@ class OralClaimMapper extends DentalMapper {
     const claimServicedDate = claim.service_date || claim.request_date || new Date();
     if (claim.items?.length > 0) {
       claimResource.item = claim.items.map((item, idx) => 
-        this.buildOralClaimItem(item, idx + 1, claimServicedDate, providerIdentifierSystem, claim, supportingInfoSequences)
+        this.buildOralClaimItem(item, idx + 1, claimServicedDate, providerIdentifierSystem, claim, supportingInfoSequences, informationSequenceMap)
       );
     }
 
@@ -444,7 +458,7 @@ class OralClaimMapper extends DentalMapper {
       totalAmount = parseFloat(claim.total_amount);
     }
     claimResource.total = { 
-      value: totalAmount, 
+      value: roundMoney(totalAmount), 
       currency: claim.currency || 'SAR' 
     };
 
@@ -491,8 +505,10 @@ class OralClaimMapper extends DentalMapper {
         const freeText = info.code_text || 
                          info.value_string || 
                          info.code_display || 
-                         info.code ||
-                         'Dental complaint';
+                         info.code;
+        if (!freeText) {
+          throw mappingError('Oral chief-complaint supporting info requires a code or text');
+        }
         supportingInfo.code = {
           text: freeText
         };
@@ -510,7 +526,8 @@ class OralClaimMapper extends DentalMapper {
    * Per NPHIES examples: package, tax, patient-share, patientInvoice extensions
    * Plus bodySite for tooth number and subSite for tooth surfaces
    */
-  buildOralClaimItem(item, sequence, servicedDate, providerIdentifierSystem, claim, supportingInfoSequences = []) {
+  buildOralClaimItem(item, sequence, servicedDate, providerIdentifierSystem, claim, supportingInfoSequences = [], informationSequenceMap = null) {
+    const informationSequence = this.resolveInformationSequences(item, supportingInfoSequences, informationSequenceMap);
     const quantity = parseFloat(item.quantity || 1);
     const unitPrice = parseFloat(item.unit_price || 0);
     const factor = parseFloat(item.factor ?? 1);
@@ -557,6 +574,8 @@ class OralClaimMapper extends DentalMapper {
       sequence,
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
+      // Link the item to its supporting info (including the required chief-complaint)
+      ...(informationSequence && { informationSequence }),
       productOrService: {
         coding: (() => {
           const codings = [{
@@ -655,11 +674,12 @@ class OralClaimMapper extends DentalMapper {
     const patientId = bundleResourceIds.patient;
     const providerId = bundleResourceIds.provider;
     
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
+    // Deterministic identifier (a 4-digit random value could collide and is not reproducible)
     const encounterIdentifier = claim.encounter_identifier || 
-                                `AB${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+                                claim.claim_number ||
+                                `ENC-${encounterId.substring(0, 8)}`;
 
     const encounter = {
       resourceType: 'Encounter',

@@ -14,6 +14,22 @@ import { NPHIES_CONFIG } from '../config/nphies.js';
 import CommunicationMapper from './communicationMapper.js';
 import batchClaimMapper from './claimMapper/BatchClaimMapper.js';
 
+// Connection errors raised before any byte of the request left this host. Only these
+// prove NPHIES never received a message, so only these allow a non-idempotent re-send.
+const NOT_SENT_ERROR_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN']);
+
+// Full request/response bundles contain patient data; log them only when explicitly enabled.
+import { debugBundlesEnabled, providerTypeCoding } from './priorAuthMapper/nphiesIdentity.js';
+
+function describeOutcomeIssues(issues = []) {
+  return issues.map(i => {
+    const code = i.details?.coding?.[0]?.code || i.code || 'UNKNOWN';
+    const display = i.details?.coding?.[0]?.display || i.diagnostics || i.details?.text || 'Unknown error';
+    const expression = i.expression ? ` [${i.expression.join(', ')}]` : '';
+    return `${i.severity?.toUpperCase() || 'ERROR'}: ${code} - ${display}${expression}`;
+  }).join('; ');
+}
+
 class NphiesService {
   constructor() {
     this.baseURL = process.env.NPHIES_BASE_URL || 'http://176.105.150.83';
@@ -22,328 +38,221 @@ class NphiesService {
   }
 
   /**
-   * Send eligibility request to NPHIES
+   * Whether a failed attempt may be sent again.
+   * - 4xx: never (the request itself is wrong).
+   * - Idempotent messages (eligibility): retry on timeouts, 5xx and invalid bodies.
+   * - Non-idempotent messages (prior auth, claim, cancel, batch): retry only when the
+   *   connection error proves nothing was sent. A timeout, a 5xx or a 200 carrying an
+   *   error may mean NPHIES already processed the message, so re-POSTing it could
+   *   create a duplicate submission.
+   */
+  canRetry(error, idempotent) {
+    const status = error?.response?.status;
+    if (error?.transportConfigError) return false;
+    if (status >= 400 && status < 500) return false;
+    if (idempotent) return true;
+    return !error?.response && NOT_SENT_ERROR_CODES.has(error?.code);
+  }
+
+  /**
+   * POST a message bundle to $process-message, applying the retry policy above.
+   * handleResponse receives the axios response and returns the success result, or throws.
+   */
+  async postMessage(label, requestBundle, handleResponse, { idempotent = false, timeout = this.timeout } = {}) {
+    const attempts = Math.max(1, Number.isFinite(this.retryAttempts) ? this.retryAttempts : 1);
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      let httpResponse;
+      try {
+        console.log(`[NPHIES] Sending ${label} (attempt ${attempt}/${attempts})`);
+        try {
+          validateNphiesTransport(this.baseURL);
+        } catch (configError) {
+          configError.transportConfigError = true;
+          throw configError;
+        }
+        httpResponse = await axios.post(
+          `${this.baseURL}/$process-message`,
+          requestBundle,
+          {
+            headers: {
+              'Content-Type': 'application/fhir+json',
+              'Accept': 'application/fhir+json'
+            },
+            timeout,
+            validateStatus: (status) => status < 500 // Accept 4xx responses as valid
+          }
+        );
+        console.log(`[NPHIES] ${label} response received: ${httpResponse.status}`);
+        return await handleResponse(httpResponse);
+      } catch (error) {
+        if (httpResponse && !error.response) error.response = httpResponse;
+        lastError = error;
+        console.error(`[NPHIES] ${label} attempt ${attempt} failed:`, error.message);
+
+        if (!this.canRetry(error, idempotent)) {
+          if (!idempotent && !error.transportConfigError && !NOT_SENT_ERROR_CODES.has(error.code)) {
+            console.log(`[NPHIES] ${label} may have reached NPHIES; not re-sending (reconcile via poll/status-check)`);
+          } else {
+            console.log('[NPHIES] Error is not retryable');
+          }
+          break;
+        }
+
+        if (attempt < attempts) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
+          await this.sleep(waitTime);
+        }
+      }
+    }
+
+    const notSent = lastError?.transportConfigError || (!lastError?.response && NOT_SENT_ERROR_CODES.has(lastError?.code));
+    return {
+      success: false,
+      // 'unknown' means the message may have been processed; do not blindly resubmit.
+      deliveryState: notSent ? 'not-sent' : (lastError?.response?.status >= 400 && lastError.response.status < 500 ? 'rejected' : 'unknown'),
+      error: this.formatError(lastError)
+    };
+  }
+
+  /**
+   * Send eligibility request to NPHIES (idempotent: safe to retry)
    */
   async checkEligibility(requestBundle) {
-    let lastError = null;
-    
-    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
-      let httpResponse;
-      try {
-        console.log(`[NPHIES] Sending eligibility request (attempt ${attempt}/${this.retryAttempts})`);
-        
-        validateNphiesTransport(this.baseURL);
-
-        const response = httpResponse = await axios.post(
-          `${this.baseURL}/$process-message`,
-          requestBundle,
-          {
-            headers: {
-              'Content-Type': 'application/fhir+json',
-              'Accept': 'application/fhir+json'
-            },
-            timeout: this.timeout,
-            validateStatus: (status) => status < 500 // Accept 4xx responses as valid
-          }
-        );
-
-        console.log(`[NPHIES] Response received: ${response.status}`);
-        
-        // Validate response
-        const validationResult = this.validateResponse(response.data);
-        if (!validationResult.valid) {
-          console.error('[NPHIES] Invalid response structure:', validationResult.errors);
-          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
-        }
-
-        return {
-          success: true,
-          status: response.status,
-          data: response.data
-        };
-
-      } catch (error) {
-        if (httpResponse && !error.response) error.response = httpResponse;
-        lastError = error;
-        console.error(`[NPHIES] Attempt ${attempt} failed:`, error.message);
-
-        // Don't retry on 4xx errors (client errors)
-        if (error.response && error.response.status >= 400 && error.response.status < 500) {
-          console.log('[NPHIES] Client error detected, not retrying');
-          break;
-        }
-
-        // Wait before retrying (exponential backoff)
-        if (attempt < this.retryAttempts) {
-          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
-          await this.sleep(waitTime);
-        }
+    return this.postMessage('eligibility request', requestBundle, response => {
+      // Validate response
+      const validationResult = this.validateResponse(response.data);
+      if (!validationResult.valid) {
+        console.error('[NPHIES] Invalid response structure:', validationResult.errors);
+        throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
       }
-    }
 
-    // All attempts failed
-    return {
-      success: false,
-      error: this.formatError(lastError)
-    };
+      return {
+        success: true,
+        status: response.status,
+        data: response.data
+      };
+    }, { idempotent: true });
   }
 
   /**
-   * Submit prior authorization request to NPHIES
+   * Submit prior authorization request to NPHIES (not idempotent)
    */
   async submitPriorAuth(requestBundle) {
-    let lastError = null;
-    
-    // Debug: Log the request bundle being sent
-    console.log('[NPHIES] ===== OUTGOING REQUEST =====');
-    console.log('[NPHIES] Request Bundle ID:', requestBundle?.id);
-    console.log('[NPHIES] Request Bundle Type:', requestBundle?.type);
-    console.log('[NPHIES] Request Bundle Entries:', requestBundle?.entry?.length);
-    // Log the MessageHeader event type
     const msgHeader = requestBundle?.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
-    console.log('[NPHIES] MessageHeader event:', msgHeader?.eventCoding?.code);
-    // Log the Claim identifier
     const claim = requestBundle?.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource;
-    console.log('[NPHIES] Claim identifier:', claim?.identifier?.[0]?.value);
-    console.log('[NPHIES] =============================');
-    
-    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
-      let httpResponse;
-      try {
-        console.log(`[NPHIES] Sending prior authorization request (attempt ${attempt}/${this.retryAttempts})`);
-        
-        validateNphiesTransport(this.baseURL);
+    console.log('[NPHIES] Outgoing prior authorization:', JSON.stringify({
+      bundleId: requestBundle?.id, entries: requestBundle?.entry?.length,
+      event: msgHeader?.eventCoding?.code, claimIdentifier: claim?.identifier?.[0]?.value
+    }));
 
-        const response = httpResponse = await axios.post(
-          `${this.baseURL}/$process-message`,
-          requestBundle,
-          {
-            headers: {
-              'Content-Type': 'application/fhir+json',
-              'Accept': 'application/fhir+json'
-            },
-            timeout: this.timeout,
-            validateStatus: (status) => status < 500 // Accept 4xx responses as valid
-          }
-        );
-
-        console.log(`[NPHIES] Response received: ${response.status}`);
-        
-        // Debug: Log the raw response for troubleshooting
-        console.log('[NPHIES] ===== INCOMING RESPONSE =====');
-        console.log('[NPHIES] Response Status:', response.status);
-        console.log('[NPHIES] Response Headers:', JSON.stringify(response.headers, null, 2));
-        
-        // Check if response is valid JSON/Bundle
-        if (!response.data) {
-          console.error('[NPHIES] Empty response received');
-          throw new Error('NPHIES returned an empty response');
-        }
-        
-        // Check if response is HTML (usually indicates auth error or server error)
-        if (typeof response.data === 'string') {
-          console.error('[NPHIES] Received string response instead of JSON:', response.data.substring(0, 500));
-          if (response.data.includes('<html') || response.data.includes('<!DOCTYPE')) {
-            throw new Error('NPHIES returned an HTML error page. This usually indicates an authentication or server error. Check your NPHIES credentials and connectivity.');
-          }
-          throw new Error(`NPHIES returned unexpected response: ${response.data.substring(0, 200)}`);
-        }
-        
-        console.log('[NPHIES] Response resourceType:', response.data?.resourceType);
-        console.log('[NPHIES] Response Bundle ID:', response.data?.id);
-        console.log('[NPHIES] Response Bundle Type:', response.data?.type);
-        console.log('[NPHIES] Response Bundle Entries:', response.data?.entry?.length);
-        
-        // IMPORTANT: Check if NPHIES returned an OperationOutcome directly (not in a Bundle)
-        // This happens when there's a validation error with the request
-        if (response.data?.resourceType === 'OperationOutcome') {
-          console.error('[NPHIES] Received direct OperationOutcome (validation error)');
-          console.error('[NPHIES] OperationOutcome:', JSON.stringify(response.data, null, 2));
-          
-          const issues = response.data.issue || [];
-          const nphiesErrors = issues.map(i => {
-            const code = i.details?.coding?.[0]?.code || i.code || 'UNKNOWN';
-            const display = i.details?.coding?.[0]?.display || i.diagnostics || i.details?.text || 'Unknown error';
-            const expression = i.expression ? ` [${i.expression.join(', ')}]` : '';
-            return `${i.severity?.toUpperCase() || 'ERROR'}: ${code} - ${display}${expression}`;
-          }).join('; ');
-          
-          throw new Error(`NPHIES Validation Error: ${nphiesErrors || 'Unknown validation error'}`);
-        }
-        
-        // Log ClaimResponse details if present
-        const claimResp = response.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
-        if (claimResp) {
-          console.log('[NPHIES] ClaimResponse ID:', claimResp?.id);
-          console.log('[NPHIES] ClaimResponse outcome:', claimResp?.outcome);
-          console.log('[NPHIES] ClaimResponse preAuthRef:', claimResp?.preAuthRef);
-          console.log('[NPHIES] ClaimResponse has extensions:', !!claimResp?.extension, 'count:', claimResp?.extension?.length);
-        }
-        
-        // Check for OperationOutcome errors inside the Bundle
-        const operationOutcome = response.data?.entry?.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
-        if (operationOutcome?.issue) {
-          console.log('[NPHIES] OperationOutcome issues in Bundle:', JSON.stringify(operationOutcome.issue, null, 2));
-        }
-        console.log('[NPHIES] ==============================');
-        
-        // Validate response for prior auth (expects ClaimResponse)
-        const validationResult = this.validatePriorAuthResponse(response.data);
-        if (!validationResult.valid) {
-          console.error('[NPHIES] Invalid prior auth response structure:', validationResult.errors);
-          console.error('[NPHIES] Full response data:', JSON.stringify(response.data, null, 2).substring(0, 2000));
-          
-          // If we got an OperationOutcome inside the bundle, include those errors
-          if (operationOutcome?.issue) {
-            const nphiesErrors = operationOutcome.issue.map(i => {
-              const code = i.details?.coding?.[0]?.code || i.code || 'UNKNOWN';
-              const display = i.details?.coding?.[0]?.display || i.diagnostics || i.details?.text || 'Unknown error';
-              const expression = i.expression ? ` [${i.expression.join(', ')}]` : '';
-              return `${i.severity?.toUpperCase() || 'ERROR'}: ${code} - ${display}${expression}`;
-            }).join('; ');
-            throw new Error(`NPHIES Error: ${nphiesErrors}`);
-          }
-          
-          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}. Response type: ${response.data?.resourceType || 'unknown'}`);
-        }
-
-        return {
-          success: true,
-          status: response.status,
-          data: response.data
-        };
-
-      } catch (error) {
-        if (httpResponse && !error.response) error.response = httpResponse;
-        lastError = error;
-        console.error(`[NPHIES] Attempt ${attempt} failed:`, error.message);
-
-        // Don't retry on 4xx errors (client errors)
-        if (error.response && error.response.status >= 400 && error.response.status < 500) {
-          console.log('[NPHIES] Client error detected, not retrying');
-          break;
-        }
-
-        // Wait before retrying (exponential backoff)
-        if (attempt < this.retryAttempts) {
-          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
-          await this.sleep(waitTime);
-        }
+    return this.postMessage('prior authorization request', requestBundle, response => {
+      // Check if response is valid JSON/Bundle
+      if (!response.data) {
+        console.error('[NPHIES] Empty response received');
+        throw new Error('NPHIES returned an empty response');
       }
-    }
 
-    // All attempts failed
-    return {
-      success: false,
-      error: this.formatError(lastError)
-    };
+      // Check if response is HTML (usually indicates auth error or server error)
+      if (typeof response.data === 'string') {
+        console.error('[NPHIES] Received string response instead of JSON:', response.data.substring(0, 500));
+        if (response.data.includes('<html') || response.data.includes('<!DOCTYPE')) {
+          throw new Error('NPHIES returned an HTML error page. This usually indicates an authentication or server error. Check your NPHIES credentials and connectivity.');
+        }
+        throw new Error(`NPHIES returned unexpected response: ${response.data.substring(0, 200)}`);
+      }
+
+      const claimResp = response.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+      console.log('[NPHIES] Incoming prior authorization response:', JSON.stringify({
+        resourceType: response.data?.resourceType, bundleId: response.data?.id, entries: response.data?.entry?.length,
+        claimResponseId: claimResp?.id, outcome: claimResp?.outcome
+      }));
+
+      // IMPORTANT: Check if NPHIES returned an OperationOutcome directly (not in a Bundle)
+      // This happens when there's a validation error with the request
+      if (response.data?.resourceType === 'OperationOutcome') {
+        console.error('[NPHIES] Received direct OperationOutcome (validation error)');
+        throw new Error(`NPHIES Validation Error: ${describeOutcomeIssues(response.data.issue) || 'Unknown validation error'}`);
+      }
+
+      // Check for OperationOutcome errors inside the Bundle
+      const operationOutcome = response.data?.entry?.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
+      if (operationOutcome?.issue) {
+        console.log('[NPHIES] OperationOutcome issues in Bundle:', describeOutcomeIssues(operationOutcome.issue));
+      }
+
+      // Validate response for prior auth (expects ClaimResponse)
+      const validationResult = this.validatePriorAuthResponse(response.data);
+      if (!validationResult.valid) {
+        console.error('[NPHIES] Invalid prior auth response structure:', validationResult.errors);
+        if (debugBundlesEnabled()) {
+          console.error('[NPHIES] Full response data:', JSON.stringify(response.data, null, 2).substring(0, 2000));
+        }
+
+        // If we got an OperationOutcome inside the bundle, include those errors
+        if (operationOutcome?.issue) {
+          throw new Error(`NPHIES Error: ${describeOutcomeIssues(operationOutcome.issue)}`);
+        }
+
+        throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}. Response type: ${response.data?.resourceType || 'unknown'}`);
+      }
+
+      return {
+        success: true,
+        status: response.status,
+        data: response.data
+      };
+    });
   }
 
   /**
-   * Submit cancel request to NPHIES
+   * Submit cancel request to NPHIES (not idempotent)
    * Reference: https://portal.nphies.sa/ig/usecase-cancel.html
-   * 
+   *
    * Cancel requests use Task resource and expect Task response
    * MessageHeader.eventCoding = cancel-request
    * Response: Task.status = 'completed' or 'error'
    */
   async submitCancelRequest(requestBundle) {
-    let lastError = null;
-    
-    // Debug: Log the request bundle being sent
-    console.log('[NPHIES] ===== OUTGOING CANCEL REQUEST =====');
-    console.log('[NPHIES] Request Bundle ID:', requestBundle?.id);
-    console.log('[NPHIES] Request Bundle Type:', requestBundle?.type);
-    console.log('[NPHIES] Request Bundle Entries:', requestBundle?.entry?.length);
     const msgHeader = requestBundle?.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
-    console.log('[NPHIES] MessageHeader event:', msgHeader?.eventCoding?.code);
     const task = requestBundle?.entry?.find(e => e.resource?.resourceType === 'Task')?.resource;
-    console.log('[NPHIES] Task code:', task?.code?.coding?.[0]?.code);
-    console.log('[NPHIES] Task focus:', task?.focus?.identifier?.value);
-    console.log('[NPHIES] ======================================');
-    
-    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
-      let httpResponse;
-      try {
-        console.log(`[NPHIES] Sending cancel request (attempt ${attempt}/${this.retryAttempts})`);
-        
-        validateNphiesTransport(this.baseURL);
+    console.log('[NPHIES] Outgoing cancel request:', JSON.stringify({
+      bundleId: requestBundle?.id, entries: requestBundle?.entry?.length, event: msgHeader?.eventCoding?.code,
+      taskCode: task?.code?.coding?.[0]?.code, focus: task?.focus?.identifier?.value
+    }));
 
-        const response = httpResponse = await axios.post(
-          `${this.baseURL}/$process-message`,
-          requestBundle,
-          {
-            headers: {
-              'Content-Type': 'application/fhir+json',
-              'Accept': 'application/fhir+json'
-            },
-            timeout: this.timeout,
-            validateStatus: (status) => status < 500
-          }
-        );
+    return this.postMessage('cancel request', requestBundle, response => {
+      const taskResp = response.data?.entry?.find(e => e.resource?.resourceType === 'Task')?.resource;
+      console.log('[NPHIES] Incoming cancel response:', JSON.stringify({
+        bundleId: response.data?.id, entries: response.data?.entry?.length, taskId: taskResp?.id, taskStatus: taskResp?.status
+      }));
 
-        console.log(`[NPHIES] Cancel response received: ${response.status}`);
-        
-        // Debug: Log the response bundle received
-        console.log('[NPHIES] ===== INCOMING CANCEL RESPONSE =====');
-        console.log('[NPHIES] Response Bundle ID:', response.data?.id);
-        console.log('[NPHIES] Response Bundle Type:', response.data?.type);
-        console.log('[NPHIES] Response Bundle Entries:', response.data?.entry?.length);
-        const taskResp = response.data?.entry?.find(e => e.resource?.resourceType === 'Task')?.resource;
-        console.log('[NPHIES] Task ID:', taskResp?.id);
-        console.log('[NPHIES] Task status:', taskResp?.status);
-        console.log('[NPHIES] Task has output:', !!taskResp?.output);
-        console.log('[NPHIES] ========================================');
-        
-        // Validate response for cancel (expects Task)
-        const validationResult = this.validateCancelResponse(response.data);
-        if (!validationResult.valid) {
-          console.error('[NPHIES] Invalid cancel response structure:', validationResult.errors);
-          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
-        }
-
-        // Parse the cancel response
-        const parsedResponse = this.parseCancelResponse(response.data);
-
-        return {
-          success: parsedResponse.success,
-          status: response.status,
-          data: response.data,
-          taskStatus: parsedResponse.taskStatus,
-          reissueReason: parsedResponse.reissueReason,
-          errors: parsedResponse.errors
-        };
-
-      } catch (error) {
-        if (httpResponse && !error.response) error.response = httpResponse;
-        lastError = error;
-        console.error(`[NPHIES] Cancel attempt ${attempt} failed:`, error.message);
-
-        if (error.response && error.response.status >= 400 && error.response.status < 500) {
-          console.log('[NPHIES] Client error detected, not retrying');
-          break;
-        }
-
-        if (attempt < this.retryAttempts) {
-          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
-          await this.sleep(waitTime);
-        }
+      // Validate response for cancel (expects Task)
+      const validationResult = this.validateCancelResponse(response.data);
+      if (!validationResult.valid) {
+        console.error('[NPHIES] Invalid cancel response structure:', validationResult.errors);
+        throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
       }
-    }
 
-    return {
-      success: false,
-      error: this.formatError(lastError)
-    };
+      // Parse the cancel response
+      const parsedResponse = this.parseCancelResponse(response.data);
+
+      return {
+        success: parsedResponse.success,
+        status: response.status,
+        data: response.data,
+        taskStatus: parsedResponse.taskStatus,
+        reissueReason: parsedResponse.reissueReason,
+        errors: parsedResponse.errors
+      };
+    });
   }
 
   /**
    * Parse Cancel Response
    * Reference: https://portal.nphies.sa/ig/usecase-cancel.html
-   * 
+   *
    * Task.status = 'completed' means cancellation was successful
    * Task.status = 'error' means cancellation failed
    * Task.output with type='error' contains error details
@@ -371,7 +280,7 @@ class NphiesService {
         for (const output of taskResource.output) {
           if (output.type?.coding?.[0]?.code === 'error') {
             const errorCode = output.valueCodeableConcept?.coding?.[0]?.code;
-            const errorMessage = output.valueCodeableConcept?.coding?.[0]?.display || 
+            const errorMessage = output.valueCodeableConcept?.coding?.[0]?.display ||
                                  output.valueCodeableConcept?.text;
             errors.push({
               code: errorCode || 'CANCEL_ERROR',
@@ -411,92 +320,38 @@ class NphiesService {
   }
 
   /**
-   * Submit claim request to NPHIES (use: "claim")
+   * Submit claim request to NPHIES (use: "claim"; not idempotent)
    * Same endpoint as prior auth, but with eventCoding = claim-request
    */
   async submitClaim(requestBundle) {
-    let lastError = null;
-    
-    // Debug: Log the request bundle being sent
-    console.log('[NPHIES] ===== OUTGOING CLAIM REQUEST =====');
-    console.log('[NPHIES] Request Bundle ID:', requestBundle?.id);
-    console.log('[NPHIES] Request Bundle Type:', requestBundle?.type);
-    console.log('[NPHIES] Request Bundle Entries:', requestBundle?.entry?.length);
     const msgHeader = requestBundle?.entry?.find(e => e.resource?.resourceType === 'MessageHeader')?.resource;
-    console.log('[NPHIES] MessageHeader event:', msgHeader?.eventCoding?.code);
     const claim = requestBundle?.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource;
-    console.log('[NPHIES] Claim identifier:', claim?.identifier?.[0]?.value);
-    console.log('[NPHIES] Claim use:', claim?.use); // Should be "claim"
-    console.log('[NPHIES] ====================================');
-    
-    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
-      let httpResponse;
-      try {
-        console.log(`[NPHIES] Sending claim request (attempt ${attempt}/${this.retryAttempts})`);
-        
-        validateNphiesTransport(this.baseURL);
+    console.log('[NPHIES] Outgoing claim request:', JSON.stringify({
+      bundleId: requestBundle?.id, entries: requestBundle?.entry?.length, event: msgHeader?.eventCoding?.code,
+      claimIdentifier: claim?.identifier?.[0]?.value, use: claim?.use
+    }));
 
-        const response = httpResponse = await axios.post(
-          `${this.baseURL}/$process-message`,
-          requestBundle,
-          {
-            headers: {
-              'Content-Type': 'application/fhir+json',
-              'Accept': 'application/fhir+json'
-            },
-            timeout: this.timeout,
-            validateStatus: (status) => status < 500
-          }
-        );
+    return this.postMessage('claim request', requestBundle, response => {
+      const claimResp = response.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
+      console.log('[NPHIES] Incoming claim response:', JSON.stringify({
+        bundleId: response.data?.id, entries: response.data?.entry?.length, claimResponseId: claimResp?.id, outcome: claimResp?.outcome
+      }));
 
-        console.log(`[NPHIES] Claim response received: ${response.status}`);
-        
-        // Debug: Log the response bundle received
-        console.log('[NPHIES] ===== INCOMING CLAIM RESPONSE =====');
-        console.log('[NPHIES] Response Bundle ID:', response.data?.id);
-        console.log('[NPHIES] Response Bundle Type:', response.data?.type);
-        console.log('[NPHIES] Response Bundle Entries:', response.data?.entry?.length);
-        const claimResp = response.data?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
-        console.log('[NPHIES] ClaimResponse ID:', claimResp?.id);
-        console.log('[NPHIES] ClaimResponse outcome:', claimResp?.outcome);
-        console.log('[NPHIES] ======================================');
-        
-        // Validate response (expects ClaimResponse - same as prior auth)
-        const validationResult = this.validatePriorAuthResponse(response.data);
-        if (!validationResult.valid) {
-          console.error('[NPHIES] Invalid claim response structure:', validationResult.errors);
-          throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
-        }
-
-        return {
-          success: true,
-          status: response.status,
-          data: response.data
-        };
-
-      } catch (error) {
-        if (httpResponse && !error.response) error.response = httpResponse;
-        lastError = error;
-        console.error(`[NPHIES] Claim attempt ${attempt} failed:`, error.message);
-
-        if (error.response && error.response.status >= 400 && error.response.status < 500) {
-          console.log('[NPHIES] Client error detected, not retrying');
-          break;
-        }
-
-        if (attempt < this.retryAttempts) {
-          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
-          await this.sleep(waitTime);
-        }
+      // Validate response (expects ClaimResponse - same as prior auth)
+      const validationResult = this.validatePriorAuthResponse(response.data);
+      if (!validationResult.valid) {
+        console.error('[NPHIES] Invalid claim response structure:', validationResult.errors);
+        throw new Error(`Invalid NPHIES response: ${validationResult.errors.join(', ')}`);
       }
-    }
 
-    return {
-      success: false,
-      error: this.formatError(lastError)
-    };
+      return {
+        success: true,
+        status: response.status,
+        data: response.data
+      };
+    });
   }
+
 
   /**
    * Validate FHIR response bundle structure for Eligibility
@@ -587,17 +442,22 @@ class NphiesService {
     }
 
     if (error.response) {
-      // HTTP error response
       const payload = error.response.data;
       const outcome = payload?.resourceType === 'OperationOutcome' ? payload :
         payload?.entry?.find(e => e.resource?.resourceType === 'OperationOutcome')?.resource;
       const issues = operationOutcomeErrors(outcome);
+      const status = error.response.status;
+      // A 2xx whose body failed validation (HTML page, missing ClaimResponse, ...) is reported
+      // with the error that was thrown, not the HTTP status text ("OK").
+      const fallback = status >= 200 && status < 300
+        ? (error.message || error.response.statusText || 'Invalid NPHIES response')
+        : (error.response.statusText || error.message || 'HTTP Error');
       return {
-        code: `HTTP_${error.response.status}`,
-        message: issues.length ? issues.map(i => `${i.code}: ${i.message}${i.location ? ` [${i.location}]` : ''}`).join('; ') : error.response.statusText || 'HTTP Error',
+        code: `HTTP_${status}`,
+        message: issues.length ? issues.map(i => `${i.code}: ${i.message}${i.location ? ` [${i.location}]` : ''}`).join('; ') : fallback,
         errors: issues,
         details: error.response.data,
-        status: error.response.status
+        status
       };
     }
 
@@ -619,24 +479,6 @@ class NphiesService {
   }
 
   /**
-   * Extract error details from OperationOutcome
-   */
-  extractOperationOutcomeErrors(operationOutcome) {
-    return operationOutcomeErrors(operationOutcome);
-  }
-
-  /**
-   * Check if response indicates queued status
-   */
-  isQueuedResponse(responseBundle) {
-    const eligibilityResponse = responseBundle.entry?.find(
-      e => e.resource?.resourceType === 'CoverageEligibilityResponse'
-    )?.resource;
-
-    return eligibilityResponse?.outcome === 'queued';
-  }
-
-  /**
    * Generate a unique request ID
    */
   generateRequestId() {
@@ -650,29 +492,6 @@ class NphiesService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /**
-   * Test connection to NPHIES
-   */
-  async testConnection() {
-    try {
-      const response = await axios.get(this.baseURL, {
-        timeout: 5000,
-        validateStatus: () => true // Accept any status
-      });
-
-      return {
-        success: true,
-        status: response.status,
-        message: 'Connection successful'
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-  
   /**
    * Poll NPHIES for pending PaymentReconciliation messages
    * This sends a poll request to check for any queued payment messages
@@ -755,10 +574,7 @@ class NphiesService {
     const providerOrgFullUrl = `${providerEndpoint}/Organization/${providerOrgId}`;
     const paymentNoticeFullUrl = `${providerEndpoint}/PaymentNotice/${paymentNoticeId}`;
     
-    const providerTypeMap = { 'hospital': '1', 'polyclinic': '2', 'pharmacy': '3', 'optical': '4', 'optical_shop': '4', 'clinic': '5', 'dental': '5', 'dental_clinic': '5', 'vision': '5', 'vision_clinic': '5', '1': '1', '2': '2', '3': '3', '4': '4', '5': '5' };
-    const providerTypeDisplays = { '1': 'Hospital', '2': 'Polyclinic', '3': 'Pharmacy', '4': 'Optical Shop', '5': 'Clinic' };
-    const providerTypeCode = providerTypeMap[(provider.provider_type || '1')?.toString().toLowerCase()] || '1';
-    const providerTypeDisplay = providerTypeDisplays[providerTypeCode] || 'Hospital';
+    const { code: providerTypeCode, display: providerTypeDisplay } = providerTypeCoding(provider.provider_type);
     
     return {
       resourceType: 'Bundle',
@@ -906,21 +722,17 @@ class NphiesService {
    * @returns {Object} Response with success status and data
    */
   async sendCommunication(communicationBundle) {
-    console.log('[NPHIES] ===== SENDING COMMUNICATION =====');
-    console.log('[NPHIES] Bundle ID:', communicationBundle?.id);
-    
     const communication = communicationBundle?.entry?.find(
       e => e.resource?.resourceType === 'Communication'
     )?.resource;
-    console.log('[NPHIES] Communication ID:', communication?.id);
-    console.log('[NPHIES] Communication status:', communication?.status);
-    console.log('[NPHIES] About:', JSON.stringify(communication?.about?.[0], null, 2));
-    console.log('[NPHIES] BasedOn:', communication?.basedOn ? JSON.stringify(communication.basedOn[0], null, 2) : 'None (unsolicited)');
-    console.log('[NPHIES] Payload count:', communication?.payload?.length);
-    console.log('[NPHIES] Subject:', JSON.stringify(communication?.subject));
-    console.log('[NPHIES] Sender:', JSON.stringify(communication?.sender?.identifier));
-    console.log('[NPHIES] Recipient:', JSON.stringify(communication?.recipient?.[0]?.identifier));
-    console.log('[NPHIES] ====================================');
+    // Ids and counts only: subject/about/payloads carry patient data.
+    console.log('[NPHIES] Sending communication:', JSON.stringify({
+      bundleId: communicationBundle?.id, communicationId: communication?.id, status: communication?.status,
+      solicited: !!communication?.basedOn, payloadCount: communication?.payload?.length || 0
+    }));
+    if (debugBundlesEnabled()) {
+      console.log('[NPHIES] Communication bundle:', JSON.stringify(communicationBundle));
+    }
     
     try {
       validateNphiesTransport(this.baseURL);
@@ -985,25 +797,17 @@ class NphiesService {
    * @returns {Object} Response with success status and data
    */
   async sendPoll(pollBundle) {
-    console.log('[NPHIES] ===== SENDING POLL REQUEST =====');
-    console.log('[NPHIES] Bundle ID:', pollBundle?.id);
-    
-    // Extract message types for logging
-    const params = pollBundle?.entry?.find(
-      e => e.resource?.resourceType === 'Parameters'
+    // Poll bundles are Task-based; log the Task inputs rather than legacy Parameters.
+    const pollTask = pollBundle?.entry?.find(
+      e => e.resource?.resourceType === 'Task'
     )?.resource;
-    const messageTypes = params?.parameter
-      ?.filter(p => p.name === 'message-type')
-      ?.map(p => p.valueCode);
-    console.log('[NPHIES] Polling for message types:', messageTypes);
-    
-    // Verify eventCoding
     const messageHeader = pollBundle?.entry?.find(
       e => e.resource?.resourceType === 'MessageHeader'
     )?.resource;
-    console.log('[NPHIES] EventCoding:', messageHeader?.eventCoding?.code);
-    console.log('[NPHIES] Endpoint: $process-message');
-    console.log('[NPHIES] =====================================');
+    console.log('[NPHIES] Sending poll request:', JSON.stringify({
+      bundleId: pollBundle?.id, event: messageHeader?.eventCoding?.code,
+      taskInputs: (pollTask?.input || []).map(i => i.type?.coding?.[0]?.code).filter(Boolean)
+    }));
     
     try {
       validateNphiesTransport(this.baseURL);
@@ -1279,29 +1083,6 @@ class NphiesService {
   }
 
   /**
-   * Build a Poll Request bundle for Prior Authorization messages
-   * 
-   * @deprecated This method used the wrong structure (Parameters instead of Task).
-   * Use CommunicationMapper.buildPollRequestBundle() instead, which follows NPHIES specification.
-   * 
-   * This method now delegates to CommunicationMapper for backwards compatibility.
-   * 
-   * @param {string} providerId - Provider NPHIES ID
-   * @param {Array} messageTypes - Message types to poll for (ignored - not in Task structure)
-   * @param {string} requestIdentifier - Optional: filter by request identifier (ignored - not in Task structure)
-   * @param {number} count - Max messages to retrieve (ignored - not in Task structure)
-   * @param {string} providerName - Provider organization name (optional)
-   * @returns {Object} FHIR Bundle for poll request
-   */
-  buildPriorAuthPollBundle(providerId, messageTypes = ['priorauth-response', 'communication-request', 'communication'], requestIdentifier = null, count = 50, providerName = 'Healthcare Provider') {
-    // Delegate to CommunicationMapper which uses the correct Task-based structure
-    // Note: messageTypes, requestIdentifier, and count are not part of the Task-based poll structure
-    // They were from the old Parameters-based approach which was incorrect
-    const mapper = new CommunicationMapper();
-    return mapper.buildPollRequestBundle(providerId, providerName);
-  }
-
-  /**
    * Extract ClaimResponses from poll response
    * 
    * @param {Object} responseData - Poll response data
@@ -1461,153 +1242,87 @@ class NphiesService {
    * @returns {Object} Response with success status and parsed data
    */
   async submitBatchClaim(batchRequestBundle) {
-    let lastError = null;
-    
-    // Debug: Log the request bundle being sent
-    console.log('[NPHIES] ===== OUTGOING BATCH CLAIM REQUEST =====');
-    console.log('[NPHIES] Bundle ID:', batchRequestBundle?.id);
-    console.log('[NPHIES] Bundle Type:', batchRequestBundle?.type);
-    console.log('[NPHIES] Bundle Entries:', batchRequestBundle?.entry?.length);
-    
     const msgHeader = batchRequestBundle?.entry?.find(
       e => e.resource?.resourceType === 'MessageHeader'
     )?.resource;
-    console.log('[NPHIES] MessageHeader event:', msgHeader?.eventCoding?.code);
-    console.log('[NPHIES] Focus references:', msgHeader?.focus?.length);
-    
-    // Count nested claim bundles
     const nestedBundles = batchRequestBundle?.entry?.filter(
       e => e.resourceType === 'Bundle' || e.resource?.resourceType === 'Bundle'
     );
-    console.log('[NPHIES] Nested claim bundles:', nestedBundles?.length || 0);
-    console.log('[NPHIES] ==========================================');
-    
-    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
-      let httpResponse;
-      try {
-        console.log(`[NPHIES] Sending batch claim request (attempt ${attempt}/${this.retryAttempts})`);
-        
-        validateNphiesTransport(this.baseURL);
+    console.log('[NPHIES] Outgoing batch claim request:', JSON.stringify({
+      bundleId: batchRequestBundle?.id, entries: batchRequestBundle?.entry?.length, event: msgHeader?.eventCoding?.code,
+      focusCount: msgHeader?.focus?.length, nestedBundles: nestedBundles?.length || 0
+    }));
 
-        const response = httpResponse = await axios.post(
-          `${this.baseURL}/$process-message`,
-          batchRequestBundle,
-          {
-            headers: {
-              'Content-Type': 'application/fhir+json',
-              'Accept': 'application/fhir+json'
-            },
-            timeout: this.timeout * 2, // Double timeout for batch requests
-            validateStatus: (status) => status < 500
-          }
-        );
+    const result = await this.postMessage('batch claim request', batchRequestBundle, response => {
+      const respMsgHeader = response.data?.entry?.find(
+        e => e.resource?.resourceType === 'MessageHeader'
+      )?.resource;
+      console.log('[NPHIES] Incoming batch claim response:', JSON.stringify({
+        bundleId: response.data?.id, type: response.data?.type, entries: response.data?.entry?.length,
+        event: respMsgHeader?.eventCoding?.code
+      }));
 
-        console.log(`[NPHIES] Batch claim response received: ${response.status}`);
-        
-        // Debug: Log the response
-        console.log('[NPHIES] ===== INCOMING BATCH CLAIM RESPONSE =====');
-        console.log('[NPHIES] Response Status:', response.status);
-        console.log('[NPHIES] Response Bundle ID:', response.data?.id);
-        console.log('[NPHIES] Response Bundle Type:', response.data?.type);
-        console.log('[NPHIES] Response Entries:', response.data?.entry?.length);
-        
-        // Check for MessageHeader event in response
-        const respMsgHeader = response.data?.entry?.find(
-          e => e.resource?.resourceType === 'MessageHeader'
-        )?.resource;
-        console.log('[NPHIES] Response event:', respMsgHeader?.eventCoding?.code);
-        console.log('[NPHIES] ============================================');
-        
-        // Handle empty response
-        if (!response.data) {
-          console.error('[NPHIES] Empty batch response received');
-          throw new Error('NPHIES returned an empty response');
-        }
-        
-        // Handle HTML error response
-        if (typeof response.data === 'string') {
-          console.error('[NPHIES] Received string response instead of JSON');
-          if (response.data.includes('<html') || response.data.includes('<!DOCTYPE')) {
-            throw new Error('NPHIES returned an HTML error page');
-          }
-          throw new Error(`NPHIES returned unexpected response: ${response.data.substring(0, 200)}`);
-        }
-        
-        // Handle direct OperationOutcome (validation error)
-        if (response.data?.resourceType === 'OperationOutcome') {
-          console.error('[NPHIES] Received direct OperationOutcome (validation error)');
-          const issues = response.data.issue || [];
-          const nphiesErrors = issues.map(i => {
-            const code = i.details?.coding?.[0]?.code || i.code || 'UNKNOWN';
-            const display = i.details?.coding?.[0]?.display || i.diagnostics || 'Unknown error';
-            return `${i.severity?.toUpperCase()}: ${code} - ${display}`;
-          }).join('; ');
-          throw new Error(`NPHIES Validation Error: ${nphiesErrors}`);
-        }
-        
-        // Validate batch response structure
-        const validationResult = this.validateBatchClaimResponse(response.data);
-        if (!validationResult.valid) {
-          console.error('[NPHIES] Invalid batch response structure:', validationResult.errors);
-          
-          // Check for OperationOutcome in bundle
-          const operationOutcome = response.data?.entry?.find(
-            e => e.resource?.resourceType === 'OperationOutcome'
-          )?.resource;
-          
-          if (operationOutcome?.issue) {
-            const nphiesErrors = operationOutcome.issue.map(i => {
-              const code = i.details?.coding?.[0]?.code || i.code || 'UNKNOWN';
-              const display = i.details?.coding?.[0]?.display || i.diagnostics || 'Unknown error';
-              return `${i.severity?.toUpperCase()}: ${code} - ${display}`;
-            }).join('; ');
-            throw new Error(`NPHIES Error: ${nphiesErrors}`);
-          }
-          
-          throw new Error(`Invalid batch response: ${validationResult.errors.join(', ')}`);
-        }
-        
-        // Parse the batch response
-        const parsedResponse = batchClaimMapper.parseBatchClaimResponse(response.data);
-        
-        return {
-          success: parsedResponse.success,
-          status: response.status,
-          data: response.data,
-          parsedResponse,
-          hasQueuedClaims: parsedResponse.hasQueuedClaims,
-          hasPendedClaims: parsedResponse.hasPendedClaims,
-          claimResponses: parsedResponse.claimResponses,
-          errors: parsedResponse.errors
-        };
-
-      } catch (error) {
-        if (httpResponse && !error.response) error.response = httpResponse;
-        lastError = error;
-        console.error(`[NPHIES] Batch claim attempt ${attempt} failed:`, error.message);
-
-        // Don't retry on 4xx errors
-        if (error.response && error.response.status >= 400 && error.response.status < 500) {
-          console.log('[NPHIES] Client error detected, not retrying');
-          break;
-        }
-
-        // Wait before retrying
-        if (attempt < this.retryAttempts) {
-          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-          console.log(`[NPHIES] Waiting ${waitTime}ms before retry...`);
-          await this.sleep(waitTime);
-        }
+      // Handle empty response
+      if (!response.data) {
+        console.error('[NPHIES] Empty batch response received');
+        throw new Error('NPHIES returned an empty response');
       }
-    }
 
-    // All attempts failed
-    return {
-      success: false,
-      error: this.formatError(lastError),
-      claimResponses: [],
-      errors: [{ code: 'SUBMIT_FAILED', message: lastError?.message || 'Batch submission failed' }]
-    };
+      // Handle HTML error response
+      if (typeof response.data === 'string') {
+        console.error('[NPHIES] Received string response instead of JSON');
+        if (response.data.includes('<html') || response.data.includes('<!DOCTYPE')) {
+          throw new Error('NPHIES returned an HTML error page');
+        }
+        throw new Error(`NPHIES returned unexpected response: ${response.data.substring(0, 200)}`);
+      }
+
+      // Handle direct OperationOutcome (validation error)
+      if (response.data?.resourceType === 'OperationOutcome') {
+        console.error('[NPHIES] Received direct OperationOutcome (validation error)');
+        throw new Error(`NPHIES Validation Error: ${describeOutcomeIssues(response.data.issue)}`);
+      }
+
+      // Validate batch response structure
+      const validationResult = this.validateBatchClaimResponse(response.data);
+      if (!validationResult.valid) {
+        console.error('[NPHIES] Invalid batch response structure:', validationResult.errors);
+
+        // Check for OperationOutcome in bundle
+        const operationOutcome = response.data?.entry?.find(
+          e => e.resource?.resourceType === 'OperationOutcome'
+        )?.resource;
+
+        if (operationOutcome?.issue) {
+          throw new Error(`NPHIES Error: ${describeOutcomeIssues(operationOutcome.issue)}`);
+        }
+
+        throw new Error(`Invalid batch response: ${validationResult.errors.join(', ')}`);
+      }
+
+      // Parse the batch response
+      const parsedResponse = batchClaimMapper.parseBatchClaimResponse(response.data);
+
+      return {
+        success: parsedResponse.success,
+        status: response.status,
+        data: response.data,
+        parsedResponse,
+        hasQueuedClaims: parsedResponse.hasQueuedClaims,
+        hasPendedClaims: parsedResponse.hasPendedClaims,
+        claimResponses: parsedResponse.claimResponses,
+        errors: parsedResponse.errors
+      };
+    }, { timeout: this.timeout * 2 }); // Double timeout for batch requests
+
+    if (result.success === false && result.error && !result.parsedResponse) {
+      return {
+        ...result,
+        claimResponses: [],
+        errors: [{ code: 'SUBMIT_FAILED', message: result.error.message || 'Batch submission failed' }]
+      };
+    }
+    return result;
   }
 
   /**
@@ -1641,10 +1356,10 @@ class NphiesService {
     console.log('[NPHIES] Batch Identifier:', batchIdentifier || 'All');
     console.log('[NPHIES] ================================================');
     
-    // Build poll request bundle
-    const pollBundle = batchClaimMapper.buildBatchPollRequestBundle(provider, batchIdentifier);
-    
+    let pollBundle = null;
     try {
+      // Build poll request bundle (inside try so builder errors are reported, not thrown)
+      pollBundle = batchClaimMapper.buildBatchPollRequestBundle(provider, batchIdentifier);
       validateNphiesTransport(this.baseURL);
       const response = await axios.post(
         `${this.baseURL}/$process-message`,

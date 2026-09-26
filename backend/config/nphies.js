@@ -19,7 +19,13 @@ export const NPHIES_CONFIG = {
   INSURER_DOMAIN: process.env.NPHIES_INSURER_DOMAIN || 'sni',
   
   // NPHIES API Configuration
-  BASE_URL: process.env.NPHIES_BASE_URL || 'http://176.105.150.83',
+  // No default: the endpoint (and whether it is the HTTP sandbox) must be chosen explicitly
+  // via NPHIES_BASE_URL; see config/nphiesTransport.js for the HTTPS rule.
+  get BASE_URL() {
+    const value = process.env.NPHIES_BASE_URL;
+    if (!value) throw new Error('NPHIES_BASE_URL is not configured');
+    return value;
+  },
   PRODUCTION_URL: process.env.NPHIES_PRODUCTION_URL || 'https://hsb.nphies.sa',
   OAUTH_URL: process.env.NPHIES_OAUTH_URL || 'https://hsb.nphies.sa/oauth/token',
   TIMEOUT: parseInt(process.env.NPHIES_TIMEOUT || '60000'),

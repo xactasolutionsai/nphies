@@ -83,6 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_advanced_auth_received_at ON advanced_authorizati
 CREATE INDEX IF NOT EXISTS idx_advanced_auth_schema ON advanced_authorizations(schema_name);
 
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS update_advanced_authorizations_updated_at ON advanced_authorizations;
 CREATE TRIGGER update_advanced_authorizations_updated_at
     BEFORE UPDATE ON advanced_authorizations
     FOR EACH ROW

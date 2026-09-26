@@ -4,11 +4,39 @@ import { loadQueries } from '../db/queryLoader.js';
 
 const router = express.Router();
 
+// One failing dashboard query (e.g. a table missing on this database) must not
+// fail the whole dashboard: log it, record the section, and return empty rows.
+function createSafeQuery(failedSections) {
+  return (sql, label) => query(sql).catch(error => {
+    console.error(`[Dashboard] Query failed (${label}):`, error.message);
+    failedSections.push(label);
+    return { rows: [] };
+  });
+}
+
+const count = result => parseInt(result.rows[0]?.total) || 0;
+
+// DATE_TRUNC returns timestamps; pg turns them into local-time Dates. toISOString()
+// would shift them to UTC (the previous day in UTC+3), so build the key from local parts.
+function localDateKey(value) {
+  if (typeof value === 'string') return value.slice(0, 10);
+  const date = new Date(value);
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function dayLabel(dateKey) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 // GET /api/dashboard/stats - Get dashboard statistics
 router.get('/stats', async (req, res) => {
   try {
     // Load queries dynamically
     const queries = await loadQueries();
+    const failedSections = [];
+    const safeQuery = createSafeQuery(failedSections);
     
     // Get counts for all tables
     const [
@@ -21,41 +49,42 @@ router.get('/stats', async (req, res) => {
       claimBatchesCount,
       paymentsCount
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_COUNTS.PATIENTS),
-      query(queries.DASHBOARD.GET_COUNTS.PROVIDERS),
-      query(queries.DASHBOARD.GET_COUNTS.INSURERS),
-      query(queries.DASHBOARD.GET_COUNTS.AUTHORIZATIONS),
-      query(queries.DASHBOARD.GET_COUNTS.ELIGIBILITY),
-      query(queries.DASHBOARD.GET_COUNTS.CLAIMS),
-      query(queries.DASHBOARD.GET_COUNTS.CLAIM_BATCHES),
-      query(queries.DASHBOARD.GET_COUNTS.PAYMENTS)
+      safeQuery(queries.DASHBOARD.GET_COUNTS.PATIENTS, 'GET_COUNTS.PATIENTS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.PROVIDERS, 'GET_COUNTS.PROVIDERS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.INSURERS, 'GET_COUNTS.INSURERS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.AUTHORIZATIONS, 'GET_COUNTS.AUTHORIZATIONS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.ELIGIBILITY, 'GET_COUNTS.ELIGIBILITY'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.CLAIMS, 'GET_COUNTS.CLAIMS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.CLAIM_BATCHES, 'GET_COUNTS.CLAIM_BATCHES'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.PAYMENTS, 'GET_COUNTS.PAYMENTS')
     ]);
 
     // Get claims by status
-    const claimsByStatus = await query(queries.DASHBOARD.GET_CLAIMS_BY_STATUS);
+    const claimsByStatus = await safeQuery(queries.DASHBOARD.GET_CLAIMS_BY_STATUS, 'GET_CLAIMS_BY_STATUS');
 
     // Get payments by insurer
-    const paymentsByInsurer = await query(queries.DASHBOARD.GET_PAYMENTS_BY_INSURER);
+    const paymentsByInsurer = await safeQuery(queries.DASHBOARD.GET_PAYMENTS_BY_INSURER, 'GET_PAYMENTS_BY_INSURER');
 
     // Get recent activity (last 10 records from each table)
-    const recentActivity = await query(queries.DASHBOARD.GET_RECENT_ACTIVITY);
+    const recentActivity = await safeQuery(queries.DASHBOARD.GET_RECENT_ACTIVITY, 'GET_RECENT_ACTIVITY');
 
     res.json({
       data: {
         counts: {
-          patients: parseInt(patientsCount.rows[0].total),
-          providers: parseInt(providersCount.rows[0].total),
-          insurers: parseInt(insurersCount.rows[0].total),
-          authorizations: parseInt(authorizationsCount.rows[0].total),
-          eligibility: parseInt(eligibilityCount.rows[0].total),
-          claims: parseInt(claimsCount.rows[0].total),
-          claimBatches: parseInt(claimBatchesCount.rows[0].total),
-          payments: parseInt(paymentsCount.rows[0].total)
+          patients: count(patientsCount),
+          providers: count(providersCount),
+          insurers: count(insurersCount),
+          authorizations: count(authorizationsCount),
+          eligibility: count(eligibilityCount),
+          claims: count(claimsCount),
+          claimBatches: count(claimBatchesCount),
+          payments: count(paymentsCount)
         },
         claimsByStatus: claimsByStatus.rows,
         paymentsByInsurer: paymentsByInsurer.rows,
         recentActivity: recentActivity.rows
-      }
+      },
+      ...(failedSections.length > 0 && { partial: true, failedSections })
     });
   } catch (error) {
     console.error('Error getting dashboard statistics:', error);
@@ -67,6 +96,8 @@ router.get('/stats', async (req, res) => {
 router.get('/comprehensive-stats', async (req, res) => {
   try {
     const queries = await loadQueries();
+    const failedSections = [];
+    const safeQuery = createSafeQuery(failedSections);
     
     // Get all basic counts
     const [
@@ -80,15 +111,15 @@ router.get('/comprehensive-stats', async (req, res) => {
       paymentsCount,
       priorAuthsCount
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_COUNTS.PATIENTS),
-      query(queries.DASHBOARD.GET_COUNTS.PROVIDERS),
-      query(queries.DASHBOARD.GET_COUNTS.INSURERS),
-      query(queries.DASHBOARD.GET_COUNTS.AUTHORIZATIONS),
-      query(queries.DASHBOARD.GET_COUNTS.ELIGIBILITY),
-      query(queries.DASHBOARD.GET_COUNTS.CLAIMS),
-      query(queries.DASHBOARD.GET_COUNTS.CLAIM_BATCHES),
-      query(queries.DASHBOARD.GET_COUNTS.PAYMENTS),
-      query('SELECT COUNT(*) as total FROM prior_authorizations')
+      safeQuery(queries.DASHBOARD.GET_COUNTS.PATIENTS, 'GET_COUNTS.PATIENTS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.PROVIDERS, 'GET_COUNTS.PROVIDERS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.INSURERS, 'GET_COUNTS.INSURERS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.AUTHORIZATIONS, 'GET_COUNTS.AUTHORIZATIONS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.ELIGIBILITY, 'GET_COUNTS.ELIGIBILITY'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.CLAIMS, 'GET_COUNTS.CLAIMS'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.CLAIM_BATCHES, 'GET_COUNTS.CLAIM_BATCHES'),
+      safeQuery(queries.DASHBOARD.GET_COUNTS.PAYMENTS, 'GET_COUNTS.PAYMENTS'),
+      safeQuery('SELECT COUNT(*) as total FROM prior_authorizations', 'PRIOR_AUTHORIZATIONS_COUNT')
     ]);
 
     // Get status distributions
@@ -98,10 +129,10 @@ router.get('/comprehensive-stats', async (req, res) => {
       eligibilityByStatus,
       authorizationsByType
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_CLAIMS_BY_STATUS),
-      query(queries.DASHBOARD.GET_AUTHORIZATIONS_BY_STATUS),
-      query(queries.DASHBOARD.GET_ELIGIBILITY_BY_STATUS),
-      query(queries.DASHBOARD.GET_AUTHORIZATIONS_BY_TYPE)
+      safeQuery(queries.DASHBOARD.GET_CLAIMS_BY_STATUS, 'GET_CLAIMS_BY_STATUS'),
+      safeQuery(queries.DASHBOARD.GET_AUTHORIZATIONS_BY_STATUS, 'GET_AUTHORIZATIONS_BY_STATUS'),
+      safeQuery(queries.DASHBOARD.GET_ELIGIBILITY_BY_STATUS, 'GET_ELIGIBILITY_BY_STATUS'),
+      safeQuery(queries.DASHBOARD.GET_AUTHORIZATIONS_BY_TYPE, 'GET_AUTHORIZATIONS_BY_TYPE')
     ]);
 
     // Get time series data
@@ -110,9 +141,9 @@ router.get('/comprehensive-stats', async (req, res) => {
       paymentTrends,
       monthlyTrends
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_DAILY_TRENDS),
-      query(queries.DASHBOARD.GET_PAYMENT_TRENDS),
-      query(queries.DASHBOARD.GET_MONTHLY_TRENDS)
+      safeQuery(queries.DASHBOARD.GET_DAILY_TRENDS, 'GET_DAILY_TRENDS'),
+      safeQuery(queries.DASHBOARD.GET_PAYMENT_TRENDS, 'GET_PAYMENT_TRENDS'),
+      safeQuery(queries.DASHBOARD.GET_MONTHLY_TRENDS, 'GET_MONTHLY_TRENDS')
     ]);
 
     // Get performance metrics
@@ -120,8 +151,8 @@ router.get('/comprehensive-stats', async (req, res) => {
       providerPerformance,
       insurerPerformance
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_PROVIDER_PERFORMANCE),
-      query(queries.DASHBOARD.GET_INSURER_PERFORMANCE)
+      safeQuery(queries.DASHBOARD.GET_PROVIDER_PERFORMANCE, 'GET_PROVIDER_PERFORMANCE'),
+      safeQuery(queries.DASHBOARD.GET_INSURER_PERFORMANCE, 'GET_INSURER_PERFORMANCE')
     ]);
 
     // Get financial data
@@ -130,23 +161,23 @@ router.get('/comprehensive-stats', async (req, res) => {
       outstandingClaims,
       financialSummary
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_PAYMENTS_BY_INSURER),
-      query(queries.DASHBOARD.GET_OUTSTANDING_CLAIMS),
-      query(queries.DASHBOARD.GET_FINANCIAL_SUMMARY)
+      safeQuery(queries.DASHBOARD.GET_PAYMENTS_BY_INSURER, 'GET_PAYMENTS_BY_INSURER'),
+      safeQuery(queries.DASHBOARD.GET_OUTSTANDING_CLAIMS, 'GET_OUTSTANDING_CLAIMS'),
+      safeQuery(queries.DASHBOARD.GET_FINANCIAL_SUMMARY, 'GET_FINANCIAL_SUMMARY')
     ]);
 
     // Get top performers
     const [
       topPatients
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_TOP_PATIENTS)
+      safeQuery(queries.DASHBOARD.GET_TOP_PATIENTS, 'GET_TOP_PATIENTS')
     ]);
 
     // Get previous period stats for trends
-    const previousStats = await query(queries.DASHBOARD.GET_PREVIOUS_PERIOD_STATS);
+    const previousStats = await safeQuery(queries.DASHBOARD.GET_PREVIOUS_PERIOD_STATS, 'GET_PREVIOUS_PERIOD_STATS');
 
     // Get recent activity
-    const recentActivity = await query(queries.DASHBOARD.GET_RECENT_ACTIVITY);
+    const recentActivity = await safeQuery(queries.DASHBOARD.GET_RECENT_ACTIVITY, 'GET_RECENT_ACTIVITY');
 
     // =========================================================================
     // NEW: Enhanced dashboard data
@@ -159,10 +190,10 @@ router.get('/comprehensive-stats', async (req, res) => {
       priorAuthTrends,
       recentPriorAuths
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_PRIOR_AUTH_BY_TYPE_STATUS),
-      query(queries.DASHBOARD.GET_PRIOR_AUTH_SUMMARY),
-      query(queries.DASHBOARD.GET_PRIOR_AUTH_TRENDS),
-      query(queries.DASHBOARD.GET_RECENT_PRIOR_AUTHS)
+      safeQuery(queries.DASHBOARD.GET_PRIOR_AUTH_BY_TYPE_STATUS, 'GET_PRIOR_AUTH_BY_TYPE_STATUS'),
+      safeQuery(queries.DASHBOARD.GET_PRIOR_AUTH_SUMMARY, 'GET_PRIOR_AUTH_SUMMARY'),
+      safeQuery(queries.DASHBOARD.GET_PRIOR_AUTH_TRENDS, 'GET_PRIOR_AUTH_TRENDS'),
+      safeQuery(queries.DASHBOARD.GET_RECENT_PRIOR_AUTHS, 'GET_RECENT_PRIOR_AUTHS')
     ]);
 
     // Eligibility and coverage
@@ -170,8 +201,8 @@ router.get('/comprehensive-stats', async (req, res) => {
       eligibilityByInsurer,
       coverageDistribution
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_ELIGIBILITY_BY_INSURER),
-      query(queries.DASHBOARD.GET_COVERAGE_DISTRIBUTION)
+      safeQuery(queries.DASHBOARD.GET_ELIGIBILITY_BY_INSURER, 'GET_ELIGIBILITY_BY_INSURER'),
+      safeQuery(queries.DASHBOARD.GET_COVERAGE_DISTRIBUTION, 'GET_COVERAGE_DISTRIBUTION')
     ]);
 
     // Claims pipeline and submissions
@@ -179,8 +210,8 @@ router.get('/comprehensive-stats', async (req, res) => {
       claimsPipeline,
       claimSubmissionsSummary
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_CLAIMS_PIPELINE),
-      query(queries.DASHBOARD.GET_CLAIM_SUBMISSIONS_SUMMARY)
+      safeQuery(queries.DASHBOARD.GET_CLAIMS_PIPELINE, 'GET_CLAIMS_PIPELINE'),
+      safeQuery(queries.DASHBOARD.GET_CLAIM_SUBMISSIONS_SUMMARY, 'GET_CLAIM_SUBMISSIONS_SUMMARY')
     ]);
 
     // Enhanced performance metrics
@@ -188,8 +219,8 @@ router.get('/comprehensive-stats', async (req, res) => {
       providerFullPerformance,
       insurerFullPerformance
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_PROVIDER_FULL_PERFORMANCE),
-      query(queries.DASHBOARD.GET_INSURER_FULL_PERFORMANCE)
+      safeQuery(queries.DASHBOARD.GET_PROVIDER_FULL_PERFORMANCE, 'GET_PROVIDER_FULL_PERFORMANCE'),
+      safeQuery(queries.DASHBOARD.GET_INSURER_FULL_PERFORMANCE, 'GET_INSURER_FULL_PERFORMANCE')
     ]);
 
     // Specialty approvals and financial breakdown
@@ -197,17 +228,17 @@ router.get('/comprehensive-stats', async (req, res) => {
       specialtyApprovals,
       financialBreakdown
     ] = await Promise.all([
-      query(queries.DASHBOARD.GET_SPECIALTY_APPROVALS),
-      query(queries.DASHBOARD.GET_FINANCIAL_BREAKDOWN)
+      safeQuery(queries.DASHBOARD.GET_SPECIALTY_APPROVALS, 'GET_SPECIALTY_APPROVALS'),
+      safeQuery(queries.DASHBOARD.GET_FINANCIAL_BREAKDOWN, 'GET_FINANCIAL_BREAKDOWN')
     ]);
 
     // Merge daily trends with payment trends
     const dailyDataMap = {};
     dailyTrends.rows.forEach(row => {
-      const dateKey = new Date(row.date).toISOString().split('T')[0];
+      const dateKey = localDateKey(row.date);
       dailyDataMap[dateKey] = {
         date: dateKey,
-        day: new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        day: dayLabel(dateKey),
         claims: parseInt(row.claim_count) || 0,
         claimAmount: parseFloat(row.claim_amount) || 0,
         payments: 0,
@@ -216,14 +247,14 @@ router.get('/comprehensive-stats', async (req, res) => {
     });
 
     paymentTrends.rows.forEach(row => {
-      const dateKey = new Date(row.date).toISOString().split('T')[0];
+      const dateKey = localDateKey(row.date);
       if (dailyDataMap[dateKey]) {
         dailyDataMap[dateKey].payments = parseInt(row.payment_count) || 0;
         dailyDataMap[dateKey].paymentAmount = parseFloat(row.payment_amount) || 0;
       } else {
         dailyDataMap[dateKey] = {
           date: dateKey,
-          day: new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          day: dayLabel(dateKey),
           claims: 0,
           claimAmount: 0,
           payments: parseInt(row.payment_count) || 0,
@@ -232,18 +263,16 @@ router.get('/comprehensive-stats', async (req, res) => {
       }
     });
 
-    const mergedDailyTrends = Object.values(dailyDataMap).sort((a, b) => 
-      new Date(a.date) - new Date(b.date)
-    );
+    const mergedDailyTrends = Object.values(dailyDataMap).sort((a, b) => a.date.localeCompare(b.date));
 
     // Process prior auth trends
     const priorAuthTrendsMap = {};
     priorAuthTrends.rows.forEach(row => {
-      const dateKey = new Date(row.date).toISOString().split('T')[0];
+      const dateKey = localDateKey(row.date);
       if (!priorAuthTrendsMap[dateKey]) {
         priorAuthTrendsMap[dateKey] = {
           date: dateKey,
-          day: new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          day: dayLabel(dateKey),
           total: 0,
           approved: 0,
           dental: 0,
@@ -257,9 +286,7 @@ router.get('/comprehensive-stats', async (req, res) => {
       priorAuthTrendsMap[dateKey][row.auth_type] = (priorAuthTrendsMap[dateKey][row.auth_type] || 0) + parseInt(row.count);
     });
 
-    const mergedPriorAuthTrends = Object.values(priorAuthTrendsMap).sort((a, b) => 
-      new Date(a.date) - new Date(b.date)
-    );
+    const mergedPriorAuthTrends = Object.values(priorAuthTrendsMap).sort((a, b) => a.date.localeCompare(b.date));
 
     // Calculate eligibility rate
     const totalEligible = eligibilityByStatus.rows.find(r => r.status === 'eligible')?.count || 0;
@@ -271,15 +298,15 @@ router.get('/comprehensive-stats', async (req, res) => {
     res.json({
       data: {
         counts: {
-          patients: parseInt(patientsCount.rows[0].total),
-          providers: parseInt(providersCount.rows[0].total),
-          insurers: parseInt(insurersCount.rows[0].total),
-          authorizations: parseInt(authorizationsCount.rows[0].total),
-          eligibility: parseInt(eligibilityCount.rows[0].total),
-          claims: parseInt(claimsCount.rows[0].total),
-          claimBatches: parseInt(claimBatchesCount.rows[0].total),
-          payments: parseInt(paymentsCount.rows[0].total),
-          priorAuthorizations: parseInt(priorAuthsCount.rows[0].total),
+          patients: count(patientsCount),
+          providers: count(providersCount),
+          insurers: count(insurersCount),
+          authorizations: count(authorizationsCount),
+          eligibility: count(eligibilityCount),
+          claims: count(claimsCount),
+          claimBatches: count(claimBatchesCount),
+          payments: count(paymentsCount),
+          priorAuthorizations: count(priorAuthsCount),
           eligibilityRate: eligibilityRate
         },
         previousPeriod: {
@@ -297,7 +324,8 @@ router.get('/comprehensive-stats', async (req, res) => {
         },
         timeSeries: {
           daily: mergedDailyTrends,
-          monthly: monthlyTrends.rows.map(row => ({
+          // Chronological order for charts (the query returns newest first)
+          monthly: [...monthlyTrends.rows].sort((a, b) => new Date(a.month) - new Date(b.month)).map(row => ({
             month: new Date(row.month).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
             claimCount: parseInt(row.claim_count) || 0,
             claimAmount: parseFloat(row.claim_amount) || 0
@@ -337,7 +365,8 @@ router.get('/comprehensive-stats', async (req, res) => {
           insurers: insurerFullPerformance.rows
         },
         specialtyApprovals: specialtyApprovals.rows
-      }
+      },
+      ...(failedSections.length > 0 && { partial: true, failedSections })
     });
   } catch (error) {
     console.error('Error getting comprehensive dashboard statistics:', error);

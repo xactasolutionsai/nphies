@@ -25,7 +25,8 @@ import { formatSaudiDateTime } from '../../utils/dateTime.js';
 
 import { randomUUID } from 'crypto';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
-import { getClaimMapper } from './index.js';
+import { getClaimMapper, detectClaimType } from './index.js';
+import { formatSaudiDate, requireProviderLicense, requireInsurerLicense, mappingError } from '../priorAuthMapper/nphiesIdentity.js';
 
 class BatchClaimMapper {
   constructor() {
@@ -38,14 +39,8 @@ class BatchClaimMapper {
   // ============================================
 
   formatDate(date) {
-    if (!date) return null;
-    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return null;
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    // Saudi calendar date, independent of the host timezone
+    return formatSaudiDate(date);
   }
 
   formatDateTime(date) {
@@ -204,59 +199,9 @@ class BatchClaimMapper {
    * @returns {Object} - Single FHIR Bundle (the outer batch-request bundle)
    */
   buildBatchRequestBundle(data) {
-    const { 
-      batchIdentifier, 
-      batchPeriodStart, 
-      batchPeriodEnd, 
-      claims, 
-      provider, 
-      insurer 
-    } = data;
-
-    const validation = this.validateBatchConstraints(claims);
-    if (!validation.valid) {
-      throw new Error(`Batch validation failed: ${validation.errors.join('; ')}`);
-    }
-
-    const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || `http://${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
-    const batchIdentifierSystem = `${providerEndpoint}/identifiers/batch`;
-
-    const nestedBundles = [];
-    const focusReferences = [];
-
-    claims.forEach((claimData, index) => {
-      const batchNumber = index + 1;
-
-      const claimType = claimData.claim?.claim_type || claimData.claim_type || 'institutional';
-      const claimMapper = getClaimMapper(claimType);
-      const claimBundle = claimMapper.buildClaimRequestBundle(claimData);
-
-      this.transformBundleRefsToProviderUrl(claimBundle, providerEndpoint);
-
-      const innerMsgHeader = claimBundle.entry?.find(e => e.resource?.resourceType === 'MessageHeader');
-      if (innerMsgHeader?.resource?.source) {
-        innerMsgHeader.resource.source.endpoint = providerEndpoint;
-      }
-
-      const claimEntry = claimBundle.entry?.find(e => e.resource?.resourceType === 'Claim');
-      if (claimEntry?.resource) {
-        this.addBatchExtensionsToClaimResource(claimEntry.resource, {
-          batchIdentifier,
-          batchNumber,
-          batchPeriodStart,
-          batchPeriodEnd,
-          identifierSystem: batchIdentifierSystem
-        });
-      }
-
-      const nestedBundleFullUrl = `${providerEndpoint}/Bundle/${claimBundle.id}`;
-      focusReferences.push({ reference: nestedBundleFullUrl });
-
-      nestedBundles.push({
-        fullUrl: nestedBundleFullUrl,
-        resource: claimBundle
-      });
-    });
+    const { provider, insurer } = data;
+    const { providerEndpoint, nestedBundles } = this.buildNestedClaimBundles(data);
+    const focusReferences = nestedBundles.map(entry => ({ reference: entry.fullUrl }));
 
     const bundleId = this.generateId();
     const messageHeaderId = this.generateId();
@@ -289,7 +234,7 @@ class BatchClaimMapper {
                 type: 'Organization',
                 identifier: {
                   system: 'http://nphies.sa/license/payer-license',
-                  value: insurer.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID
+                  value: requireInsurerLicense(insurer)
                 }
               }
             }],
@@ -297,7 +242,7 @@ class BatchClaimMapper {
               type: 'Organization',
               identifier: {
                 system: 'http://nphies.sa/license/provider-license',
-                value: provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID
+                value: requireProviderLicense(provider)
               }
             },
             source: {
@@ -314,36 +259,43 @@ class BatchClaimMapper {
   }
 
   /**
-   * Build individual bundles for each claim (for preview / copy-paste testing).
-   * Each bundle is a standalone claim-request with batch extensions.
-   * 
-   * @param {Object} data - Batch data
-   * @returns {Array} - Array of FHIR Bundles (one per claim)
+   * Build the nested claim-request bundles exactly as they are submitted in the
+   * batch: references rewritten to the provider endpoint and batch extensions added.
+   * Shared by submission and preview so what users inspect is what is sent.
    */
-  buildIndividualClaimBundles(data) {
+  buildNestedClaimBundles(data) {
     const { 
       batchIdentifier, 
       batchPeriodStart, 
       batchPeriodEnd, 
-      claims, 
-      provider 
+      claims
     } = data;
 
     const validation = this.validateBatchConstraints(claims);
     if (!validation.valid) {
       throw new Error(`Batch validation failed: ${validation.errors.join('; ')}`);
     }
+    // Every claim in a batch SHALL carry batch-identifier and batch-period (never null)
+    if (!batchIdentifier || !batchPeriodStart || !batchPeriodEnd) {
+      throw mappingError('Batch requires batchIdentifier, batchPeriodStart and batchPeriodEnd');
+    }
 
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || `http://${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
     const batchIdentifierSystem = `${providerEndpoint}/identifiers/batch`;
-    const bundles = [];
 
-    claims.forEach((claimData, index) => {
+    const nestedBundles = claims.map((claimData, index) => {
       const batchNumber = index + 1;
 
-      const claimType = claimData.claim?.claim_type || claimData.claim_type || 'institutional';
-      const claimMapper = getClaimMapper(claimType);
+      // Same type detection as single-claim submission (claim type, PA type, encounter class)
+      const claimMapper = getClaimMapper(detectClaimType(claimData));
       const claimBundle = claimMapper.buildClaimRequestBundle(claimData);
+
+      this.transformBundleRefsToProviderUrl(claimBundle, providerEndpoint);
+
+      const innerMsgHeader = claimBundle.entry?.find(e => e.resource?.resourceType === 'MessageHeader');
+      if (innerMsgHeader?.resource?.source) {
+        innerMsgHeader.resource.source.endpoint = providerEndpoint;
+      }
 
       const claimEntry = claimBundle.entry?.find(e => e.resource?.resourceType === 'Claim');
       if (claimEntry?.resource) {
@@ -356,25 +308,24 @@ class BatchClaimMapper {
         });
       }
 
-      claimBundle._batchMetadata = {
-        batchIdentifier,
-        batchNumber,
-        totalInBatch: claims.length
+      return {
+        fullUrl: `${providerEndpoint}/Bundle/${claimBundle.id}`,
+        resource: claimBundle
       };
-
-      bundles.push(claimBundle);
     });
 
-    return bundles;
+    return { providerEndpoint, nestedBundles };
   }
 
   /**
-   * @deprecated Use buildBatchRequestBundle for submission.
-   * Kept only for backwards-compat; delegates to buildIndividualClaimBundles.
+   * Individual claim bundles for preview / copy-paste testing: identical to the
+   * nested bundles of the submitted batch (same reference rewriting, no extra fields).
+   * 
+   * @param {Object} data - Batch data
+   * @returns {Array} - Array of FHIR Bundles (one per claim)
    */
-  buildBatchClaimBundles(data) {
-    console.warn('[BatchClaimMapper] buildBatchClaimBundles is deprecated. Use buildBatchRequestBundle for submission or buildIndividualClaimBundles for preview.');
-    return this.buildIndividualClaimBundles(data);
+  buildIndividualClaimBundles(data) {
+    return this.buildNestedClaimBundles(data).nestedBundles.map(entry => entry.resource);
   }
 
   // ============================================
@@ -436,20 +387,6 @@ class BatchClaimMapper {
         }]
       };
     }
-  }
-
-  /**
-   * Legacy wrapper - delegates to addBatchExtensionsToClaimResource.
-   */
-  addBatchExtensionsToClaim(claimBundle, batchInfo) {
-    const claimEntry = claimBundle.entry?.find(
-      e => e.resource?.resourceType === 'Claim'
-    );
-    if (!claimEntry?.resource) {
-      console.warn('[BatchClaimMapper] No Claim resource found in bundle');
-      return;
-    }
-    this.addBatchExtensionsToClaimResource(claimEntry.resource, batchInfo);
   }
 
   // ============================================

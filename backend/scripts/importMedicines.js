@@ -18,7 +18,7 @@ class MedicineImporter {
     this.stats = {
       medicines: { total: 0, success: 0, errors: 0 },
       brands: { total: 0, success: 0, errors: 0 },
-      codes: { total: 0, success: 0, errors: 0 }
+      codes: { total: 0, success: 0, errors: 0, skipped: 0 }
     };
     this.maxConsecutiveErrors = 10; // Stop if 10 consecutive errors occur
     this.maxTotalErrors = 100; // Stop if more than 100 total errors
@@ -282,9 +282,8 @@ class MedicineImporter {
         let mrid = row[mridColumn];
         
         if (!mrid) {
-          errors++;
-          this.stats.codes.errors++;
-          this.consecutiveErrors = 0; // Don't count as consecutive error - just missing data
+          // Missing data is a skip, not an error; it must not count towards the error limits.
+          this.stats.codes.skipped++;
           continue;
         }
         
@@ -305,9 +304,7 @@ class MedicineImporter {
           if ((i + 1) % 5000 === 0) {
             console.warn(`⚠️  Skipping ${codeType} code ${row[codeColumn]}: Medicine ${mrid} not found`);
           }
-          errors++;
-          this.stats.codes.errors++;
-          this.consecutiveErrors = 0; // Don't count as consecutive error - it's expected
+          this.stats.codes.skipped++;
           continue;
         }
         
@@ -386,6 +383,7 @@ class MedicineImporter {
     console.log(`   Total: ${this.stats.codes.total}`);
     console.log(`   Success: ${this.stats.codes.success}`);
     console.log(`   Errors: ${this.stats.codes.errors}`);
+    console.log(`   Skipped (no matching medicine): ${this.stats.codes.skipped}`);
     
     const totalSuccess = this.stats.medicines.success + this.stats.brands.success + this.stats.codes.success;
     const totalRecords = this.stats.medicines.total + this.stats.brands.total + this.stats.codes.total;

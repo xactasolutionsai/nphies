@@ -4,7 +4,7 @@
 const primaryKeys = Object.freeze({
   patients: 'patient_id', providers: 'provider_id', insurers: 'insurer_id',
   authorizations: 'auth_id', eligibility: 'eligibility_id', claims: 'claim_id',
-  payments: 'payment_id', claims_batch: 'batch_id', claim_batches: 'id',
+  payments: 'payment_id', claim_batches: 'id',
   prior_authorizations: 'id', claim_submissions: 'id', dental_approvals: 'id',
   eye_approvals: 'id', standard_approvals_claims: 'id'
 });
@@ -27,7 +27,8 @@ export const queries = {
       AUTHORIZATIONS: 'SELECT COUNT(*) as total FROM authorizations',
       ELIGIBILITY: 'SELECT COUNT(*) as total FROM eligibility',
       CLAIMS: 'SELECT COUNT(*) as total FROM claims',
-      CLAIM_BATCHES: 'SELECT COUNT(*) as total FROM claims_batch',
+      // claim_batches is the batch table the application writes (migration 047).
+      CLAIM_BATCHES: 'SELECT COUNT(*) as total FROM claim_batches',
       PAYMENTS: 'SELECT COUNT(*) as total FROM payments'
     },
 
@@ -47,19 +48,23 @@ export const queries = {
       ORDER BY amount DESC
     `,
 
-    // Get recent activity
+    // Get recent activity, ordered by each record's own date. Rows without a date are left out
+    // rather than stamped with "now", which used to push them to the top.
     GET_RECENT_ACTIVITY: `
-      SELECT 'patient' as type, name as title, CURRENT_TIMESTAMP as created_at, 'New patient registered' as description
-      FROM patients
-      UNION ALL
-      SELECT 'claim' as type, claim_number as title, CURRENT_TIMESTAMP as created_at, 'New claim submitted' as description
-      FROM claims
-      UNION ALL
-      SELECT 'payment' as type, payment_ref as title, COALESCE(payment_date, CURRENT_TIMESTAMP) as created_at, 'Payment processed' as description
-      FROM payments
-      UNION ALL
-      SELECT 'authorization' as type, auth_id::text as title, COALESCE(request_date, CURRENT_TIMESTAMP) as created_at, 'Authorization requested' as description
-      FROM authorizations
+      SELECT type, title, created_at, description FROM (
+        SELECT 'patient' as type, name as title, created_at::timestamp as created_at, 'New patient registered' as description
+        FROM patients
+        UNION ALL
+        SELECT 'claim' as type, claim_number as title, submission_date::timestamp as created_at, 'New claim submitted' as description
+        FROM claims
+        UNION ALL
+        SELECT 'payment' as type, payment_ref as title, payment_date::timestamp as created_at, 'Payment processed' as description
+        FROM payments
+        UNION ALL
+        SELECT 'authorization' as type, auth_id::text as title, request_date::timestamp as created_at, 'Authorization requested' as description
+        FROM authorizations
+      ) activity
+      WHERE created_at IS NOT NULL
       ORDER BY created_at DESC
       LIMIT 20
     `,
@@ -114,20 +119,32 @@ export const queries = {
       LIMIT 10
     `,
 
+    // Claims and payments are aggregated separately per insurer; joining both tables
+    // directly would multiply each claim by the insurer's payment count and vice versa.
     GET_INSURER_PERFORMANCE: `
       SELECT 
         i.insurer_id,
         i.insurer_name,
-        COUNT(c.claim_id) as total_claims,
-        SUM(COALESCE(c.amount, 0)) as total_amount,
-        COUNT(CASE WHEN c.status = 'Paid' THEN 1 END) as paid_claims,
-        ROUND(100.0 * COUNT(CASE WHEN c.status = 'Paid' THEN 1 END) / NULLIF(COUNT(c.claim_id), 0), 2) as approval_rate,
-        COALESCE(SUM(p.amount), 0) as total_payments
+        COALESCE(c.total_claims, 0) as total_claims,
+        COALESCE(c.total_amount, 0) as total_amount,
+        COALESCE(c.paid_claims, 0) as paid_claims,
+        ROUND(100.0 * c.paid_claims / NULLIF(c.total_claims, 0), 2) as approval_rate,
+        COALESCE(p.total_payments, 0) as total_payments
       FROM insurers i
-      LEFT JOIN claims c ON i.insurer_id = c.insurer_id
-      LEFT JOIN payments p ON i.insurer_id = p.insurer_id
-      GROUP BY i.insurer_id, i.insurer_name
-      HAVING COUNT(c.claim_id) > 0 OR SUM(p.amount) > 0
+      LEFT JOIN (
+        SELECT insurer_id,
+          COUNT(*) as total_claims,
+          SUM(COALESCE(amount, 0)) as total_amount,
+          COUNT(CASE WHEN status = 'Paid' THEN 1 END) as paid_claims
+        FROM claims
+        GROUP BY insurer_id
+      ) c ON c.insurer_id = i.insurer_id
+      LEFT JOIN (
+        SELECT insurer_id, SUM(COALESCE(amount, 0)) as total_payments
+        FROM payments
+        GROUP BY insurer_id
+      ) p ON p.insurer_id = i.insurer_id
+      WHERE COALESCE(c.total_claims, 0) > 0 OR COALESCE(p.total_payments, 0) > 0
       ORDER BY total_amount DESC
       LIMIT 10
     `,
@@ -316,44 +333,66 @@ export const queries = {
     `,
 
     // Provider performance with prior authorizations
+    // Claims and prior authorizations are aggregated in separate subqueries to avoid join fan-out.
     GET_PROVIDER_FULL_PERFORMANCE: `
       SELECT 
         p.provider_id,
         p.provider_name,
         p.type as provider_type,
-        COUNT(DISTINCT c.claim_id) as total_claims,
-        SUM(COALESCE(c.amount, 0)) as claims_amount,
-        COUNT(DISTINCT pa.id) as total_auths,
-        COUNT(DISTINCT CASE WHEN pa.status = 'approved' THEN pa.id END) as approved_auths,
-        ROUND(100.0 * COUNT(DISTINCT CASE WHEN pa.status = 'approved' THEN pa.id END) / 
-          NULLIF(COUNT(DISTINCT pa.id), 0), 1) as auth_approval_rate
+        COALESCE(c.total_claims, 0) as total_claims,
+        COALESCE(c.claims_amount, 0) as claims_amount,
+        COALESCE(pa.total_auths, 0) as total_auths,
+        COALESCE(pa.approved_auths, 0) as approved_auths,
+        ROUND(100.0 * pa.approved_auths / NULLIF(pa.total_auths, 0), 1) as auth_approval_rate
       FROM providers p
-      LEFT JOIN claims c ON p.provider_id = c.provider_id
-      LEFT JOIN prior_authorizations pa ON p.provider_id = pa.provider_id
-      GROUP BY p.provider_id, p.provider_name, p.type
-      HAVING COUNT(DISTINCT c.claim_id) > 0 OR COUNT(DISTINCT pa.id) > 0
+      LEFT JOIN (
+        SELECT provider_id, COUNT(*) as total_claims, SUM(COALESCE(amount, 0)) as claims_amount
+        FROM claims
+        GROUP BY provider_id
+      ) c ON c.provider_id = p.provider_id
+      LEFT JOIN (
+        SELECT provider_id, COUNT(*) as total_auths,
+          COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_auths
+        FROM prior_authorizations
+        GROUP BY provider_id
+      ) pa ON pa.provider_id = p.provider_id
+      WHERE COALESCE(c.total_claims, 0) > 0 OR COALESCE(pa.total_auths, 0) > 0
       ORDER BY total_claims DESC, total_auths DESC
       LIMIT 10
     `,
 
     // Insurer full performance
+    // Claims, payments and eligibility checks are aggregated in separate subqueries to avoid join fan-out.
     GET_INSURER_FULL_PERFORMANCE: `
       SELECT 
         i.insurer_id,
         i.insurer_name,
         i.plan_type,
-        COUNT(DISTINCT c.claim_id) as total_claims,
-        SUM(COALESCE(c.amount, 0)) as claims_amount,
-        COUNT(DISTINCT CASE WHEN c.status = 'Paid' THEN c.claim_id END) as paid_claims,
-        COALESCE((SELECT SUM(amount) FROM payments WHERE insurer_id = i.insurer_id), 0) as total_payments,
-        COUNT(DISTINCT e.eligibility_id) as eligibility_checks,
-        COUNT(DISTINCT CASE WHEN e.status = 'eligible' THEN e.eligibility_id END) as eligible_count,
-        ROUND(100.0 * COUNT(DISTINCT CASE WHEN e.status = 'eligible' THEN e.eligibility_id END) / 
-          NULLIF(COUNT(DISTINCT e.eligibility_id), 0), 1) as eligibility_rate
+        COALESCE(c.total_claims, 0) as total_claims,
+        COALESCE(c.claims_amount, 0) as claims_amount,
+        COALESCE(c.paid_claims, 0) as paid_claims,
+        COALESCE(p.total_payments, 0) as total_payments,
+        COALESCE(e.eligibility_checks, 0) as eligibility_checks,
+        COALESCE(e.eligible_count, 0) as eligible_count,
+        ROUND(100.0 * e.eligible_count / NULLIF(e.eligibility_checks, 0), 1) as eligibility_rate
       FROM insurers i
-      LEFT JOIN claims c ON i.insurer_id = c.insurer_id
-      LEFT JOIN eligibility e ON i.insurer_id = e.insurer_id
-      GROUP BY i.insurer_id, i.insurer_name, i.plan_type
+      LEFT JOIN (
+        SELECT insurer_id, COUNT(*) as total_claims, SUM(COALESCE(amount, 0)) as claims_amount,
+          COUNT(CASE WHEN status = 'Paid' THEN 1 END) as paid_claims
+        FROM claims
+        GROUP BY insurer_id
+      ) c ON c.insurer_id = i.insurer_id
+      LEFT JOIN (
+        SELECT insurer_id, SUM(COALESCE(amount, 0)) as total_payments
+        FROM payments
+        GROUP BY insurer_id
+      ) p ON p.insurer_id = i.insurer_id
+      LEFT JOIN (
+        SELECT insurer_id, COUNT(*) as eligibility_checks,
+          COUNT(CASE WHEN status = 'eligible' THEN 1 END) as eligible_count
+        FROM eligibility
+        GROUP BY insurer_id
+      ) e ON e.insurer_id = i.insurer_id
       ORDER BY total_claims DESC, eligibility_checks DESC
       LIMIT 10
     `,
@@ -502,8 +541,6 @@ export const queries = {
       ORDER BY a.request_date DESC
     `,
 
-    // Search patients
-    SEARCH_WHERE: `WHERE name ILIKE $3 OR identifier ILIKE $3`
   },
 
   // =============================================================================
@@ -571,8 +608,6 @@ export const queries = {
     // Get provider claim count
     GET_CLAIM_COUNT: 'SELECT COUNT(*) as total_claims FROM claims WHERE provider_id = $1',
 
-    // Search providers
-    SEARCH_WHERE: `WHERE (provider_name ILIKE $3 OR nphies_id ILIKE $3)`
   },
 
   // =============================================================================
@@ -617,8 +652,6 @@ export const queries = {
       LIMIT 10
     `,
 
-    // Search insurers
-    SEARCH_WHERE: ` WHERE (insurer_name ILIKE $1 OR nphies_id ILIKE $1)`,
 
     // Get insurer claim statistics
     GET_CLAIM_STATS: `
@@ -694,16 +727,13 @@ export const queries = {
       RETURNING *
     `,
 
-    // Search claims
-    SEARCH_WHERE: `WHERE (p.name ILIKE $3 OR pr.provider_name ILIKE $3 OR i.insurer_name ILIKE $3 OR c.claim_number ILIKE $3)`,
-    STATUS_WHERE: `AND c.status = $4`,
 
     // Get claims statistics
     GET_STATS: `
       SELECT
         COUNT(*) as total_claims,
         COUNT(CASE WHEN status = 'Submitted' THEN 1 END) as submitted_claims,
-        COUNT(CASE WHEN status = 'Paid' THEN 1 END) as approved_claims,
+        COUNT(CASE WHEN status = 'Approved' THEN 1 END) as approved_claims,
         COUNT(CASE WHEN status = 'Denied' THEN 1 END) as denied_claims,
         COUNT(CASE WHEN status = 'Paid' THEN 1 END) as paid_claims
       FROM claims
@@ -766,9 +796,6 @@ export const queries = {
       RETURNING *
     `,
 
-    // Search authorizations
-    SEARCH_WHERE: `WHERE (p.name ILIKE $3 OR pr.provider_name ILIKE $3 OR i.insurer_name ILIKE $3 OR a.auth_id::text ILIKE $3)`,
-    STATUS_WHERE: `AND a.auth_status = $4`
   },
 
   // =============================================================================
@@ -817,6 +844,9 @@ export const queries = {
       WHERE e.eligibility_id = $1
     `,
 
+    // Used by eligibilityController.getById (was referenced but never defined).
+    get GET_BY_ID_WITH_JOINS() { return this.GET_BY_ID; },
+
     // Update eligibility status
     UPDATE_STATUS: `
       UPDATE eligibility
@@ -840,9 +870,6 @@ export const queries = {
       ORDER BY e.response_date DESC
     `,
 
-    // Search eligibility
-    SEARCH_WHERE: `WHERE (p.name ILIKE $3 OR pr.provider_name ILIKE $3 OR i.insurer_name ILIKE $3 OR e.purpose ILIKE $3)`,
-    STATUS_WHERE: `AND e.status = $4`
   },
 
   // =============================================================================
@@ -927,49 +954,6 @@ export const queries = {
   },
 
   // =============================================================================
-  // CLAIM BATCHES QUERIES
-  // =============================================================================
-
-  CLAIM_BATCHES: {
-    // Get all claim batches with joins and search
-    GET_ALL_WITH_JOINS: `
-      SELECT
-        cb.*,
-        cb.batch_id as batch_identifier,
-        pr.provider_name as provider_name,
-        i.insurer_name as insurer_name
-      FROM claims_batch cb
-      LEFT JOIN providers pr ON cb.provider_id = pr.provider_id
-      LEFT JOIN insurers i ON cb.insurer_id = i.insurer_id
-    `,
-
-    // Get claim batches count
-    GET_ALL_COUNT: `
-      SELECT COUNT(*) as total
-      FROM claims_batch cb
-      LEFT JOIN providers pr ON cb.provider_id = pr.provider_id
-      LEFT JOIN insurers i ON cb.insurer_id = i.insurer_id
-    `,
-
-    // Get claim batch by ID
-    GET_BY_ID: `
-      SELECT
-        cb.*,
-        cb.batch_id as batch_identifier,
-        pr.provider_name as provider_name,
-        i.insurer_name as insurer_name
-      FROM claims_batch cb
-      LEFT JOIN providers pr ON cb.provider_id = pr.provider_id
-      LEFT JOIN insurers i ON cb.insurer_id = i.insurer_id
-      WHERE cb.batch_id = $1
-    `,
-
-    // Search claim batches
-    SEARCH_WHERE: `WHERE (pr.provider_name ILIKE $3 OR i.insurer_name ILIKE $3)`,
-    STATUS_WHERE: `AND cb.status = $4`
-  },
-
-  // =============================================================================
   // DENTAL APPROVALS QUERIES
   // =============================================================================
 
@@ -1022,8 +1006,6 @@ export const queries = {
       ORDER BY id ASC
     `,
 
-    // Search dental approvals
-    SEARCH_WHERE: `WHERE (da.provider_name ILIKE $3 OR da.insurance_company_name ILIKE $3 OR da.form_number ILIKE $3 OR da.insured_name ILIKE $3 OR p.name ILIKE $3)`
   },
 
   // =============================================================================
@@ -1068,22 +1050,4 @@ export const queries = {
       SELECT COUNT(*) as total FROM ${table}
     `
   }
-};
-
-// Helper function to build dynamic WHERE clauses
-export const buildWhereClause = (searchWhere, statusWhere = '') => {
-  let whereClause = 'WHERE 1=1';
-  if (searchWhere) {
-    whereClause += ` AND ${searchWhere}`;
-  }
-  if (statusWhere) {
-    whereClause += ` ${statusWhere}`;
-  }
-  return whereClause;
-};
-
-// Helper function to get query with proper WHERE clause
-export const getQueryWithWhere = (queryFn, searchWhere, statusWhere = '') => {
-  const whereClause = buildWhereClause(searchWhere, statusWhere);
-  return queryFn(whereClause);
 };

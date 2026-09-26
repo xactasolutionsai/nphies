@@ -10,7 +10,7 @@ import chatService from '../services/chatService.js';
  * POST /api/chat/stream
  */
 export const streamChat = async (req, res) => {
-  const { message, mode = 'general', conversationHistory = [] } = req.body;
+  const { message, mode = 'general', conversationHistory = [] } = req.body || {};
 
   // Validate request
   if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -25,6 +25,31 @@ export const streamChat = async (req, res) => {
     });
   }
 
+  // Only well-formed user/assistant turns are used as context (bounded)
+  const history = Array.isArray(conversationHistory)
+    ? conversationHistory
+      .filter(msg => msg && ['user', 'assistant'].includes(msg.role) &&
+        typeof msg.content === 'string' && msg.content.trim() !== '')
+      .map(msg => ({ role: msg.role, content: msg.content }))
+      .slice(-10)
+    : [];
+
+  // Register the disconnect handler BEFORE streaming so a client that goes away
+  // stops generation instead of letting the model run to completion.
+  let clientClosed = false;
+  const clientDisconnected = new Error('Client disconnected');
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      clientClosed = true;
+      console.log('🔌 Client disconnected from chat stream');
+    }
+  });
+  const send = payload => {
+    if (clientClosed || res.writableEnded) return false;
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    return true;
+  };
+
   // Set headers for Server-Sent Events
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -38,32 +63,19 @@ export const streamChat = async (req, res) => {
     await chatService.streamChat(
       message,
       mode,
-      conversationHistory,
-      // onChunk callback
+      history,
+      // onChunk callback: throwing stops consuming (and so generating) the model stream
       (chunk) => {
-        const data = JSON.stringify({
-          type: 'chunk',
-          content: chunk
-        });
-        res.write(`data: ${data}\n\n`);
+        if (!send({ type: 'chunk', content: chunk })) throw clientDisconnected;
       },
       // onComplete callback
       (fullResponse) => {
-        const data = JSON.stringify({
-          type: 'done',
-          content: fullResponse
-        });
-        res.write(`data: ${data}\n\n`);
-        res.end();
+        if (send({ type: 'done', content: fullResponse })) res.end();
       },
       // onError callback
       (error) => {
-        const data = JSON.stringify({
-          type: 'error',
-          error: error.message || 'An error occurred during streaming'
-        });
-        res.write(`data: ${data}\n\n`);
-        res.end();
+        if (error === clientDisconnected) return;
+        if (send({ type: 'error', error: error.message || 'An error occurred during streaming' })) res.end();
       }
     );
 
@@ -71,20 +83,8 @@ export const streamChat = async (req, res) => {
     console.error('❌ Error in streamChat controller:', error);
     
     // Send error event if we haven't closed the connection yet
-    if (!res.writableEnded) {
-      const data = JSON.stringify({
-        type: 'error',
-        error: error.message || 'Failed to process chat request'
-      });
-      res.write(`data: ${data}\n\n`);
-      res.end();
-    }
+    if (send({ type: 'error', error: 'Failed to process chat request' })) res.end();
   }
-
-  // Handle client disconnect
-  req.on('close', () => {
-    console.log('🔌 Client disconnected from chat stream');
-  });
 };
 
 /**

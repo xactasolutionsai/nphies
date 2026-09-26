@@ -40,6 +40,8 @@ class StandardApprovalsController extends BaseController {
       }
 
       const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+      // The count query has no LIMIT/OFFSET, so its placeholders start at $1 instead of $3
+      const countWhereClause = whereClause.replace(/\$(\d+)/g, (_, n) => `$${Number(n) - 2}`);
 
       // Get total count
       const countQuery = `
@@ -48,7 +50,7 @@ class StandardApprovalsController extends BaseController {
         LEFT JOIN patients p ON sac.patient_id = p.patient_id
         LEFT JOIN providers pr ON sac.provider_id = pr.provider_id
         LEFT JOIN insurers i ON sac.insurer_id = i.insurer_id
-        ${whereClause}
+        ${countWhereClause}
       `;
       const countResult = await query(countQuery, countParams);
       const total = parseInt(countResult.rows[0].total);
@@ -280,11 +282,9 @@ class StandardApprovalsController extends BaseController {
           errors: [{ field: fieldName, message: `Invalid ${fieldName} reference` }]
         });
       } else {
-        // Return detailed error message
-        const errorMessage = error.message || 'Failed to create standard approval';
+        // Never echo raw database error text to the client
         res.status(error.status || 500).json({
-          error: errorMessage,
-          details: error.detail || error.hint || null
+          error: error.status ? error.message : 'Failed to create standard approval'
         });
       }
     }
@@ -418,11 +418,9 @@ class StandardApprovalsController extends BaseController {
           errors: [{ field: fieldName, message: `Invalid ${fieldName} reference` }]
         });
       } else {
-        // Return detailed error message
-        const errorMessage = error.message || 'Failed to update standard approval';
+        // Never echo raw database error text to the client
         res.status(error.status || 500).json({
-          error: errorMessage,
-          details: error.detail || error.hint || null
+          error: error.status ? error.message : 'Failed to update standard approval'
         });
       }
     }

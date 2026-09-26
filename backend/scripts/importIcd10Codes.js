@@ -26,12 +26,19 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 const { Pool } = pg;
 
 // Database configuration
+// No credential defaults: DB_NAME, DB_USER and DB_PASSWORD must come from the environment.
+for (const name of ['DB_NAME', 'DB_USER', 'DB_PASSWORD']) {
+  if (process.env[name] === undefined) {
+    console.error(`Database is not configured: set ${name} (see env.example)`);
+    process.exit(1);
+  }
+}
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'nafes_healthcare',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
 });
 
 /**

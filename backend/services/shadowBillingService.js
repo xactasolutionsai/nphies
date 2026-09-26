@@ -97,59 +97,81 @@ class ShadowBillingService {
     this.medicationCodesCache = new Set();
     this.nphiesCodesCache = new Map();
     this.cacheExpiry = 60 * 60 * 1000;
+    // After a failed load, try again soon instead of waiting for the full expiry.
+    this.retryDelay = 30 * 1000;
     this.lastLoaded = null;
-    this.isLoading = false;
+    this.lastFailedAt = null;
+    this.lastLoadError = null;
+    this.loadingPromise = null;
   }
 
+  /** True when the code catalog is loaded and usable for detection. */
+  isCatalogAvailable() {
+    return this.lastLoaded !== null && (this.medicationCodesCache.size > 0 || this.nphiesCodesCache.size > 0);
+  }
+
+  /**
+   * Load (or refresh) the code caches. Only a fully successful load sets
+   * lastLoaded; on failure the previous caches are kept, the error is recorded and
+   * the next call after `retryDelay` retries.
+   * @returns {Promise<boolean>} whether a usable catalog is available
+   */
   async ensureLoaded() {
-    if (this.lastLoaded && Date.now() - this.lastLoaded < this.cacheExpiry) return;
-    if (this.isLoading) {
-      while (this.isLoading) await new Promise(r => setTimeout(r, 100));
-      return;
+    if (this.lastLoaded && Date.now() - this.lastLoaded < this.cacheExpiry) return this.isCatalogAvailable();
+    if (!this.lastLoaded && this.lastFailedAt && Date.now() - this.lastFailedAt < this.retryDelay) return false;
+    if (!this.loadingPromise) {
+      this.loadingPromise = (async () => {
+        try {
+          const [medicationCodes, nphiesCodes] = await Promise.all([
+            this._loadMedicationCodes(),
+            this._loadNphiesCodes()
+          ]);
+          this.medicationCodesCache = medicationCodes;
+          this.nphiesCodesCache = nphiesCodes;
+          this.lastLoaded = Date.now();
+          this.lastFailedAt = null;
+          this.lastLoadError = null;
+          if (!this.isCatalogAvailable()) {
+            console.error('[ShadowBillingService] Code catalog is empty; auto-detection is disabled until codes are imported');
+          }
+        } catch (err) {
+          this.lastFailedAt = Date.now();
+          this.lastLoadError = err.message;
+          // A stale catalog is safe to keep using; a missing one is not (see processItem).
+          if (this.lastLoaded) this.lastLoaded = Date.now() - this.cacheExpiry + this.retryDelay;
+          console.error('[ShadowBillingService] Error loading codes:', err.message);
+        } finally {
+          this.loadingPromise = null;
+        }
+      })();
     }
-    this.isLoading = true;
-    try {
-      await Promise.all([this._loadMedicationCodes(), this._loadNphiesCodes()]);
-      this.lastLoaded = Date.now();
-    } catch (err) {
-      console.error('[ShadowBillingService] Error loading codes:', err.message);
-    } finally {
-      this.isLoading = false;
-    }
+    await this.loadingPromise;
+    return this.isCatalogAvailable();
   }
 
   async _loadMedicationCodes() {
-    try {
-      const result = await query('SELECT code FROM medication_codes');
-      this.medicationCodesCache.clear();
-      for (const row of result.rows) {
-        this.medicationCodesCache.add(row.code);
-      }
-      console.log(`[ShadowBillingService] Loaded ${this.medicationCodesCache.size} medication codes`);
-    } catch (err) {
-      console.error('[ShadowBillingService] Error loading medication codes:', err.message);
-    }
+    const result = await query('SELECT code FROM medication_codes');
+    const codes = new Set(result.rows.map(row => row.code));
+    console.log(`[ShadowBillingService] Loaded ${codes.size} medication codes`);
+    return codes;
   }
 
   async _loadNphiesCodes() {
-    try {
-      const result = await query(`
-        SELECT cs.code as system_code, c.code
-        FROM nphies_codes c
-        JOIN nphies_code_systems cs ON c.code_system_id = cs.code_system_id
-        WHERE c.is_active = true AND cs.is_active = true
-      `);
-      this.nphiesCodesCache.clear();
-      for (const row of result.rows) {
-        if (!this.nphiesCodesCache.has(row.system_code)) {
-          this.nphiesCodesCache.set(row.system_code, new Set());
-        }
-        this.nphiesCodesCache.get(row.system_code).add(row.code);
+    const result = await query(`
+      SELECT cs.code as system_code, c.code
+      FROM nphies_codes c
+      JOIN nphies_code_systems cs ON c.code_system_id = cs.code_system_id
+      WHERE c.is_active = true AND cs.is_active = true
+    `);
+    const codes = new Map();
+    for (const row of result.rows) {
+      if (!codes.has(row.system_code)) {
+        codes.set(row.system_code, new Set());
       }
-      console.log(`[ShadowBillingService] Loaded ${result.rows.length} NPHIES codes`);
-    } catch (err) {
-      console.error('[ShadowBillingService] Error loading NPHIES codes:', err.message);
+      codes.get(row.system_code).add(row.code);
     }
+    console.log(`[ShadowBillingService] Loaded ${result.rows.length} NPHIES codes`);
+    return codes;
   }
 
   /**
@@ -166,21 +188,29 @@ class ShadowBillingService {
    * Check whether a code exists in the NPHIES catalog.
    * Checks: Section 4.5 whitelist → medication_codes table → nphies_codes table.
    * Any code not found → returns false → forces unlisted + shadow billing.
+   * Returns null when the catalog could not be loaded (unknown, not "invalid").
    */
   async isValidNphiesCode(code, systemUrl) {
     if (!code) return false;
-    await this.ensureLoaded();
 
     const codeStr = String(code).trim();
     const key = this._systemKey(systemUrl);
 
     if (SECTION_4_5_UNLISTED_CODES.has(codeStr)) return true;
 
+    if (!(await this.ensureLoaded())) return null;
+
     if (key === 'medication-codes' && this.medicationCodesCache.has(codeStr)) return true;
 
     if (key && this.nphiesCodesCache.has(key)) {
       if (this.nphiesCodesCache.get(key).has(codeStr)) return true;
     }
+
+    // No codes at all were loaded for this code system: we cannot tell whether the
+    // code is standard, so report "unknown" rather than "invalid".
+    const systemLoaded = (key && this.nphiesCodesCache.has(key)) ||
+      (key === 'medication-codes' && this.medicationCodesCache.size > 0);
+    if (!systemLoaded) return null;
 
     return false;
   }
@@ -324,7 +354,15 @@ class ShadowBillingService {
 
     const isValid = await this.isValidNphiesCode(item.product_or_service_code, system);
 
-    if (!isValid) {
+    if (isValid === null) {
+      // Catalog unavailable: do NOT rewrite the code (that would turn every valid
+      // NPHIES code into an unlisted one). Pass it through unchanged and flag it.
+      Object.defineProperty(item, 'shadowBillingUnverified', { value: true, enumerable: false, configurable: true });
+      console.warn(
+        `[ShadowBillingService] Code catalog unavailable (${this.lastLoadError || 'empty catalog'}); ` +
+        `code '${item.product_or_service_code}' passed through without shadow-billing detection`
+      );
+    } else if (!isValid) {
       const originalCode = item.product_or_service_code;
       const originalDisplay = item.product_or_service_display || '';
 
@@ -373,7 +411,8 @@ class ShadowBillingService {
 
   async refresh() {
     this.lastLoaded = null;
-    await this.ensureLoaded();
+    this.lastFailedAt = null;
+    return this.ensureLoaded();
   }
 }
 

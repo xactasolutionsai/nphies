@@ -111,6 +111,7 @@ CREATE INDEX IF NOT EXISTS idx_general_requests_medications ON general_requests 
 CREATE INDEX IF NOT EXISTS idx_general_requests_validation_results ON general_requests USING GIN (validation_results);
 
 -- Create trigger to automatically update updated_at
+DROP TRIGGER IF EXISTS update_general_requests_updated_at ON general_requests;
 CREATE TRIGGER update_general_requests_updated_at 
     BEFORE UPDATE ON general_requests
     FOR EACH ROW 

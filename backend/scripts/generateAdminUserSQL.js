@@ -1,27 +1,17 @@
+// Print an INSERT for an administrator account, for environments where the
+// scripts cannot reach the database. Prefer scripts/createAdminUser.js.
+// Usage: ADMIN_PASSWORD='<strong password>' node scripts/generateAdminUserSQL.js <email>
 import bcrypt from 'bcryptjs';
+import { readAdminEmail, readAdminPassword } from './adminCredentials.js';
 
-async function generateSQL() {
-  const email = 'admin@admin.com';
-  const password = '123123';
-  
-  // Hash password
-  const saltRounds = 10;
-  const passwordHash = await bcrypt.hash(password, saltRounds);
-  
-  // Generate SQL query
-  const sql = `-- Create super admin user
--- Email: admin@admin.com
--- Password: 123123
-
-INSERT INTO users (email, password_hash) 
-VALUES ('${email}', '${passwordHash}')
-ON CONFLICT (email) DO NOTHING;
-
--- Verify the user was created
-SELECT id, email, created_at FROM users WHERE email = '${email}';`;
-
-  console.log(sql);
+try {
+  const email = readAdminEmail();
+  const passwordHash = await bcrypt.hash(readAdminPassword(), 12);
+  const literal = value => `'${String(value).replaceAll("'", "''")}'`;
+  console.log(`INSERT INTO users (email, password_hash, role)
+VALUES (${literal(email)}, ${literal(passwordHash)}, 'admin')
+ON CONFLICT (email) DO NOTHING;`);
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
 }
-
-generateSQL().catch(console.error);
-

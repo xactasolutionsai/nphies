@@ -93,17 +93,19 @@ class AuthorizationsController extends BaseController {
       const result = await query(`
         SELECT 
           a.*,
-          CONCAT(p.first_name, ' ', p.last_name) as patient_name,
-          p.nphies_id as patient_identifier,
-          pr.name as provider_name,
+          a.auth_id as id,
+          a.auth_status as status,
+          p.name as patient_name,
+          p.identifier as patient_identifier,
+          pr.provider_name as provider_name,
           pr.nphies_id as provider_nphies_id,
-          i.name as insurer_name,
+          i.insurer_name as insurer_name,
           i.nphies_id as insurer_nphies_id
         FROM authorizations a
         LEFT JOIN patients p ON a.patient_id = p.patient_id
         LEFT JOIN providers pr ON a.provider_id = pr.provider_id
         LEFT JOIN insurers i ON a.insurer_id = i.insurer_id
-        WHERE a.authorization_id = $1
+        WHERE a.auth_id = $1
       `, [id]);
 
       if (result.rows.length === 0) {
@@ -130,7 +132,7 @@ class AuthorizationsController extends BaseController {
       const result = await query(`
         UPDATE authorizations 
         SET auth_status = $1
-        WHERE authorization_id = $2
+        WHERE auth_id = $2
         RETURNING *
       `, [status, id]);
 
