@@ -3,7 +3,8 @@ import { pathToFileURL } from 'node:url';
 import { authenticateToken } from './middleware/auth.js';
 import { getJwtSecret } from './config/auth.js';
 import openmedRoutes from './openmed/routes.js';
-import { closeRuntime as closeOpenmedRuntime } from './openmed/inference.js';
+import { closeRuntime as closeOpenmedRuntime, runtimeStatus as openmedRuntimeStatus } from './openmed/inference.js';
+import { evaluateAlerts as evaluateClinicalAlerts } from './openmed/alerts.js';
 import clinicalAiAccessRoutes from './routes/clinicalAiAccess.js';
 import clinicalKnowledgeRoutes from './routes/clinicalKnowledge.js';
 import clinicalPilotRoutes from './routes/clinicalPilot.js';
@@ -281,6 +282,7 @@ app.use((error, req, res, next) => {
 });
 
 // Start server (only when run directly, not when imported by tests)
+let alertTimer = null;
 async function start() {
   // Load queries before accepting requests so the first dashboard call cannot race the loader.
   await initializeQueryLoader();
@@ -292,6 +294,14 @@ async function start() {
 
     // Start optional scheduled polling (disabled by default)
     startPollScheduler();
+    // Optional clinical-assistant alert evaluation (aggregates only; stored, never sent out).
+    const alertMinutes = Number(process.env.CLINICAL_AI_ALERT_INTERVAL_MIN || 0);
+    if (alertMinutes > 0) {
+      alertTimer = setInterval(() => {
+        evaluateClinicalAlerts({ query, runtime: openmedRuntimeStatus() }).catch(e => console.error('[clinical-ai] alert evaluation failed:', e.message));
+      }, alertMinutes * 60000);
+      alertTimer.unref();
+    }
   });
 
   // Single graceful shutdown path: stop polling, stop accepting connections, then close the pool.
@@ -301,6 +311,7 @@ async function start() {
     shuttingDown = true;
     console.log(`${signal} received, shutting down gracefully`);
     stopPollScheduler();
+    clearInterval(alertTimer);
     const force = setTimeout(() => process.exit(1), 10000);
     force.unref();
     server.close(async () => {

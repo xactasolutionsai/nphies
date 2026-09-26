@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { query, transaction } from '../db.js';
 import { buildFingerprint } from '../openmed/fingerprint.js';
 import { runtimeStatus } from '../openmed/inference.js';
+import { evaluateAlerts } from '../openmed/alerts.js';
 
 // Administration of the clinical assistant pilot (migration 074). Admin-only
 // (middleware/requireRole.js). Activation records the hospital's approval and the evaluated
@@ -13,9 +14,15 @@ const router = express.Router();
 const uuid = Joi.string().guid().required();
 const day = Joi.date().iso().raw();
 const reasonInput = Joi.object({ reason: Joi.string().trim().min(3).max(500).required() }).unknown(false);
+const closeInput = Joi.object({ reason: Joi.string().trim().min(3).max(500).required(),
+  outcome_ref: Joi.string().trim().min(2).max(300) }).unknown(false);
 const pilotFields = {
   name: Joi.string().trim().min(3).max(200), scope: Joi.string().trim().min(3).max(1000),
-  starts_on: day, ends_on: day, max_participants: Joi.number().integer().min(1).max(500)
+  starts_on: day, ends_on: day, max_participants: Joi.number().integer().min(1).max(5000),
+  kind: Joi.string().valid('pilot', 'rollout'),
+  approved_features: Joi.array().items(Joi.string().valid('analysis', 'summary', 'generation')).unique()
+    .has(Joi.string().valid('analysis')).min(1),
+  prerequisite_pilot_id: Joi.string().guid().allow(null)
 };
 const createInput = Joi.object({ ...pilotFields, name: pilotFields.name.required(), scope: pilotFields.scope.required() }).unknown(false);
 const updateInput = Joi.object(pilotFields).min(1).unknown(false);
@@ -72,9 +79,11 @@ router.get('/pilots', handle(async (req, res) => {
 
 router.post('/pilots', handle(async (req, res) => {
   const v = check(createInput, req.body);
-  const { rows } = await query(`INSERT INTO clinical_pilot.pilots (id, name, scope, starts_on, ends_on, max_participants, created_by)
-    VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-  [randomUUID(), v.name, v.scope, v.starts_on ?? null, v.ends_on ?? null, v.max_participants ?? null, req.user.id]);
+  const { rows } = await query(`INSERT INTO clinical_pilot.pilots (id, name, scope, starts_on, ends_on, max_participants, created_by,
+      kind, approved_features, prerequisite_pilot_id)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+  [randomUUID(), v.name, v.scope, v.starts_on ?? null, v.ends_on ?? null, v.max_participants ?? null, req.user.id,
+    v.kind ?? 'pilot', v.approved_features ?? ['analysis', 'summary'], v.prerequisite_pilot_id ?? null]);
   res.status(201).json(rows[0]);
 }));
 
@@ -138,6 +147,22 @@ router.post('/pilots/:id/activate', handle(async (req, res) => {
     const ended = (await client.query('SELECT $1::date < current_date AS ended', [pilot.ends_on ?? '9999-12-31'])).rows[0].ended;
     if (ended) problems.push('ends_on_in_past');
     if (problems.length) throw fail(422, 'The pilot cannot be activated yet', { problems });
+    if (pilot.kind === 'rollout') {
+      // Wider use only on top of a pilot that was closed with the hospital's outcome review,
+      // and only for features that pilot approved.
+      const prior = pilot.prerequisite_pilot_id
+        ? (await client.query('SELECT kind, status, outcome_ref, approved_features FROM clinical_pilot.pilots WHERE id = $1', [pilot.prerequisite_pilot_id])).rows[0]
+        : null;
+      const rollout = [];
+      if (!prior) rollout.push('prerequisite_pilot');
+      else {
+        if (prior.kind !== 'pilot') rollout.push('prerequisite_must_be_a_pilot');
+        if (prior.status !== 'closed') rollout.push('prerequisite_pilot_not_closed');
+        if (!prior.outcome_ref) rollout.push('prerequisite_pilot_outcome_missing');
+        if (pilot.approved_features.some(f => !prior.approved_features.includes(f))) rollout.push('feature_not_piloted');
+      }
+      if (rollout.length) throw fail(422, 'The rollout cannot be activated yet', { problems: rollout });
+    }
     if (v.evaluation_build_sha256 !== buildFingerprint().sha256) {
       throw fail(409, 'The deployed build is not the evaluated build: deploy the evaluated version or evaluate this one',
         { deployed_build: buildFingerprint().sha256 });
@@ -154,13 +179,14 @@ router.post('/pilots/:id/activate', handle(async (req, res) => {
 for (const [action, from, to] of [['pause', ['active'], 'paused'], ['resume', ['paused'], 'active'], ['close', ['draft', 'active', 'paused'], 'closed']]) {
   router.post(`/pilots/:id/${action}`, handle(async (req, res) => {
     const id = check(uuid, req.params.id);
-    const v = check(reasonInput, req.body);
+    const v = check(action === 'close' ? closeInput : reasonInput, req.body);
     const row = await transaction(async client => {
       const pilot = await lockPilot(client, id);
       if (!from.includes(pilot.status)) throw fail(409, `Cannot ${action} a ${pilot.status} pilot`);
       if (action === 'resume' && await openSerious(client, id)) throw fail(409, 'Resolve the open serious error reports first');
       return (await client.query(`UPDATE clinical_pilot.pilots SET status = $2, status_reason = $3, status_changed_by = $4,
-        status_changed_at = now() WHERE id = $1 RETURNING *`, [id, to, v.reason, req.user.id])).rows[0];
+        status_changed_at = now(), outcome_ref = COALESCE($5, outcome_ref) WHERE id = $1 RETURNING *`,
+      [id, to, v.reason, req.user.id, v.outcome_ref ?? null])).rows[0];
     });
     res.json(row);
   }));
@@ -188,6 +214,25 @@ router.patch('/issues/:id', handle(async (req, res) => {
   res.json(rows[0]);
 }));
 
+// Operating alerts (aggregates only). Evaluated on demand here, or on a timer when
+// CLINICAL_AI_ALERT_INTERVAL_MIN is set (server.js). Stored for administrators; nothing is sent out.
+router.post('/alerts/evaluate', handle(async (req, res) => {
+  res.json({ created: await evaluateAlerts({ query, runtime: runtimeStatus() }) });
+}));
+router.get('/alerts', handle(async (req, res) => {
+  const open = req.query.open !== 'false';
+  const { rows } = await query(`SELECT * FROM clinical_pilot.alerts ${open ? 'WHERE acknowledged_at IS NULL' : ''}
+    ORDER BY created_at DESC LIMIT 200`);
+  res.json({ data: rows });
+}));
+router.post('/alerts/:id/ack', handle(async (req, res) => {
+  const id = check(Joi.number().integer().positive().required(), req.params.id);
+  const { rows } = await query(`UPDATE clinical_pilot.alerts SET acknowledged_by = $2, acknowledged_at = now()
+    WHERE id = $1 AND acknowledged_at IS NULL RETURNING *`, [id, req.user.id]);
+  if (!rows[0]) throw fail(404, 'Open alert not found');
+  res.json(rows[0]);
+}));
+
 // Aggregates only (counts and rates); no note text, no patient data.
 router.get('/pilots/:id/metrics', handle(async (req, res) => {
   const id = check(uuid, req.params.id);
@@ -208,11 +253,17 @@ router.get('/pilots/:id/metrics', handle(async (req, res) => {
   const summaryReviews = await one(`SELECT sr.decision, count(*)::int AS n FROM openmed_advisory.summary_reviews sr
     JOIN openmed_advisory.summaries s ON s.id = sr.summary_id JOIN openmed_advisory.analyses a ON a.id = s.analysis_id
     WHERE a.pilot_id = $1 GROUP BY sr.decision ORDER BY sr.decision`);
+  const [generation] = await one(`SELECT count(*)::int AS attempts, count(*) FILTER (WHERE accepted)::int AS accepted,
+      count(*) FILTER (WHERE NOT accepted AND reason = 'verification_failed')::int AS rejected_by_verifier
+    FROM openmed_advisory.generation_attempts WHERE pilot_id = $1`);
+  const draftReviews = await one(`SELECT r.decision, count(*)::int AS n FROM openmed_advisory.draft_reviews r
+    JOIN openmed_advisory.generated_drafts d ON d.id = r.draft_id JOIN openmed_advisory.generation_attempts g ON g.id = d.attempt_id
+    WHERE g.pilot_id = $1 GROUP BY r.decision ORDER BY r.decision`);
   const issues = await one(`SELECT category, severity, status, count(*)::int AS n FROM clinical_pilot.issue_reports
     WHERE pilot_id = $1 GROUP BY category, severity, status ORDER BY severity, category`);
   const reviewed = reviews.reduce((s, r) => s + r.n, 0);
   res.json({
-    analyses, reviews, corrections, summaries, summary_reviews: summaryReviews, issues,
+    analyses, reviews, corrections, summaries, summary_reviews: summaryReviews, generation, draft_reviews: draftReviews, issues,
     rates: {
       review_coverage: analyses.total ? Math.round((reviewed / analyses.total) * 1000) / 1000 : null,
       corrected_or_rejected: reviewed ? Math.round((reviews.filter(r => r.decision !== 'accepted').reduce((s, r) => s + r.n, 0) / reviewed) * 1000) / 1000 : null,

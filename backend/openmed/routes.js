@@ -5,6 +5,8 @@ import { advisoryQuery } from './database.js';
 import { runLocalAnalysis, runtimeReady, runtimeStatus as poolStatus } from './inference.js';
 import { buildFingerprint } from './fingerprint.js';
 import { pilotEligibility, PILOT_REASONS } from './pilot.js';
+import { generateDraft } from '../clinical-evidence/generator.js';
+import { createLlmClient } from '../services/ai/llmClient.js';
 import { inspectPassage } from '../clinical-evidence/ingestion.js';
 import { contextForOpenMed } from '../clinical-context/openmedAdapter.js';
 import { ENGINE } from '../clinical-context/index.js';
@@ -56,7 +58,30 @@ const reviewInput = Joi.object({
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{8,100}$/;
 
-/** Per-user token bucket for model runs (in this process; several instances need a shared store). */
+/**
+ * Shared per-user limit for model runs, counted in the database so that several server
+ * instances enforce one limit: analyses and generation attempts of the last minute, plus
+ * the runs this instance has in flight. Returns the seconds to wait (0 = allowed).
+ */
+export function createDbRateLimiter({ query, perMinute = 20 }) {
+  const inFlight = new Map();
+  const limiter = async userId => {
+    const { rows } = await query(`SELECT count(*)::int AS n, min(created_at) AS oldest FROM (
+        SELECT created_at FROM openmed_advisory.analyses WHERE user_id = $1 AND created_at > now() - interval '1 minute'
+        UNION ALL
+        SELECT created_at FROM openmed_advisory.generation_attempts WHERE user_id = $1 AND created_at > now() - interval '1 minute'
+      ) recent`, [userId]);
+    const used = rows[0].n + (inFlight.get(userId) || 0);
+    if (used < perMinute) return 0;
+    const oldest = rows[0].oldest ? new Date(rows[0].oldest).getTime() : Date.now();
+    return Math.max(1, Math.ceil((oldest + 60000 - Date.now()) / 1000));
+  };
+  limiter.begin = userId => inFlight.set(userId, (inFlight.get(userId) || 0) + 1);
+  limiter.end = userId => inFlight.set(userId, Math.max(0, (inFlight.get(userId) || 1) - 1));
+  return limiter;
+}
+
+/** Per-user token bucket for model runs, in this process only (OPENMED_RATE_LIMIT_STORE=memory). */
 export function createRateLimiter({ perMinute = 20, now = () => Date.now() } = {}) {
   const buckets = new Map();
   return userId => {
@@ -75,7 +100,12 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
   runtimeStatus = poolStatus, fingerprint = buildFingerprint,
   // Model runs need an approved pilot (migration 074). 'false' is for non-clinical test setups only.
   requirePilot = process.env.CLINICAL_AI_REQUIRE_PILOT !== 'false',
-  rateLimit = createRateLimiter({ perMinute: Number(process.env.OPENMED_RATE_PER_MINUTE) || 20 }) } = {}) {
+  rateLimit = process.env.OPENMED_RATE_LIMIT_STORE === 'memory'
+    ? createRateLimiter({ perMinute: Number(process.env.OPENMED_RATE_PER_MINUTE) || 20 })
+    : createDbRateLimiter({ query, perMinute: Number(process.env.OPENMED_RATE_PER_MINUTE) || 20 }),
+  // Generated drafts: off unless CLINICAL_AI_GENERATION=on AND the pilot approves 'generation'.
+  generationEnabled = process.env.CLINICAL_AI_GENERATION === 'on',
+  llm = createLlmClient({ audit: async () => null }) } = {}) {
   const router = express.Router();
   const inFlight = new Map();          // `${user}:${idempotency key}` -> promise of the stored row
   const route = fn => async (req, res) => {
@@ -104,9 +134,9 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     } catch { res.status(503).json({ error: 'OpenMed database is not configured or unavailable' }); }
   });
   // Returns the pilot the run belongs to (null when pilots are not enforced) or refuses with 403.
-  async function requirePilotEligibility(userId) {
+  async function requirePilotEligibility(userId, feature = 'analysis') {
     if (!requirePilot) return null;
-    const result = await pilotEligibility(query, userId, fingerprint().sha256);
+    const result = await pilotEligibility(query, userId, fingerprint().sha256, feature);
     if (!result.eligible) throw Object.assign(failure(PILOT_REASONS[result.reason], 403), { reason: result.reason });
     return result.pilot;
   }
@@ -120,7 +150,9 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     res.json({ database: 'connected', runtime_ready: ready(), advisory_only: true, language: 'en', sdk_version: '2.3.0',
       context_engine: { name: ENGINE.name, version: ENGINE.version, languages: ENGINE.languages },
       patient_access: 'explicit_grant', runtime: runtimeStatus(), build: fingerprint(),
-      pilot: requirePilot ? await pilotEligibility(query, req.user.id, fingerprint().sha256) : { enforced: false } });
+      pilot: requirePilot ? await pilotEligibility(query, req.user.id, fingerprint().sha256) : { enforced: false },
+      generation: { enabled_on_server: generationEnabled,
+        approved_for_user: requirePilot ? (await pilotEligibility(query, req.user.id, fingerprint().sha256, 'generation')).eligible : generationEnabled } });
   }));
   router.get('/patients', route(async (req, res) => {
     const search = validate(Joi.string().trim().min(2).max(100).required(), req.query.search);
@@ -184,7 +216,7 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     if (flightKey && inFlight.has(flightKey)) return replay(await inFlight.get(flightKey));
 
     const pilot = await requirePilotEligibility(req.user.id);
-    const retryAfter = rateLimit(req.user.id);
+    const retryAfter = await rateLimit(req.user.id);
     if (retryAfter > 0) {
       res.set('Retry-After', String(retryAfter));
       throw failure('Too many analyses; try again shortly', 429);
@@ -193,6 +225,7 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     // A client that disconnects cancels its queued analysis instead of occupying a worker.
     const controller = new AbortController();
     res.on('close', () => { if (!res.writableFinished) controller.abort(); });
+    rateLimit.begin?.(req.user.id);
     const run = (async () => {
       const analysis = await analyze(value.text, value.mode, { signal: controller.signal });
       // Context (negation, family history, medication status...) is computed before anything is
@@ -218,6 +251,7 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
       res.status(201).json(row);
     } finally {
       if (flightKey) inFlight.delete(flightKey);
+      rateLimit.end?.(req.user.id);
     }
   }));
   router.get('/analyses', route(async (req, res) => {
@@ -277,7 +311,7 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
   // reference passages quoted verbatim, no inference. Each generation is a stored version.
   router.post('/analyses/:id/summaries', route(async (req, res) => {
     const analysis = await ownAnalysis(req);
-    await requirePilotEligibility(req.user.id);
+    await requirePilotEligibility(req.user.id, 'summary');
     const context = analysis.result?.context;
     const terms = context?.status === 'ok' ? queryTerms(patientFacts(context, analysis.input_text)) : [];
     const retrieval = await retrieveForTerms(query, terms);
@@ -311,6 +345,67 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
     if (!rows[0]) throw failure('Summary not found', 404);
     res.status(201).json(rows[0]);
   }));
+  // Generated drafts: the model writes from this summary's facts and approved passages only;
+  // every sentence must pass the verifier or nothing is shown. Drafts always need review.
+  async function ownSummary(req) {
+    const id = validate(uuid, req.params.id);
+    const { rows } = await query(`SELECT s.id, s.content, s.analysis_id FROM openmed_advisory.summaries s
+      JOIN openmed_advisory.analyses a ON a.id = s.analysis_id
+      WHERE s.id=$1 AND a.user_id=$2 AND ${grantSql('$2', 'a.patient_id')}`, [id, req.user.id]);
+    if (!rows[0]) throw failure('Summary not found', 404);
+    return rows[0];
+  }
+  router.post('/summaries/:id/drafts', route(async (req, res) => {
+    const summary = await ownSummary(req);
+    if (!generationEnabled) throw Object.assign(failure(PILOT_REASONS.generation_disabled, 409), { reason: 'generation_disabled' });
+    const pilot = await requirePilotEligibility(req.user.id, 'generation');
+    const retryAfter = await rateLimit(req.user.id);
+    if (retryAfter > 0) {
+      res.set('Retry-After', String(retryAfter));
+      throw failure('Too many model runs; try again shortly', 429);
+    }
+    rateLimit.begin?.(req.user.id);
+    let outcome;
+    try { outcome = await generateDraft({ summary, llm, userId: req.user.id }); }
+    finally { rateLimit.end?.(req.user.id); }
+    const attemptId = randomUUID();
+    await query(`INSERT INTO openmed_advisory.generation_attempts (id, summary_id, user_id, pilot_id, model, prompt_sha256,
+        input_fact_ids, input_passage_ids, raw_output, verification, accepted, reason, latency_ms)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13)`,
+    [attemptId, summary.id, req.user.id, pilot?.id ?? null, outcome.model ?? null, outcome.promptSha256 ?? 'none',
+      outcome.factIds ?? [], outcome.passageIds ?? [], outcome.raw ? JSON.stringify(outcome.raw) : null,
+      outcome.verification ? JSON.stringify(outcome.verification) : null, outcome.accepted, outcome.reason, outcome.latencyMs ?? null]);
+    let draft = null;
+    if (outcome.accepted) {
+      draft = (await query(`INSERT INTO openmed_advisory.generated_drafts (id, attempt_id, summary_id, sentences)
+        VALUES ($1,$2,$3,$4::jsonb) RETURNING *`, [randomUUID(), attemptId, summary.id, JSON.stringify(outcome.raw.sentences)])).rows[0];
+    }
+    res.status(201).json({ attempt: { id: attemptId, accepted: outcome.accepted, reason: outcome.reason,
+      problems: outcome.verification?.sentences?.filter(x => x.problems.length) ?? [] }, draft });
+  }));
+  router.get('/summaries/:id/drafts', route(async (req, res) => {
+    const summary = await ownSummary(req);
+    const { rows } = await query(`SELECT d.*, COALESCE((SELECT jsonb_agg(r ORDER BY r.created_at) FROM openmed_advisory.draft_reviews r
+        WHERE r.draft_id = d.id), '[]'::jsonb) AS reviews
+      FROM openmed_advisory.generated_drafts d WHERE d.summary_id = $1 ORDER BY d.created_at DESC LIMIT 20`, [summary.id]);
+    const attempts = (await query(`SELECT count(*)::int AS total, count(*) FILTER (WHERE accepted)::int AS accepted
+      FROM openmed_advisory.generation_attempts WHERE summary_id = $1`, [summary.id])).rows[0];
+    res.json({ data: rows, attempts });
+  }));
+  router.post('/drafts/:id/reviews', route(async (req, res) => {
+    const id = validate(uuid, req.params.id);
+    const value = validate(Joi.object({ decision: Joi.string().valid('accepted', 'edited', 'rejected').required(),
+      edited_text: Joi.when('decision', { is: 'edited', then: Joi.string().trim().min(1).max(8000).required(), otherwise: Joi.forbidden() }),
+      note: Joi.string().max(2000).allow('').default('') }).unknown(false), req.body);
+    const { rows } = await query(`INSERT INTO openmed_advisory.draft_reviews (id, draft_id, reviewer_id, decision, edited_text, note)
+      SELECT $1, d.id, $3, $4, $5, $6 FROM openmed_advisory.generated_drafts d
+        JOIN openmed_advisory.summaries s ON s.id = d.summary_id JOIN openmed_advisory.analyses a ON a.id = s.analysis_id
+      WHERE d.id = $2 AND a.user_id = $3 AND ${grantSql('$3', 'a.patient_id')} RETURNING *`,
+    [randomUUID(), id, req.user.id, value.decision, value.edited_text ?? null, value.note]);
+    if (!rows[0]) throw failure('Draft not found', 404);
+    res.status(201).json(rows[0]);
+  }));
+
   // Error reports during the pilot. Allowed even while the pilot is paused. A serious report
   // pauses the assistant for the whole pilot until it is resolved.
   const issueInput = Joi.object({

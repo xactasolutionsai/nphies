@@ -61,7 +61,7 @@ test('Pilot gate, error reports, activation and metrics', { skip: !process.env.T
   const patient = randomUUID();
   await owner.query("INSERT INTO public.patients VALUES ($1,'Synthetic P','SYN-P')", [patient]);
   for (const file of ['064_openmed_advisory.sql', '071_clinical_ai_access_and_reviews.sql', '072_clinical_knowledge_sources.sql',
-    '073_openmed_idempotency.sql', '074_clinical_pilot.sql']) {
+    '073_openmed_idempotency.sql', '074_clinical_pilot.sql', '075_clinical_ai_rollout_generation.sql']) {
     const sql = await fs.readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8');
     await owner.query(sql);
     await owner.query(sql);

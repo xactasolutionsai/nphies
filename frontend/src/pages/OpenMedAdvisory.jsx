@@ -8,7 +8,8 @@ const PILOT_REASONS = {
   no_active_pilot: 'المساعد غير مفعّل لحسابك: لا توجد تجربة معتمدة نشطة تشملك. يمكنك مراجعة النتائج السابقة فقط.',
   outside_dates: 'المساعد غير مفعّل اليوم: خارج تواريخ التجربة المعتمدة.',
   build_not_evaluated: 'المساعد موقوف: النسخة المنشورة ليست النسخة التي قُيّمت واعتُمدت.',
-  paused_serious_issue: 'المساعد موقوف مؤقتاً حتى مراجعة بلاغ خطأ خطير.'
+  paused_serious_issue: 'المساعد موقوف مؤقتاً حتى مراجعة بلاغ خطأ خطير.',
+  feature_not_approved: 'هذه الميزة غير معتمدة في تجربتك.'
 };
 
 async function request(path, options = {}) {
@@ -164,7 +165,7 @@ export default function OpenMedAdvisory() {
         <p className="text-sm text-gray-500">درجة النموذج ليست احتمال صحة تشخيص، ولا تعني أن الكيان مثبت للمريض.</p>
       </details>
     </section>}
-    {selected && <EvidenceSummary analysisId={selected.id} request={request} busy={busy} />}
+    {selected && <EvidenceSummary analysisId={selected.id} request={request} busy={busy} generation={status?.generation} />}
     {patient && <section className="space-y-3 rounded-xl border bg-white p-5">
       <h2 className="text-xl font-semibold">استشاراتك لهذا المريض — آخر 30 نتيجة</h2>
       {!history.length && <p className="text-gray-500">لا توجد نتائج محفوظة.</p>}

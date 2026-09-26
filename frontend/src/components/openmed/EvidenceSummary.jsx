@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import GeneratedDrafts from './GeneratedDrafts';
 
 // Evidence-backed summary of one analysis (backend/clinical-evidence). Extractive only:
 // patient data, approved reference passages and inference are shown as separate sections,
@@ -26,7 +27,7 @@ const GAP = {
   measurement_without_unit: 'قياس بلا وحدة', ambiguous_date: 'تاريخ ملتبس (يوم/شهر)', context_unavailable: 'سياق غير متاح'
 };
 
-export default function EvidenceSummary({ analysisId, request, busy }) {
+export default function EvidenceSummary({ analysisId, request, busy, generation }) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState('');
   const [working, setWorking] = useState(false);
@@ -98,6 +99,8 @@ export default function EvidenceSummary({ analysisId, request, busy }) {
         <h3 className="font-semibold">ج. الاستنتاج</h3>
         <p className="text-sm">لا يوجد. الوضع الاستخراجي لا يستنتج ولا يربط بين بيانات المريض والمراجع؛ الربط والحكم للممارس.</p>
       </div>
+
+      <GeneratedDrafts key={latest.id} summaryId={latest.id} request={request} generation={generation} />
 
       {c.gaps.length > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
         <h3 className="font-semibold">نواقص وتعارضات تحتاج استكمالاً</h3>

@@ -64,6 +64,9 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
   const pilotSql = await fs.readFile(new URL('../migrations/074_clinical_pilot.sql', import.meta.url), 'utf8');
   await owner.query(pilotSql);
   await owner.query(pilotSql); // idempotent
+  const stage5Sql = await fs.readFile(new URL('../migrations/075_clinical_ai_rollout_generation.sql', import.meta.url), 'utf8');
+  await owner.query(stage5Sql);
+  await owner.query(stage5Sql); // idempotent
   // User 1 has an active grant for the synthetic patient; user 2 has none.
   await owner.query("INSERT INTO public.clinical_ai_patient_access (user_id,patient_id,reason,granted_by) VALUES (1,$1,'synthetic test grant',1)", [patientId]);
   // Generated identifiers/password contain only a-z0-9; no user SQL interpolation.

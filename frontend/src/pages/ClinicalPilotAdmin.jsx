@@ -17,6 +17,9 @@ async function request(path, options = {}) {
 const field = 'w-full rounded-lg border p-2';
 const button = 'rounded-lg bg-teal-700 px-3 py-2 text-white disabled:opacity-40';
 const STATUS = { draft: 'مسودة', active: 'نشطة', paused: 'موقوفة', closed: 'مغلقة' };
+const FEATURES = { analysis: 'التحليل', summary: 'الملخص', generation: 'الصياغة بالنموذج' };
+const ALERTS = { worker_error_rate: 'نسبة أخطاء العمّال', queue_rejections: 'رفض بسبب امتلاء الطابور', context_failure_rate: 'فشل تحديد السياق',
+  correction_rate: 'نسبة التصحيح والرفض', generation_rejection_rate: 'رفض المسودات المولّدة', open_serious_issues: 'بلاغات خطيرة مفتوحة', pilot_ending: 'اقتراب نهاية التجربة' };
 const ISSUE_STATUS = { open: 'مفتوح', triaged: 'قيد المعالجة', fixed: 'أُصلح', wont_fix: 'لن يُصلح', duplicate: 'مكرر' };
 const PROBLEMS = { dates: 'التواريخ', max_participants: 'الحد الأقصى للمشاركين', participants: 'مشارك واحد على الأقل', ends_on_in_past: 'تاريخ النهاية مضى' };
 const APPROVAL = [['approval_reference', 'مرجع قرار الاعتماد'], ['approved_by_name', 'اسم المعتمد'], ['approved_by_role', 'صفة المعتمد'],
@@ -50,7 +53,8 @@ function Pilot({ id, deployedBuild, onChanged }) {
   const isDraft = pilot.status === 'draft';
   return <div className="space-y-4 rounded-lg border p-4">
     <h3 className="text-lg font-semibold">{pilot.name} · {STATUS[pilot.status]}</h3>
-    <p className="text-sm text-gray-600">{pilot.scope}</p>
+    <p className="text-sm text-gray-600">{pilot.scope} · {pilot.kind === 'rollout' ? 'توسع' : 'تجربة'} · الميزات المعتمدة: {(pilot.approved_features || []).map(f => FEATURES[f]).join('، ')}
+      {pilot.outcome_ref ? ` · تقرير النتائج: ${pilot.outcome_ref}` : ''}</p>
     {error && <p role="alert" className="rounded bg-red-50 p-2 text-red-800">{error}</p>}
     {pilot.open_serious_issues > 0 && <p className="rounded bg-red-50 p-2 text-red-800">بلاغات خطيرة مفتوحة: {pilot.open_serious_issues}. المساعد متوقف لكل المشاركين حتى معالجتها.</p>}
     {pilot.evaluation_build_sha256 && pilot.evaluation_build_sha256 !== deployedBuild && pilot.status === 'active' &&
@@ -85,9 +89,15 @@ function Pilot({ id, deployedBuild, onChanged }) {
     </div>}
     {pilot.status === 'active' && <button className="rounded-lg border px-3 py-2" onClick={() => withReason(`/pilots/${id}/pause`, 'سبب الإيقاف')}>إيقاف مؤقت</button>}
     {pilot.status === 'paused' && <button className="rounded-lg border px-3 py-2" onClick={() => withReason(`/pilots/${id}/resume`, 'سبب الاستئناف')}>استئناف</button>}
-    {pilot.status !== 'closed' && <button className="mr-2 rounded-lg border px-3 py-2" onClick={() => withReason(`/pilots/${id}/close`, 'سبب الإغلاق')}>إغلاق التجربة</button>}
+    {pilot.status !== 'closed' && <button className="mr-2 rounded-lg border px-3 py-2" onClick={() => {
+      const reason = window.prompt('سبب الإغلاق');
+      if (!reason) return;
+      const outcome = pilot.kind === 'pilot' ? window.prompt('مرجع تقرير نتائج التجربة (يلزم قبل أي توسع لاحق؛ اتركه فارغاً إن لم يصدر)') : null;
+      act(() => request(`/pilots/${id}/close`, { method: 'POST', body: JSON.stringify({ reason, ...(outcome ? { outcome_ref: outcome } : {}) }) }));
+    }}>إغلاق</button>}
 
     {metrics && <div className="rounded border p-3 text-sm">
+      {metrics.generation?.attempts > 0 && <p>الصياغة بالنموذج: محاولات {metrics.generation.attempts} · مقبولة آلياً {metrics.generation.accepted} · رفضها المدقّق {metrics.generation.rejected_by_verifier}</p>}
       <h4 className="font-semibold">المؤشرات (مجمّعة، بلا بيانات مرضى)</h4>
       <p>التحليلات: {metrics.analyses.total} · مستخدمون: {metrics.analyses.users} · فشل السياق: {metrics.analyses.context_failed}</p>
       <p>تغطية المراجعة: {metrics.rates.review_coverage ?? '—'} · نسبة المصحح أو المرفوض: {metrics.rates.corrected_or_rejected ?? '—'} · نسبة الامتناع في الملخصات: {metrics.rates.abstention_share ?? '—'}</p>
@@ -113,7 +123,12 @@ export default function ClinicalPilotAdmin() {
   const [pilots, setPilots] = useState([]);
   const [deployedBuild, setDeployedBuild] = useState('');
   const [selected, setSelected] = useState(null);
-  const [form, setForm] = useState({ name: '', scope: '' });
+  const [form, setForm] = useState({ name: '', scope: '', kind: 'pilot', approved_features: ['analysis', 'summary'], prerequisite_pilot_id: '' });
+  const [alerts, setAlerts] = useState([]);
+  const loadAlerts = useCallback(() => request('/alerts').then(r => setAlerts(r.data)).catch(e => setError(e.message)), []);
+  useEffect(() => { loadAlerts(); }, [loadAlerts]);
+  const toggleFeature = f => setForm(v => ({ ...v, approved_features: v.approved_features.includes(f)
+    ? v.approved_features.filter(x => x !== f) : [...v.approved_features, f] }));
   const [error, setError] = useState('');
   const load = useCallback(() => request('/pilots').then(r => { setPilots(r.data); setDeployedBuild(r.deployed_build); }).catch(e => setError(e.message)), []);
   useEffect(() => { load(); }, [load]);
@@ -123,13 +138,36 @@ export default function ClinicalPilotAdmin() {
       <p className="mt-2 text-gray-600">لا يعمل المساعد إلا لمشاركي تجربة نشطة اعتمدها المستشفى، ضمن تواريخها، وعلى النسخة التي قُيّمت. البلاغ الخطير يوقفه تلقائياً.</p>
     </header>
     {error && <p role="alert" className="rounded bg-red-50 p-3 text-red-800">{error}</p>}
+    <section className="space-y-2 rounded-xl border bg-white p-5">
+      <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">تنبيهات التشغيل المفتوحة</h2>
+        <button className="rounded-lg border px-3 py-2 text-sm" onClick={async () => { setError('');
+          try { await request('/alerts/evaluate', { method: 'POST', body: '{}' }); await loadAlerts(); } catch (e) { setError(e.message); } }}>فحص الآن</button></div>
+      {!alerts.length && <p className="text-sm text-gray-500">لا توجد تنبيهات مفتوحة.</p>}
+      <ul className="space-y-1 text-sm">{alerts.map(a => <li key={a.id} className={`rounded p-2 ${a.level === 'critical' ? 'bg-red-50 text-red-900' : 'bg-amber-50 text-amber-900'}`}>
+        {a.level === 'critical' ? 'حرج' : 'تحذير'} · {ALERTS[a.rule] || a.rule} · القيمة {Number(a.observed).toFixed(2)} (الحد {a.threshold ?? '—'})
+        {' '}· {pilots.find(p => p.id === a.pilot_id)?.name || 'الخادم'} · {new Date(a.created_at).toLocaleString('ar')}
+        <button className="mr-2 underline" onClick={async () => { try { await request(`/alerts/${a.id}/ack`, { method: 'POST', body: '{}' }); await loadAlerts(); } catch (e) { setError(e.message); } }}>تم الاطلاع</button></li>)}</ul>
+      <p className="text-xs text-gray-500">الحدود الافتراضية نقطة بداية وليست حدوداً معتمدة؛ يحددها المستشفى. التنبيهات تُحفظ هنا ولا تُرسل خارج الخادم.</p>
+    </section>
     <section className="space-y-3 rounded-xl border bg-white p-5">
       <div className="flex flex-wrap gap-2">
         <input className={field} placeholder="اسم التجربة" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
         <input className={field} placeholder="النطاق (القسم، الاستخدام)" value={form.scope} onChange={e => setForm(f => ({ ...f, scope: e.target.value }))} />
+        <select className="rounded border p-2" value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))}>
+          <option value="pilot">تجربة محدودة</option><option value="rollout">توسع بعد تجربة مغلقة</option></select>
+        {form.kind === 'rollout' && <select className="rounded border p-2" value={form.prerequisite_pilot_id} onChange={e => setForm(f => ({ ...f, prerequisite_pilot_id: e.target.value }))}>
+          <option value="">التجربة السابقة…</option>
+          {pilots.filter(p => p.kind === 'pilot' && p.status === 'closed').map(p => <option key={p.id} value={p.id}>{p.name}{p.outcome_ref ? '' : ' (بلا تقرير نتائج)'}</option>)}</select>}
+        <span className="flex items-center gap-3 text-sm">{Object.entries(FEATURES).map(([f, l]) => <label key={f} className="flex items-center gap-1">
+          <input type="checkbox" checked={form.approved_features.includes(f)} disabled={f === 'analysis'} onChange={() => toggleFeature(f)} />{l}</label>)}</span>
         <button className={button} disabled={form.name.trim().length < 3 || form.scope.trim().length < 3} onClick={async () => {
           setError('');
-          try { const p = await request('/pilots', { method: 'POST', body: JSON.stringify(form) }); setForm({ name: '', scope: '' }); await load(); setSelected(p.id); }
+          try {
+            const body = { ...form, prerequisite_pilot_id: form.kind === 'rollout' ? form.prerequisite_pilot_id || null : null };
+            const p = await request('/pilots', { method: 'POST', body: JSON.stringify(body) });
+            setForm({ name: '', scope: '', kind: 'pilot', approved_features: ['analysis', 'summary'], prerequisite_pilot_id: '' });
+            await load(); setSelected(p.id);
+          }
           catch (e) { setError(e.message); }
         }}>تسجيل مسودة</button>
       </div>
