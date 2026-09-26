@@ -18,6 +18,12 @@ import {
   Info,
   Lightbulb
 } from 'lucide-react';
+import AIBadge from '@/components/ai/AIBadge';
+import { formatDuration } from '@/utils/aiAssist';
+
+// Suggestions produced by the deterministic rule checks; every other type comes from the language model.
+const RULE_SUGGESTION_TYPES = new Set(['missing_field', 'invalid_value', 'ai_unavailable', 'ai_incomplete']);
+const RULES_META = { source: 'rules', certainty: 'high' };
 
 /**
  * AI Validation Panel Component
@@ -173,6 +179,13 @@ const AIValidationPanel = ({
   const necessityScore = validation?.ai?.medicalNecessityScore;
   const hasNecessityScore = typeof necessityScore === 'number' && Number.isFinite(necessityScore);
   const consistencyPassed = validation?.ai?.consistencyCheck?.passed;
+  // Source/certainty of the language-model part: the backend's ai metadata when it sends one,
+  // otherwise 'llm' / 'low' (the model's output is never more than low certainty).
+  const llmMeta = {
+    source: validationResult.ai?.source || 'llm',
+    certainty: validationResult.ai?.certainty || 'low'
+  };
+  const duration = formatDuration(metadata?.validationDuration ?? metadata?.responseTime);
 
   return (
     <div className={`bg-white rounded-xl border ${riskStyle.border} shadow-sm overflow-hidden`}>
@@ -199,6 +212,10 @@ const AIValidationPanel = ({
                       : '')
                   : `Overall Risk Score: ${((riskScores?.overall || 0) * 100).toFixed(0)}%`}
               </p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <AIBadge {...RULES_META} basis="Rule checks: required fields, vital-sign ranges, dates" />
+                {!aiUnavailable && <AIBadge {...llmMeta} basis={metadata?.model ? { description: 'Language-model review', model: metadata.model } : 'Language-model review'} />}
+              </div>
             </div>
           </div>
           {onDismiss && (
@@ -289,10 +306,11 @@ const AIValidationPanel = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
                         <span className={`text-xs px-2 py-0.5 rounded-full border ${getSeverityStyle(suggestion.severity)}`}>
                           {suggestion.severity}
                         </span>
+                        <AIBadge {...(RULE_SUGGESTION_TYPES.has(suggestion.type) ? RULES_META : llmMeta)} />
                         {suggestion.type && (
                           <span className="text-xs text-gray-500">
                             {suggestion.type.replace(/_/g, ' ')}
@@ -355,9 +373,10 @@ const AIValidationPanel = ({
             onClick={() => toggleSection('details')}
             className="flex items-center justify-between w-full text-left"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary-purple" />
               <span className="text-sm font-medium text-gray-700">AI Analysis Details</span>
+              <AIBadge {...llmMeta} />
             </div>
             {expandedSections.details ? 
               <ChevronUp className="h-4 w-4 text-gray-400" /> : 
@@ -474,11 +493,11 @@ const AIValidationPanel = ({
 
       {/* Footer with metadata */}
       {metadata && (
-        <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500 flex items-center justify-between">
+        <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500 flex flex-wrap items-center justify-between gap-2">
           <span>
-            Analyzed by {metadata.model || 'AI'} in {metadata.validationDuration || metadata.responseTime || 'N/A'}
+            Analyzed by {metadata.model || 'AI'}{duration ? ` in ${duration}` : ''} · advisory — the reviewer decides
           </span>
-          <span>{new Date(metadata.timestamp).toLocaleTimeString()}</span>
+          {metadata.timestamp && <span>{new Date(metadata.timestamp).toLocaleTimeString()}</span>}
         </div>
       )}
     </div>

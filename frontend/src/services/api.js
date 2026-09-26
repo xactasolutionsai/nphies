@@ -1222,6 +1222,7 @@ class ApiService {
    * @param {string} category - Category (chief_complaint, diagnosis, etc.)
    */
   async suggestSnomedCodes(text, category = 'chief_complaint') {
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/ai-validation/suggest-snomed', {
       method: 'POST',
       body: JSON.stringify({ text, category })

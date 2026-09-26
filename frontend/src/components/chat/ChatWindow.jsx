@@ -2,6 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Minimize2, Send, Trash2, AlertCircle } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import ModeSelector from './ModeSelector';
+import useAIHealth from '@/hooks/useAIHealth';
+import { chatHealthStatus } from '@/utils/aiAssist';
+
+// Header dot driven by GET /api/ai/health (not a constant "online" indicator).
+const STATUS_DOT = {
+  online: { className: 'bg-green-400 animate-pulse', label: 'AI online' },
+  offline: { className: 'bg-red-400', label: 'AI unavailable — answers cannot be generated' },
+  unknown: { className: 'bg-gray-300', label: 'AI status unknown' }
+};
 
 /**
  * ChatWindow Component
@@ -22,6 +31,8 @@ const ChatWindow = ({
   const [isMinimized, setIsMinimized] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const { health } = useAIHealth();
+  const status = STATUS_DOT[chatHealthStatus(health)];
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -61,7 +72,13 @@ const ChatWindow = ({
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-blue-500 rounded-t-2xl">
         <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse"></div>
+          <span
+            className={`w-2.5 h-2.5 rounded-full ${status.className}`}
+            role="status"
+            aria-label={status.label}
+            title={status.label}
+            data-testid="chat-ai-status"
+          />
           <h3 className="font-semibold text-white">AI Medical Assistant</h3>
         </div>
         <div className="flex items-center gap-2">

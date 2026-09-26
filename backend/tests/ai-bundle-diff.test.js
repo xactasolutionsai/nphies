@@ -94,6 +94,31 @@ test('Diff reports missing / extra / different paths, collapses subtrees, and ne
   assert.equal(many.truncated, true);
 });
 
+test('Diff values: numbers sort numerically, truncated lists keep the differing values and say how many are hidden', () => {
+  const claim = sequences => ({ resourceType: 'Bundle', entry: [{ resource: { resourceType: 'Claim', item: sequences.map(sequence => ({ sequence })) } }] });
+  const row = (failed, reference) => diffBundles(claim(failed), claim(reference)).diff.find(d => d.path === 'Claim.item[].sequence');
+
+  // Numeric order, not string order ("10" before "9").
+  assert.deepEqual(row([2, 10], [2, 9]), { path: 'Claim.item[].sequence', kind: 'different', failed: ['2', '10'], reference: ['2', '9'] });
+
+  // Seven values each that differ only in the last one: the old string sort + slice(0, 5) showed
+  // ['1','2','3','4','5'] on both sides of a "different" row. The differing value must be visible.
+  const d = row([1, 2, 3, 4, 5, 6, 7], [1, 2, 3, 4, 5, 6, 8]);
+  assert.equal(d.kind, 'different');
+  assert.ok(d.failed.includes('7'), JSON.stringify(d.failed));
+  assert.ok(d.reference.includes('8'), JSON.stringify(d.reference));
+  assert.notDeepEqual(d.failed, d.reference);
+  assert.equal(d.failed.at(-1), '(+2 more)');
+  assert.equal(d.reference.at(-1), '(+2 more)');
+  assert.deepEqual(d.failed.slice(0, -1), ['1', '2', '3', '4', '7']);
+
+  // Short lists are not marked; non-numeric values keep string order.
+  assert.deepEqual(row([1, 2], [1, 3]).failed, ['1', '2']);
+  const codes = values => ({ resourceType: 'Bundle', entry: [{ resource: { resourceType: 'Claim', item: values.map(code => ({ productOrService: { coding: [{ system: 'S', code }] } })) } }] });
+  const codeRow = diffBundles(codes(['b', 'a', '10']), codes(['a', '9'])).diff.find(x => x.kind === 'different');
+  assert.deepEqual(codeRow.failed, ['10', 'a', 'b']);
+});
+
 function fakeDb({ failed, reference, lastErrors = [{ code: 'BV-00163', message: 'Patient 1098765432 is not eligible', coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/adjudication-error' }] }] }) {
   const calls = [];
   const queryFn = async (sql, params) => {

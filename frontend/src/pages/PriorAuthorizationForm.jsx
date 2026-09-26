@@ -12,12 +12,14 @@ import AsyncSelect from 'react-select/async';
 import 'react-datepicker/dist/react-datepicker.css';
 import api, { extractErrorMessage, AI_UNAVAILABLE_MESSAGE } from '@/services/api';
 import aiApi from '@/services/aiApi';
+import AIBadge from '@/components/ai/AIBadge';
+import { buildEnhanceContext, interpretEnhanceResponse, readSnomedSuggestions } from '@/utils/aiAssist';
 import { 
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
   Calendar, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
   Upload, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle, Package, RotateCcw,
-  Zap
+  Zap, Check
 } from 'lucide-react';
 
 // Import AI Medication Safety components
@@ -137,6 +139,10 @@ export default function PriorAuthorizationForm() {
   const [aiValidationLoading, setAiValidationLoading] = useState(false);
   const [showAiValidation, setShowAiValidation] = useState(false);
   const [enhancingField, setEnhancingField] = useState(null); // Track which field is being enhanced
+  // Per clinical field: { status: 'suggestion'|'accepted'|'unchanged'|'unavailable', text, original, reason }
+  const [enhanceSuggestions, setEnhanceSuggestions] = useState({});
+  // Chief complaint SNOMED suggestions: null | { loading } | { available, suggestions, reason }
+  const [snomedSuggest, setSnomedSuggest] = useState(null);
   const [suggestionsPatientContext, setSuggestionsPatientContext] = useState(null);
   const [pendingAiRevalidation, setPendingAiRevalidation] = useState(false);
   
@@ -516,7 +522,9 @@ export default function PriorAuthorizationForm() {
       }
 
       if (response.success && response.analysis) {
-        setMedicationSafetyAnalysis(response.analysis);
+        // Keep the backend's { available, source, certainty } with the analysis so the panel
+        // (and the saved copy shown on the details page) can label the language-model part.
+        setMedicationSafetyAnalysis(response.ai ? { ...response.analysis, ai: response.ai } : response.analysis);
       } else {
         throw new Error(response.message || 'Analysis failed');
       }
@@ -1488,7 +1496,10 @@ export default function PriorAuthorizationForm() {
     handleAIValidation();
   }, [pendingAiRevalidation]);
 
-  // Enhance clinical text with AI
+  // Enhance clinical text with AI (advisory): the suggestion is shown as a preview under the field
+  // and nothing in the form changes until the user clicks Accept (Undo restores the original).
+  const setEnhanceState = (field, value) => setEnhanceSuggestions(prev => ({ ...prev, [field]: value }));
+
   const handleEnhanceClinicalText = async (field) => {
     const currentText = formData.clinical_info[field];
     if (!currentText || currentText.trim().length < 5) {
@@ -1497,107 +1508,117 @@ export default function PriorAuthorizationForm() {
     }
 
     setEnhancingField(field);
+    setEnhanceState(field, null);
 
     try {
-      // Get selected patient from loaded patients (using patient_id)
       const selectedPatient = patients.find(p => p.patient_id == formData.patient_id);
       const patientAge = selectedPatient ? calculatePatientAge(selectedPatient.birth_date || selectedPatient.date_of_birth) : null;
-      
-      // Get selected provider from loaded providers
       const selectedProvider = providers.find(p => p.provider_id == formData.provider_id);
-      
-      // Get selected insurer from loaded insurers
-      const selectedInsurer = insurers.find(i => i.insurer_id == formData.insurer_id);
-      
-      // Build comprehensive context from all form data
-      const context = {
-        // Patient Information (from database)
-        patientName: selectedPatient?.name || selectedPatient?.full_name || '',
-        patientAge: patientAge,
+
+      // Only age/gender and clinical context are sent: no patient name or national ID.
+      const context = buildEnhanceContext(formData, {
+        patientAge,
         patientGender: selectedPatient?.gender || '',
-        patientId: selectedPatient?.identifier || selectedPatient?.national_id || '',
-        
-        // Basic Information
-        authType: formData.auth_type || '',
-        priority: formData.priority || '',
-        encounterClass: formData.encounter_class || '',
-        claimSubtype: formData.claim_subtype || '',
-        
-        // Chief Complaint
-        chiefComplaint: formData.clinical_info.chief_complaint_display || formData.clinical_info.chief_complaint_text || '',
-        chiefComplaintCode: formData.clinical_info.chief_complaint_code || '',
-        
-        // Diagnoses (all of them)
-        diagnoses: (formData.diagnoses || []).map(d => ({
-          code: d.diagnosis_code || '',
-          display: d.diagnosis_display || '',
-          description: d.diagnosis_description || '',
-          type: d.diagnosis_type || ''
-        })),
-        
-        // Vital Signs (all of them)
-        vitalSigns: {
-          systolic: formData.vital_signs?.systolic || '',
-          diastolic: formData.vital_signs?.diastolic || '',
-          pulse: formData.vital_signs?.pulse || '',
-          temperature: formData.vital_signs?.temperature || '',
-          oxygen_saturation: formData.vital_signs?.oxygen_saturation || '',
-          respiratory_rate: formData.vital_signs?.respiratory_rate || '',
-          height: formData.vital_signs?.height || '',
-          weight: formData.vital_signs?.weight || ''
-        },
-        
-        // Requested Services/Procedures/Medications
-        requestedServices: (formData.items || []).map(item => ({
-          code: item.product_or_service_code || item.medication_code || '',
-          description: item.service_description || item.medication_name || '',
-          quantity: item.quantity || '',
-          bodySite: item.body_site || '',
-          tooth: item.tooth_number || ''
-        })),
-        
-        // Provider Information (from database)
-        providerName: selectedProvider?.name || selectedProvider?.facility_name || '',
-        providerType: selectedProvider?.provider_type || '',
-        
-        // Insurer Information (from database)
-        insurerName: selectedInsurer?.name || selectedInsurer?.organization_name || '',
-        
-        // Admission Info (for inpatient)
-        admissionWeight: formData.admission_info?.admission_weight || '',
-        estimatedLengthOfStay: formData.admission_info?.estimated_length_of_stay || ''
-      };
+        providerType: selectedProvider?.provider_type || ''
+      });
 
       const response = await api.enhanceClinicalText(currentText, field, context);
-      
-      // Handle disabled AI features
-      if (response.disabled) {
-        alert(response.message || AI_UNAVAILABLE_MESSAGE);
-        setEnhancingField(null);
-        return;
-      }
-      
-      if (response.success && response.enhancedText && response.enhancedText !== currentText) {
-        setFormData(prev => ({
-          ...prev,
-          clinical_info: {
-            ...prev.clinical_info,
-            [field]: response.enhancedText
-          }
-        }));
-      } else if (response.error) {
-        console.error('Enhancement failed:', response.error);
-        alert(`Enhancement failed: ${response.error}\n\nPlease try again or add more detail to your text.`);
-      } else {
-        console.warn('No enhancement returned');
-        alert('AI could not enhance the text. Try adding more clinical details to your input.');
-      }
+      const result = interpretEnhanceResponse(response, currentText);
+      setEnhanceState(field, { ...result, original: currentText });
     } catch (error) {
-      console.error('Error enhancing clinical text:', error);
-      alert('Failed to connect to AI service. Please check the server is running and try again.');
+      setEnhanceState(field, { status: 'unavailable', reason: extractErrorMessage(error), original: currentText });
     } finally {
       setEnhancingField(null);
     }
+  };
+
+  const acceptEnhancement = (field) => {
+    const suggestion = enhanceSuggestions[field];
+    if (suggestion?.status !== 'suggestion') return;
+    // Undo restores the text as it was when Accept was clicked.
+    const original = formData.clinical_info?.[field] ?? '';
+    setFormData(prev => ({ ...prev, clinical_info: { ...prev.clinical_info, [field]: suggestion.text } }));
+    setEnhanceState(field, { ...suggestion, original, status: 'accepted' });
+  };
+
+  const undoEnhancement = (field) => {
+    const suggestion = enhanceSuggestions[field];
+    if (suggestion?.status !== 'accepted') return;
+    setFormData(prev => ({ ...prev, clinical_info: { ...prev.clinical_info, [field]: suggestion.original } }));
+    setEnhanceState(field, null);
+  };
+
+  // SNOMED suggestions for the free-text chief complaint (advisory; the user picks a chip).
+  const handleSuggestSnomed = async () => {
+    const text = formData.clinical_info?.chief_complaint_text?.trim();
+    if (!text || text.length < 3) return;
+    setSnomedSuggest({ loading: true });
+    try {
+      const response = await api.suggestSnomedCodes(text, 'chief_complaint');
+      setSnomedSuggest(readSnomedSuggestions(response, 3));
+    } catch (error) {
+      setSnomedSuggest({ available: false, reason: extractErrorMessage(error) });
+    }
+  };
+
+  const pickSnomedSuggestion = (suggestion) => {
+    handleClinicalInfoChange('chief_complaint_code', suggestion.code);
+    handleClinicalInfoChange('chief_complaint_display', suggestion.display);
+  };
+
+  const renderEnhancePreview = (field) => {
+    const suggestion = enhanceSuggestions[field];
+    if (!suggestion) return null;
+    if (suggestion.status === 'unavailable' || suggestion.status === 'unchanged') {
+      return (
+        <div className="flex items-start justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+          <span className="flex items-start gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            {suggestion.status === 'unchanged'
+              ? 'The AI suggested no changes — your text was kept.'
+              : `${AI_UNAVAILABLE_MESSAGE} — your text was kept.${suggestion.reason && suggestion.reason !== AI_UNAVAILABLE_MESSAGE ? ` (${suggestion.reason})` : ''}`}
+          </span>
+          <button type="button" onClick={() => setEnhanceState(field, null)} className="text-amber-700 hover:text-amber-900" aria-label="Dismiss">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      );
+    }
+    if (suggestion.status === 'accepted') {
+      const canUndo = formData.clinical_info?.[field] === suggestion.text;
+      return (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-green-200 bg-green-50 p-2 text-xs text-green-900">
+          <span>AI suggestion accepted{canUndo ? '' : ' and edited'}.</span>
+          <span className="flex items-center gap-2">
+            {canUndo && (
+              <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => undoEnhancement(field)}>
+                Undo (restore original)
+              </Button>
+            )}
+            <button type="button" onClick={() => setEnhanceState(field, null)} className="text-green-700 hover:text-green-900" aria-label="Dismiss">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2 rounded-md border border-purple-200 bg-purple-50/40 p-3" data-testid={`enhance-preview-${field}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-medium text-gray-700">AI suggestion — not applied until you accept</span>
+          <AIBadge source="llm" certainty="low" basis="Language-model rewrite of your text; check every statement before accepting" />
+        </div>
+        <p className="whitespace-pre-wrap text-sm text-gray-800">{suggestion.text}</p>
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" className="h-7 px-3 text-xs" onClick={() => acceptEnhancement(field)}>
+            <Check className="h-3 w-3 mr-1" />Accept
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={() => setEnhanceState(field, null)}>
+            <X className="h-3 w-3 mr-1" />Reject
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   // Handler for vision prescription fields
@@ -3874,12 +3895,61 @@ export default function PriorAuthorizationForm() {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label>Chief Complaint (Free Text)</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="chief_complaint_text">Chief Complaint (Free Text)</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSuggestSnomed}
+                        disabled={snomedSuggest?.loading || (formData.clinical_info?.chief_complaint_text?.trim().length || 0) < 3}
+                        className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                        title="Ask the AI for SNOMED codes matching this text; you choose one"
+                      >
+                        {snomedSuggest?.loading ? (
+                          <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Suggesting...</>
+                        ) : (
+                          <><Sparkles className="h-3 w-3 mr-1" />Suggest SNOMED (AI)</>
+                        )}
+                      </Button>
+                    </div>
                     <Input
+                      id="chief_complaint_text"
                       value={formData.clinical_info?.chief_complaint_text ?? ''}
                       onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
                       placeholder="e.g., Patient presents with abdominal pain"
                     />
+                    {snomedSuggest && !snomedSuggest.loading && (
+                      snomedSuggest.available ? (
+                        <div className="space-y-1.5 rounded-md border border-purple-200 bg-purple-50/40 p-2" data-testid="snomed-suggestions">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs text-gray-600">AI suggestions — click one to fill the SNOMED code (verify before use)</span>
+                            <AIBadge source="llm" certainty="low" basis="Language-model suggestion from the free text; codes are not checked against SNOMED CT" />
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {snomedSuggest.suggestions.map(suggestion => {
+                              const selected = formData.clinical_info.chief_complaint_code === suggestion.code;
+                              return (
+                                <button
+                                  key={suggestion.code}
+                                  type="button"
+                                  onClick={() => pickSnomedSuggestion(suggestion)}
+                                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${selected ? 'border-purple-500 bg-purple-100 text-purple-900' : 'border-gray-300 bg-white text-gray-800 hover:border-purple-400 hover:bg-purple-50'}`}
+                                  title={selected ? 'Selected' : 'Use this code'}
+                                >
+                                  <span className="font-mono">{suggestion.code}</span> · {suggestion.display}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                          <span>{AI_UNAVAILABLE_MESSAGE}{snomedSuggest.reason && snomedSuggest.reason !== AI_UNAVAILABLE_MESSAGE ? ` (${snomedSuggest.reason})` : ''}</span>
+                        </p>
+                      )
+                    )}
                   </div>
                 </div>
               </div>
@@ -3937,6 +4007,7 @@ export default function PriorAuthorizationForm() {
                         : `${formData.clinical_info?.[field.key]?.length || 0} characters`
                       }
                     </p>
+                    {renderEnhancePreview(field.key)}
                   </div>
                 ))}
               </div>

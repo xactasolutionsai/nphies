@@ -133,7 +133,25 @@ function prefixes(map) {
   return all;
 }
 
-const values = set => (set ? [...set].sort().slice(0, MAX_VALUES) : null);
+const NUMERIC = /^-?\d+(\.\d+)?$/;
+const sortValues = list => (list.every(v => NUMERIC.test(v))
+  ? list.sort((a, b) => Number(a) - Number(b))
+  : list.sort());
+
+/**
+ * Up to MAX_VALUES values for display, sorted numerically when all are numbers. When `other` is
+ * given (a "different" row), values missing from the other side are kept first so a truncated
+ * list still shows what differs; hidden values are counted in a trailing "(+N more)".
+ */
+function values(set, other = null) {
+  if (!set) return null;
+  const all = [...set];
+  const differing = other ? all.filter(v => !other.has(v)) : [];
+  const shared = other ? all.filter(v => other.has(v)) : all;
+  const kept = [...sortValues(differing), ...sortValues(shared)].slice(0, MAX_VALUES);
+  const shown = sortValues(kept);
+  return all.length > MAX_VALUES ? [...shown, `(+${all.length - MAX_VALUES} more)`] : shown;
+}
 
 export function diffBundles(failedBundle, referenceBundle, { includeAmounts = false, limit = 200 } = {}) {
   const failed = normalizeBundle(failedBundle, { includeAmounts });
@@ -167,7 +185,7 @@ export function diffBundles(failedBundle, referenceBundle, { includeAmounts = fa
     const other = reference.get(path);
     if (!other) continue;
     const same = set.size === other.size && [...set].every(v => other.has(v));
-    if (!same) found.set(path, { path, kind: 'different', failed: values(set), reference: values(other) });
+    if (!same) found.set(path, { path, kind: 'different', failed: values(set, other), reference: values(other, set) });
   }
 
   const all = [...found.values()].sort((a, b) => a.path.localeCompare(b.path));

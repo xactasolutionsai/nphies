@@ -58,7 +58,8 @@ test('LLM-only calls report AI unavailable when it is disabled, unreachable or t
       () => api.getMedicationSuggestions('synthetic diagnosis', 40, 'male'),
       () => api.checkDrugInteractions([{ name: 'A' }, { name: 'B' }]),
       () => api.validatePriorAuth({ auth_type: 'professional' }),
-      () => api.enhanceClinicalText('text', 'patient_history')
+      () => api.enhanceClinicalText('text', 'patient_history'),
+      () => api.suggestSnomedCodes('abdominal pain')
     ]) {
       assert.deepEqual(await call(), { success: false, disabled: true, message: 'AI unavailable — manual review required' });
     }

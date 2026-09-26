@@ -58,8 +58,10 @@ export const RuleFindingsSection = ({ ruleFindings }) => {
  * Displays comprehensive medication safety analysis results.
  * `ruleFindings` (optional) is the deterministic duplicate-ingredient check; it is shown even when
  * the AI analysis is loading, failed or disabled.
+ * `ai` (optional) is the backend's { available, source, certainty } for the language-model part
+ * (falls back to analysis.ai, then to source 'llm', certainty 'low').
  */
-const MedicationSafetyPanel = ({ analysis, isLoading, error, ruleFindings }) => {
+const MedicationSafetyPanel = ({ analysis, isLoading, error, ruleFindings, ai }) => {
   const rules = ruleFindings ? <RuleFindingsSection ruleFindings={ruleFindings} /> : null;
   if (rules && (isLoading || error || !analysis)) {
     return (
@@ -124,12 +126,25 @@ const MedicationSafetyPanel = ({ analysis, isLoading, error, ruleFindings }) => 
     || (rawRisk !== undefined && overallRiskAssessment === 'unknown')
     || (rawRisk === undefined && analysis.hasInteractions === undefined);
 
+  const aiMeta = ai || analysis.ai || {};
+  const llmHeader = (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-200 pb-2">
+      <h4 className="text-md font-semibold text-gray-900">AI medication safety analysis (language model)</h4>
+      <AIBadge
+        source={aiMeta.source || 'llm'}
+        certainty={analysisIncomplete ? undefined : (aiMeta.certainty || 'low')}
+        basis="Language-model review of the listed medications; advisory, verify with a pharmacist or physician"
+      />
+    </div>
+  );
+
   const hasIssues = drugInteractions.length > 0 || ageRelatedWarnings.length > 0 || 
                      pregnancyWarnings.length > 0 || duplicateIngredients.length > 0;
 
   return (
     <div className="space-y-4">
       {rules}
+      {llmHeader}
       {/* Overall Risk Assessment */}
       {analysisIncomplete ? (
         <div className="border rounded-lg p-4 bg-amber-50 border-amber-300">

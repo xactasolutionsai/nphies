@@ -31,9 +31,9 @@ export default function AIBadge({ source, certainty, basis, showBasis = false, c
   const Icon = meta.icon;
   const text = basisText(basis);
   return (
-    <div className={`inline-flex flex-col gap-1 ${className}`}>
+    <div className={`inline-flex flex-col items-start gap-1 ${className}`}>
       <span
-        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${meta.className}`}
+        className={`inline-flex w-fit self-start items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${meta.className}`}
         title={text || undefined}
       >
         <Icon className="h-3 w-3" />
