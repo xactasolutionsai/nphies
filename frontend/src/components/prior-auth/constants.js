@@ -422,23 +422,17 @@ export const getServiceCodeSystemsByAuthType = (authType) => {
 
 // Vision ICD-10 Codes for eye examinations and disorders
 // Reference: https://icd.who.int/browse10/2016/en
+// NPHIES uses ICD-10-AM. Only WHO ICD-10 category/subcategory codes are listed here;
+// ICD-10-CM-only extensions (e.g. Z01.00, H52.20, H53.00, H35.30, H04.12) were removed.
 export const VISION_ICD10_OPTIONS = [
   // === Z01 - Eye Examination Encounters ===
   { value: 'Z01.0', label: 'Z01.0 - Examination of eyes and vision' },
-  { value: 'Z01.00', label: 'Z01.00 - Encounter for examination of eyes and vision without abnormal findings' },
-  { value: 'Z01.01', label: 'Z01.01 - Encounter for examination of eyes and vision with abnormal findings' },
-  { value: 'Z01.02', label: 'Z01.02 - Encounter for examination of eyes and vision following failed vision screening' },
   
   // === H52 - Disorders of Refraction and Accommodation ===
   { value: 'H52.0', label: 'H52.0 - Hypermetropia (Farsightedness)' },
   { value: 'H52.1', label: 'H52.1 - Myopia (Nearsightedness)' },
   { value: 'H52.2', label: 'H52.2 - Astigmatism' },
-  { value: 'H52.20', label: 'H52.20 - Unspecified astigmatism' },
-  { value: 'H52.21', label: 'H52.21 - Irregular astigmatism' },
-  { value: 'H52.22', label: 'H52.22 - Regular astigmatism' },
   { value: 'H52.3', label: 'H52.3 - Anisometropia and aniseikonia' },
-  { value: 'H52.31', label: 'H52.31 - Anisometropia' },
-  { value: 'H52.32', label: 'H52.32 - Aniseikonia' },
   { value: 'H52.4', label: 'H52.4 - Presbyopia' },
   { value: 'H52.5', label: 'H52.5 - Disorders of accommodation' },
   { value: 'H52.6', label: 'H52.6 - Other disorders of refraction' },
@@ -446,10 +440,6 @@ export const VISION_ICD10_OPTIONS = [
   
   // === H53 - Visual Disturbances ===
   { value: 'H53.0', label: 'H53.0 - Amblyopia ex anopsia (Lazy eye)' },
-  { value: 'H53.00', label: 'H53.00 - Unspecified amblyopia' },
-  { value: 'H53.01', label: 'H53.01 - Deprivation amblyopia' },
-  { value: 'H53.02', label: 'H53.02 - Refractive amblyopia' },
-  { value: 'H53.03', label: 'H53.03 - Strabismic amblyopia' },
   { value: 'H53.1', label: 'H53.1 - Subjective visual disturbances' },
   { value: 'H53.2', label: 'H53.2 - Diplopia (Double vision)' },
   { value: 'H53.3', label: 'H53.3 - Other disorders of binocular vision' },
@@ -473,8 +463,6 @@ export const VISION_ICD10_OPTIONS = [
   { value: 'H40.9', label: 'H40.9 - Unspecified glaucoma' },
   { value: 'H25.9', label: 'H25.9 - Unspecified age-related cataract' },
   { value: 'H26.9', label: 'H26.9 - Unspecified cataract' },
-  { value: 'H35.30', label: 'H35.30 - Unspecified macular degeneration' },
-  { value: 'H04.12', label: 'H04.12 - Dry eye syndrome' },
   { value: 'H10.9', label: 'H10.9 - Unspecified conjunctivitis' },
   { value: 'H16.9', label: 'H16.9 - Unspecified keratitis' },
   { value: 'H50.9', label: 'H50.9 - Unspecified strabismus' }
@@ -806,6 +794,7 @@ export const SUPPORTING_INFO_CATEGORY_OPTIONS = [
   
   // Hospital/admission specific
   { value: 'ventilation-hours', label: 'ventilation-hours - Ventilation Hours', description: 'Number of hours under mechanical ventilation', needsCode: false },
+  { value: 'icu-hours', label: 'icu-hours - ICU Hours', description: 'Number of hours in the intensive care unit', needsCode: false },
   { value: 'admission-weight', label: 'admission-weight - Admission Weight', description: 'Admission Weight', needsCode: false },
   { value: 'estimated-Length-of-Stay', label: 'estimated-Length-of-Stay - Estimated Length Of Stay', description: 'Estimated Length Of Stay', needsCode: false },
   

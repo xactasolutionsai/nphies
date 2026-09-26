@@ -91,7 +91,6 @@ const PHARMACY_CHIEF_COMPLAINTS = [
 // Vision chief complaints
 const VISION_CHIEF_COMPLAINTS = [
   { code: '246636008', display: 'Blurred vision' },
-  { code: '60862001', display: 'Tinnitus' },
   { code: '193570009', display: 'Cataract' },
   { code: '23986001', display: 'Glaucoma' },
   { code: '246655008', display: 'Eye pain' },

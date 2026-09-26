@@ -9,6 +9,7 @@ import ValidationMessage from '../shared/ValidationMessage';
 import RequiredFieldIndicator from '../shared/RequiredFieldIndicator';
 import { COVERAGE_TYPE_OPTIONS } from '../config/wizardConfig';
 import api from '@/services/api';
+import { toLocalISODate, parseLocalISODate } from '@/utils/date';
 
 /**
  * CoverageStep Component
@@ -19,13 +20,13 @@ const CoverageStep = React.memo(({ formData, setField, errors }) => {
   // Parse date helper
   const parseDate = useCallback((dateString) => {
     if (!dateString) return null;
-    return new Date(dateString);
+    return parseLocalISODate(dateString);
   }, []);
   
   // Format date for API
   const formatDate = useCallback((date) => {
     if (!date) return '';
-    return date.toISOString().split('T')[0];
+    return toLocalISODate(date);
   }, []);
   
   // Fetch insurer data from backend

@@ -7,6 +7,19 @@ import { TrendingUp, DollarSign, CreditCard, Calendar, Building2, Shield } from 
 import api from '@/services/api';
 
 const COLORS = ['#553781', '#9658C4', '#8572CD', '#00DEFE', '#26A69A', '#E0E7FF'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const formatSAR = (amount) => `SAR ${(Number(amount) || 0).toLocaleString()}`;
+
+const getMonthKey = (dateValue) => {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+// recharts passes the chart state to BarChart/LineChart onClick and the data entry
+// to per-Bar/Pie onClick; normalize both to the clicked data entry.
+const getClickedEntry = (data) => data?.activePayload?.[0]?.payload ?? data?.payload ?? data ?? null;
 
 export default function Payments() {
   const [payments, setPayments] = useState([]);
@@ -67,13 +80,14 @@ export default function Payments() {
 
     // Monthly Trends
     const monthlyData = {};
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     paymentsData.forEach(payment => {
-      const date = new Date(payment.payment_date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthKey = getMonthKey(payment.payment_date || payment.created_at);
+      if (!monthKey) return;
       if (!monthlyData[monthKey]) {
+        const [year, month] = monthKey.split('-');
         monthlyData[monthKey] = {
-          month: months[date.getMonth()],
+          key: monthKey,
+          month: `${MONTHS[parseInt(month, 10) - 1]} ${year}`,
           amount: 0,
           count: 0
         };
@@ -81,16 +95,13 @@ export default function Payments() {
       monthlyData[monthKey].amount += parseFloat(payment.total_amount || 0);
       monthlyData[monthKey].count += 1;
     });
-    setMonthlyTrends(Object.values(monthlyData).sort((a, b) => {
-      const aDate = new Date(a.month + ' 1, 2024');
-      const bDate = new Date(b.month + ' 1, 2024');
-      return aDate - bDate;
-    }));
+    setMonthlyTrends(Object.values(monthlyData).sort((a, b) => a.key.localeCompare(b.key)));
 
     // Payment Methods
     const methodCounts = {};
     paymentsData.forEach(payment => {
-      methodCounts[payment.method] = (methodCounts[payment.method] || 0) + 1;
+      const method = payment.method || 'Unknown';
+      methodCounts[method] = (methodCounts[method] || 0) + 1;
     });
     setPaymentMethods(Object.entries(methodCounts).map(([name, value]) => ({ name, value })));
   };
@@ -98,9 +109,11 @@ export default function Payments() {
   // Drill-down functions
   const handleStatusClick = async (data) => {
     try {
-      setDrillDownTitle(`Payment Notifications with Status: ${data.name}`);
+      const name = getClickedEntry(data)?.name;
+      if (!name) return;
+      setDrillDownTitle(`Payment Notifications with Status: ${name}`);
       
-      const filteredPayments = payments.filter(payment => payment.status === data.name);
+      const filteredPayments = payments.filter(payment => String(payment.status) === name);
       setDrillDownData(filteredPayments);
       setShowDrillDown(true);
     } catch (error) {
@@ -110,9 +123,11 @@ export default function Payments() {
 
   const handleInsurerClick = async (data) => {
     try {
-      setDrillDownTitle(`Payment Notifications for Insurer: ${data.name}`);
+      const name = getClickedEntry(data)?.name;
+      if (!name) return;
+      setDrillDownTitle(`Payment Notifications for Insurer: ${name}`);
       
-      const filteredPayments = payments.filter(payment => payment.insurer_name === data.name);
+      const filteredPayments = payments.filter(payment => (payment.insurer_name || 'Unknown') === name);
       setDrillDownData(filteredPayments);
       setShowDrillDown(true);
     } catch (error) {
@@ -122,17 +137,14 @@ export default function Payments() {
 
   const handleMonthlyTrendClick = async (data) => {
     try {
-      setDrillDownTitle(`Payment Notifications for Month: ${data.month}`);
+      const entry = getClickedEntry(data);
+      if (!entry?.key) return;
+      setDrillDownTitle(`Payment Notifications for Month: ${entry.month}`);
       
-      // Filter payments for the selected month
-      const monthDate = new Date(data.month + ' 1, 2024');
-      const startDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-      const endDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-      
-      const filteredPayments = payments.filter(payment => {
-        const paymentDate = new Date(payment.payment_date || payment.created_at);
-        return paymentDate >= startDate && paymentDate <= endDate;
-      });
+      // Filter payments for the selected month (year-aware)
+      const filteredPayments = payments.filter(payment =>
+        getMonthKey(payment.payment_date || payment.created_at) === entry.key
+      );
       
       setDrillDownData(filteredPayments);
       setShowDrillDown(true);
@@ -143,9 +155,11 @@ export default function Payments() {
 
   const handleMethodClick = async (data) => {
     try {
-      setDrillDownTitle(`Payment Notifications with Method: ${data.name}`);
+      const name = getClickedEntry(data)?.name;
+      if (!name) return;
+      setDrillDownTitle(`Payment Notifications with Method: ${name}`);
       
-      const filteredPayments = payments.filter(payment => payment.method === data.name);
+      const filteredPayments = payments.filter(payment => (payment.method || 'Unknown') === name);
       setDrillDownData(filteredPayments);
       setShowDrillDown(true);
     } catch (error) {
@@ -189,7 +203,7 @@ export default function Payments() {
       key: 'total_amount',
       header: 'Amount',
       accessor: 'total_amount',
-      render: (row) => `$${parseFloat(row.total_amount || 0).toLocaleString()}`
+      render: (row) => formatSAR(row.total_amount)
     },
     {
       key: 'status',
@@ -205,7 +219,7 @@ export default function Payments() {
       key: 'payment_date',
       header: 'Payment Date',
       accessor: 'payment_date',
-      render: (row) => new Date(row.payment_date).toLocaleDateString()
+      render: (row) => (row.payment_date ? new Date(row.payment_date).toLocaleDateString() : '-')
     }
   ];
 
@@ -226,7 +240,14 @@ export default function Payments() {
 
   return (
     <div className="space-y-8">
-      {loadError && <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-red-700">{loadError}</p>}
+      {loadError && (
+        <div role="alert" className="flex items-center justify-between gap-4 rounded border border-red-200 bg-red-50 p-3 text-red-700">
+          <span>{loadError}</span>
+          <button onClick={loadPayments} className="px-3 py-1 text-sm font-medium rounded border border-red-300 hover:bg-red-100">
+            Retry
+          </button>
+        </div>
+      )}
       {/* Enhanced Header */}
       <div className="relative">
  
@@ -339,7 +360,7 @@ export default function Payments() {
           <CardContent>
             <div className="h-[400px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={paymentsByInsurer} onClick={handleInsurerClick}>
+                <BarChart data={paymentsByInsurer}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                   <XAxis dataKey="name" angle={-45} textAnchor="end" height={120} stroke="#6B7280" />
                   <YAxis stroke="#6B7280" />
@@ -350,9 +371,9 @@ export default function Payments() {
                       borderRadius: '8px',
                       boxShadow: 'none'
                     }}
-                    formatter={(value) => [`$${value.toLocaleString()}`, 'Amount']} 
+                    formatter={(value) => [formatSAR(value), 'Amount']} 
                   />
-                  <Bar dataKey="value" fill="#059669" style={{ cursor: 'pointer' }} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="value" fill="#059669" style={{ cursor: 'pointer' }} radius={[4, 4, 0, 0]} onClick={handleInsurerClick} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -360,7 +381,7 @@ export default function Payments() {
           </Card>
         </div>
 
-        {/* Enhanced Daily Trends */}
+        {/* Enhanced Monthly Trends */}
         <div className="relative group">
  
           <Card className="relative bg-white border-0 transition-all duration-300 hover:-translate-y-2">
@@ -373,8 +394,8 @@ export default function Payments() {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold">Daily Payment Trends</h3>
-                  <p className="text-sm text-gray-600 font-medium">Payment amounts and counts over the last 30 days</p>
+                  <h3 className="text-xl font-bold">Monthly Payment Trends</h3>
+                  <p className="text-sm text-gray-600 font-medium">Payment amounts and counts per month</p>
                 </div>
               </CardTitle>
             </CardHeader>
@@ -384,7 +405,7 @@ export default function Payments() {
                 <LineChart data={monthlyTrends} onClick={handleMonthlyTrendClick}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                   <XAxis 
-                    dataKey="day" 
+                    dataKey="month" 
                     stroke="#6B7280" 
                     angle={-45}
                     textAnchor="end"
@@ -401,7 +422,7 @@ export default function Payments() {
                       boxShadow: 'none'
                     }}
                     formatter={(value, name) => [
-                      name === 'amount' ? `$${value.toLocaleString()}` : value,
+                      name === 'amount' ? formatSAR(value) : value,
                       name === 'amount' ? 'Amount' : 'Count'
                     ]}
                   />
@@ -578,7 +599,7 @@ export default function Payments() {
                         </div>
                         <div>
                           <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Amount</label>
-                          <p className="text-lg font-semibold text-gray-900">${parseFloat(selectedPayment.total_amount || 0).toLocaleString()}</p>
+                          <p className="text-lg font-semibold text-gray-900">{formatSAR(selectedPayment.total_amount)}</p>
                         </div>
                       </div>
                     </div>
@@ -638,7 +659,7 @@ export default function Payments() {
                         </div>
                         <div>
                           <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Payment Date</label>
-                          <p className="text-lg font-semibold text-gray-900">{new Date(selectedPayment.payment_date).toLocaleDateString()}</p>
+                          <p className="text-lg font-semibold text-gray-900">{selectedPayment.payment_date ? new Date(selectedPayment.payment_date).toLocaleDateString() : 'N/A'}</p>
                         </div>
                       </div>
                     </div>
@@ -743,7 +764,7 @@ export default function Payments() {
                           {payment.provider_name || 'N/A'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {payment.total_amount ? `$${parseFloat(payment.total_amount).toLocaleString()}` : 'N/A'}
+                          {payment.total_amount ? formatSAR(payment.total_amount) : 'N/A'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${

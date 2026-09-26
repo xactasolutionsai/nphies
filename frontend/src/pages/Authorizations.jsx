@@ -4,13 +4,39 @@ import { Badge } from '@/components/ui/badge';
 import DataTable from '@/components/DataTable';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { TrendingUp, FileCheck, DollarSign, Calendar, Users } from 'lucide-react';
-import api from '@/services/api';
+import api, { extractErrorMessage } from '@/services/api';
+import { toLocalISODate } from '@/utils/date';
 
 const COLORS = ['#553781', '#9658C4', '#8572CD', '#00DEFE', '#26A69A', '#E0E7FF'];
+
+// Backend stores lowercase statuses ('approved', 'denied', 'pending', 'under_review')
+const normalizeStatus = (status) =>
+  String(status || 'unknown').trim().toLowerCase().replace(/[\s-]+/g, '_');
+const STATUS_LABELS = {
+  approved: 'Approved',
+  pending: 'Pending',
+  denied: 'Denied',
+  rejected: 'Rejected',
+  under_review: 'Under Review',
+  unknown: 'Unknown'
+};
+const statusLabel = (status) => STATUS_LABELS[normalizeStatus(status)] || String(status || 'Unknown');
+
+// recharts passes the row directly for <Pie>/<Bar> handlers, but chart-level onClick
+// receives chart state with the row in activePayload[0].payload
+const clickedRow = (event) => event?.activePayload?.[0]?.payload || event?.payload || event || null;
+
+const formatDate = (value) => {
+  if (!value) return 'N/A';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString();
+};
+const formatSAR = (value) => `${(parseFloat(value) || 0).toLocaleString()} SAR`;
 
 export default function Authorizations() {
   const [authorizations, setAuthorizations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [selectedAuth, setSelectedAuth] = useState(null);
   
   // Chart data states
@@ -31,49 +57,20 @@ export default function Authorizations() {
   const loadAuthorizations = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await api.getAuthorizations({ limit: 1000 });
-      const authsData = response.data || response || [];
+      const rawData = response.data || response || [];
+      const authsData = Array.isArray(rawData) ? rawData : [];
       setAuthorizations(authsData);
       
       // Process chart data
       processChartData(authsData);
     } catch (error) {
       console.error('Error loading authorizations:', error);
-      // Mock data for demonstration
-      const mockAuths = [
-        {
-          id: 1,
-          status: 'Approved',
-          purpose: 'Surgery',
-          patient_name: 'أحمد محمد العلي',
-          provider_name: 'مستشفى الملك فهد التخصصي',
-          insurer_name: 'التأمين الصحي السعودي',
-          request_date: '2024-01-15',
-          amount: '15000'
-        },
-        {
-          id: 2,
-          status: 'Pending',
-          purpose: 'Consultation',
-          patient_name: 'فاطمة عبدالله السعد',
-          provider_name: 'عيادة الدكتور أحمد محمد',
-          insurer_name: 'بوبا العربية للتأمين',
-          request_date: '2024-01-20',
-          amount: '500'
-        },
-        {
-          id: 3,
-          status: 'Rejected',
-          purpose: 'Dental Treatment',
-          patient_name: 'محمد خالد القحطاني',
-          provider_name: 'مركز الأسنان المتخصص',
-          insurer_name: 'تأمين مدجلف',
-          request_date: '2024-01-18',
-          amount: '2000'
-        }
-      ];
-      setAuthorizations(mockAuths);
-      processChartData(mockAuths);
+      // Show an error state - never substitute demo records for real data
+      setLoadError(extractErrorMessage(error));
+      setAuthorizations([]);
+      processChartData([]);
     } finally {
       setLoading(false);
     }
@@ -83,9 +80,10 @@ export default function Authorizations() {
     // Authorizations by Status
     const statusCounts = {};
     authsData.forEach(auth => {
-      statusCounts[auth.status] = (statusCounts[auth.status] || 0) + 1;
+      const key = normalizeStatus(auth.status);
+      statusCounts[key] = (statusCounts[key] || 0) + 1;
     });
-    setAuthsByStatus(Object.entries(statusCounts).map(([name, value]) => ({ name, value })));
+    setAuthsByStatus(Object.entries(statusCounts).map(([key, value]) => ({ key, name: statusLabel(key), value })));
 
     // Authorizations by Insurer
     const insurerAmounts = {};
@@ -105,9 +103,10 @@ export default function Authorizations() {
       const date = new Date(dateValue);
       if (isNaN(date.getTime())) return;
       if (date < thirtyDaysAgo) return;
-      const dayKey = date.toISOString().split('T')[0];
+      const dayKey = toLocalISODate(date);
       if (!dailyData[dayKey]) {
         dailyData[dayKey] = {
+          dateKey: dayKey,
           day: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
           amount: 0,
           count: 0
@@ -132,12 +131,13 @@ export default function Authorizations() {
 
   const getStatusBadge = (status) => {
     const variants = {
-      'Approved': 'default',
-      'Pending': 'secondary',
-      'Rejected': 'destructive',
-      'Under Review': 'outline'
+      approved: 'default',
+      pending: 'secondary',
+      denied: 'destructive',
+      rejected: 'destructive',
+      under_review: 'outline'
     };
-    return variants[status] || 'outline';
+    return variants[normalizeStatus(status)] || 'outline';
   };
 
   const columns = [
@@ -152,7 +152,7 @@ export default function Authorizations() {
       accessor: 'status',
       render: (row) => (
         <Badge variant={getStatusBadge(row.status)}>
-          {row.status}
+          {statusLabel(row.status)}
         </Badge>
       )
     },
@@ -180,67 +180,47 @@ export default function Authorizations() {
       key: 'amount',
       header: 'Amount',
       accessor: 'amount',
-      render: (row) => `$${parseFloat(row.amount || 0).toLocaleString()}`
+      render: (row) => formatSAR(row.amount)
     },
     {
       key: 'request_date',
       header: 'Request Date',
       accessor: 'request_date',
-      render: (row) => new Date(row.request_date).toLocaleDateString()
+      render: (row) => formatDate(row.request_date)
     }
   ];
 
   // Drill-down functions
-  const handleStatusClick = async (data) => {
-    try {
-      setDrillDownTitle(`Authorizations with Status: ${data.name}`);
-      const filteredAuths = authorizations.filter(item => item.status === data.name);
-      setDrillDownData(filteredAuths);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading status drill-down data:', error);
-    }
+  const handleStatusClick = (event) => {
+    const data = clickedRow(event);
+    if (!data?.key) return;
+    setDrillDownTitle(`Authorizations with Status: ${data.name}`);
+    setDrillDownData(authorizations.filter(item => normalizeStatus(item.status) === data.key));
+    setShowDrillDown(true);
   };
 
-  const handleInsurerClick = async (data) => {
-    try {
-      setDrillDownTitle(`Authorizations for Insurer: ${data.name}`);
-      const filteredAuths = authorizations.filter(item => item.insurer_name === data.name);
-      setDrillDownData(filteredAuths);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading insurer drill-down data:', error);
-    }
+  const handleInsurerClick = (event) => {
+    const data = clickedRow(event);
+    if (!data?.name) return;
+    setDrillDownTitle(`Authorizations for Insurer: ${data.name}`);
+    setDrillDownData(authorizations.filter(item => (item.insurer_name || 'Unknown') === data.name));
+    setShowDrillDown(true);
   };
 
-  const handleProviderClick = async (data) => {
-    try {
-      setDrillDownTitle(`Authorizations for Provider: ${data.name}`);
-      const filteredAuths = authorizations.filter(item => item.provider_name === data.name);
-      setDrillDownData(filteredAuths);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading provider drill-down data:', error);
-    }
+  const handleProviderClick = (event) => {
+    const data = clickedRow(event);
+    if (!data?.name) return;
+    setDrillDownTitle(`Authorizations for Provider: ${data.name}`);
+    setDrillDownData(authorizations.filter(item => (item.provider_name || 'Unknown') === data.name));
+    setShowDrillDown(true);
   };
 
-  const handleMonthlyTrendClick = async (data) => {
-    try {
-      setDrillDownTitle(`Authorizations for Month: ${data.month}`);
-      const monthDate = new Date(data.month + ' 1, 2024');
-      const startDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-      const endDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-      
-      const filteredAuths = authorizations.filter(item => {
-        const requestDate = new Date(item.request_date);
-        return requestDate >= startDate && requestDate <= endDate;
-      });
-      
-      setDrillDownData(filteredAuths);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading monthly trend drill-down data:', error);
-    }
+  const handleMonthlyTrendClick = (event) => {
+    const data = clickedRow(event);
+    if (!data?.dateKey) return;
+    setDrillDownTitle(`Authorizations on ${data.day}`);
+    setDrillDownData(authorizations.filter(item => toLocalISODate(item.request_date) === data.dateKey));
+    setShowDrillDown(true);
   };
 
   const closeDrillDown = () => {
@@ -266,6 +246,12 @@ export default function Authorizations() {
 
   return (
     <div className="space-y-8">
+      {loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+          <span>Failed to load authorizations: {loadError}</span>
+          <button type="button" onClick={loadAuthorizations} className="ml-4 underline font-medium">Retry</button>
+        </div>
+      )}
       {/* Enhanced Header */}
       <div className="relative">
         <div className="relative bg-white rounded-2xl p-8 border border-gray-100">
@@ -403,7 +389,7 @@ export default function Authorizations() {
                         borderRadius: '12px',
                         boxShadow: 'none'
                       }}
-                      formatter={(value) => [`$${value.toLocaleString()}`, 'Amount']} 
+                      formatter={(value) => [formatSAR(value), 'Amount']} 
                     />
                     <Bar 
                       dataKey="value" 
@@ -462,7 +448,7 @@ export default function Authorizations() {
                         boxShadow: 'none'
                       }}
                       formatter={(value, name) => [
-                        name === 'amount' ? `$${value.toLocaleString()}` : value,
+                        name === 'amount' ? formatSAR(value) : value,
                         name === 'amount' ? 'Amount' : 'Count'
                       ]}
                     />
@@ -625,7 +611,7 @@ export default function Authorizations() {
                           <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Status</label>
                           <div className="mt-1">
                             <Badge variant={getStatusBadge(selectedAuth.status)} className="text-sm">
-                              {selectedAuth.status}
+                              {statusLabel(selectedAuth.status)}
                             </Badge>
                           </div>
                         </div>
@@ -657,7 +643,7 @@ export default function Authorizations() {
                         </div>
                         <div>
                           <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Amount</label>
-                          <p className="text-lg font-semibold text-gray-900">${parseFloat(selectedAuth.amount || 0).toLocaleString()}</p>
+                          <p className="text-lg font-semibold text-gray-900">{formatSAR(selectedAuth.amount)}</p>
                         </div>
                       </div>
                     </div>
@@ -717,7 +703,7 @@ export default function Authorizations() {
                         </div>
                         <div>
                           <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Request Date</label>
-                          <p className="text-lg font-semibold text-gray-900">{new Date(selectedAuth.request_date).toLocaleDateString()}</p>
+                          <p className="text-lg font-semibold text-gray-900">{formatDate(selectedAuth.request_date)}</p>
                         </div>
                       </div>
                     </div>
@@ -820,16 +806,16 @@ export default function Authorizations() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                            item.status === 'Approved' ? 'bg-accent-teal/10 text-accent-teal' :
-                            item.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                            item.status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                            normalizeStatus(item.status) === 'approved' ? 'bg-accent-teal/10 text-accent-teal' :
+                            normalizeStatus(item.status) === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                            ['rejected', 'denied'].includes(normalizeStatus(item.status)) ? 'bg-red-100 text-red-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
-                            {item.status || 'N/A'}
+                            {item.status ? statusLabel(item.status) : 'N/A'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          ${parseFloat(item.amount || 0).toLocaleString()}
+                          {formatSAR(item.amount)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {item.request_date ? new Date(item.request_date).toLocaleDateString() : 'N/A'}

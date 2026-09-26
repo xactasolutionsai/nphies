@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -18,18 +18,50 @@ import {
   AlertCircle,
   Activity,
   RefreshCw,
-  Download,
   User,
   Building2
 } from 'lucide-react';
 import responseViewerApi from '../services/responseViewerApi';
 
+// Date-range presets -> lower bound (local time). Used client-side as a fallback while the
+// legacy /response-viewer endpoints do not filter server-side.
+const getDateLowerBound = (range) => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (range) {
+    case 'today':
+      return start;
+    case 'week':
+      start.setDate(start.getDate() - start.getDay());
+      return start;
+    case 'month':
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    case 'quarter':
+      return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    default:
+      return null;
+  }
+};
+
+const getRecordId = (item) =>
+  item.claim_id ?? item.auth_id ?? item.eligibility_id ?? item.payment_id ?? item.id;
+
+const getRecordStatus = (item) =>
+  item.status ?? item.auth_status ?? item.eligibility_status ?? item.payment_status;
+
+const getRecordDate = (item) =>
+  item.submission_date || item.request_date || item.requested_date || item.payment_date || item.created_at;
+
+const TAB_LOADERS = {
+  claims: (params) => responseViewerApi.getClaims(params),
+  authorizations: (params) => responseViewerApi.getAuthorizations(params),
+  eligibility: (params) => responseViewerApi.getEligibility(params),
+  payments: (params) => responseViewerApi.getPayments(params)
+};
+
 const ResponseViewer = () => {
   const [activeTab, setActiveTab] = useState('claims');
-  const [claims, setClaims] = useState([]);
-  const [authorizations, setAuthorizations] = useState([]);
-  const [eligibility, setEligibility] = useState([]);
-  const [payments, setPayments] = useState([]);
+  const [records, setRecords] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -49,6 +81,8 @@ const ResponseViewer = () => {
 
   // Debounced search
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  // Guards against out-of-order responses when filters change quickly
+  const requestSeq = useRef(0);
 
   useEffect(() => {
     loadDashboardData();
@@ -62,21 +96,45 @@ const ResponseViewer = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  // Any filter / tab change starts again from page 1
   useEffect(() => {
-    const loadData = async () => {
-      if (activeTab === 'claims') {
-        await loadClaims();
-      } else if (activeTab === 'authorizations') {
-        await loadAuthorizations();
-      } else if (activeTab === 'eligibility') {
-        await loadEligibility();
-      } else if (activeTab === 'payments') {
-        await loadPayments();
-      }
-    };
-    
-    loadData();
-  }, [activeTab, currentPage, debouncedSearchTerm, statusFilter, dateFilter, sortBy, sortOrder]);
+    setCurrentPage(1);
+  }, [activeTab, debouncedSearchTerm, statusFilter, dateFilter, sortBy, sortOrder]);
+
+  const loadTabData = useCallback(async () => {
+    const loader = TAB_LOADERS[activeTab];
+    if (!loader) return;
+    const seq = ++requestSeq.current;
+    setLoading(true);
+    try {
+      const params = {
+        page: currentPage,
+        limit: pageSize,
+        search: debouncedSearchTerm || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        dateRange: dateFilter !== 'all' ? dateFilter : undefined,
+        sortBy,
+        sortOrder
+      };
+      const response = await loader(params);
+      if (seq !== requestSeq.current) return;
+      const rows = Array.isArray(response?.data) ? response.data : (Array.isArray(response) ? response : []);
+      setRecords(rows);
+      const total = response?.pagination?.total ?? rows.length;
+      setTotalPages(Math.max(1, Math.ceil(total / pageSize)));
+    } catch (error) {
+      if (seq !== requestSeq.current) return;
+      console.error(`Error loading ${activeTab}:`, error);
+      setRecords([]);
+      setTotalPages(1);
+    } finally {
+      if (seq === requestSeq.current) setLoading(false);
+    }
+  }, [activeTab, currentPage, pageSize, debouncedSearchTerm, statusFilter, dateFilter, sortBy, sortOrder]);
+
+  useEffect(() => {
+    loadTabData();
+  }, [loadTabData]);
 
   const loadDashboardData = async () => {
     try {
@@ -97,168 +155,22 @@ const ResponseViewer = () => {
     }
   };
 
-  const loadClaims = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = {
-        page: currentPage,
-        limit: pageSize,
-        search: debouncedSearchTerm,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        sortBy,
-        sortOrder
-      };
-      const response = await responseViewerApi.getClaims(params);
-      setClaims(response.data || response);
-      setTotalPages(Math.ceil((response.pagination?.total || response.data?.length || 0) / pageSize));
-    } catch (error) {
-      console.error('Error loading claims:', error);
-      setClaims([]);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentPage, pageSize, debouncedSearchTerm, statusFilter, sortBy, sortOrder]);
-
-  const loadAuthorizations = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = {
-        page: currentPage,
-        limit: pageSize,
-        search: debouncedSearchTerm,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        sortBy,
-        sortOrder
-      };
-      const response = await responseViewerApi.getAuthorizations(params);
-      setAuthorizations(response.data || response);
-      setTotalPages(Math.ceil((response.pagination?.total || response.data?.length || 0) / pageSize));
-    } catch (error) {
-      console.error('Error loading authorizations:', error);
-      setAuthorizations([]);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentPage, pageSize, debouncedSearchTerm, statusFilter, sortBy, sortOrder]);
-
-  const loadEligibility = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = {
-        page: currentPage,
-        limit: pageSize,
-        search: debouncedSearchTerm,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        sortBy,
-        sortOrder
-      };
-      const response = await responseViewerApi.getEligibility(params);
-      setEligibility(response.data || response);
-      setTotalPages(Math.ceil((response.pagination?.total || response.data?.length || 0) / pageSize));
-    } catch (error) {
-      console.error('Error loading eligibility:', error);
-      setEligibility([]);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentPage, pageSize, debouncedSearchTerm, statusFilter, sortBy, sortOrder]);
-
-  const loadPayments = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = {
-        page: currentPage,
-        limit: pageSize,
-        search: debouncedSearchTerm,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        sortBy,
-        sortOrder
-      };
-      const response = await responseViewerApi.getPayments(params);
-      setPayments(response.data || response);
-      setTotalPages(Math.ceil((response.pagination?.total || response.data?.length || 0) / pageSize));
-    } catch (error) {
-      console.error('Error loading payments:', error);
-      setPayments([]);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentPage, pageSize, debouncedSearchTerm, statusFilter, sortBy, sortOrder]);
-
-  const handleViewDetails = async (id, type) => {
-    try {
-      let response;
-      if (type === 'claim') {
-        response = await responseViewerApi.getClaim(id);
-      } else if (type === 'authorization') {
-        response = await responseViewerApi.getAuthorization(id);
-      } else if (type === 'eligibility') {
-        response = await responseViewerApi.getEligibilityRecord(id);
-      } else if (type === 'payment') {
-        response = await responseViewerApi.getPayment(id);
-      }
-      setSelectedRecord(response.data || response);
-      setShowDetails(true);
-    } catch (error) {
-      console.error('Error loading details:', error);
-      // Fallback to local data if API fails
-      let localRecord = {};
-      if (type === 'claim') {
-        localRecord = claims.find(c => c.claim_id === id || c.id === id) || {};
-      } else if (type === 'authorization') {
-        localRecord = authorizations.find(a => a.auth_id === id || a.id === id) || {};
-      } else if (type === 'eligibility') {
-        localRecord = eligibility.find(e => e.eligibility_id === id || e.id === id) || {};
-      } else if (type === 'payment') {
-        localRecord = payments.find(p => p.payment_id === id || p.id === id) || {};
-      }
-      setSelectedRecord(localRecord);
-      setShowDetails(true);
-    }
+  // There are no per-record endpoints on /response-viewer, so details are shown from the
+  // already-loaded row.
+  const handleViewDetails = (record) => {
+    setSelectedRecord({ ...record, id: getRecordId(record), status: getRecordStatus(record) });
+    setShowDetails(true);
   };
 
-  const handleStatusUpdate = async (id, type, newStatus) => {
-    try {
-      let response;
-      if (type === 'claim') {
-        response = await responseViewerApi.updateClaimStatus(id, newStatus);
-      } else if (type === 'authorization') {
-        response = await responseViewerApi.updateAuthorizationStatus(id, newStatus);
-      } else if (type === 'eligibility') {
-        response = await responseViewerApi.updateEligibilityStatus(id, newStatus);
-      }
-      
-      // Refresh the current tab data
-      if (activeTab === 'claims') {
-        loadClaims();
-      } else if (activeTab === 'authorizations') {
-        loadAuthorizations();
-      } else if (activeTab === 'eligibility') {
-        loadEligibility();
-      }
-      
-      alert(`Status updated to ${newStatus}`);
-    } catch (error) {
-      console.error('Error updating status:', error);
-      alert('Error updating status');
-    }
+  const handleTabChange = (tab) => {
+    if (tab === activeTab) return;
+    setRecords([]);
+    setActiveTab(tab);
   };
 
   const handleRefresh = () => {
     loadDashboardData();
-    if (activeTab === 'claims') {
-      loadClaims();
-    } else if (activeTab === 'authorizations') {
-      loadAuthorizations();
-    } else if (activeTab === 'eligibility') {
-      loadEligibility();
-    } else if (activeTab === 'payments') {
-      loadPayments();
-    }
+    loadTabData();
   };
 
   const getStatusBadge = (status) => {
@@ -288,7 +200,7 @@ const ResponseViewer = () => {
       'failed': { variant: 'destructive', label: 'Failed', icon: AlertCircle }
     };
     
-    const config = statusConfig[status] || { variant: 'outline', label: status, icon: Activity };
+    const config = statusConfig[status] || { variant: 'outline', label: status || '-', icon: Activity };
     const Icon = config.icon;
     return (
       <Badge variant={config.variant} className="flex items-center gap-1">
@@ -299,32 +211,39 @@ const ResponseViewer = () => {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString();
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString();
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-SA', {
       style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+      currency: 'SAR'
+    }).format(Number(amount) || 0);
   };
 
+  // Client-side filtering of the loaded page (the legacy endpoints may ignore the filter params).
   const getCurrentData = () => {
-    let data = [];
-    if (activeTab === 'claims') data = claims;
-    else if (activeTab === 'authorizations') data = authorizations;
-    else if (activeTab === 'eligibility') data = eligibility;
-    else if (activeTab === 'payments') data = payments;
-
-    if (searchTerm) {
-      data = data.filter(item => 
-        item.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.provider_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.id?.toLowerCase().includes(searchTerm.toLowerCase())
+    let data = records;
+    const term = searchTerm.trim().toLowerCase();
+    if (term) {
+      data = data.filter(item =>
+        String(item.patient_name ?? '').toLowerCase().includes(term) ||
+        String(item.provider_name ?? '').toLowerCase().includes(term) ||
+        String(item.claim_number ?? item.payment_ref ?? '').toLowerCase().includes(term) ||
+        String(getRecordId(item) ?? '').toLowerCase().includes(term)
       );
     }
     if (statusFilter !== 'all') {
-      data = data.filter(item => item.status === statusFilter);
+      data = data.filter(item => getRecordStatus(item) === statusFilter);
+    }
+    const lowerBound = getDateLowerBound(dateFilter);
+    if (lowerBound) {
+      data = data.filter(item => {
+        const d = new Date(getRecordDate(item));
+        return !Number.isNaN(d.getTime()) && d >= lowerBound;
+      });
     }
     return data;
   };
@@ -410,7 +329,7 @@ const ResponseViewer = () => {
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8">
               <button
-                onClick={() => setActiveTab('claims')}
+                onClick={() => handleTabChange('claims')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'claims'
                     ? 'border-blue-500 text-blue-600'
@@ -421,7 +340,7 @@ const ResponseViewer = () => {
                 Claims
               </button>
               <button
-                onClick={() => setActiveTab('authorizations')}
+                onClick={() => handleTabChange('authorizations')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'authorizations'
                     ? 'border-blue-500 text-blue-600'
@@ -432,7 +351,7 @@ const ResponseViewer = () => {
                 Authorizations
               </button>
               <button
-                onClick={() => setActiveTab('eligibility')}
+                onClick={() => handleTabChange('eligibility')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'eligibility'
                     ? 'border-blue-500 text-blue-600'
@@ -443,7 +362,7 @@ const ResponseViewer = () => {
                 Eligibility
               </button>
               <button
-                onClick={() => setActiveTab('payments')}
+                onClick={() => handleTabChange('payments')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'payments'
                     ? 'border-blue-500 text-blue-600'
@@ -459,10 +378,6 @@ const ResponseViewer = () => {
             <Button variant="outline" size="sm" onClick={handleRefresh}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
-            </Button>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              Export
             </Button>
           </div>
         </div>
@@ -609,7 +524,7 @@ const ResponseViewer = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleViewDetails(claim.claim_id || claim.id, 'claim')}
+                          onClick={() => handleViewDetails(claim)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -648,20 +563,10 @@ const ResponseViewer = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleViewDetails(auth.auth_id || auth.id, 'authorization')}
+                            onClick={() => handleViewDetails(auth)}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <select 
-                            value={auth.auth_status || auth.status} 
-                            onChange={(e) => handleStatusUpdate(auth.auth_id || auth.id, 'authorization', e.target.value)}
-                            className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Approved">Approved</option>
-                            <option value="Rejected">Rejected</option>
-                            <option value="Under Review">Under Review</option>
-                          </select>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -696,20 +601,10 @@ const ResponseViewer = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleViewDetails(record.eligibility_id || record.id, 'eligibility')}
+                            onClick={() => handleViewDetails(record)}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <select 
-                            value={record.eligibility_status || record.status} 
-                            onChange={(e) => handleStatusUpdate(record.eligibility_id || record.id, 'eligibility', e.target.value)}
-                            className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Eligible">Eligible</option>
-                            <option value="Not Eligible">Not Eligible</option>
-                            <option value="Under Review">Under Review</option>
-                          </select>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -743,7 +638,7 @@ const ResponseViewer = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleViewDetails(payment.payment_id || payment.id, 'payment')}
+                          onClick={() => handleViewDetails(payment)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -885,7 +780,7 @@ const ResponseViewer = () => {
                     </div>
                   </div>
 
-                  {selectedRecord.amount && (
+                  {selectedRecord.amount != null && (
                     <div className="relative group">
  
                       <div className="relative bg-gray-50 rounded-xl p-4">

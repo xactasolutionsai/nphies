@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import api, { extractErrorMessage } from '@/services/api';
+import api, { extractErrorMessage, clearApiCache } from '@/services/api';
 import {
   RefreshCw, Play, Clock, CheckCircle, AlertCircle, XCircle,
   ChevronDown, ChevronUp, FileJson, Copy, Activity,
@@ -262,7 +262,7 @@ function SystemPoll() {
                 )}
                 Latest Poll Result
               </CardTitle>
-              {pollResult.duration && (
+              {pollResult.duration != null && (
                 <span className="text-xs text-gray-400">{pollResult.duration}ms</span>
               )}
             </div>
@@ -390,7 +390,7 @@ function SystemPoll() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => { loadLogs(pagination.page); loadStats(); }}
+              onClick={() => { clearApiCache(); loadLogs(pagination.page); loadStats(); }}
             >
               <RefreshCw className="w-4 h-4" />
             </Button>
@@ -436,7 +436,7 @@ function SystemPoll() {
                         <span title="Received">{log.messages_received || 0} msg</span>
                         <span title="Matched" className="text-green-600">{log.messages_matched || 0} matched</span>
                         <span title="Unmatched" className="text-orange-500">{log.messages_unmatched || 0} unmatched</span>
-                        {log.duration_ms && <span className="text-gray-400">{log.duration_ms}ms</span>}
+                        {log.duration_ms != null && <span className="text-gray-400">{log.duration_ms}ms</span>}
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </div>
                     </div>

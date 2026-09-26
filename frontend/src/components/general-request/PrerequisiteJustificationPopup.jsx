@@ -45,23 +45,7 @@ const PrerequisiteJustificationPopup = ({
       return;
     }
 
-    // Log for now (fake storage)
-    console.log('=== VALIDATION OVERRIDE JUSTIFICATION ===');
-    console.log('Justification:', justification);
-    if (dbPrerequisites.length > 0) {
-      console.log('DB Prerequisites Bypassed:', dbPrerequisites);
-    }
-    if (aiPrerequisites.length > 0) {
-      console.log('AI Prerequisites Bypassed:', aiPrerequisites);
-    }
-    if (fitIssue) {
-      console.log('Fit Issue Override:', {
-        currentDiagnosis,
-        requestedScan,
-        suggestedDiagnoses
-      });
-    }
-    console.log('=========================================');
+    // The justification is submitted with the request (prerequisiteJustification)
 
     // Clear and submit
     setJustification('');

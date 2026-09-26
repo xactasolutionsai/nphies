@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import DataTable from '@/components/DataTable';
-import api, { extractErrorMessage } from '@/services/api';
+import api, { extractErrorMessage, clearApiCache } from '@/services/api';
 import { 
   FileText, Plus, Edit, Trash2, Eye, Send, RefreshCw, 
   XCircle, ArrowRightLeft, Clock, CheckCircle, AlertCircle,
@@ -145,7 +145,7 @@ export default function PriorAuthorizations() {
   const handlePoll = async (id) => {
     try {
       setLoading(true);
-      const response = await api.pollNphiesAuthorizationResponse(id);
+      const response = await api.pollPriorAuthorizationResponse(id);
       await loadAuthorizations();
       alert(response.message || 'Polling complete');
     } catch (error) {
@@ -559,7 +559,7 @@ export default function PriorAuthorizations() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Prior Authorization Requests</CardTitle>
-            <Button variant="outline" size="sm" onClick={loadAuthorizations} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={() => { clearApiCache(); loadAuthorizations(); }} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>

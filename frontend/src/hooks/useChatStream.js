@@ -48,7 +48,17 @@ export const useChatStream = () => {
     setStreamingMessageId(aiMessageId);
 
     // Get conversation history (last 10 messages, excluding the current ones)
-    const conversationHistory = messages.slice(-10).map(msg => ({
+    // Only real user/assistant turns are sent: local system notices (mode switches),
+    // error placeholders and empty/unfinished replies stay in the UI only.
+    const conversationHistory = messages
+      .filter(msg =>
+        (msg.role === 'user' || msg.role === 'assistant') &&
+        !msg.error &&
+        !msg.isStreaming &&
+        typeof msg.content === 'string' && msg.content.trim() !== ''
+      )
+      .slice(-10)
+      .map(msg => ({
       role: msg.role,
       content: msg.content
     }));

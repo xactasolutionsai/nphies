@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import DatePicker from 'react-datepicker';
 import Select from 'react-select';
 import 'react-datepicker/dist/react-datepicker.css';
 import api from '@/services/api';
+import { toLocalISODate, parseLocalISODate } from '@/utils/date';
 
 // Custom CSS for DatePicker to fix selected date visibility
 const datePickerStyles = `
@@ -122,6 +123,10 @@ const RequiredFieldIndicator = () => (
   <span className="text-red-500 ml-1">*</span>
 );
 
+const PICKLIST_LIMIT = 1000;
+const sortByName = (list, getName) =>
+  [...list].sort((a, b) => String(getName(a) || '').localeCompare(String(getName(b) || '')));
+
 export default function NphiesEligibilityForm() {
   const navigate = useNavigate();
   
@@ -213,12 +218,12 @@ export default function NphiesEligibilityForm() {
   // Date helpers
   const parseDate = (dateString) => {
     if (!dateString) return null;
-    return new Date(dateString);
+    return parseLocalISODate(dateString);
   };
 
   const formatDate = (date) => {
     if (!date) return '';
-    return date.toISOString().split('T')[0];
+    return toLocalISODate(date);
   };
 
   useEffect(() => {
@@ -247,15 +252,17 @@ export default function NphiesEligibilityForm() {
   const loadInitialData = async () => {
     try {
       setLoadingData(true);
+      // Larger page + client-side ordering by name; patients beyond this page are still
+      // reachable through the server-side search in handlePatientSearch.
       const [patientsRes, providersRes, insurersRes] = await Promise.all([
-        api.getPatients({ limit: 100 }),
-        api.getProviders({ limit: 100 }),
-        api.getInsurers({ limit: 100 })
+        api.getPatients({ limit: PICKLIST_LIMIT }),
+        api.getProviders({ limit: PICKLIST_LIMIT }),
+        api.getInsurers({ limit: PICKLIST_LIMIT })
       ]);
 
-      setPatients(patientsRes.data || []);
-      setProviders(providersRes.data || []);
-      setInsurers(insurersRes.data || []);
+      setPatients(sortByName(patientsRes.data || [], p => p.name));
+      setProviders(sortByName(providersRes.data || [], p => p.provider_name || p.name));
+      setInsurers(sortByName(insurersRes.data || [], i => i.insurer_name || i.name));
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Failed to load initial data');
@@ -264,25 +271,53 @@ export default function NphiesEligibilityForm() {
     }
   };
 
+  // Server-side patient search (debounced) so patients outside the initial page can be found
+  const patientSearchTimer = useRef(null);
+  useEffect(() => () => clearTimeout(patientSearchTimer.current), []);
+  const handlePatientSearch = (input, { action } = {}) => {
+    if (action !== 'input-change') return;
+    clearTimeout(patientSearchTimer.current);
+    const term = (input || '').trim();
+    if (term.length < 2) return;
+    patientSearchTimer.current = setTimeout(async () => {
+      try {
+        const res = await api.getPatients({ search: term, limit: 50 });
+        const found = res.data || [];
+        if (found.length === 0) return;
+        setPatients(prev => {
+          const byId = new Map(prev.map(p => [p.patient_id, p]));
+          found.forEach(p => byId.set(p.patient_id, p));
+          return sortByName([...byId.values()], p => p.name);
+        });
+      } catch (err) {
+        console.error('Error searching patients:', err);
+      }
+    }, 300);
+  };
+
   const loadPatientCoverages = async (patientId) => {
     try {
       const res = await api.getPatientCoverages(patientId);
-      setCoverages(res.data || []);
+      const list = res.data || [];
+      setCoverages(list);
       
-      // Auto-select first coverage if available
-      if (res.data && res.data.length > 0) {
-        setSelectedCoverage(res.data[0].coverage_id.toString());
-      }
+      // Auto-select the first coverage of this patient; never keep a coverage that
+      // belonged to the previously selected patient
+      setSelectedCoverage(list.length > 0 ? String(list[0].coverage_id) : '');
     } catch (err) {
       console.error('Error loading coverages:', err);
       setCoverages([]);
+      setSelectedCoverage('');
     }
   };
 
   const loadAllCoverages = async () => {
     try {
-      const res = await api.getCoverages({ limit: 100 });
-      setCoverages(res.data || []);
+      const res = await api.getCoverages({ limit: PICKLIST_LIMIT });
+      const list = res.data || [];
+      setCoverages(list);
+      // Drop a selection that is not in the new list
+      setSelectedCoverage(prev => (prev && list.some(c => String(c.coverage_id) === prev) ? prev : ''));
     } catch (err) {
       console.error('Error loading all coverages:', err);
       setCoverages([]);
@@ -761,8 +796,9 @@ export default function NphiesEligibilityForm() {
 
                 {patientMode === 'existing' ? (
                   <Select
-                    value={patientOptions.find(opt => opt.value === selectedPatient)}
+                    value={patientOptions.find(opt => opt.value === selectedPatient) || null}
                     onChange={(option) => setSelectedPatient(option?.value || '')}
+                    onInputChange={handlePatientSearch}
                     options={patientOptions}
                     styles={selectStyles}
                     placeholder="Search and select patient..."
@@ -1112,7 +1148,8 @@ export default function NphiesEligibilityForm() {
                 {motherPatientMode === 'existing' ? (
                   <div className="space-y-3">
                     <Select
-                      value={patientOptions.find(opt => opt.value === selectedMotherPatient)}
+                      value={patientOptions.find(opt => opt.value === selectedMotherPatient) || null}
+                      onInputChange={handlePatientSearch}
                       onChange={(option) => {
                         setSelectedMotherPatient(option?.value || '');
                         // Find and store the full patient details

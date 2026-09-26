@@ -7,6 +7,7 @@ import '../styles/datepicker-custom.css';
 import { Calendar } from 'lucide-react';
 import ValidationMessage from '../shared/ValidationMessage';
 import RequiredFieldIndicator from '../shared/RequiredFieldIndicator';
+import { toLocalISODate, parseLocalISODate } from '@/utils/date';
 import {
   SERVICE_DESCRIPTIONS,
   BODY_PARTS,
@@ -24,13 +25,13 @@ const ServiceRequestStep = React.memo(({ formData, setField, errors }) => {
   // Parse date helper
   const parseDate = useCallback((dateString) => {
     if (!dateString) return null;
-    return new Date(dateString);
+    return parseLocalISODate(dateString);
   }, []);
   
   // Format date for API
   const formatDate = useCallback((date) => {
     if (!date) return '';
-    return date.toISOString().split('T')[0];
+    return toLocalISODate(date);
   }, []);
   
   // Select styles

@@ -5,8 +5,10 @@ async function request(path, options = {}) {
   const response = await apiFetch(`${API_BASE_URL}/openmed${path}`, {
     ...options, headers: { 'Content-Type': 'application/json' }
   });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || 'تعذر إكمال الطلب');
+  // Check the status before parsing: an error page may not be JSON
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error || 'تعذر إكمال الطلب');
+  if (body === null) throw new Error('تعذر إكمال الطلب');
   return body;
 }
 const button = 'rounded-lg bg-teal-700 px-4 py-2 text-white disabled:opacity-40';

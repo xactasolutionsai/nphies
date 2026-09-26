@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { parseHttpUrl } from '@/utils/url';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -142,9 +143,9 @@ function ContactDetailModal({ contact, onClose, onStatusChange, updatingStatus }
             {/* Source URL */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Source URL</label>
-              {contact.source_url ? (
+              {contact.source_url && parseHttpUrl(contact.source_url) ? (
                 <a 
-                  href={contact.source_url}
+                  href={parseHttpUrl(contact.source_url).href}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-2 text-primary-purple hover:underline text-sm"
@@ -153,6 +154,9 @@ function ContactDetailModal({ contact, onClose, onStatusChange, updatingStatus }
                   <span className="truncate">{contact.source_url}</span>
                   <ExternalLink className="h-3 w-3 flex-shrink-0" />
                 </a>
+              ) : contact.source_url ? (
+                // Not an http(s) URL (e.g. javascript: or garbage): show as plain text only
+                <span className="text-sm text-gray-600 break-all">{contact.source_url}</span>
               ) : (
                 <span className="text-gray-400">Not tracked</span>
               )}
@@ -236,9 +240,7 @@ export default function ContactsPage() {
   useEffect(() => {
     if (!isSuperAdmin) {
       navigate('/', { replace: true });
-      return;
     }
-    loadContacts();
   }, [isSuperAdmin, navigate]);
 
   const loadContacts = async () => {
@@ -265,9 +267,10 @@ export default function ContactsPage() {
 
   useEffect(() => {
     if (isSuperAdmin) {
+      // Single loader: immediate on mount / cleared search, debounced while typing
       const timeoutId = setTimeout(() => {
         loadContacts();
-      }, 500);
+      }, searchTerm ? 500 : 0);
       return () => clearTimeout(timeoutId);
     }
   }, [searchTerm, statusFilter, isSuperAdmin]);
@@ -280,10 +283,9 @@ export default function ContactsPage() {
       setContacts(prev => prev.map(contact => 
         contact.id === contactId ? { ...contact, status: newStatus } : contact
       ));
-      // Update selected contact if it's the one being updated
-      if (selectedContact && selectedContact.id === contactId) {
-        setSelectedContact(prev => ({ ...prev, status: newStatus }));
-      }
+      // Update selected contact if it's the one being updated (functional update:
+      // selectedContact may have just been set in the same event and be stale here)
+      setSelectedContact(prev => (prev && prev.id === contactId ? { ...prev, status: newStatus } : prev));
     } catch (error) {
       console.error('Error updating status:', error);
       setError(extractErrorMessage(error));
@@ -378,7 +380,7 @@ export default function ContactsPage() {
       render: (row) => row.source_url ? (
         <div className="flex items-center space-x-1 text-xs text-gray-500" title={row.source_url}>
           <Globe className="h-3 w-3" />
-          <span className="truncate max-w-[100px]">{new URL(row.source_url).hostname}</span>
+          <span className="truncate max-w-[100px]">{parseHttpUrl(row.source_url)?.hostname || row.source_url}</span>
         </div>
       ) : (
         <span className="text-gray-400">-</span>

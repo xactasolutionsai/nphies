@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { addCanvasAcrossPages } from '@/utils/pdfExport';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -101,37 +102,20 @@ export default function DentalApprovalsDetails() {
         backgroundColor: '#ffffff',
       });
       
-      // Hide the element again and remove PDF export class
-      element.classList.add('hidden');
-      element.classList.remove('pdf-export');
       
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      
-      // Calculate dimensions to fit the page
-      const ratio = imgWidth / imgHeight;
-      let finalWidth = pdfWidth - 20; // 10mm margin on each side
-      let finalHeight = finalWidth / ratio;
-      
-      // If height is too large, scale based on height instead
-      if (finalHeight > pdfHeight - 20) {
-        finalHeight = pdfHeight - 20;
-        finalWidth = finalHeight * ratio;
-      }
-      
-      const imgX = (pdfWidth - finalWidth) / 2;
-      const imgY = 10;
-      
-      pdf.addImage(imgData, 'PNG', imgX, imgY, finalWidth, finalHeight);
+      // Full width, continued over as many A4 pages as needed
+      addCanvasAcrossPages(pdf, canvas, 10);
       pdf.save(`DentalApproval_${formData?.form_number || 'Form'}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Error generating PDF. Please try again.');
     } finally {
+      // Always hide the print template again, even if html2canvas throws
+      if (printRef.current) {
+        printRef.current.classList.add('hidden');
+        printRef.current.classList.remove('pdf-export');
+      }
       setExportingPDF(false);
     }
   };
@@ -397,14 +381,14 @@ export default function DentalApprovalsDetails() {
                             <TableCell>{proc.service_description || 'N/A'}</TableCell>
                             <TableCell>{proc.tooth_number || 'N/A'}</TableCell>
                             <TableCell className="text-right font-semibold">
-                              ${parseFloat(proc.cost || 0).toFixed(2)}
+                              {parseFloat(proc.cost || 0).toFixed(2)} SAR
                             </TableCell>
                           </TableRow>
                         ))}
                         <TableRow className="bg-gray-50 font-semibold">
                           <TableCell colSpan={3} className="text-right">Total Cost:</TableCell>
                           <TableCell className="text-right">
-                            ${totalCost.toFixed(2)}
+                            {totalCost.toFixed(2)} SAR
                           </TableCell>
                         </TableRow>
                       </TableBody>
@@ -557,7 +541,7 @@ export default function DentalApprovalsDetails() {
                   </div>
                   <div className="mt-2 bg-purple-50 rounded-lg p-3 text-center">
                     <p className="text-xs text-gray-500 mb-1">Total Cost</p>
-                    <p className="text-2xl font-bold text-purple-600">${totalCost.toFixed(2)}</p>
+                    <p className="text-2xl font-bold text-purple-600">{totalCost.toFixed(2)} SAR</p>
                   </div>
                 </div>
               </CardContent>
@@ -781,7 +765,7 @@ export default function DentalApprovalsDetails() {
                 )}
                 <tr style={{ fontWeight: 'bold' }}>
                   <td colSpan="3" style={{ border: '2px solid #000', padding: '6px', textAlign: 'right' }}>Total Cost:</td>
-                  <td style={{ border: '2px solid #000', padding: '6px', textAlign: 'right' }}>${totalCost.toFixed(2)}</td>
+                  <td style={{ border: '2px solid #000', padding: '6px', textAlign: 'right' }}>{totalCost.toFixed(2)} SAR</td>
                 </tr>
               </tbody>
             </table>

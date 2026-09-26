@@ -29,6 +29,16 @@ import {
 } from 'lucide-react';
 import api, { extractErrorMessage } from '@/services/api';
 
+// Receipt dates are KSA-local: compute "today" in Asia/Riyadh, not UTC
+const todayInKsa = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  } catch {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
+};
+
 export default function PaymentReconciliationDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -108,9 +118,14 @@ export default function PaymentReconciliationDetails() {
     }
   };
   
-  const copyBundleToClipboard = (bundle) => {
-    navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
-    alert('Bundle copied to clipboard!');
+  const copyBundleToClipboard = async (bundle) => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+      alert('Bundle copied to clipboard!');
+    } catch (error) {
+      console.error('Failed to copy bundle:', error);
+      alert('Failed to copy to clipboard');
+    }
   };
 
   const toggleDetailExpand = (detailId) => {
@@ -169,9 +184,22 @@ export default function PaymentReconciliationDetails() {
     return icons[type] || icons['other'];
   };
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(String(text ?? ''));
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      alert('Failed to copy to clipboard');
+    }
   };
+
+  // Processing status (our internal pipeline state) is shown with its own colour
+  const getProcessingBadgeVariant = (status) => ({
+    processed: 'default',
+    received: 'secondary',
+    error: 'destructive',
+    duplicate: 'outline'
+  }[status] || 'outline');
 
   if (loading) {
     return (
@@ -297,7 +325,7 @@ export default function PaymentReconciliationDetails() {
           <p className="text-sm text-gray-600">Send a payment notice after the payment reaches the bank account. Select Paid or Cleared according to the confirmed bank status.</p>
           <label className="flex items-center gap-2"><input type="checkbox" checked={bankReceiptConfirmed} onChange={e => setBankReceiptConfirmed(e.target.checked)} />I confirm receipt of this payment in the bank account</label>
           <div className="flex flex-wrap gap-4">
-            <label>Receipt date<input aria-label="Receipt date" type="date" value={receivedDate} max={new Date().toISOString().slice(0, 10)} onChange={e => setReceivedDate(e.target.value)} className="block rounded border p-2" /></label>
+            <label>Receipt date<input aria-label="Receipt date" type="date" value={receivedDate} max={todayInKsa()} onChange={e => setReceivedDate(e.target.value)} className="block rounded border p-2" /></label>
             <label>Bank receipt reference<input aria-label="Bank receipt reference" value={receiptReference} onChange={e => setReceiptReference(e.target.value)} className="block rounded border p-2" /></label>
           </div>
           {reconciliation.notice_attempts?.some(a => ['sending', 'unknown'].includes(a.status)) && <p className="text-amber-700">An earlier attempt needs response verification before another notice can be sent.</p>}
@@ -333,9 +361,11 @@ export default function PaymentReconciliationDetails() {
                 </p>
               </div>
             </div>
-            <Badge variant={statusConfig.variant} className="text-sm">
-              {reconciliation.processing_status}
-            </Badge>
+            {reconciliation.processing_status && (
+              <Badge variant={getProcessingBadgeVariant(reconciliation.processing_status)} className="text-sm capitalize" title="Processing status">
+                {reconciliation.processing_status}
+              </Badge>
+            )}
           </div>
         </CardContent>
       </Card>

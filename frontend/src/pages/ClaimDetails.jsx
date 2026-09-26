@@ -10,7 +10,7 @@ import {
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ExternalLink,
-  Wallet, Banknote, ArrowRight, MessageSquare, ChevronDown, MoreVertical, Download, Package, Pill
+  Wallet, Banknote, ArrowRight, MessageSquare, Download, Package, Pill
 } from 'lucide-react';
 import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
@@ -113,6 +113,19 @@ const extractCodeValue = (value, fallback = '-') => {
   return fallback;
 };
 
+// bundle_json / errors are JSONB columns, so they usually arrive as objects,
+// but legacy rows (or other API paths) may still carry a JSON string.
+const parseMaybeJson = (value, fallback = null) => {
+  if (value == null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+};
+
+// The most recent adjudication response (responses arrive ordered by received_at DESC).
+// Cancel responses are excluded so a cancellation does not hide/replace claim errors.
+const getLatestClaimResponse = (responses) =>
+  (responses || []).find(r => r?.response_type !== 'cancel') || null;
+
 const ADJUDICATION_CATEGORY_DISPLAY = {
   eligible: 'Eligible',
   benefit: 'Benefit',
@@ -134,18 +147,12 @@ const ADJUDICATION_CATEGORY_DISPLAY = {
 const extractErrorsFromResponse = (resp) => {
   if (!resp) return [];
   let list = [];
-  const parsedErrors = (() => {
-    if (!resp.errors) return null;
-    if (typeof resp.errors !== 'string') return resp.errors;
-    try { return JSON.parse(resp.errors); } catch { return null; }
-  })();
+  const parsedErrors = parseMaybeJson(resp.errors);
 
   if (Array.isArray(parsedErrors) && parsedErrors.length > 0) {
     list = parsedErrors;
   } else {
-    const bundle = typeof resp.bundle_json === 'string'
-      ? (() => { try { return JSON.parse(resp.bundle_json); } catch { return null; } })()
-      : resp.bundle_json;
+    const bundle = parseMaybeJson(resp.bundle_json);
     let cr = null;
     if (bundle?.resourceType === 'Bundle') {
       cr = bundle.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
@@ -237,17 +244,31 @@ export default function ClaimDetails() {
   const [pollingPayments, setPollingPayments] = useState(false);
   const [priorAuthComms, setPriorAuthComms] = useState([]);
   const [priorAuthCommsLoading, setPriorAuthCommsLoading] = useState(false);
+  const [priorAuthCommsLoadedFor, setPriorAuthCommsLoadedFor] = useState(null);
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
 
-  // Item sequences (1-based) referenced by any NPHIES validation error
-  // across all stored responses. Drives the "Errors only" filter and the
-  // quick-jump pills in the page-level banner.
-  const erroredSequences = useMemo(() => new Set(
-    (claim?.responses || [])
-      .flatMap(extractErrorsFromResponse)
-      .map(e => e.itemSequence)
-      .filter(Boolean)
-  ), [claim?.responses]);
+  // NPHIES validation errors from the LATEST adjudication response only.
+  // Older responses (e.g. before a resubmission) are stale and must not
+  // flag items; the Responses tab still shows the full history.
+  const latestErrors = useMemo(
+    () => extractErrorsFromResponse(getLatestClaimResponse(claim?.responses)),
+    [claim?.responses]
+  );
+
+  // Errors grouped by item sequence (1-based), computed once per response set.
+  const errorsBySequence = useMemo(() => {
+    const map = new Map();
+    latestErrors.forEach(e => {
+      if (!e.itemSequence) return;
+      if (!map.has(e.itemSequence)) map.set(e.itemSequence, []);
+      map.get(e.itemSequence).push(e);
+    });
+    return map;
+  }, [latestErrors]);
+
+  // Item sequences referenced by a current error. Drives the "Errors only"
+  // filter and the quick-jump pills in the page-level banner.
+  const erroredSequences = useMemo(() => new Set(errorsBySequence.keys()), [errorsBySequence]);
 
   // Switch to the Items tab and smooth-scroll the targeted item card into
   // view, briefly outlining it so the user can see where they landed.
@@ -283,22 +304,25 @@ export default function ClaimDetails() {
     }
   }, [claim?.mother_patient_id]);
 
-  // Fetch prior auth communications when communications tab is active
+  // Fetch prior auth communications once per prior auth when the communications
+  // tab is first opened (an empty result must not trigger a refetch on every visit).
   useEffect(() => {
-    if (activeTab === 'communications' && claim?.prior_auth_id && priorAuthComms.length === 0 && !priorAuthCommsLoading) {
+    if (activeTab === 'communications' && claim?.prior_auth_id && priorAuthCommsLoadedFor !== claim.prior_auth_id && !priorAuthCommsLoading) {
       loadPriorAuthCommunications();
     }
   }, [activeTab, claim?.prior_auth_id]);
 
   const loadPriorAuthCommunications = async () => {
     if (!claim?.prior_auth_id) return;
+    const priorAuthId = claim.prior_auth_id;
     try {
       setPriorAuthCommsLoading(true);
-      const response = await api.getCommunications(claim.prior_auth_id);
+      const response = await api.getCommunications(priorAuthId);
       setPriorAuthComms(response.data || response.communications || []);
     } catch (error) {
       console.error('Failed to load prior auth communications:', error);
     } finally {
+      setPriorAuthCommsLoadedFor(priorAuthId);
       setPriorAuthCommsLoading(false);
     }
   };
@@ -307,7 +331,13 @@ export default function ClaimDetails() {
     try {
       setLoading(true);
       const response = await api.getClaimSubmission(id);
-      setClaim(response.data || response);
+      const data = response.data || response;
+      // Stored bundles are JSONB (objects) but tolerate legacy string values
+      setClaim(data ? {
+        ...data,
+        request_bundle: parseMaybeJson(data.request_bundle),
+        response_bundle: parseMaybeJson(data.response_bundle)
+      } : data);
     } catch (error) {
       console.error('Error loading claim:', error);
       alert('Error loading claim');
@@ -472,8 +502,9 @@ export default function ClaimDetails() {
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       
-      // Clean up URL after a delay (browser will handle cleanup when tab closes)
-      setTimeout(() => URL.revokeObjectURL(url), 100);
+      // Revoke only after the new tab has had ample time to load the blob;
+      // revoking too early leaves the preview tab blank.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (error) {
       console.error('Error previewing attachment:', error);
       alert('Failed to preview file');
@@ -1029,9 +1060,9 @@ export default function ClaimDetails() {
         <div className="lg:col-span-2 space-y-6">
           {/* NPHIES validation errors banner */}
           {(() => {
-            const allErrors = (claim.responses || []).flatMap(extractErrorsFromResponse);
+            const allErrors = latestErrors;
             if (allErrors.length === 0) return null;
-            const affectedItems = new Set(allErrors.map(e => e.itemSequence).filter(Boolean));
+            const affectedItems = erroredSequences;
             return (
               <Card className="border-red-300 bg-red-50">
                 <CardContent className="py-3 flex items-start gap-3">
@@ -1136,7 +1167,7 @@ export default function ClaimDetails() {
                   </div>
                   <div>
                     <Label className="text-gray-500">Outcome</Label>
-                    <p className="font-medium capitalize">{extractCodeValue(claim.outcome) || extractCodeValue(claim.adjudication_outcome) || '-'}</p>
+                    <p className="font-medium capitalize">{extractCodeValue(claim.outcome, '') || extractCodeValue(claim.adjudication_outcome, '') || '-'}</p>
                   </div>
                   {claim.practice_code && (
                     <div>
@@ -1231,12 +1262,11 @@ export default function ClaimDetails() {
                             <Label className="text-red-700">Cancellation Reason Code</Label>
                             <p className="font-medium text-red-900">
                               {(() => {
-                                const cancelReason = claim.cancellation_reason || 
-                                  (claim.responses?.find(r => r.response_type === 'cancel')?.bundle_json 
-                                    ? JSON.parse(claim.responses.find(r => r.response_type === 'cancel').bundle_json)
-                                      ?.entry?.find(e => e.resource?.resourceType === 'Task')
-                                      ?.resource?.reasonCode?.coding?.[0]?.code
-                                    : null);
+                                const cancelBundle = parseMaybeJson(claim.responses?.find(r => r.response_type === 'cancel')?.bundle_json);
+                                const cancelReason = claim.cancellation_reason ||
+                                  cancelBundle?.entry?.find(e => e.resource?.resourceType === 'Task')
+                                    ?.resource?.reasonCode?.coding?.[0]?.code ||
+                                  null;
                                 if (!cancelReason) return 'Not specified';
                                 if (cancelReason === 'WI') return 'WI - Wrong Information';
                                 if (cancelReason === 'NP') return 'NP - Service Not Performed';
@@ -1330,9 +1360,7 @@ export default function ClaimDetails() {
                       )?.valueIdentifier?.value;
 
                       // NPHIES validation errors targeting this specific item (by sequence)
-                      const errorsForItem = (claim.responses || [])
-                        .flatMap(extractErrorsFromResponse)
-                        .filter(e => e.itemSequence === item.sequence);
+                      const errorsForItem = errorsBySequence.get(item.sequence) || [];
 
                       return (
                         <div
@@ -1361,7 +1389,7 @@ export default function ClaimDetails() {
                                 (extractCodeValue(itemOutcome) === 'approved' || extractCodeValue(item.adjudication_status) === 'approved') ? 'default' : 
                                 (extractCodeValue(itemOutcome) === 'rejected' || extractCodeValue(item.adjudication_status) === 'denied') ? 'destructive' : 'outline'
                               } className={(extractCodeValue(itemOutcome) === 'approved' || extractCodeValue(item.adjudication_status) === 'approved') ? 'bg-green-500' : ''}>
-                                {extractCodeValue(itemOutcome) || extractCodeValue(item.adjudication_status) || 'pending'}
+                                {extractCodeValue(itemOutcome, '') || extractCodeValue(item.adjudication_status, '') || 'pending'}
                               </Badge>
                             </div>
                           </div>
@@ -1809,7 +1837,10 @@ export default function ClaimDetails() {
             {/* Lab Observations Section - Only for Professional claim type */}
             {(() => {
               const labObservations = claim.lab_observations
-                ? (Array.isArray(claim.lab_observations) ? claim.lab_observations : JSON.parse(claim.lab_observations || '[]'))
+                ? (() => {
+                    const parsed = parseMaybeJson(claim.lab_observations, []);
+                    return Array.isArray(parsed) ? parsed : [];
+                  })()
                 : (claim.supporting_info || [])
                     .filter(si => si.category === 'lab-test')
                     .map((si, idx) => ({
@@ -3382,9 +3413,7 @@ export default function ClaimDetails() {
 
                           {/* Adjudication Details from bundle_json */}
                           {(() => {
-                            const bundle = typeof resp.bundle_json === 'string' 
-                              ? (() => { try { return JSON.parse(resp.bundle_json); } catch { return null; } })() 
-                              : resp.bundle_json;
+                            const bundle = parseMaybeJson(resp.bundle_json);
                             if (!bundle) return null;
 
                             let claimResp = null;

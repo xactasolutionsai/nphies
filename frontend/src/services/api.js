@@ -1,9 +1,10 @@
 import { API_BASE_URL, apiFetch } from '@/services/http';
+import { filenameFromContentDisposition, saveBlob } from '@/utils/download';
 
 // AI Features Configuration
 // Set to false to disable AI medication safety analysis and suggestions
 // This prevents unnecessary API calls when the AI server (medbot) is not running
-const AI_FEATURES_ENABLED = false;
+export const AI_FEATURES_ENABLED = false;
 
 // Request throttling and caching
 const requestQueue = new Map();
@@ -94,6 +95,31 @@ class ApiService {
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Download a binary attachment with the Authorization header and save it via an object URL.
+   * window.open() cannot send the Bearer token, so the backend would answer 401.
+   * The file is always saved (never rendered in the app origin).
+   * Resolves to true on success; on failure it alerts the user and resolves to false,
+   * so onClick callers that do not await never produce an unhandled rejection.
+   */
+  async downloadAttachment(endpoint, fallbackName = 'attachment') {
+    try {
+      const response = await apiFetch(`${API_BASE_URL}${endpoint}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const filename = filenameFromContentDisposition(response.headers.get('Content-Disposition'), fallbackName);
+      saveBlob(blob, filename);
+      return true;
+    } catch (error) {
+      console.error('Attachment download failed:', error);
+      if (typeof window !== 'undefined') window.alert(`Failed to download attachment: ${error.message}`);
+      return false;
     }
   }
 
@@ -476,11 +502,6 @@ class ApiService {
     });
   }
 
-  // Search functionality
-  async search(query, entity) {
-    return this.request(`/search?q=${encodeURIComponent(query)}&entity=${entity}`);
-  }
-
   // NPHIES Eligibility Methods
   async checkNphiesEligibility(data) {
     return this.request('/eligibility/check-nphies', {
@@ -755,7 +776,7 @@ class ApiService {
   }
 
   downloadCommunicationRequestAttachment(priorAuthId, requestId, payloadIndex) {
-    window.open(`${API_BASE_URL}/prior-authorizations/${priorAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, '_blank');
+    return this.downloadAttachment(`/prior-authorizations/${priorAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, `attachment-${payloadIndex}`);
   }
 
   /**
@@ -938,7 +959,7 @@ class ApiService {
   }
 
   downloadClaimCommunicationRequestAttachment(claimId, requestId, payloadIndex) {
-    window.open(`${API_BASE_URL}/claim-submissions/${claimId}/communication-requests/${requestId}/attachment/${payloadIndex}`, '_blank');
+    return this.downloadAttachment(`/claim-submissions/${claimId}/communication-requests/${requestId}/attachment/${payloadIndex}`, `attachment-${payloadIndex}`);
   }
 
   /**
@@ -1460,7 +1481,7 @@ class ApiService {
   }
 
   downloadAdvancedAuthCommunicationRequestAttachment(advAuthId, requestId, payloadIndex) {
-    window.open(`${API_BASE_URL}/advanced-authorizations/${advAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, '_blank');
+    return this.downloadAttachment(`/advanced-authorizations/${advAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, `attachment-${payloadIndex}`);
   }
 
   /**

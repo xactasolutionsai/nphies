@@ -1,10 +1,8 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-const Button = React.forwardRef(({ className, variant = "default", size = "default", ...props }, ref) => {
-  return (
-    <button
-      className={cn(
+const Button = React.forwardRef(({ className, variant = "default", size = "default", asChild = false, ...props }, ref) => {
+  const classes = cn(
         "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
         {
           "bg-primary text-primary-foreground hover:bg-primary/90": variant === "default",
@@ -21,7 +19,23 @@ const Button = React.forwardRef(({ className, variant = "default", size = "defau
           "h-10 w-10": size === "icon",
         },
         className
-      )}
+      )
+
+  // asChild: render the single child element (e.g. <a> or <Link>) with the button styles,
+  // instead of nesting it inside a <button>.
+  if (asChild && React.isValidElement(props.children)) {
+    const { children, ...rest } = props
+    return React.cloneElement(children, {
+      ...rest,
+      ...children.props,
+      className: cn(classes, children.props.className),
+      ref,
+    })
+  }
+
+  return (
+    <button
+      className={classes}
       ref={ref}
       {...props}
     />

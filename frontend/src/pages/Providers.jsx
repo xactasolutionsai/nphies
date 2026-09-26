@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, PlusCircle, Loader2, AlertCircle, Eye, Edit, Trash2 } from 'lucide-react';
@@ -8,6 +8,18 @@ import api, { extractErrorMessage } from '@/services/api';
 
 export default function Providers() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Success message passed by the create/edit form via navigate(..., { state: { message } })
+  const [successMessage, setSuccessMessage] = useState(location.state?.message || null);
+
+  useEffect(() => {
+    if (!location.state?.message) return undefined;
+    setSuccessMessage(location.state.message);
+    // Clear the history state so the message is not shown again on refresh/back
+    navigate(location.pathname, { replace: true, state: null });
+    const timer = setTimeout(() => setSuccessMessage(null), 5000);
+    return () => clearTimeout(timer);
+  }, [location.state, location.pathname, navigate]);
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -148,6 +160,11 @@ export default function Providers() {
 
   return (
     <div className="space-y-8">
+      {successMessage && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {successMessage}
+        </div>
+      )}
       {/* Enhanced Header */}
       <div className="relative">
         <div className="relative bg-white rounded-2xl p-8 border border-gray-100">

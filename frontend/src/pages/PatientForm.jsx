@@ -67,7 +67,7 @@ export default function PatientForm() {
     { value: 'L', label: 'L - Legally Separated' },
     { value: 'P', label: 'P - Polygamous' },
     { value: 'T', label: 'T - Domestic Partner' },
-    { value: 'U', label: 'U - Unknown' }
+    { value: 'U', label: 'U - Unmarried' }
   ];
 
   const nationalityOptions = [

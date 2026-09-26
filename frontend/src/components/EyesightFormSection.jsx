@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Scan, Eye, ClipboardCheck } from 'lucide-react';
 import api from '@/services/api';
+import { toDateInputValue } from '@/utils/date';
 
 export default function EyesightFormSection() {
   const [form, setForm] = useState({
@@ -62,7 +63,6 @@ export default function EyesightFormSection() {
   });
   const [status, setStatus] = useState({ type: 'idle', message: '' });
   const [preview, setPreview] = useState(null);
-  const [lastResponse, setLastResponse] = useState(null);
 
   const setField = (path, value) => {
     const keys = path.split('.');
@@ -80,33 +80,9 @@ export default function EyesightFormSection() {
   const handleSubmit = (e) => {
     e.preventDefault();
     setPreview(form);
-    setStatus({ type: 'success', message: 'Eyesight request prepared automatically. Click "AI Check" to validate with n8n.' });
+    setStatus({ type: 'success', message: 'Eyesight request prepared automatically. AI validation is not available for this form yet.' });
   };
 
-  const handleAICheck = async () => {
-    if (!preview) setPreview(form);
-    try {
-      setStatus({ type: 'idle', message: 'Sending to AI for validation...' });
-      if (typeof window !== 'undefined') window.localStorage.removeItem('webhookUrl');
-      let webhookUrl = typeof window !== 'undefined' ? window.localStorage.getItem('webhookUrl') || '' : '';
-      if (!webhookUrl) {
-        const input = typeof window !== 'undefined' ? window.prompt('Enter n8n Webhook URL', 'http://localhost:5678/webhook/check') : '';
-        if (input && input.trim()) { window.localStorage.setItem('webhookUrl', input.trim()); webhookUrl = input.trim(); }
-        else { setStatus({ type: 'error', message: 'No webhook URL provided.' }); return; }
-      }
-      const response = await fetch(webhookUrl, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'eyesight_request', data: preview || form, timestamp: new Date().toISOString() }),
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const result = await response.json();
-      setLastResponse(result);
-      setStatus({ type: 'success', message: 'AI check completed successfully!' });
-    } catch (error) {
-      console.error('Error sending to n8n:', error);
-      setStatus({ type: 'error', message: error?.message || 'Failed to send to AI check' });
-    }
-  };
 
   // Backend lookups
   const fetchPatient = async () => {
@@ -120,8 +96,8 @@ export default function EyesightFormSection() {
       if (!data) throw new Error('Patient not found');
       const p = data.data || data;
       setField('patient.fullName', p.name || p.full_name || p.fullName || '');
-      setField('patient.dob', p.birthdate || p.dob || '');
-      setField('patient.gender', (p.gender || '').toLowerCase() || 'male');
+      setField('patient.dob', toDateInputValue(p.birth_date || p.birthdate || p.dob));
+      if (p.gender) setField('patient.gender', String(p.gender).toLowerCase());
       setField('patient.contactPhone', p.phone || p.contactPhone || '');
       setField('patient.email', p.email || '');
       setStatus({ type: 'success', message: 'Patient info retrieved.' });
@@ -197,7 +173,7 @@ export default function EyesightFormSection() {
                 <input type="date" value={form.patient.dob} onChange={(e) => setField('patient.dob', e.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30" required />
               </div>
               <div>
-                <label className="block text sm font-medium text-gray-700 mb-1">Gender *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gender *</label>
                 <select value={form.patient.gender} onChange={(e) => setField('patient.gender', e.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-purple/30" required>
                   <option value="">Select gender…</option>
                   <option value="male">Male</option>
@@ -672,18 +648,20 @@ export default function EyesightFormSection() {
                   <div className="flex gap-6">
                     <label className="flex items-center space-x-2">
                       <input
-                        type="checkbox"
+                        type="radio"
+                        name="eyesight-frames"
                         checked={form.eyesight.lensSpecs.frames.yes}
-                        onChange={(e) => setField('eyesight.lensSpecs.frames.yes', e.target.checked)}
+                        onChange={() => { setField('eyesight.lensSpecs.frames.yes', true); setField('eyesight.lensSpecs.frames.no', false); }}
                         className="rounded border-gray-300 text-primary-purple focus:ring-primary-purple"
                       />
                       <span className="text-sm font-medium">Yes</span>
                     </label>
                     <label className="flex items-center space-x-2">
                       <input
-                        type="checkbox"
+                        type="radio"
+                        name="eyesight-frames"
                         checked={form.eyesight.lensSpecs.frames.no}
-                        onChange={(e) => setField('eyesight.lensSpecs.frames.no', e.target.checked)}
+                        onChange={() => { setField('eyesight.lensSpecs.frames.no', true); setField('eyesight.lensSpecs.frames.yes', false); }}
                         className="rounded border-gray-300 text-primary-purple focus:ring-primary-purple"
                       />
                       <span className="text-sm font-medium">No</span>
@@ -757,34 +735,6 @@ export default function EyesightFormSection() {
           </div>
         )}
 
-        {lastResponse && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-semibold">AI Response</h2>
-            </div>
-            
-            <div className="bg-gray-50 rounded-lg p-4 border">
-              <div className="space-y-2">
-                {typeof lastResponse === 'object' && lastResponse !== null ? (
-                  Object.entries(lastResponse).map(([key, value]) => (
-                    <div key={key} className="flex items-start space-x-3">
-                      <span className="font-medium text-gray-700 min-w-0 flex-shrink-0">{key}:</span>
-                      <span className="text-gray-900 break-words">
-                        {typeof value === 'boolean' ? (value ? 'true' : 'false') : 
-                         typeof value === 'object' ? JSON.stringify(value) : 
-                         String(value)}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-gray-900 whitespace-pre-wrap">
-                    {typeof lastResponse === 'string' ? lastResponse : JSON.stringify(lastResponse, null, 2)}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="flex items-center justify-end gap-3">
           <button type="button" onClick={() => {
@@ -811,9 +761,15 @@ export default function EyesightFormSection() {
               },
               attachments: []
             });
-            setPreview(null); setLastResponse(null); setStatus({ type: 'idle', message: '' });
+            setPreview(null);  setStatus({ type: 'idle', message: '' });
           }} className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 transition">Reset</button>
-          <button type="button" onClick={handleAICheck} className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-2 rounded-xl transition">
+          <span className="text-xs text-gray-500">AI check is disabled: patient data is no longer sent from the browser to external webhooks, and no backend AI endpoint exists for this form yet.</span>
+          <button
+            type="button"
+            disabled
+            title="AI check is not available for this form yet"
+            className="inline-flex items-center gap-2 bg-gray-400 text-white px-5 py-2 rounded-xl cursor-not-allowed"
+          >
             <Scan className="h-4 w-4" />
             AI Check
           </button>

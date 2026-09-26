@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import api from '@/services/api';
+import { parseHttpUrl } from '@/utils/url';
 import { 
   ArrowLeft, 
   Edit, 
@@ -34,6 +35,13 @@ import {
   TestTube2,
   MapPin
 } from 'lucide-react';
+
+// CPT/ICD codes are stored as free text by the wizard (e.g. "70551, 70553") but may be arrays
+const toCodeList = (value) => {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  if (typeof value === 'string') return value.split(/[,;\n]+/).map(c => c.trim()).filter(Boolean);
+  return [];
+};
 import { format } from 'date-fns';
 
 export default function GeneralRequestDetails() {
@@ -506,21 +514,21 @@ export default function GeneralRequestDetails() {
                     </div>
                   </div>
                 )}
-                {(serviceData.cptCodes && serviceData.cptCodes.length > 0) && (
+                {toCodeList(serviceData.cptCodes).length > 0 && (
                   <div className="border-t pt-4">
                     <Label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">CPT Codes</Label>
                     <div className="flex flex-wrap gap-2">
-                      {serviceData.cptCodes.map((code, idx) => (
+                      {toCodeList(serviceData.cptCodes).map((code, idx) => (
                         <Badge key={idx} variant="outline" className="font-mono">{code}</Badge>
                       ))}
                     </div>
                   </div>
                 )}
-                {(serviceData.icd10Codes && serviceData.icd10Codes.length > 0) && (
+                {toCodeList(serviceData.icd10Codes).length > 0 && (
                   <div className="border-t pt-4">
                     <Label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">ICD-10 Codes</Label>
                     <div className="flex flex-wrap gap-2">
-                      {serviceData.icd10Codes.map((code, idx) => (
+                      {toCodeList(serviceData.icd10Codes).map((code, idx) => (
                         <Badge key={idx} variant="outline" className="font-mono">{code}</Badge>
                       ))}
                     </div>
@@ -633,7 +641,7 @@ export default function GeneralRequestDetails() {
                             <TableCell>{item.type || 'N/A'}</TableCell>
                             <TableCell className="text-right">{item.quantity || 'N/A'}</TableCell>
                             <TableCell className="text-right font-semibold">
-                              {item.cost ? `$${item.cost}` : 'N/A'}
+                              {item.cost ? `${item.cost} SAR` : 'N/A'}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -872,9 +880,9 @@ export default function GeneralRequestDetails() {
                             </div>
                           </div>
                         </div>
-                        {attachment.url && (
+                        {parseHttpUrl(attachment.url, window.location.origin) && (
                           <Button variant="outline" size="sm" asChild>
-                            <a href={attachment.url} download target="_blank" rel="noopener noreferrer">
+                            <a href={parseHttpUrl(attachment.url, window.location.origin).href} download target="_blank" rel="noopener noreferrer">
                               Download
                             </a>
                           </Button>

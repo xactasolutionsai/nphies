@@ -22,8 +22,24 @@ export function AuthProvider({ children }) {
           setUser(response.data.user);
           localStorage.setItem('auth_user', JSON.stringify(response.data.user));
         }
-      }).catch(() => {
-        if (active && storedToken === localStorage.getItem('auth_token')) clearSession();
+      }).catch((error) => {
+        if (!active || storedToken !== localStorage.getItem('auth_token')) return;
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+          clearSession();
+        } else {
+          // Network error or server failure: keep the session and the cached user so a
+          // transient outage does not log the user out.
+          try {
+            const cachedUser = JSON.parse(localStorage.getItem('auth_user') || 'null');
+            if (cachedUser) {
+              setToken(storedToken);
+              setUser(cachedUser);
+            }
+          } catch {
+            // Corrupt cached user: fall through as signed out without clearing the token.
+          }
+        }
       }).finally(() => { if (active) setLoading(false); });
     }
     return () => { active = false; window.removeEventListener('auth:changed', reset); };

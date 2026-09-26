@@ -86,8 +86,9 @@ export default function PatientDetails() {
       ageYears--;
     }
     
-    // Check if newborn (less than 1 year old or is_newborn flag is true)
-    const isNewborn = patient?.is_newborn || ageYears < 1;
+    // Use the months/days format only for patients under one year old; a record flagged
+    // newborn that is older than a year shows its age in years
+    const isNewborn = ageYears < 1;
     
     if (isNewborn) {
       // Calculate months and days for newborns

@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import DataTable from '@/components/DataTable';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Package, TrendingUp, Users, DollarSign, Calendar, Building2, Shield, Receipt, Plus, Send, RefreshCw, Eye, Trash2, X, CheckCircle2, AlertCircle, Clock, Layers } from 'lucide-react';
-import api from '@/services/api';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Package, Shield, Plus, Send, RefreshCw, Eye, Trash2, X, CheckCircle2, AlertCircle, Clock, Layers } from 'lucide-react';
+import api, { clearApiCache } from '@/services/api';
 
 const COLORS = ['#553781', '#9658C4', '#8572CD', '#00DEFE', '#26A69A', '#E0E7FF'];
 
@@ -14,7 +14,6 @@ export default function ClaimBatches() {
   const navigate = useNavigate();
   const [claimBatches, setClaimBatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedBatch, setSelectedBatch] = useState(null);
   const [stats, setStats] = useState(null);
   
   // Action states
@@ -23,8 +22,6 @@ export default function ClaimBatches() {
   // Chart data states
   const [batchesByStatus, setBatchesByStatus] = useState([]);
   const [batchesByInsurer, setBatchesByInsurer] = useState([]);
-  const [monthlyTrends, setMonthlyTrends] = useState([]);
-  const [batchesByProvider, setBatchesByProvider] = useState([]);
   
   // Drill-down state
   const [drillDownData, setDrillDownData] = useState([]);
@@ -89,43 +86,6 @@ export default function ClaimBatches() {
       value,
       amount: insurerAmounts[name] 
     })));
-
-    // Process batches by provider
-    const providerCounts = {};
-    data.forEach(item => {
-      const provider = item.provider_name || 'Unknown';
-      providerCounts[provider] = (providerCounts[provider] || 0) + 1;
-    });
-    setBatchesByProvider(Object.entries(providerCounts).map(([name, value]) => ({ name, value })));
-
-    // Process monthly trends
-    const monthlyData = {};
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    data.forEach(item => {
-      const date = new Date(item.submission_date || item.created_at);
-      if (isNaN(date.getTime())) return;
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      if (!monthlyData[monthKey]) {
-        monthlyData[monthKey] = {
-          month: months[date.getMonth()],
-          count: 0,
-          amount: 0,
-          processed: 0,
-          pending: 0,
-          rejected: 0
-        };
-      }
-      monthlyData[monthKey].count += 1;
-      monthlyData[monthKey].amount += parseFloat(item.total_amount || 0);
-      
-      if (item.status === 'Processed') monthlyData[monthKey].processed += 1;
-      else if (['Pending', 'Submitted', 'Queued', 'Draft'].includes(item.status)) monthlyData[monthKey].pending += 1;
-      else if (['Rejected', 'Error'].includes(item.status)) monthlyData[monthKey].rejected += 1;
-    });
-
-    const trendsArray = Object.values(monthlyData);
-    setMonthlyTrends(trendsArray.slice(-6));
   };
 
   const getStatusBadge = (status) => {
@@ -167,10 +127,7 @@ export default function ClaimBatches() {
       if (response.success) {
         alert(response.message || 'Batch submitted successfully');
         loadClaimBatches();
-        if (selectedBatch?.id === batchId) {
-          const updatedBatch = await api.getClaimBatch(batchId);
-          setSelectedBatch(updatedBatch.data);
-        }
+        loadStats();
       } else {
         alert(response.error || 'Failed to submit batch');
       }
@@ -190,10 +147,9 @@ export default function ClaimBatches() {
       if (response.success) {
         alert(response.pollResult?.message || 'Poll completed');
         loadClaimBatches();
-        if (selectedBatch?.id === batchId) {
-          const updatedBatch = await api.getClaimBatch(batchId);
-          setSelectedBatch(updatedBatch.data);
-        }
+        loadStats();
+      } else {
+        alert(response.error || 'Poll failed');
       }
     } catch (error) {
       console.error('Error polling responses:', error);
@@ -216,9 +172,6 @@ export default function ClaimBatches() {
       await api.deleteClaimBatch(batchId);
       loadClaimBatches();
       loadStats();
-      if (selectedBatch?.id === batchId) {
-        setSelectedBatch(null);
-      }
     } catch (error) {
       console.error('Error deleting batch:', error);
       alert(error.response?.data?.error || 'Failed to delete batch');
@@ -314,6 +267,16 @@ export default function ClaimBatches() {
               )}
             </>
           )}
+          {row.status === 'Pending' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => { e.stopPropagation(); navigate(`/claim-batches/${row.id}`); }}
+              title="Batch is being sent - open to check status / poll"
+            >
+              <Clock className="h-4 w-4" />
+            </Button>
+          )}
           {['Submitted', 'Queued', 'Partial'].includes(row.status) && (
             <Button
               size="sm"
@@ -332,21 +295,27 @@ export default function ClaimBatches() {
 
   // Drill-down handlers
   const handleStatusClick = (data) => {
-    setDrillDownTitle(`Batches with Status: ${data.name}`);
-    setDrillDownData(claimBatches.filter(item => item.status === data.name));
+    const name = data?.payload?.name ?? data?.name;
+    if (!name) return;
+    setDrillDownTitle(`Batches with Status: ${name}`);
+    setDrillDownData(claimBatches.filter(item => (item.status || 'Unknown') === name));
     setShowDrillDown(true);
   };
 
+  // Per-Bar onClick receives the bar's data entry (fields are also under .payload)
   const handleInsurerClick = (data) => {
-    setDrillDownTitle(`Batches for Insurer: ${data.name}`);
-    setDrillDownData(claimBatches.filter(item => item.insurer_name === data.name));
+    const name = data?.payload?.name ?? data?.name;
+    if (!name) return;
+    setDrillDownTitle(`Batches for Insurer: ${name}`);
+    setDrillDownData(claimBatches.filter(item => (item.insurer_name || 'Unknown') === name));
     setShowDrillDown(true);
   };
 
-  const handleProviderClick = (data) => {
-    setDrillDownTitle(`Batches for Provider: ${data.name}`);
-    setDrillDownData(claimBatches.filter(item => item.provider_name === data.name));
-    setShowDrillDown(true);
+  // Re-fetch (bypassing the GET cache) so batches stuck in 'Pending' show their current status
+  const handleRefresh = () => {
+    clearApiCache();
+    loadClaimBatches();
+    loadStats();
   };
 
   const handleRowClick = (batch) => {
@@ -384,6 +353,10 @@ export default function ClaimBatches() {
             </div>
           </div>
           <div className="flex items-center space-x-3">
+            <Button variant="outline" onClick={handleRefresh}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
             <Button onClick={() => navigate('/claim-batches/create')} className="bg-gradient-to-r from-primary-purple to-accent-purple">
               <Plus className="h-5 w-5 mr-2" />
               Create Batch
@@ -503,12 +476,12 @@ export default function ClaimBatches() {
           <CardContent>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={batchesByInsurer} onClick={handleInsurerClick}>
+                <BarChart data={batchesByInsurer}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} fontSize={12} />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="value" fill="#553781" style={{ cursor: 'pointer' }} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="value" fill="#553781" style={{ cursor: 'pointer' }} radius={[4, 4, 0, 0]} onClick={handleInsurerClick} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -536,143 +509,6 @@ export default function ClaimBatches() {
           />
         </CardContent>
       </Card>
-
-      {/* Batch Detail Modal */}
-      {selectedBatch && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden">
-            <div className="bg-gradient-to-r from-primary-purple to-accent-purple p-6 text-white">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-2xl font-bold">Batch: {selectedBatch.batch_identifier}</h2>
-                  <p className="text-white/80 mt-1">
-                    <Badge variant="secondary" className="bg-white/20 text-white">
-                      {selectedBatch.status}
-                    </Badge>
-                  </p>
-                </div>
-                <button onClick={() => setSelectedBatch(null)} className="text-white/80 hover:text-white p-2">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {/* Batch Info */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Total Claims</p>
-                  <p className="text-2xl font-bold">{selectedBatch.total_claims || selectedBatch.claims?.length || 0}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Total Amount</p>
-                  <p className="text-2xl font-bold">SAR {parseFloat(selectedBatch.total_amount || 0).toLocaleString()}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Approved</p>
-                  <p className="text-2xl font-bold text-green-600">{selectedBatch.approved_claims || selectedBatch.statistics?.approved_claims || 0}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Rejected</p>
-                  <p className="text-2xl font-bold text-red-600">{selectedBatch.rejected_claims || selectedBatch.statistics?.rejected_claims || 0}</p>
-                </div>
-              </div>
-
-              {/* Provider/Insurer Info */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="flex items-center space-x-3 bg-gray-50 rounded-lg p-4">
-                  <Building2 className="h-8 w-8 text-primary-purple" />
-                  <div>
-                    <p className="text-sm text-gray-500">Provider</p>
-                    <p className="font-semibold">{selectedBatch.provider_name}</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3 bg-gray-50 rounded-lg p-4">
-                  <Shield className="h-8 w-8 text-accent-purple" />
-                  <div>
-                    <p className="text-sm text-gray-500">Insurer</p>
-                    <p className="font-semibold">{selectedBatch.insurer_name}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Claims in Batch */}
-              {selectedBatch.claims && selectedBatch.claims.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Claims in Batch</h3>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">#</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Claim Number</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Patient</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Amount</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {selectedBatch.claims.map((claim, index) => (
-                          <tr key={claim.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm">{claim.batch_number || index + 1}</td>
-                            <td className="px-4 py-3 text-sm font-medium">{claim.claim_number}</td>
-                            <td className="px-4 py-3 text-sm">{claim.patient_name}</td>
-                            <td className="px-4 py-3 text-sm">SAR {parseFloat(claim.total_amount || 0).toLocaleString()}</td>
-                            <td className="px-4 py-3">
-                              <Badge variant={getStatusBadge(claim.status)}>{claim.status}</Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Errors */}
-              {selectedBatch.errors && selectedBatch.errors.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold mb-3 text-red-600">Errors</h3>
-                  <div className="bg-red-50 rounded-lg p-4">
-                    {selectedBatch.errors.map((error, index) => (
-                      <div key={index} className="text-sm text-red-700 mb-2">
-                        {error.code && <span className="font-semibold">[{error.code}]</span>} {error.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-gray-50 px-6 py-4 border-t flex justify-between items-center">
-              <div className="text-sm text-gray-500">
-                Created: {new Date(selectedBatch.created_at).toLocaleString()}
-              </div>
-              <div className="flex space-x-3">
-                {(selectedBatch.status === 'Draft' || selectedBatch.status === 'Error') && (
-                  <>
-                    <Button variant="outline" onClick={() => handlePreviewBundle(selectedBatch.id)}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      Preview Bundle
-                    </Button>
-                    <Button onClick={() => handleSendToNphies(selectedBatch.id)} className="bg-gradient-to-r from-primary-purple to-accent-purple">
-                      <Send className="h-4 w-4 mr-2" />
-                      {selectedBatch.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
-                    </Button>
-                  </>
-                )}
-                {['Submitted', 'Queued', 'Partial'].includes(selectedBatch.status) && (
-                  <Button onClick={() => handlePollResponses(selectedBatch.id)} variant="outline">
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Poll Responses
-                  </Button>
-                )}
-                <Button variant="outline" onClick={() => setSelectedBatch(null)}>Close</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Drill-down Modal */}
       {showDrillDown && (

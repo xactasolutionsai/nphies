@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import api, { extractErrorMessage } from '@/services/api';
+import api, { extractErrorMessage, clearApiCache } from '@/services/api';
+import { saveBlob, safeInlineContentType } from '@/utils/download';
 import {
   ArrowLeft, Download, RefreshCw, ShieldAlert, ChevronDown, ChevronRight,
   FileJson, Building2, User, Stethoscope, ClipboardList, Pill,
@@ -135,16 +136,9 @@ function handleDownloadAttachment(responseBundle, sequence, title) {
       byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
     const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: attachment.contentType });
-
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = title || attachment.title;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    // Payer-supplied content type is not trusted: always save as an opaque binary download
+    const blob = new Blob([byteArray], { type: 'application/octet-stream' });
+    saveBlob(blob, title || attachment.title || `attachment-${sequence}`);
   } catch (err) {
     console.error('Error downloading attachment:', err);
     alert('Failed to download attachment.');
@@ -165,9 +159,18 @@ function handleViewAttachment(responseBundle, sequence) {
       byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
     const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: attachment.contentType });
+    // Only open inline for a safe allow-list (PDF, raster images, plain text). Anything else
+    // (e.g. text/html or image/svg+xml from the payer) would run in the app origin, so it is
+    // downloaded instead.
+    const safeType = safeInlineContentType(attachment.contentType);
+    if (!safeType) {
+      saveBlob(new Blob([byteArray], { type: 'application/octet-stream' }), attachment.title || `attachment-${sequence}`);
+      return;
+    }
+    const blob = new Blob([byteArray], { type: safeType });
     const url = window.URL.createObjectURL(blob);
-    window.open(url, '_blank');
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => window.URL.revokeObjectURL(url), 60000);
   } catch (err) {
     console.error('Error viewing attachment:', err);
     alert('Failed to open attachment.');
@@ -507,7 +510,7 @@ export default function AdvancedAuthorizationDetails() {
               Cancel
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={loadData}>
+          <Button variant="outline" size="sm" onClick={() => { clearApiCache(); loadData(); }}>
             <RefreshCw className="h-4 w-4 mr-1" /> Refresh
           </Button>
           <Button variant="outline" size="sm" onClick={handleDownload}>

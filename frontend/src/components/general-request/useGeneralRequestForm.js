@@ -317,16 +317,15 @@ const formReducer = (state, action) => {
     
     case ACTIONS.SET_MEDICATION_WARNINGS: {
       const { warnings } = action.payload;
-      const newMedications = [...state.formData.medications];
-      
-      // Reset all warnings first
-      newMedications.forEach(med => {
-        med.hasInteractions = false;
-        med.hasSideEffects = false;
-        med.hasAgeWarning = false;
-        med.hasPregnancyWarning = false;
-        med.isDuplicate = false;
-      });
+      // Reset all warnings first (copy each object - never mutate previous state)
+      const newMedications = state.formData.medications.map(med => ({
+        ...med,
+        hasInteractions: false,
+        hasSideEffects: false,
+        hasAgeWarning: false,
+        hasPregnancyWarning: false,
+        isDuplicate: false
+      }));
       
       // Apply new warnings - only update specific warning flags
       if (warnings && Object.keys(warnings).length > 0) {
@@ -378,7 +377,11 @@ const formReducer = (state, action) => {
 /**
  * Custom hook for managing General Request form state
  */
-export const useGeneralRequestForm = () => {
+// Map a field path to the wizard step that owns it (for jumping to the first error)
+const STEP_BY_PREFIX = { patient: 1, insured: 2, coverage: 2, provider: 3, service: 4, encounterClass: 4, encounterStart: 4, encounterEnd: 4 };
+const AUTO_SAVE_DEBOUNCE_MS = 2000;
+
+export const useGeneralRequestForm = ({ isEditMode = false } = {}) => {
   const [state, dispatch] = useReducer(formReducer, {
     formData: initialFormState,
     currentStep: 1,
@@ -387,6 +390,14 @@ export const useGeneralRequestForm = () => {
   });
   
   const autoSaveTimerRef = useRef(null);
+  const latestFormDataRef = useRef(state.formData);
+  // Only persist drafts for new requests, and only when the user has changed something.
+  // In edit mode the record being edited must not overwrite the user's new-request draft.
+  const draftEnabledRef = useRef(!isEditMode);
+  draftEnabledRef.current = !isEditMode;
+  latestFormDataRef.current = state.formData;
+  // Form data whose draft was explicitly discarded (reset / submitted) must not be re-saved.
+  const discardedFormDataRef = useRef(null);
   
   // Set field value
   const setField = useCallback((path, value) => {
@@ -406,6 +417,18 @@ export const useGeneralRequestForm = () => {
     return Object.keys(errors).length === 0;
   }, [state.currentStep, state.formData]);
   
+  // Validate every step (used on submit). Returns { valid, firstInvalidStep, errors }.
+  const validateAllSteps = useCallback(() => {
+    const requiredFields = WIZARD_STEPS.flatMap(step => step.requiredFields || []);
+    const errors = validateStep(state.formData, requiredFields);
+    dispatch({ type: ACTIONS.SET_ERRORS, payload: errors });
+    const invalidSteps = Object.keys(errors)
+      .map(path => STEP_BY_PREFIX[path.split('.')[0]])
+      .filter(Boolean);
+    const firstInvalidStep = invalidSteps.length > 0 ? Math.min(...invalidSteps) : null;
+    return { valid: Object.keys(errors).length === 0, firstInvalidStep, errors };
+  }, [state.formData]);
+
   // Navigate to next step (without validation blocking)
   const nextStep = useCallback(() => {
     // Still validate to show errors, but don't block navigation
@@ -459,11 +482,21 @@ export const useGeneralRequestForm = () => {
     dispatch({ type: ACTIONS.LOAD_EXISTING_DATA, payload: data });
   }, []);
   
+  // Cancel any pending auto-save and delete the stored draft
+  const discardDraft = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    discardedFormDataRef.current = latestFormDataRef.current;
+    if (draftEnabledRef.current) clearDraft();
+  }, []);
+
   // Clear all data
   const resetForm = useCallback(() => {
     dispatch({ type: ACTIONS.RESET_FORM });
-    clearDraft();
-  }, []);
+    discardDraft();
+  }, [discardDraft]);
   
   // Medication handlers
   const addMedication = useCallback(() => {
@@ -503,33 +536,33 @@ export const useGeneralRequestForm = () => {
     dispatch({ type: ACTIONS.UPDATE_MANAGEMENT_ITEM, payload: { index, field, value } });
   }, []);
   
-  // Auto-save effect
+  // Debounced auto-save: save a draft shortly after the user stops editing.
+  // The pristine initial state (e.g. right after Reset) is never saved, so a reset
+  // cannot be undone by a pending or unmount save.
   useEffect(() => {
-    // Clear existing timer
-    if (autoSaveTimerRef.current) {
-      clearInterval(autoSaveTimerRef.current);
-    }
-    
-    // Set up new auto-save timer (every 30 seconds)
-    autoSaveTimerRef.current = setInterval(() => {
+    if (!draftEnabledRef.current || state.formData === initialFormState ||
+        state.formData === discardedFormDataRef.current) return undefined;
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null;
       saveDraft(state.formData);
-      console.log('📝 Auto-saved draft');
-    }, 30000);
-    
-    // Cleanup
+    }, AUTO_SAVE_DEBOUNCE_MS);
     return () => {
       if (autoSaveTimerRef.current) {
-        clearInterval(autoSaveTimerRef.current);
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
       }
     };
   }, [state.formData]);
   
-  // Save on unmount
+  // Flush a pending save on unmount only (not on every change)
   useEffect(() => {
     return () => {
-      saveDraft(state.formData);
+      const data = latestFormDataRef.current;
+      if (draftEnabledRef.current && data !== initialFormState && data !== discardedFormDataRef.current) {
+        saveDraft(data);
+      }
     };
-  }, [state.formData]);
+  }, []);
   
   return {
     formData: state.formData,
@@ -538,6 +571,7 @@ export const useGeneralRequestForm = () => {
     completedSteps: state.completedSteps,
     setField,
     validateCurrentStep,
+    validateAllSteps,
     nextStep,
     prevStep,
     goToStep,
@@ -545,6 +579,7 @@ export const useGeneralRequestForm = () => {
     loadDraftData,
     loadExistingData,
     resetForm,
+    discardDraft,
     addMedication,
     removeMedication,
     updateMedication,

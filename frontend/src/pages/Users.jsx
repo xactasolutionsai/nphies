@@ -27,9 +27,7 @@ export default function UsersPage() {
   useEffect(() => {
     if (!isSuperAdmin) {
       navigate('/', { replace: true });
-      return;
     }
-    loadUsers();
   }, [isSuperAdmin, navigate]);
 
   const loadUsers = async () => {
@@ -52,12 +50,12 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    if (isSuperAdmin && searchTerm !== undefined) {
-      const timeoutId = setTimeout(() => {
-        loadUsers();
-      }, 500);
-      return () => clearTimeout(timeoutId);
-    }
+    // Single loader: immediate on mount / cleared search, debounced while typing
+    if (!isSuperAdmin) return undefined;
+    const timeoutId = setTimeout(() => {
+      loadUsers();
+    }, searchTerm ? 500 : 0);
+    return () => clearTimeout(timeoutId);
   }, [searchTerm, isSuperAdmin]);
 
   if (!isSuperAdmin) {

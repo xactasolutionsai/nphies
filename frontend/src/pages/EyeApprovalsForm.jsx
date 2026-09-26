@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,72 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import Select from 'react-select';
 import { format } from 'date-fns';
+import { parseLocalISODate } from '@/utils/date';
+
+// Columns accepted by the eye-approvals create/update endpoints (backend models/approvalFields.js).
+// Anything else in a loaded record (id, timestamps, joined names such as provider_name_joined)
+// must not be sent back.
+const EDITABLE_FIELDS = [
+  'form_number', 'patient_id', 'provider_id', 'insurer_id', 'status',
+  'provider_name', 'insurance_company_name', 'tpa_company_name', 'patient_file_number',
+  'date_of_visit', 'plan_type', 'new_visit', 'follow_up',
+  'insured_name', 'id_card_number', 'sex', 'age', 'policy_holder', 'policy_number',
+  'expiry_date', 'class', 'approval',
+  'duration_of_illness_days', 'chief_complaints', 'significant_signs',
+  'right_eye_specs', 'left_eye_specs', 'lens_type', 'lens_specifications',
+  'contact_lenses_permanent', 'contact_lenses_disposal', 'frames_required', 'number_of_pairs',
+  'completed_coded_by', 'provider_signature', 'provider_date'
+];
+
+function pickEditableFields(data) {
+  const result = {};
+  EDITABLE_FIELDS.forEach((key) => {
+    if (data && Object.prototype.hasOwnProperty.call(data, key)) {
+      result[key] = data[key] === null ? '' : data[key];
+    }
+  });
+  return result;
+}
+
+const EMPTY_PRESCRIPTION = { sphere: '', cylinder: '', axis: '', prism: '', vn: '' };
+
+function parseJsonObject(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+// Always returns the full nested structure the inputs expect (handles null, '{}' and partial data)
+function normalizeEyeSpecs(value, eye) {
+  const specs = parseJsonObject(value);
+  const distance = { ...EMPTY_PRESCRIPTION, ...(eye === 'left' ? { pd: '' } : {}), ...(specs.distance || {}) };
+  const near = { ...EMPTY_PRESCRIPTION, ...(specs.near || {}) };
+  return {
+    ...specs,
+    distance,
+    near,
+    bifocal_add: specs.bifocal_add ?? '',
+    ...(eye === 'right' ? { vertex_add: specs.vertex_add ?? '' } : {})
+  };
+}
+
+const LENS_SPEC_KEYS = [
+  'multi_coated', 'varilux', 'light', 'aspheric', 'bifocal', 'medium', 'lenticular',
+  'single_vision', 'dark', 'safety_thickness', 'anti_reflecting', 'photosensitive',
+  'high_index', 'colored', 'anti_scratch'
+];
+
+function normalizeLensSpecs(value) {
+  const specs = parseJsonObject(value);
+  const result = { ...specs };
+  LENS_SPEC_KEYS.forEach((key) => { result[key] = Boolean(specs[key]); });
+  return result;
+}
 
 export default function EyeApprovalsForm() {
   const navigate = useNavigate();
@@ -37,9 +103,6 @@ export default function EyeApprovalsForm() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('reception');
-  const [patients, setPatients] = useState([]);
-  const [providers, setProviders] = useState([]);
-  const [insurers, setInsurers] = useState([]);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   
@@ -49,102 +112,71 @@ export default function EyeApprovalsForm() {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [aiWarnings, setAiWarnings] = useState({});
   const [validationBypass, setValidationBypass] = useState(false);
+  const formRef = useRef(null);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => ({
     // Reception/Nurse Section
-    provider_name: 'Vision Care Medical Center', // TEMP: Remove later
-    insurance_company_name: 'Bupa Arabia Insurance', // TEMP: Remove later
-    tpa_company_name: 'MedNet TPA Services', // TEMP: Remove later
-    patient_file_number: 'PF-2024-00789', // TEMP: Remove later
-    date_of_visit: format(new Date(), 'yyyy-MM-dd'), // TEMP: Remove later
-    plan_type: 'Gold Premium Plan', // TEMP: Remove later
-    new_visit: true, // TEMP: Remove later
+    provider_name: '',
+    insurance_company_name: '',
+    tpa_company_name: '',
+    patient_file_number: '',
+    date_of_visit: '',
+    plan_type: '',
+    new_visit: false,
     follow_up: false,
     
     // Insured Information
-    insured_name: 'Ahmed Mohammed Al-Qahtani', // TEMP: Remove later
-    id_card_number: '2234567890', // TEMP: Remove later
-    sex: 'Male', // TEMP: Remove later
-    age: '45', // TEMP: Remove later
-    policy_holder: 'Self', // TEMP: Remove later
-    policy_number: 'BUPA-POL-123456', // TEMP: Remove later
-    expiry_date: format(new Date(2025, 11, 31), 'yyyy-MM-dd'), // TEMP: Remove later
-    class: 'A', // TEMP: Remove later
-    approval: '', // TEMP: Remove later
+    insured_name: '',
+    id_card_number: '',
+    sex: '',
+    age: '',
+    policy_holder: '',
+    policy_number: '',
+    expiry_date: '',
+    class: '',
+    approval: '',
     
     // Optician Section
-    duration_of_illness_days: '30', // TEMP: Remove later
-    chief_complaints: 'Difficulty reading small text, blurred vision at near distance, eyestrain when using computer', // TEMP: Remove later
-    significant_signs: 'Patient reports progressive difficulty with near vision over past 6 months. No pain, no redness, no discharge. Vision worse in evening.', // TEMP: Remove later
+    duration_of_illness_days: '',
+    chief_complaints: '',
+    significant_signs: '',
     
     // Eye Specifications (JSONB fields)
-    // TEMP: Remove static data later
-    right_eye_specs: {
-      distance: { sphere: '-2.00', cylinder: '-0.75', axis: '180', prism: '', vn: '6/6' },
-      near: { sphere: '', cylinder: '', axis: '', prism: '', vn: '6/9' },
-      bifocal_add: '+2.00',
-      vertex_add: '12'
-    },
-    left_eye_specs: {
-      distance: { sphere: '-1.75', cylinder: '-0.50', axis: '175', prism: '', vn: '6/6', pd: '32' },
-      near: { sphere: '', cylinder: '', axis: '', prism: '', vn: '6/9' },
-      bifocal_add: '+2.00'
-    },
+    right_eye_specs: normalizeEyeSpecs(null, 'right'),
+    left_eye_specs: normalizeEyeSpecs(null, 'left'),
     
     // Lens Type
-    lens_type: 'plastic', // TEMP: Remove later
+    lens_type: '',
     
     // Lens Specifications (JSONB field)
-    // TEMP: Remove static data later
-    lens_specifications: {
-      multi_coated: true,
-      varilux: false,
-      light: false,
-      aspheric: true,
-      bifocal: true,
-      medium: false,
-      lenticular: false,
-      single_vision: false,
-      dark: false,
-      safety_thickness: false,
-      anti_reflecting: true,
-      photosensitive: false,
-      high_index: false,
-      colored: false,
-      anti_scratch: true
-    },
+    lens_specifications: normalizeLensSpecs(null),
     
     // Contact Lenses
     contact_lenses_permanent: false,
     contact_lenses_disposal: false,
     
     // Frames
-    frames_required: true, // TEMP: Remove later
-    number_of_pairs: '1', // TEMP: Remove later
+    frames_required: false,
+    number_of_pairs: '',
     
     // Provider Approval
-    completed_coded_by: 'Dr. Sarah Al-Mansoori', // TEMP: Remove later
-    provider_signature: 'Dr. S. Al-Mansoori', // TEMP: Remove later
-    provider_date: format(new Date(), 'yyyy-MM-dd'), // TEMP: Remove later
+    completed_coded_by: '',
+    provider_signature: '',
+    provider_date: '',
     
     // Foreign Keys
     patient_id: '',
     provider_id: '',
     insurer_id: '',
     status: 'Draft'
-  });
+  }));
 
-  // TEMP: Remove static data later
   const [procedures, setProcedures] = useState([
-    { code: '92015', service_description: 'Comprehensive Eye Examination with Refraction', type: 'Examination', cost: '350.00' },
-    { code: '92310', service_description: 'Prescription of Optical and Physical Characteristics of Contact Lenses', type: 'Consultation', cost: '150.00' }
+    { code: '', service_description: '', type: '', cost: '' }
   ]);
 
   // Helper functions for date handling
-  const parseDate = (dateString) => {
-    if (!dateString) return null;
-    return new Date(dateString);
-  };
+  const parseDate = (dateString) => parseLocalISODate(dateString);
 
   const formatDateForAPI = (date) => {
     if (!date) return '';
@@ -227,9 +259,6 @@ export default function EyeApprovalsForm() {
     if (isEditMode) {
       loadForm();
     }
-    loadPatients();
-    loadProviders();
-    loadInsurers();
   }, [id]);
 
   const loadForm = async () => {
@@ -238,15 +267,17 @@ export default function EyeApprovalsForm() {
       const response = await api.getEyeApproval(id);
       const data = response.data || response;
       
-      // Parse JSONB fields
+      // Keep only editable columns (joined/read-only fields such as provider_name_joined
+      // are rejected by the update endpoint) and parse JSONB fields safely. Missing or
+      // empty ({}) specs become empty structures - never pre-filled values.
       const parsedData = {
-        ...data,
-        right_eye_specs: typeof data.right_eye_specs === 'string' ? JSON.parse(data.right_eye_specs) : (data.right_eye_specs || formData.right_eye_specs),
-        left_eye_specs: typeof data.left_eye_specs === 'string' ? JSON.parse(data.left_eye_specs) : (data.left_eye_specs || formData.left_eye_specs),
-        lens_specifications: typeof data.lens_specifications === 'string' ? JSON.parse(data.lens_specifications) : (data.lens_specifications || formData.lens_specifications)
+        ...pickEditableFields(data),
+        right_eye_specs: normalizeEyeSpecs(data.right_eye_specs, 'right'),
+        left_eye_specs: normalizeEyeSpecs(data.left_eye_specs, 'left'),
+        lens_specifications: normalizeLensSpecs(data.lens_specifications)
       };
       
-      setFormData(parsedData);
+      setFormData(prev => ({ ...prev, ...parsedData }));
       setProcedures(data.procedures && data.procedures.length > 0 ? data.procedures : [{ code: '', service_description: '', type: '', cost: '' }]);
     } catch (error) {
       console.error('Error loading form:', error);
@@ -254,39 +285,6 @@ export default function EyeApprovalsForm() {
       navigate('/eye-approvals');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadPatients = async () => {
-    try {
-      const response = await api.getPatients({ limit: 1000 });
-      const data = response?.data?.data || response?.data || response || [];
-      setPatients(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error loading patients:', error);
-      setPatients([]);
-    }
-  };
-
-  const loadProviders = async () => {
-    try {
-      const response = await api.getProviders({ limit: 1000 });
-      const data = response?.data?.data || response?.data || response || [];
-      setProviders(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error loading providers:', error);
-      setProviders([]);
-    }
-  };
-
-  const loadInsurers = async () => {
-    try {
-      const response = await api.getInsurers({ limit: 1000 });
-      const data = response?.data?.data || response?.data || response || [];
-      setInsurers(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error loading insurers:', error);
-      setInsurers([]);
     }
   };
 
@@ -302,15 +300,19 @@ export default function EyeApprovalsForm() {
   };
 
   const handleEyeSpecChange = (eye, section, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [`${eye}_eye_specs`]: {
-        ...prev[`${eye}_eye_specs`],
-        [section]: typeof prev[`${eye}_eye_specs`][section] === 'object' 
-          ? { ...prev[`${eye}_eye_specs`][section], [field]: value }
-          : value
-      }
-    }));
+    setFormData(prev => {
+      const specs = prev[`${eye}_eye_specs`] || {};
+      const current = specs[section];
+      return {
+        ...prev,
+        [`${eye}_eye_specs`]: {
+          ...specs,
+          [section]: current !== null && typeof current === 'object'
+            ? { ...current, [field]: value }
+            : value
+        }
+      };
+    });
   };
 
   const handleLensSpecChange = (field) => {
@@ -324,9 +326,7 @@ export default function EyeApprovalsForm() {
   };
 
   const handleProcedureChange = (index, field, value) => {
-    const newProcedures = [...procedures];
-    newProcedures[index][field] = value;
-    setProcedures(newProcedures);
+    setProcedures(prev => prev.map((proc, i) => (i === index ? { ...proc, [field]: value } : proc)));
   };
 
   const addProcedure = () => {
@@ -452,7 +452,7 @@ export default function EyeApprovalsForm() {
       setValidating(true);
       
       const submitData = {
-        ...formData,
+        ...pickEditableFields(formData),
         procedures: procedures.filter(proc => proc.code || proc.service_description)
       };
 
@@ -504,8 +504,10 @@ export default function EyeApprovalsForm() {
       setSaving(true);
       
       const submitData = {
-        ...formData,
-        procedures: procedures.filter(proc => proc.code || proc.service_description)
+        ...pickEditableFields(formData),
+        procedures: procedures
+          .filter(proc => proc.code || proc.service_description)
+          .map(({ code, service_description, type, cost }) => ({ code, service_description, type, cost }))
       };
 
       let savedFormId = id; // For edit mode
@@ -519,22 +521,20 @@ export default function EyeApprovalsForm() {
         alert('Form created successfully!');
       }
       
-      // Save AI validation result to database if we have one
-      if (validationResult && savedFormId) {
+      // In edit mode the validation run already saved its result against this form
+      // (saveToDatabase: isEditMode). A new form had no ID at validation time, and the
+      // backend has no endpoint to attach an existing result, so only then is it re-run
+      // once with the new ID to persist it.
+      if (validationResult && savedFormId && !isEditMode) {
         try {
-          console.log(`💾 Attempting to save AI validation for form ID: ${savedFormId}`);
-          const saveResponse = await aiValidationService.validateForm(submitData, {
+          await aiValidationService.validateForm(submitData, {
             saveToDatabase: true,
             formId: savedFormId
           });
-          console.log('✅ AI validation saved to database:', saveResponse);
         } catch (aiError) {
-          console.error('❌ Error saving AI validation to database:', aiError);
-          console.error('Error details:', aiError.response?.data || aiError.message);
+          console.error('Error saving AI validation to database:', aiError?.message);
           // Don't block form submission if AI save fails
         }
-      } else {
-        console.log('ℹ️ No AI validation to save:', { hasValidationResult: !!validationResult, savedFormId });
       }
       
       navigate('/eye-approvals');
@@ -549,10 +549,11 @@ export default function EyeApprovalsForm() {
   const handleValidationProceed = () => {
     setShowValidationModal(false);
     setValidationBypass(true);
-    // Trigger form submission
-    const form = document.querySelector('form');
+    // Trigger submission of this page's form (not the first <form> in the document)
+    const form = formRef.current;
     if (form) {
-      form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
     }
   };
 
@@ -660,7 +661,7 @@ export default function EyeApprovalsForm() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         {/* Reception/Nurse Tab */}
         {activeTab === 'reception' && (
           <Card>
@@ -794,7 +795,7 @@ export default function EyeApprovalsForm() {
                   <div>
                     <Label>Sex</Label>
                     <Select
-                      value={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }, { value: 'Other', label: 'Other' }].find(opt => opt.value === formData.sex)}
+                      value={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }, { value: 'Other', label: 'Other' }].find(opt => opt.value === formData.sex) || null}
                       onChange={(option) => handleSelectChange('sex', option)}
                       onBlur={() => handleBlur('sex')}
                       options={[{ value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }, { value: 'Other', label: 'Other' }]}

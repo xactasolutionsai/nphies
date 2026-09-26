@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Send, Save, RotateCcw } from 'lucide-react';
 import { useGeneralRequestForm } from './useGeneralRequestForm';
 import WizardProgress from './WizardProgress';
 import { WIZARD_STEPS, isFirstStep, isLastStep } from './config/wizardConfig';
-import { hasDraft, getDraftTimestampFormatted, clearDraft } from '@/utils/draftManager';
+import { hasDraft, getDraftTimestampFormatted } from '@/utils/draftManager';
 import PrerequisiteJustificationPopup from './PrerequisiteJustificationPopup';
 
 // Lazy load step components for better performance
@@ -34,6 +34,7 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
     completedSteps,
     setField,
     validateCurrentStep,
+    validateAllSteps,
     nextStep,
     prevStep,
     goToStep,
@@ -41,6 +42,7 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
     loadDraftData,
     loadExistingData,
     resetForm,
+    discardDraft,
     addMedication,
     removeMedication,
     updateMedication,
@@ -50,7 +52,7 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
     addManagementItem,
     removeManagementItem,
     updateManagementItem
-  } = useGeneralRequestForm();
+  } = useGeneralRequestForm({ isEditMode });
   
   const [showDraftPrompt, setShowDraftPrompt] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,7 +65,6 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
     currentDiagnosis: '',
     requestedScan: ''
   });
-  const [pendingJustification, setPendingJustification] = useState('');
   
   // Load existing data if in edit mode
   useEffect(() => {
@@ -87,9 +88,9 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
   
   // Handle draft dismissal
   const handleDismissDraft = useCallback(() => {
-    clearDraft();
+    discardDraft();
     setShowDraftPrompt(false);
-  }, []);
+  }, [discardDraft]);
   
   // Handle next button
   const handleNext = useCallback(() => {
@@ -179,7 +180,8 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
   }, [formData]);
 
   // Handle actual submission (after prerequisites cleared)
-  const performSubmission = useCallback(async () => {
+  // The justification is passed in directly (not read from state) so it is never stale.
+  const performSubmission = useCallback(async (justification = '') => {
     try {
       const submissionData = {
         ...formData,
@@ -187,11 +189,9 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
         patient_id: formData.patient?.patient_id || null,
         provider_id: formData.provider?.provider_id || null,
         insurer_id: formData.coverage?.insurer_id || null,
-        prerequisiteJustification: pendingJustification || '',
+        prerequisiteJustification: justification || '',
         status: 'Submitted'
       };
-      
-      console.log('Submitting form data:', submissionData);
       
       let response;
       if (isEditMode && requestId) {
@@ -218,15 +218,12 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
         throw new Error(`Submission failed: ${response.status}`);
       }
 
-      const result = await response.json();
-      console.log('✅ Submission successful:', result);
+      await response.json();
       
       alert(isEditMode ? 'Request updated successfully!' : 'Request created successfully!');
       
-      // Clear draft after successful submission
-      if (!isEditMode) {
-        clearDraft();
-      }
+      // Clear draft after successful submission (no-op in edit mode)
+      discardDraft();
       
       // Navigate to the list page
       window.location.href = '/general-requests';
@@ -236,10 +233,19 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
       alert('Failed to submit request. Please try again.');
       throw error;
     }
-  }, [formData, pendingJustification, isEditMode, requestId]);
+  }, [formData, isEditMode, requestId, discardDraft]);
 
   // Handle form submission (with prerequisite check and fit validation)
   const handleSubmit = useCallback(async () => {
+    // Re-validate every step before submitting and block on errors
+    const { valid, firstInvalidStep } = validateAllSteps();
+    if (!valid) {
+      if (firstInvalidStep) goToStep(firstInvalidStep);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      alert('Please complete the required fields before submitting.');
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
@@ -273,25 +279,24 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
       } else {
         // No prerequisites or fit issues, submit directly
         console.log('✅ No validation issues, submitting...');
-        await performSubmission();
+        await performSubmission('');
         setIsSubmitting(false);
       }
       
     } catch (error) {
+      // performSubmission already alerted the user
       console.error('Submission error:', error);
-      alert('Failed to submit request. Please try again.');
       setIsSubmitting(false);
     }
-  }, [validatePrerequisites, performSubmission, formData]);
+  }, [validateAllSteps, goToStep, validatePrerequisites, performSubmission, formData]);
 
   // Handle justification submission from popup
   const handleJustificationSubmit = useCallback(async (justification) => {
-    setPendingJustification(justification);
     setShowPrerequisitePopup(false);
     setIsSubmitting(true);
     
     try {
-      await performSubmission();
+      await performSubmission(justification);
     } catch (error) {
       // Error already handled in performSubmission
     } finally {
@@ -492,10 +497,12 @@ const GeneralRequestWizard = ({ initialData = null, isEditMode = false, requestI
         </div>
       </div>
       
-      {/* Auto-save indicator */}
-      <div className="fixed bottom-4 left-4 bg-white px-4 py-2 rounded-lg shadow-lg border border-gray-200 text-sm text-gray-600">
-        💾 Auto-saving every 30 seconds
-      </div>
+      {/* Auto-save indicator (drafts are only kept for new requests) */}
+      {!isEditMode && (
+        <div className="fixed bottom-4 left-4 bg-white px-4 py-2 rounded-lg shadow-lg border border-gray-200 text-sm text-gray-600">
+          💾 Draft auto-saves as you type
+        </div>
+      )}
     </div>
   );
 };

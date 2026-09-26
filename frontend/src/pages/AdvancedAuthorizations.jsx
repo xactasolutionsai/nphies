@@ -324,7 +324,7 @@ export default function AdvancedAuthorizations() {
             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
               <ShieldAlert className="h-12 w-12 mb-3 text-gray-300" />
               <p className="text-lg font-medium">No Advanced Authorizations Found</p>
-              <p className="text-sm mt-1">Click "Poll for New" to check for incoming authorizations from payers.</p>
+              <p className="text-sm mt-1">Use "System Poll" to check for incoming authorizations from payers.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">

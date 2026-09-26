@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import api from '@/services/api';
+import { safeJsonParse } from '@/utils/json';
 import { 
   Shield, CheckCircle, XCircle, AlertCircle, Info, FileText, 
   ChevronDown, ChevronUp, ArrowLeft, RefreshCw, Copy, User, 
@@ -273,22 +274,24 @@ export default function NphiesEligibilityDetails() {
   // Parse benefits and errors from JSON if needed - must be before any early returns
   const benefits = useMemo(() => {
     if (!record) return [];
-    return typeof record.benefits === 'string' ? JSON.parse(record.benefits || '[]') : (record.benefits || []);
+    const parsed = safeJsonParse(record.benefits, []);
+    return Array.isArray(parsed) ? parsed : [];
   }, [record]);
   
   const errors = useMemo(() => {
     if (!record) return [];
-    return typeof record.error_codes === 'string' ? JSON.parse(record.error_codes || '[]') : (record.error_codes || record.errors || []);
+    const parsed = safeJsonParse(record.error_codes, null) ?? record.errors ?? [];
+    return Array.isArray(parsed) ? parsed : [];
   }, [record]);
   
   const rawRequest = useMemo(() => {
     if (!record) return {};
-    return typeof record.raw_request === 'string' ? JSON.parse(record.raw_request || '{}') : (record.raw_request || record.raw?.request || {});
+    return safeJsonParse(record.raw_request, null) || record.raw?.request || {};
   }, [record]);
   
   const rawResponse = useMemo(() => {
     if (!record) return {};
-    return typeof record.raw_response === 'string' ? JSON.parse(record.raw_response || '{}') : (record.raw_response || record.raw?.response || {});
+    return safeJsonParse(record.raw_response, null) || record.raw?.response || {};
   }, [record]);
 
   // Extract detailed data from FHIR response bundle
@@ -1513,7 +1516,7 @@ export default function NphiesEligibilityDetails() {
                         </Badge>
                         <span className="text-sm text-gray-500">Error #{index + 1}</span>
                       </div>
-                      <p className="text-red-700 font-medium mb-2">{err.message || err}</p>
+                      <p className="text-red-700 font-medium mb-2">{typeof err === 'string' ? err : (err?.message || err?.display || err?.code || JSON.stringify(err))}</p>
                       {err.location && (
                         <div className="bg-white rounded px-3 py-2 mt-2">
                           <p className="text-xs text-gray-600 mb-1">Location in Bundle:</p>

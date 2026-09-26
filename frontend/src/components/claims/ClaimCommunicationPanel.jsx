@@ -36,7 +36,7 @@ import {
   Code,
   Download
 } from 'lucide-react';
-import api from '../../services/api';
+import api, { clearApiCache } from '../../services/api';
 import { selectStyles } from '../prior-auth/styles';
 
 const ClaimCommunicationPanel = ({ 
@@ -51,135 +51,6 @@ const ClaimCommunicationPanel = ({
   const [communications, setCommunications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  const [pollPreviewCopied, setPollPreviewCopied] = useState(false);
-
-  const generatePollRequestBundle = () => {
-    const bundleId = crypto.randomUUID();
-    const messageHeaderId = crypto.randomUUID();
-    const taskId = `${Date.now()}`;
-    const providerOrgId = `provider-org-${Date.now()}`;
-    const providerId = communications?.[0]?.provider_nphies_id || '1010613708';
-    const providerName = 'Healthcare Provider';
-    const providerEndpoint = 'http://provider.com/fhir';
-    const nphiesBaseURL = 'http://176.105.150.83';
-    const timestamp = new Date().toISOString();
-    const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
-    const taskFullUrl = `${providerBaseUrl}/Task/${taskId}`;
-    const providerOrgFullUrl = `${providerBaseUrl}/Organization/${providerOrgId}`;
-    const nphiesOrgFullUrl = `${providerBaseUrl}/Organization/NPHIES`;
-
-    return {
-      resourceType: 'Bundle',
-      id: bundleId,
-      meta: {
-        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
-      },
-      type: 'message',
-      timestamp: timestamp,
-      entry: [
-        {
-          fullUrl: `urn:uuid:${messageHeaderId}`,
-          resource: {
-            resourceType: 'MessageHeader',
-            id: messageHeaderId,
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
-            },
-            eventCoding: {
-              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
-              code: 'poll-request'
-            },
-            sender: {
-              type: 'Organization',
-              identifier: {
-                system: 'http://nphies.sa/license/provider-license',
-                value: providerId
-              }
-            },
-            source: { endpoint: providerBaseUrl },
-            destination: [{
-              endpoint: `${nphiesBaseURL}/$process-message`,
-              receiver: {
-                type: 'Organization',
-                identifier: {
-                  system: 'http://nphies.sa/license/nphies',
-                  value: 'NPHIES'
-                }
-              }
-            }],
-            focus: [{ reference: taskFullUrl }]
-          }
-        },
-        {
-          fullUrl: taskFullUrl,
-          resource: {
-            resourceType: 'Task',
-            id: taskId,
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
-            },
-            identifier: [{
-              system: `${providerBaseUrl}/identifiers/poll-request`,
-              value: `req_${taskId}`
-            }],
-            status: 'requested',
-            intent: 'order',
-            code: {
-              coding: [{
-                system: 'http://nphies.sa/terminology/CodeSystem/task-code',
-                code: 'poll'
-              }]
-            },
-            requester: { reference: `Organization/${providerOrgId}` },
-            owner: { reference: 'Organization/NPHIES' },
-            authoredOn: timestamp
-          }
-        },
-        {
-          fullUrl: providerOrgFullUrl,
-          resource: {
-            resourceType: 'Organization',
-            id: providerOrgId,
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
-            },
-            identifier: [{
-              system: 'http://nphies.sa/license/provider-license',
-              value: providerId
-            }],
-            active: true,
-            type: [{ coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/organization-type', code: 'prov' }] }],
-            name: providerName
-          }
-        },
-        {
-          fullUrl: nphiesOrgFullUrl,
-          resource: {
-            resourceType: 'Organization',
-            id: 'NPHIES',
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
-            },
-            identifier: [{
-              use: 'official',
-              system: 'http://nphies.sa/license/nphies',
-              value: 'NPHIES'
-            }],
-            active: true,
-            name: 'National Program for Health Information Exchange Services'
-          }
-        }
-      ]
-    };
-  };
-
-  const handleCopyPollJson = async () => {
-    const pollBundle = generatePollRequestBundle();
-    await navigator.clipboard.writeText(JSON.stringify(pollBundle, null, 2));
-    setPollPreviewCopied(true);
-    setTimeout(() => setPollPreviewCopied(false), 2000);
-  };
   
   // Form state
   const [showComposeForm, setShowComposeForm] = useState(false);
@@ -227,6 +98,8 @@ const ClaimCommunicationPanel = ({
   const [pollMetadata, setPollMetadata] = useState(null);
   const [isLoadingPollPreview, setIsLoadingPollPreview] = useState(false);
   const [pollBundleCopied, setPollBundleCopied] = useState(false);
+  // False once the backend reports it has no poll-preview endpoint (404)
+  const [pollPreviewAvailable, setPollPreviewAvailable] = useState(true);
 
   useEffect(() => {
     if (claimId) {
@@ -257,6 +130,8 @@ const ClaimCommunicationPanel = ({
     setIsPolling(true);
     setError(null);
     try {
+      // Bypass the 30s GET cache so background System Poll results show up
+      clearApiCache();
       await loadData();
     } catch (err) {
       console.error('Error refreshing data:', err);
@@ -266,17 +141,36 @@ const ClaimCommunicationPanel = ({
     }
   };
 
+  // The poll bundle is always built by the backend (it knows the real provider
+  // license and NPHIES endpoint); the browser never fabricates one.
+  const fetchPollPreview = async () => {
+    try {
+      const result = await api.previewClaimPollBundle(claimId);
+      const bundle = result?.bundle || result?.data?.bundle || null;
+      if (!bundle) throw new Error('Server returned no poll bundle');
+      return { bundle, metadata: result?.metadata || result?.data?.metadata || null };
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        setPollPreviewAvailable(false);
+        setError('Poll bundle preview is not available on this server.');
+        return null;
+      }
+      throw err;
+    }
+  };
+
   const handlePreviewPollBundle = async () => {
     setIsLoadingPollPreview(true);
     setError(null);
     try {
-      const result = await api.previewClaimPollBundle(claimId);
+      const result = await fetchPollPreview();
+      if (!result) return;
       setPollBundle(result.bundle);
       setPollMetadata(result.metadata);
       setShowPollPreview(true);
     } catch (err) {
       console.error('Error fetching poll bundle preview:', err);
-      setError('Failed to load poll bundle preview: ' + (err.message || 'Unknown error'));
+      setError('Failed to load poll bundle preview: ' + (err.response?.data?.error || err.message || 'Unknown error'));
     } finally {
       setIsLoadingPollPreview(false);
     }
@@ -285,13 +179,14 @@ const ClaimCommunicationPanel = ({
   const copyPollBundleToClipboard = async () => {
     setIsLoadingPollPreview(true);
     try {
-      const result = await api.previewClaimPollBundle(claimId);
+      const result = await fetchPollPreview();
+      if (!result) return;
       await navigator.clipboard.writeText(JSON.stringify(result.bundle, null, 2));
       setPollBundleCopied(true);
       setTimeout(() => setPollBundleCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy poll bundle:', err);
-      setError('Failed to copy poll bundle: ' + (err.message || 'Unknown error'));
+      setError('Failed to copy poll bundle: ' + (err.response?.data?.error || err.message || 'Unknown error'));
     } finally {
       setIsLoadingPollPreview(false);
     }
@@ -670,6 +565,7 @@ const ClaimCommunicationPanel = ({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {pollPreviewAvailable && (<>
           <button
             onClick={handlePreviewPollBundle}
             disabled={isLoadingPollPreview}
@@ -701,6 +597,7 @@ const ClaimCommunicationPanel = ({
               </>
             )}
           </button>
+          </>)}
           <button
             onClick={handleRefresh}
             disabled={isPolling}
@@ -731,13 +628,17 @@ const ClaimCommunicationPanel = ({
                 >
                   Dismiss
                 </button>
-                <span className="text-gray-300">|</span>
-                <button 
-                  onClick={handlePreviewPollBundle}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  View Poll Bundle
-                </button>
+                {pollPreviewAvailable && (
+                  <>
+                    <span className="text-gray-300">|</span>
+                    <button 
+                      onClick={handlePreviewPollBundle}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      View Poll Bundle
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1167,14 +1068,15 @@ const ClaimCommunicationPanel = ({
                         )}
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        {(!comm.acknowledgment_received || comm.acknowledgment_status === 'queued') && (
+                        {pollPreviewAvailable && (!comm.acknowledgment_received || comm.acknowledgment_status === 'queued') && (
                           <button
-                            onClick={handleCopyPollJson}
-                            className="flex items-center px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
-                            title="Copy the Poll Bundle JSON"
+                            onClick={copyPollBundleToClipboard}
+                            disabled={isLoadingPollPreview}
+                            className="flex items-center px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                            title="Copy the Poll Bundle JSON (built by the server)"
                           >
                             <Copy className="w-3 h-3 mr-1" />
-                            {pollPreviewCopied ? 'Copied!' : 'Copy Poll JSON'}
+                            {pollBundleCopied ? 'Copied!' : 'Copy Poll JSON'}
                           </button>
                         )}
                         <button
