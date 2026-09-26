@@ -41,7 +41,8 @@ export const ADMIN_ONLY_OPERATIONS = Object.freeze([
   ['POST', /^\/system-poll(\/.*)?$/],                    // manual system-wide poll trigger
   ['POST', /^\/nphies-codes\/refresh$/],                 // code cache refresh
   ['POST', /^\/eligibility\/check-nphies-direct$/],      // raw bundle relay to NPHIES
-  ['*', /^\/users(\/.*)?$/]                              // user administration
+  ['*', /^\/users(\/.*)?$/],                             // user administration
+  ['*', /^\/clinical-ai-access(\/.*)?$/]                 // patient access grants for clinical AI
 ]);
 
 // Non-GET operations a reviewer may call: they build or check data but never create,

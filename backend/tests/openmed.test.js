@@ -53,6 +53,11 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
   const migration = await fs.readFile(new URL('../migrations/064_openmed_advisory.sql', import.meta.url), 'utf8');
   await owner.query(migration);
   await owner.query(migration); // idempotent
+  const access = await fs.readFile(new URL('../migrations/071_clinical_ai_access_and_reviews.sql', import.meta.url), 'utf8');
+  await owner.query(access);
+  await owner.query(access); // idempotent
+  // User 1 has an active grant for the synthetic patient; user 2 has none.
+  await owner.query("INSERT INTO public.clinical_ai_patient_access (user_id,patient_id,reason,granted_by) VALUES (1,$1,'synthetic test grant',1)", [patientId]);
   // Generated identifiers/password contain only a-z0-9; no user SQL interpolation.
   const password = randomUUID().replaceAll('-', '');
   await admin.query(`CREATE ROLE ${login} LOGIN PASSWORD '${password}' IN ROLE nafes_openmed`);
@@ -107,7 +112,7 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
     assert.equal((await call(`/patients/${patientId}/sources`)).body.data.length,2);
     for (const type of ['claim','prior_authorization']) {
       assert.match((await call(`/patients/${patientId}/sources/${type}/1`)).body.text,/metformin/);
-      assert.equal((await call(`/patients/${otherPatient}/sources/${type}/1`)).status,404);
+      assert.equal((await call(`/patients/${otherPatient}/sources/${type}/1`)).status,403);
     }
   });
   const payload = {patient_id:patientId,source_type:'claim',source_id:1,mode:'medications',text:'Patient takes metformin for type 2 diabetes.'};
@@ -117,7 +122,7 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
     assert.equal(saved.status,201,JSON.stringify(saved.body));
     assert.ok(saved.body.result.entities.some(entity=>entity.text.toLowerCase()==='metformin'));
     assert.equal((await call(`/analyses?patient_id=${patientId}`)).body.data.length,1);
-    assert.equal((await call(`/analyses?patient_id=${patientId}`,'GET',null,2)).body.data.length,0);
+    assert.equal((await call(`/analyses?patient_id=${patientId}`,'GET',null,2)).status,403);
     assert.equal((await call(`/analyses/${saved.body.id}`,'PATCH',{review_status:'reviewed'},2)).status,404);
     const reviewed = await call(`/analyses/${saved.body.id}`,'PATCH',{review_status:'reviewed',review_note:'Synthetic review'});
     assert.equal(reviewed.body.review_note,'Synthetic review');
@@ -126,12 +131,65 @@ test('OpenMed database integration and isolation', { skip: !process.env.TEST_OPE
   await t.test('Rejects forged fields, Arabic input, mismatched references, and failed inference', async () => {
     assert.equal((await call('/analyses','POST',{...payload,status:'approved'})).status,400);
     assert.equal((await call('/analyses','POST',{...payload,text:'نص طبي'})).status,400);
-    assert.equal((await call('/analyses','POST',{...payload,patient_id:otherPatient})).status,404);
+    assert.equal((await call('/analyses','POST',{...payload,patient_id:otherPatient})).status,403);
     assert.equal((await call('/analyses','POST',{...payload,source_type:'manual'})).status,400);
     simulateFailure=true;
     assert.equal((await call('/analyses','POST',payload)).status,503);
     simulateFailure=false;
     assert.equal((await call(`/analyses?patient_id=${patientId}`)).body.data.length,1);
+  });
+  await t.test('Patient access needs an active, unexpired, unrevoked grant', async () => {
+    assert.deepEqual((await call('/patients?search=SYNTHETIC','GET',null,2)).body.data,[]);
+    assert.deepEqual((await call('/patients?search=SYNTHETIC')).body.data.map(p=>p.patient_id),[patientId]);
+    assert.equal((await call(`/patients/${patientId}/sources`,'GET',null,2)).status,403);
+    assert.equal((await call('/analyses','POST',payload,2)).status,403);
+    await owner.query("INSERT INTO public.clinical_ai_patient_access (user_id,patient_id,reason,granted_at,expires_at) VALUES (2,$1,'expired grant',now()-interval '2 days',now()-interval '1 day')", [patientId]);
+    assert.equal((await call(`/patients/${patientId}/sources`,'GET',null,2)).status,403);
+    const { rows } = await owner.query("INSERT INTO public.clinical_ai_patient_access (user_id,patient_id,reason) VALUES (2,$1,'active grant') RETURNING id", [patientId]);
+    assert.equal((await call(`/patients/${patientId}/sources`,'GET',null,2)).status,200);
+    await owner.query("UPDATE public.clinical_ai_patient_access SET revoked_at=now(),revoked_by=1,revoke_reason='test' WHERE id=$1", [rows[0].id]);
+    assert.equal((await call(`/patients/${patientId}/sources`,'GET',null,2)).status,403);
+    // A granted user still sees only their own analyses
+    await owner.query("INSERT INTO public.clinical_ai_patient_access (user_id,patient_id,reason) VALUES (2,$1,'second grant')", [patientId]);
+    assert.equal((await call(`/analyses?patient_id=${patientId}`,'GET',null,2)).body.data.length,0);
+    assert.equal((await call(`/analyses/${saved.body.id}/reviews`,'GET',null,2)).status,404);
+    // The advisory login can read grants but never create or change them, nor rewrite reviews
+    await assert.rejects(query("INSERT INTO public.clinical_ai_patient_access (user_id,patient_id,reason) VALUES (2,$1,'self grant')",[otherPatient]),{code:'42501'});
+    await assert.rejects(query("UPDATE public.clinical_ai_patient_access SET revoked_at=NULL"),{code:'42501'});
+    await assert.rejects(query('UPDATE openmed_advisory.analysis_reviews SET note=$1',['x']),{code:'42501'});
+    await assert.rejects(query('DELETE FROM openmed_advisory.analysis_reviews'),{code:'42501'});
+  });
+  await t.test('Context is computed and stored with the analysis', async () => {
+    const context = saved.body.result.context;
+    assert.equal(context.status,'ok');
+    const metformin = context.entities.find(e=>e.text==='metformin');
+    assert.equal(metformin.type,'medication');
+    assert.equal(metformin.medication.status,'current');
+    assert.equal(metformin.extractor.extractor,'openmed');
+    assert.match(metformin.extractor.score_meaning,/not a clinical probability/);
+    const status = (await call('/status')).body;
+    assert.equal(status.patient_access,'explicit_grant');
+    assert.ok(status.context_engine.version);
+  });
+  await t.test('Reviews are versioned, validated, and never change the stored output', async () => {
+    const base = `/analyses/${saved.body.id}/reviews`;
+    const original = (await call(`/analyses?patient_id=${patientId}`)).body.data[0].result;
+    const v1 = await call(base,'POST',{decision:'accepted',note:'looks right'});
+    assert.equal(v1.status,201,JSON.stringify(v1.body));
+    assert.equal(v1.body.version,1);
+    const v2 = await call(base,'POST',{decision:'corrected',corrections:[{entity_index:0,field:'medication_status',value:'discontinued',reason:'stopped per note'}]});
+    assert.equal(v2.body.version,2);
+    assert.equal((await call(base,'POST',{decision:'corrected',corrections:[{entity_index:0,field:'assertion',value:'confirmed'}]})).status,400);
+    assert.equal((await call(base,'POST',{decision:'corrected',corrections:[{entity_index:9,field:'assertion',value:'absent'}]})).status,400);
+    assert.equal((await call(base,'POST',{decision:'corrected',corrections:[]})).status,400);
+    assert.equal((await call(base,'POST',{decision:'accepted',corrections:[{entity_index:0,field:'assertion',value:'absent'}]})).status,400);
+    assert.equal((await call(base,'POST',{decision:'rejected'})).body.version,3);
+    const history = (await call(base)).body.data;
+    assert.deepEqual(history.map(r=>[r.version,r.decision]),[[1,'accepted'],[2,'corrected'],[3,'rejected']]);
+    assert.equal(history[1].corrections[0].value,'discontinued');
+    const after = (await call(`/analyses?patient_id=${patientId}`)).body.data[0];
+    assert.deepEqual(after.result,original);
+    assert.equal(after.review_status,'dismissed');
   });
   await t.test('All original patient and NPHIES source rows remain byte-equivalent as JSON', async () => {
     assert.deepEqual(await snapshot(),before);
