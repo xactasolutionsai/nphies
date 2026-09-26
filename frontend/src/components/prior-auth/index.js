@@ -38,7 +38,11 @@ export {
   formatAmount,
   getInitialItemData,
   getInitialDiagnosisData,
-  getInitialSupportingInfoData
+  getInitialSupportingInfoData,
+  getInitialLabObservationData,
+  newRowKey,
+  withRowKeys,
+  stripRowKeys
 } from './helpers';
 
 // Dummy Data Generator

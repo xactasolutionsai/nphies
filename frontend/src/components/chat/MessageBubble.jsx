@@ -1,5 +1,31 @@
 import React from 'react';
 import { User, Bot, Info } from 'lucide-react';
+import { parseChatMarkdown } from '@/utils/aiAssist';
+
+const Inline = ({ runs }) => runs.map((run, i) => (run.bold ? <strong key={i}>{run.text}</strong> : <React.Fragment key={i}>{run.text}</React.Fragment>));
+
+/**
+ * Model text rendered as React elements from a small Markdown subset (bold, lists, headings,
+ * line breaks). No HTML is ever injected: everything else stays literal text.
+ */
+const MarkdownText = ({ text }) => parseChatMarkdown(text).map((block, i) => {
+  if (block.type === 'heading') return <p key={i} className="font-semibold mt-2 first:mt-0"><Inline runs={block.inline} /></p>;
+  if (block.type === 'list') {
+    const List = block.ordered ? 'ol' : 'ul';
+    return (
+      <List key={i} className={`${block.ordered ? 'list-decimal' : 'list-disc'} pl-5 my-1 space-y-0.5`}>
+        {block.items.map((item, j) => <li key={j}><Inline runs={item} /></li>)}
+      </List>
+    );
+  }
+  return (
+    <p key={i} className="my-1 first:mt-0 last:mb-0">
+      {block.lines.map((line, j) => (
+        <React.Fragment key={j}>{j > 0 && <br />}<Inline runs={line} /></React.Fragment>
+      ))}
+    </p>
+  );
+});
 
 /**
  * MessageBubble Component
@@ -59,8 +85,8 @@ const MessageBubble = ({ message }) => {
               : 'bg-gray-100 text-gray-900'
           }`}>
             {content ? (
-              <div className="text-sm whitespace-pre-wrap break-words">
-                {content}
+              <div className="text-sm break-words">
+                <MarkdownText text={content} />
                 {isStreaming && (
                   <span className="inline-block w-1.5 h-4 bg-gray-500 ml-1 animate-pulse"></span>
                 )}

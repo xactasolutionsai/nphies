@@ -9,6 +9,37 @@ import {
 } from 'lucide-react';
 import api from '@/services/api';
 
+// JSONB columns normally arrive as objects; tolerate legacy string values.
+const parseMaybeJson = (value) => {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return null; }
+};
+
+// The batch is submitted as ONE batch-request Bundle in a single HTTP POST;
+// the individual claim bundles are nested entries inside it.
+const formatBatchBundlesForCopy = (bundles, batchIdentifier) => {
+  let output = `// ==========================================\n`;
+  output += `// Batch Claim: ${batchIdentifier}\n`;
+  output += `// Nested claim bundles: ${bundles.length}\n`;
+  output += `// All bundles below are sent together inside a single batch-request Bundle (one HTTP POST).\n`;
+  output += `// ==========================================\n\n`;
+
+  bundles.forEach((bundle, index) => {
+    const batchNumber = bundle.entry?.find(e => e.resource?.resourceType === 'Claim')
+      ?.resource?.extension?.find(ext => ext.url?.includes('extension-batch-number'))
+      ?.valuePositiveInt || (index + 1);
+
+    output += `// ------------------------------------------\n`;
+    output += `// Bundle #${index + 1} (batch-number: ${batchNumber})\n`;
+    output += `// ------------------------------------------\n`;
+    output += JSON.stringify(bundle, null, 2);
+    output += `\n\n`;
+  });
+
+  return output;
+};
+
 export default function BatchBundlePreview() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -36,9 +67,10 @@ export default function BatchBundlePreview() {
       setBatch(batchData);
       
       if (batchData && batchData.status !== 'Draft' && batchData.request_bundle) {
-        const storedBundle = typeof batchData.request_bundle === 'string' 
-          ? JSON.parse(batchData.request_bundle) 
-          : batchData.request_bundle;
+        const storedBundle = parseMaybeJson(batchData.request_bundle);
+        if (!storedBundle) {
+          throw new Error('Stored request bundle could not be parsed');
+        }
         
         if (storedBundle.batchBundle) {
           setBatchBundle(storedBundle.batchBundle);
@@ -81,7 +113,7 @@ export default function BatchBundlePreview() {
     return cleanBundle;
   };
 
-  // Copy all bundles as formatted text showing each HTTP request
+  // Copy all nested bundles as formatted text (sent together in one batch-request POST)
   const copyAllBundlesFormatted = async () => {
     try {
       const rawData = bundlePreview?.data || bundlePreview;
@@ -89,25 +121,8 @@ export default function BatchBundlePreview() {
         ? rawData.map(cleanBundleForNphies)
         : [cleanBundleForNphies(rawData)];
       
-      let formattedOutput = `// ==========================================\n`;
-      formattedOutput += `// Batch Claim: ${batch?.batch_identifier}\n`;
-      formattedOutput += `// Total HTTP Requests: ${cleanBundles.length}\n`;
-      formattedOutput += `// Each bundle below is sent as a SEPARATE HTTP POST request\n`;
-      formattedOutput += `// ==========================================\n\n`;
-      
-      cleanBundles.forEach((bundle, index) => {
-        const batchNumber = bundle.entry?.find(e => e.resource?.resourceType === 'Claim')
-          ?.resource?.extension?.find(ext => ext.url?.includes('extension-batch-number'))
-          ?.valuePositiveInt || (index + 1);
-        
-        formattedOutput += `// ------------------------------------------\n`;
-        formattedOutput += `// HTTP Request #${index + 1} (batch-number: ${batchNumber})\n`;
-        formattedOutput += `// POST to NPHIES API\n`;
-        formattedOutput += `// ------------------------------------------\n`;
-        formattedOutput += JSON.stringify(bundle, null, 2);
-        formattedOutput += `\n\n`;
-      });
-      
+      const formattedOutput = formatBatchBundlesForCopy(cleanBundles, batch?.batch_identifier);
+
       await navigator.clipboard.writeText(formattedOutput);
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
@@ -356,13 +371,13 @@ export default function BatchBundlePreview() {
               </div>
               <div className="text-center p-4 bg-blue-50 rounded-lg">
                 <p className="text-3xl font-bold text-blue-600">
-                  {bundlePreview?.claimCount || 0}
+                  {bundlePreview?.claimCount ?? batch?.total_claims ?? batch?.claims?.length ?? 0}
                 </p>
                 <p className="text-sm text-gray-600 mt-1">Claims</p>
               </div>
               <div className="text-center p-4 bg-green-50 rounded-lg">
                 <p className="text-3xl font-bold text-green-600">
-                  {Number(bundlePreview?.totalAmount || 0).toLocaleString()}
+                  {Number(bundlePreview?.totalAmount ?? batch?.total_amount ?? 0).toLocaleString()}
                 </p>
                 <p className="text-sm text-gray-600 mt-1">Total Amount (SAR)</p>
               </div>
@@ -483,7 +498,7 @@ export default function BatchBundlePreview() {
                 <div>
                   <CardTitle className="text-xl text-white">Complete Batch Request</CardTitle>
                   <p className="text-white/80 text-sm mt-1">
-                    {bundlePreview.data.length} HTTP Requests - Batch: {batch?.batch_identifier}
+                    {bundlePreview.data.length} nested claim bundle{bundlePreview.data.length === 1 ? '' : 's'} - Batch: {batch?.batch_identifier}
                   </p>
                 </div>
                 <Badge className="bg-white/20 text-white">
@@ -493,34 +508,12 @@ export default function BatchBundlePreview() {
             </CardHeader>
             <div className="bg-amber-50 border-b border-amber-200 px-4 py-2">
               <p className="text-sm text-amber-800">
-                <strong>⚠️ ملاحظة:</strong> كل Bundle يُرسل في HTTP POST منفصل لـ NPHIES. الـ Comments تُظهر ترتيب الإرسال.
+                <strong>Note:</strong> These bundles are sent to NPHIES together inside a single batch-request Bundle (one HTTP POST). The comments show each bundle's batch-number.
               </p>
             </div>
             <CardContent className="p-0">
               <pre className="bg-gray-900 text-green-400 p-6 overflow-x-auto text-sm font-mono leading-relaxed max-h-[700px] overflow-y-auto whitespace-pre-wrap break-all select-all">
-{(() => {
-  const cleanBundles = bundlePreview.data.map(cleanBundleForNphies);
-  let output = `// ==========================================\n`;
-  output += `// Batch Claim: ${batch?.batch_identifier}\n`;
-  output += `// Total HTTP Requests: ${cleanBundles.length}\n`;
-  output += `// Each bundle below is sent as a SEPARATE HTTP POST request\n`;
-  output += `// ==========================================\n\n`;
-  
-  cleanBundles.forEach((bundle, index) => {
-    const batchNumber = bundle.entry?.find(e => e.resource?.resourceType === 'Claim')
-      ?.resource?.extension?.find(ext => ext.url?.includes('extension-batch-number'))
-      ?.valuePositiveInt || (index + 1);
-    
-    output += `// ------------------------------------------\n`;
-    output += `// HTTP Request #${index + 1} (batch-number: ${batchNumber})\n`;
-    output += `// POST to NPHIES API\n`;
-    output += `// ------------------------------------------\n`;
-    output += JSON.stringify(bundle, null, 2);
-    output += `\n\n`;
-  });
-  
-  return output;
-})()}
+{formatBatchBundlesForCopy(bundlePreview.data.map(cleanBundleForNphies), batch?.batch_identifier)}
               </pre>
             </CardContent>
           </Card>
@@ -546,7 +539,7 @@ export default function BatchBundlePreview() {
                           </div>
                           <div>
                             <CardTitle className="text-lg">
-                              HTTP Request #{index + 1}
+                              Bundle #{index + 1}
                             </CardTitle>
                             <p className="text-sm text-gray-500">
                               batch-number: {batchNumber}

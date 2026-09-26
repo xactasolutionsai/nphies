@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { addCanvasAcrossPages } from '@/utils/pdfExport';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import api from '@/services/api';
 import { format } from 'date-fns';
+import { safeJsonParse } from '@/utils/json';
 import { 
   ArrowLeft, 
   Edit, 
@@ -27,8 +29,10 @@ import {
   AlertTriangle,
   FlaskConical
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function EyeApprovalsDetails() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
@@ -52,9 +56,9 @@ export default function EyeApprovalsDetails() {
       // Parse JSONB fields
       const parsedData = {
         ...data,
-        right_eye_specs: typeof data.right_eye_specs === 'string' ? JSON.parse(data.right_eye_specs) : (data.right_eye_specs || {}),
-        left_eye_specs: typeof data.left_eye_specs === 'string' ? JSON.parse(data.left_eye_specs) : (data.left_eye_specs || {}),
-        lens_specifications: typeof data.lens_specifications === 'string' ? JSON.parse(data.lens_specifications) : (data.lens_specifications || {}),
+        right_eye_specs: safeJsonParse(data.right_eye_specs, {}) || {},
+        left_eye_specs: safeJsonParse(data.left_eye_specs, {}) || {},
+        lens_specifications: safeJsonParse(data.lens_specifications, {}) || {},
         procedures: data.procedures || []
       };
       
@@ -127,34 +131,19 @@ export default function EyeApprovalsDetails() {
         backgroundColor: '#ffffff',
       });
       
-      element.classList.add('hidden');
-      element.classList.remove('pdf-export');
-      
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      
-      const ratio = imgWidth / imgHeight;
-      let finalWidth = pdfWidth - 20;
-      let finalHeight = finalWidth / ratio;
-      
-      if (finalHeight > pdfHeight - 20) {
-        finalHeight = pdfHeight - 20;
-        finalWidth = finalHeight * ratio;
-      }
-      
-      const imgX = (pdfWidth - finalWidth) / 2;
-      const imgY = 10;
-      
-      pdf.addImage(imgData, 'PNG', imgX, imgY, finalWidth, finalHeight);
+      // Full width, continued over as many A4 pages as needed
+      addCanvasAcrossPages(pdf, canvas, 10);
       pdf.save(`EyeApproval_${formData?.form_number || 'Form'}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Error generating PDF. Please try again.');
     } finally {
+      // Always hide the print template again, even if html2canvas throws
+      if (printRef.current) {
+        printRef.current.classList.add('hidden');
+        printRef.current.classList.remove('pdf-export');
+      }
       setExportingPDF(false);
     }
   };
@@ -517,14 +506,14 @@ export default function EyeApprovalsDetails() {
                             <TableCell>{proc.service_description || 'N/A'}</TableCell>
                             <TableCell>{proc.type || 'N/A'}</TableCell>
                             <TableCell className="text-right font-semibold">
-                              ${parseFloat(proc.cost || 0).toFixed(2)}
+                              {parseFloat(proc.cost || 0).toFixed(2)} SAR
                             </TableCell>
                           </TableRow>
                         ))}
                         <TableRow className="bg-gray-50 font-semibold">
                           <TableCell colSpan={3} className="text-right">Total Cost:</TableCell>
                           <TableCell className="text-right">
-                            ${totalCost.toFixed(2)}
+                            {totalCost.toFixed(2)} SAR
                           </TableCell>
                         </TableRow>
                       </TableBody>
@@ -582,9 +571,7 @@ export default function EyeApprovalsDetails() {
                 <CardContent className="pt-6 space-y-6">
                   {aiValidations.map((validation, index) => {
                     // Parse validation_result if it's a string, otherwise use as-is
-                    const validationResult = typeof validation.validation_result === 'string' 
-                      ? JSON.parse(validation.validation_result) 
-                      : (validation.validation_result || {});
+                    const validationResult = safeJsonParse(validation.validation_result, {}) || {};
                     
                     // Extract arrays from the validation result
                     const recommendations = Array.isArray(validationResult.recommendations) 
@@ -792,7 +779,7 @@ export default function EyeApprovalsDetails() {
                   </div>
                   <div className="mt-2 bg-purple-50 rounded-lg p-3 text-center">
                     <p className="text-xs text-gray-500 mb-1">Total Cost</p>
-                    <p className="text-2xl font-bold text-purple-600">${totalCost.toFixed(2)}</p>
+                    <p className="text-2xl font-bold text-purple-600">{totalCost.toFixed(2)} SAR</p>
                   </div>
                 </div>
               </CardContent>
@@ -801,13 +788,15 @@ export default function EyeApprovalsDetails() {
             {/* Action Buttons */}
             <Card>
               <CardContent className="p-4 space-y-2">
-                <Button
-                  onClick={() => navigate(`/eye-approvals/${id}/edit`)}
-                  className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Form
-                </Button>
+                {can('edit') && (
+                  <Button
+                    onClick={() => navigate(`/eye-approvals/${id}/edit`)}
+                    className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Form
+                  </Button>
+                )}
                 <Button
                   onClick={handlePrint}
                   variant="outline"
@@ -825,14 +814,16 @@ export default function EyeApprovalsDetails() {
                   <Download className="h-4 w-4 mr-2" />
                   {exportingPDF ? 'Generating...' : 'Export PDF'}
                 </Button>
-                <Button
-                  onClick={handleDelete}
-                  variant="destructive"
-                  className="w-full"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Form
-                </Button>
+                {can('delete') && (
+                  <Button
+                    onClick={handleDelete}
+                    variant="destructive"
+                    className="w-full"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Form
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1065,7 +1056,7 @@ export default function EyeApprovalsDetails() {
                 )}
                 <tr style={{ fontWeight: 'bold' }}>
                   <td colSpan="3" style={{ border: '2px solid #000', padding: '6px', textAlign: 'right' }}>Total Cost:</td>
-                  <td style={{ border: '2px solid #000', padding: '6px', textAlign: 'right' }}>${totalCost.toFixed(2)}</td>
+                  <td style={{ border: '2px solid #000', padding: '6px', textAlign: 'right' }}>{totalCost.toFixed(2)} SAR</td>
                 </tr>
               </tbody>
             </table>

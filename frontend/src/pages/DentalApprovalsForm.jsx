@@ -387,7 +387,8 @@ export default function DentalApprovalsForm() {
     });
     setTouched(prev => ({ ...prev, ...touchedFields }));
 
-    return Object.keys(newErrors).length === 0;
+    // Return the errors themselves: the `errors` state is not updated until the next render
+    return newErrors;
   };
 
   // Get which tab each field belongs to
@@ -409,9 +410,7 @@ export default function DentalApprovalsForm() {
   };
 
   const handleProcedureChange = (index, field, value) => {
-    const newProcedures = [...procedures];
-    newProcedures[index][field] = value;
-    setProcedures(newProcedures);
+    setProcedures(prev => prev.map((proc, i) => (i === index ? { ...proc, [field]: value } : proc)));
   };
 
   const addProcedure = () => {
@@ -514,10 +513,11 @@ export default function DentalApprovalsForm() {
     if (e) e.preventDefault();
     
     // Validate form before submission
-    if (!validateForm()) {
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
       alert('Please fill in all required fields correctly.');
       // Switch to first tab with error
-      const errorFields = Object.keys(errors);
+      const errorFields = Object.keys(validationErrors);
       if (errorFields.length > 0) {
         const firstErrorTab = getFieldTab(errorFields[0]);
         setActiveTab(firstErrorTab);

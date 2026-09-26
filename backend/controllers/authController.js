@@ -2,16 +2,17 @@ import { query } from '../db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../config/auth.js';
+import { publicRegistrationEnabled } from '../middleware/publicRegistration.js';
 
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 class AuthController {
   // Register a new user
   async register(req, res) {
-    // Enforce this inside Express too: reverse-proxy exact paths can be bypassed
-    // through trailing slashes or case-insensitive routing.
-    if (process.env.NODE_ENV === 'production' || process.env.DISABLE_PUBLIC_REGISTRATION === 'true') {
-      return res.status(403).json({ error: 'Public registration is disabled' });
+    // Enforced here as well as by the route guard (same ENABLE_PUBLIC_REGISTRATION flag):
+    // reverse-proxy exact paths can be bypassed through trailing slashes or case-insensitive routing.
+    if (!publicRegistrationEnabled()) {
+      return res.status(403).json({ error: 'Registration disabled', message: 'Public registration is disabled' });
     }
     try {
       const { email, password, confirmPassword } = req.body;

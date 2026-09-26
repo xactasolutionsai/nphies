@@ -19,6 +19,11 @@
 
 import { randomUUID } from 'crypto';
 import { NPHIES_CONFIG } from '../config/nphies.js';
+import { formatSaudiDateTime } from '../utils/dateTime.js';
+import {
+  providerDomain as deriveProviderDomain, claimIdentifierSystem, requireProviderLicense, requireInsurerLicense,
+  formatSaudiDate, mappingError, providerTypeCoding
+} from './priorAuthMapper/nphiesIdentity.js';
 
 class CommunicationMapper {
   constructor() {
@@ -155,9 +160,10 @@ class CommunicationMapper {
         }]
       },
       deceasedBoolean: false,
-      // NPHIES FIX (IC-00236): birthDate is REQUIRED, not optional
-      // If not provided, use a placeholder date that indicates unknown
-      birthDate: patient.birth_date ? this.formatDate(patient.birth_date) : '1900-01-01',
+      // NPHIES FIX (IC-00236): birthDate is REQUIRED; never a placeholder date
+      birthDate: this.formatDate(patient.birth_date) || (() => {
+        throw mappingError('Patient birth date (patient.birth_date) is required');
+      })(),
       maritalStatus: {
         coding: [{
           system: 'http://terminology.hl7.org/CodeSystem/v3-MaritalStatus',
@@ -192,14 +198,9 @@ class CommunicationMapper {
    */
   buildProviderOrganizationResource(provider) {
     const providerId = provider.provider_id?.toString() || this.generateId();
-    const nphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
+    const nphiesId = requireProviderLicense(provider);
     const providerName = provider.provider_name || provider.name || 'Provider Organization';
-    const providerType = provider.provider_type || '1';
-
-    const getProviderTypeDisplay = (code) => {
-      const displays = { '1': 'Hospital', '2': 'Polyclinic', '3': 'Pharmacy', '4': 'Optical Shop', '5': 'Clinic' };
-      return displays[code] || 'Healthcare Provider';
-    };
+    const providerType = providerTypeCoding(provider.provider_type);
 
     return {
       fullUrl: `http://provider.com/Organization/${providerId}`,
@@ -214,8 +215,8 @@ class CommunicationMapper {
           valueCodeableConcept: {
             coding: [{
               system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
-              code: providerType,
-              display: getProviderTypeDisplay(providerType)
+              code: providerType.code,
+              display: providerType.display
             }]
           }
         }],
@@ -251,7 +252,7 @@ class CommunicationMapper {
    */
   buildInsurerOrganizationResource(insurer) {
     const insurerId = insurer.insurer_id?.toString() || this.generateId();
-    const nphiesId = insurer.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID;
+    const nphiesId = requireInsurerLicense(insurer);
     const insurerName = insurer.insurer_name || insurer.name || 'Insurance Organization';
 
     return {
@@ -299,10 +300,17 @@ class CommunicationMapper {
    * Build Coverage resource for Communication bundle
    * Per NPHIES standard: https://portal.nphies.sa/ig/StructureDefinition-coverage.html
    */
-  buildCoverageResource(coverage, patient, insurer) {
+  buildCoverageResource(coverage, patient, insurer, resourceIds = {}) {
     const coverageId = coverage?.coverage_id?.toString() || coverage?.id?.toString() || this.generateId();
-    const patientId = patient.patient_id?.toString() || patient.id;
-    const insurerId = insurer.insurer_id?.toString() || insurer.id;
+    // Reference the ids actually generated for the Patient/Organization in this bundle
+    const patientId = resourceIds.patient || patient.patient_id?.toString() || patient.id;
+    const insurerId = resourceIds.insurer || insurer.insurer_id?.toString() || insurer.id;
+    const memberId = coverage?.member_id;
+    if (!memberId) {
+      throw mappingError('Coverage member ID (coverage.member_id) is required');
+    }
+    const planValue = coverage?.plan_id || coverage?.class_value;
+    const planName = coverage?.plan_name || coverage?.class_name;
 
     const coverageResource = {
       resourceType: 'Coverage',
@@ -313,10 +321,10 @@ class CommunicationMapper {
       identifier: [
         {
           system: 'http://payer.com/memberid',
-          value: coverage?.member_id || patient.identifier || `MEM-${Date.now()}`
+          value: String(memberId)
         }
       ],
-      status: 'active',
+      status: coverage?.is_active === false ? 'cancelled' : 'active',
       type: {
         coding: [
           {
@@ -349,21 +357,24 @@ class CommunicationMapper {
           reference: `Organization/${insurerId}`
         }
       ],
-      class: [
-        {
-          type: {
-            coding: [
-              {
-                system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
-                code: 'plan'
-              }
-            ]
-          },
-          value: coverage?.plan_id || coverage?.class_value || 'default-plan',
-          name: coverage?.plan_name || coverage?.class_name || 'Insurance Plan'
-        }
-      ]
+      class: []
     };
+
+    // Plan class only when the plan is known (no 'default-plan' placeholder)
+    if (planValue || planName) {
+      coverageResource.class.push({
+        type: {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
+              code: 'plan'
+            }
+          ]
+        },
+        value: String(planValue || planName),
+        ...(planName && { name: planName })
+      });
+    }
 
     // Add period if available
     if (coverage?.period_start || coverage?.start_date) {
@@ -390,6 +401,8 @@ class CommunicationMapper {
         name: coverage.network_name || 'Network'
       });
     }
+
+    if (coverageResource.class.length === 0) delete coverageResource.class;
 
     return {
       fullUrl: `http://provider.com/Coverage/${coverageId}`,
@@ -429,9 +442,17 @@ class CommunicationMapper {
    * Format date to FHIR date format (YYYY-MM-DD)
    */
   formatDate(date) {
-    if (!date) return null;
-    const d = new Date(date);
-    return d.toISOString().split('T')[0];
+    // Saudi calendar date; toISOString() shifted local-midnight dates to the previous day
+    // and threw on invalid input
+    return formatSaudiDate(date);
+  }
+
+  /**
+   * System of the submitted Claim.identifier the communication is about
+   * (claims: /claim, prior authorizations: /authorization), derived exactly as the mappers do.
+   */
+  getAboutIdentifierSystem(provider, claimUse = 'preauthorization') {
+    return claimIdentifierSystem(provider, claimUse);
   }
 
   /**
@@ -579,20 +600,29 @@ class CommunicationMapper {
    * @param {Array} options.payloads - Array of payload objects
    * @returns {Object} FHIR Bundle
    */
-  buildUnsolicitedCommunicationBundle({ priorAuth, patient, provider, insurer, coverage, location, payloads, messageEventCode, communicationStatus }) {
+  buildUnsolicitedCommunicationBundle({ priorAuth, patient, provider, insurer, coverage, location, payloads, messageEventCode, communicationStatus, claimUse = priorAuth?.claim_use || 'preauthorization' }) {
     const bundleId = this.generateId();
     const communicationId = this.generateId();
     
     // Build the 'about' reference using proper identifier system URL format
-    // NPHIES FIX: The 'about' identifier MUST match the Claim.identifier from the original authorization request
-    // Uses the same identifier system and request_number value for consistency
-    const providerDomain = this.extractProviderDomain(provider.provider_name || provider.name || 'provider');
+    // NPHIES FIX: The 'about' identifier MUST match the Claim.identifier of the original request:
+    // same system (/claim for claims, /authorization for prior auths) and the same value
     const aboutIdentifier = this.getNphiesAuthReference(priorAuth);
     const aboutReference = {
       identifier: {
-        system: `http://${providerDomain}/identifiers/authorization`,
+        system: priorAuth?.about_identifier_system || this.getAboutIdentifierSystem(provider, claimUse),
         value: aboutIdentifier
       }
+    };
+
+    // Build full resources first so the Communication references their actual ids
+    const patientResource = this.buildPatientResource(patient);
+    const providerResource = this.buildProviderOrganizationResource(provider);
+    const insurerResource = this.buildInsurerOrganizationResource(insurer);
+    const resourceIds = {
+      patient: patientResource.resource.id,
+      provider: providerResource.resource.id,
+      insurer: insurerResource.resource.id
     };
     
     // Build the Communication resource
@@ -602,6 +632,7 @@ class CommunicationMapper {
       patient,
       provider,
       insurer,
+      resourceIds,
       aboutReference: aboutReference,
       aboutType: 'Claim',
       payloads,
@@ -621,13 +652,8 @@ class CommunicationMapper {
       ...(messageEventCode && { eventCode: messageEventCode })
     });
 
-    // Build full resources per NPHIES standard
-    const patientResource = this.buildPatientResource(patient);
-    const providerResource = this.buildProviderOrganizationResource(provider);
-    const insurerResource = this.buildInsurerOrganizationResource(insurer);
-    
     // Build Coverage resource if coverage data is provided
-    const coverageResource = coverage ? this.buildCoverageResource(coverage, patient, insurer) : null;
+    const coverageResource = coverage ? this.buildCoverageResource(coverage, patient, insurer, resourceIds) : null;
     
     // Build Location resource if location data is provided (optional per NPHIES spec)
     const locationResource = location ? this.buildLocationResource(location, provider) : null;
@@ -683,13 +709,12 @@ class CommunicationMapper {
    * @param {Array} options.payloads - Array of payload objects (typically attachments)
    * @returns {Object} FHIR Bundle
    */
-  buildSolicitedCommunicationBundle({ communicationRequest, priorAuth, patient, provider, insurer, coverage, location, payloads, messageEventCode, communicationStatus }) {
+  buildSolicitedCommunicationBundle({ communicationRequest, priorAuth, patient, provider, insurer, coverage, location, payloads, messageEventCode, communicationStatus, claimUse = priorAuth?.claim_use || 'preauthorization' }) {
     const bundleId = this.generateId();
     const communicationId = this.generateId();
     
     // Build the 'about' reference using proper identifier system URL format
-    // NPHIES FIX: The 'about' identifier MUST match the Claim.identifier from the original authorization request
-    const providerDomain = this.extractProviderDomain(provider.provider_name || provider.name || 'provider');
+    // NPHIES FIX: The 'about' identifier MUST match the Claim.identifier from the original request
     const aboutIdentifierValue = this.getNphiesAuthReference(priorAuth);
     
     // Priority for about identifier value:
@@ -697,7 +722,7 @@ class CommunicationMapper {
     // 2. getNphiesAuthReference(priorAuth) fallback (same logic as unsolicited) - reliable
     // NOTE: about_reference is a FHIR reference string (e.g. "Claim/123"), NOT an identifier value
     const resolvedAboutValue = communicationRequest.about_identifier || aboutIdentifierValue;
-    const resolvedAboutSystem = communicationRequest.about_identifier_system || `http://${providerDomain}/identifiers/authorization`;
+    const resolvedAboutSystem = communicationRequest.about_identifier_system || this.getAboutIdentifierSystem(provider, claimUse);
     const aboutReference = {
       identifier: { system: resolvedAboutSystem, value: resolvedAboutValue }
     };
@@ -712,6 +737,16 @@ class CommunicationMapper {
       value: communicationRequest.cr_identifier || communicationRequest.request_id || `CommReq_${communicationId}`
     };
 
+    // Build full resources first so the Communication references their actual ids
+    const patientResource = this.buildPatientResource(patient);
+    const providerResource = this.buildProviderOrganizationResource(provider);
+    const insurerResource = this.buildInsurerOrganizationResource(insurer);
+    const resourceIds = {
+      patient: patientResource.resource.id,
+      provider: providerResource.resource.id,
+      insurer: insurerResource.resource.id
+    };
+
     // Build the Communication resource with basedOn identifier
     const communicationResource = this.buildCommunicationResource({
       id: communicationId,
@@ -719,6 +754,7 @@ class CommunicationMapper {
       patient,
       provider,
       insurer,
+      resourceIds,
       aboutReference: aboutReference,
       aboutType: communicationRequest.about_type || 'Claim',
       payloads,
@@ -738,13 +774,8 @@ class CommunicationMapper {
       ...(messageEventCode && { eventCode: messageEventCode })
     });
 
-    // Build full resources per NPHIES standard
-    const patientResource = this.buildPatientResource(patient);
-    const providerResource = this.buildProviderOrganizationResource(provider);
-    const insurerResource = this.buildInsurerOrganizationResource(insurer);
-    
     // Build Coverage resource if coverage data is provided
-    const coverageResource = coverage ? this.buildCoverageResource(coverage, patient, insurer) : null;
+    const coverageResource = coverage ? this.buildCoverageResource(coverage, patient, insurer, resourceIds) : null;
     
     // Build Location resource if location data is provided (optional per NPHIES spec)
     const locationResource = location ? this.buildLocationResource(location, provider) : null;
@@ -805,10 +836,14 @@ class CommunicationMapper {
    * @param {string|null} options.basedOn - CommunicationRequest reference (for solicited)
    * @returns {Object} FHIR Communication resource
    */
-  buildCommunicationResource({ id, type, patient, provider, insurer, aboutReference, aboutType, payloads, basedOn, communicationStatus = 'in-progress' }) {
-    const patientId = patient.patient_id?.toString() || patient.id;
-    const providerId = provider.provider_id?.toString() || provider.id;
-    const insurerId = insurer.insurer_id?.toString() || insurer.id;
+  buildCommunicationResource({ id, type, patient, provider, insurer, resourceIds = {}, aboutReference, aboutType, payloads, basedOn, communicationStatus = 'in-progress' }) {
+    // Ids of the resources actually present in the bundle (never 'Patient/undefined')
+    const patientId = resourceIds.patient || patient.patient_id?.toString() || patient.id;
+    const providerId = resourceIds.provider || provider.provider_id?.toString() || provider.id;
+    const insurerId = resourceIds.insurer || insurer.insurer_id?.toString() || insurer.id;
+    if (!patientId || !providerId || !insurerId) {
+      throw mappingError('Communication requires Patient, provider and insurer resources with ids');
+    }
     
     // Build 'about' reference - supports both object (with identifier) and string formats
     // Per NPHIES example: uses identifier with system URL format
@@ -870,7 +905,7 @@ class CommunicationMapper {
         type: 'Organization',
         identifier: {
           system: 'http://nphies.sa/license/provider-license',
-          value: provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID
+          value: requireProviderLicense(provider)
         }
       },
       // Recipient (HIC/Insurer) - references Organization in bundle
@@ -880,7 +915,7 @@ class CommunicationMapper {
         type: 'Organization',
         identifier: {
           system: 'http://nphies.sa/license/payer-license',
-          value: insurer.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID
+          value: requireInsurerLicense(insurer)
         }
       }],
       // Payload (content)
@@ -971,8 +1006,8 @@ class CommunicationMapper {
         if (payload.attachment.creation) {
           fhirPayload.contentAttachment.creation = payload.attachment.creation;
         } else {
-          // NPHIES requires creation date - default to today
-          fhirPayload.contentAttachment.creation = new Date().toISOString().split('T')[0];
+          // NPHIES requires creation date - default to today (Saudi calendar date)
+          fhirPayload.contentAttachment.creation = this.formatDate(new Date());
         }
       } else if (payload.contentType === 'reference' && payload.reference) {
         fhirPayload.contentReference = {
@@ -1000,8 +1035,8 @@ class CommunicationMapper {
    */
   buildCommunicationMessageHeader({ provider, insurer, focusFullUrl, eventCode = 'communication' }) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    const destinationNphiesId = insurer.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID;
+    const senderNphiesId = requireProviderLicense(provider);
+    const destinationNphiesId = requireInsurerLicense(insurer);
 
     return {
       fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -1065,7 +1100,7 @@ class CommunicationMapper {
    * @param {string} options.insurerName - Insurer organization name (optional)
    * @param {string} options.focalResourceIdentifier - The identifier of the resource being checked
    * @param {string} options.focalResourceType - Resource type ('Claim' or 'ClaimResponse')
-   * @param {string} options.originalRequestId - Original request bundle ID for response.identifier
+   * @param {string} options.originalRequestId - Unused: a status-check request carries no MessageHeader.response
    * @param {string} options.providerType - Provider type code from DB (e.g., '1' for Hospital)
    * @param {Object} options.providerAddress - Provider address object from DB
    * @param {Object} options.insurerAddress - Insurer address object from DB
@@ -1078,6 +1113,10 @@ class CommunicationMapper {
     insurerName = 'Insurance Company',
     focalResourceIdentifier, 
     focalResourceType = 'Claim',
+    // Use of the checked request: status checks are sent for claims ('claim');
+    // pass 'preauthorization' for a prior authorization, or focalIdentifierSystem to override
+    claimUse = 'claim',
+    focalIdentifierSystem = null,
     originalRequestId = null,
     providerType = null,        // From DB: provider_type code
     providerAddress = null,     // From DB: provider address
@@ -1089,12 +1128,9 @@ class CommunicationMapper {
     const taskId = `${taskTimestamp}`;
     const providerOrgId = this.generateId();
     const insurerOrgId = this.generateId();
+    // Bundle.timestamp is an instant; Task dates stay date-only as in the NPHIES example
+    const bundleTimestamp = formatSaudiDateTime(new Date());
     const timestamp = this.formatDate(new Date());
-    const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
-    const nphiesBaseURL = NPHIES_CONFIG.BASE_URL;
-    
-    // Extract base URL from provider endpoint
-    const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
     
     // Extract provider domain for identifier system and full URLs
     const providerDomain = this.extractProviderDomain(providerName);
@@ -1137,12 +1173,8 @@ class CommunicationMapper {
       }],
       focus: [{
         reference: taskFullUrl
-      }],
-      // NPHIES FIX: response element is REQUIRED with both identifier and code
-      response: {
-        identifier: originalRequestId || bundleId,
-        code: 'ok'  // IC-00224 fix: MessageHeader response code is required
-      }
+      }]
+      // No MessageHeader.response: this is a request message, not a response
     };
 
     // Build Task resource with task profile (matching NPHIES example)
@@ -1170,7 +1202,8 @@ class CommunicationMapper {
       focus: {
         type: focalResourceType,
         identifier: {
-          system: `http://${providerDomain}/identifiers/authorization`,
+          // Must equal the submitted Claim.identifier (same derivation as the claim mappers)
+          system: focalIdentifierSystem || claimIdentifierSystem({ provider_name: providerName }, claimUse),
           value: focalResourceIdentifier
         }
       },
@@ -1187,8 +1220,7 @@ class CommunicationMapper {
     // Build Provider Organization with required providerType extension
     // Per NPHIES IG: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aad.json.html
     // providerType extension is REQUIRED - use dynamic data from DB
-    const providerTypeCode = this.getProviderTypeCode(providerType);
-    const providerTypeDisplay = this.getProviderTypeDisplay(providerType);
+    const { code: providerTypeCode, display: providerTypeDisplay } = providerTypeCoding(providerType);
     
     const providerOrgResource = {
       resourceType: 'Organization',
@@ -1259,7 +1291,7 @@ class CommunicationMapper {
         profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
       },
       type: 'message',
-      timestamp: timestamp,
+      timestamp: bundleTimestamp,
       entry: [
         {
           fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -1282,115 +1314,17 @@ class CommunicationMapper {
   }
 
   // ============================================================================
-  // POLL REQUEST BUILDERS
-  // ============================================================================
-
-  /**
-   * Build Poll Request bundle for multiple message types
-   * 
-   * @param {string} providerId - Provider NPHIES ID
-   * @param {Array} messageTypes - Array of message types to poll for
-   *   - 'priorauth-response': Final ClaimResponse
-   *   - 'communication-request': HIC asking for info
-   *   - 'communication': Acknowledgment of sent Communication
-   * @param {number} count - Max messages to retrieve (default 50)
-   * @returns {Object} FHIR Bundle for poll request
-   */
-  /**
-   * Build Poll Request Bundle for NPHIES
-   * 
-   * Based on official NPHIES IG examples:
-   * - Task-560081: Basic poll request
-   * - Task-560082: Poll with input filters (count, exclude-message-type)
-   * - Task-560083: Poll with focus (specific authorization)
-   * 
-   * NPHIES Poll uses a FHIR Message Bundle with:
-   * - MessageHeader with eventCoding: 'poll-request'
-   * - Task resource with profile 'poll-request' and code 'poll'
-   * - Organization resources for requester (Provider) and owner (NPHIES)
-   * 
-   * The MessageHeader.focus points to the Task resource.
-   * 
-   * @param {string} providerId - Provider license ID
-   * @param {string} providerName - Provider organization name (optional)
-   * @param {string} providerType - Provider type code (optional, default '1')
-   * @param {Object} options - Optional polling parameters
-   * @param {Object} options.focus - Focus on specific resource (Task-560083 pattern)
-   *   - type: Resource type (e.g., "Claim")
-   *   - identifier: { system: string, value: string }
-   * @param {Object} options.input - Input filters (Task-560082 pattern)
-   *   - count: Number of messages to retrieve (default: 50)
-   *   - excludeMessageTypes: Array of message types to exclude
-   * @returns {Object} FHIR Bundle for poll request
-   */
-  
-  // ============================================================================
   // HELPER METHODS FOR DYNAMIC DATA
   // ============================================================================
   
-  /**
-   * Get NPHIES provider type code from database value
-   * Based on NPHIES CodeSystem: http://nphies.sa/terminology/CodeSystem/provider-type
-   * @param {string} dbValue - Provider type from database (e.g., 'hospital', 'clinic')
-   * @returns {string} NPHIES code
-   */
+  /** NPHIES provider-type code (shared table in nphiesIdentity.js). */
   getProviderTypeCode(dbValue) {
-    if (!dbValue) return '1'; // Default to Hospital
-    
-    const typeMap = {
-      'hospital': '1',
-      'polyclinic': '2',
-      'clinic': '3',
-      'pharmacy': '4',
-      'optical': '5',
-      'dental': '6',
-      'laboratory': '7',
-      'radiology': '8',
-      'physiotherapy': '9',
-      'home healthcare': '10',
-      'home_healthcare': '10'
-    };
-    
-    const normalized = dbValue.toLowerCase().trim();
-    return typeMap[normalized] || dbValue; // Return original if already a code
+    return providerTypeCoding(dbValue).code;
   }
   
-  /**
-   * Get display text for provider type code
-   * Based on NPHIES CodeSystem: http://nphies.sa/terminology/CodeSystem/provider-type
-   * @param {string} code - Provider type code (numeric or text)
-   * @returns {string} Display text
-   */
+  /** Display text for a provider type (shared table in nphiesIdentity.js). */
   getProviderTypeDisplay(code) {
-    if (!code) return 'Healthcare Provider';
-    
-    const providerTypes = {
-      '1': 'Hospital',
-      '2': 'Polyclinic',
-      '3': 'Clinic',
-      '4': 'Pharmacy',
-      '5': 'Optical',
-      '6': 'Dental',
-      '7': 'Laboratory',
-      '8': 'Radiology',
-      '9': 'Physiotherapy',
-      '10': 'Home Healthcare',
-      'licensed': 'Licensed Provider',
-      // Also handle text values from DB
-      'hospital': 'Hospital',
-      'polyclinic': 'Polyclinic',
-      'clinic': 'Clinic',
-      'pharmacy': 'Pharmacy',
-      'optical': 'Optical',
-      'dental': 'Dental',
-      'laboratory': 'Laboratory',
-      'radiology': 'Radiology',
-      'physiotherapy': 'Physiotherapy',
-      'home healthcare': 'Home Healthcare'
-    };
-    
-    const normalized = code.toLowerCase().trim();
-    return providerTypes[normalized] || providerTypes[code] || 'Healthcare Provider';
+    return providerTypeCoding(code).display;
   }
   
   /**
@@ -1475,12 +1409,8 @@ class CommunicationMapper {
     if (!providerName || providerName === 'Healthcare Provider') {
       return 'provider.com.sa';
     }
-    // Convert to lowercase, remove special chars, replace spaces with nothing
-    const domain = providerName
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, '')
-      .replace(/\s+/g, '');
-    return `${domain}.com.sa`;
+    // Same derivation as the Claim.identifier system in the claim/prior-auth mappers
+    return deriveProviderDomain(providerName);
   }
 
   buildPollRequestBundle(providerId, providerName = 'Healthcare Provider', providerType = '1', options = {}) {
@@ -1490,7 +1420,7 @@ class CommunicationMapper {
     const taskId = `${Date.now()}`;
     // Use simple numeric ID for provider org (example uses "b1b3432921324f97af3be9fd0b1a14ae")
     const providerOrgId = this.generateId();
-    const timestamp = this.formatDateTime(new Date()); // Bundle timestamp uses datetime
+    const timestamp = formatSaudiDateTime(new Date()); // Bundle timestamp is an instant
     const providerEndpoint = process.env.NPHIES_PROVIDER_ENDPOINT || 'http://provider.com/fhir';
     const nphiesBaseURL = NPHIES_CONFIG.BASE_URL;
     
@@ -1591,7 +1521,7 @@ class CommunicationMapper {
               focus: {
                 type: options.focus.type || 'Claim',
                 identifier: {
-                  system: options.focus.identifier?.system || `http://${providerDomain}/identifiers/authorization`,
+                  system: options.focus.identifier?.system || claimIdentifierSystem({ provider_name: providerName }, options.focus.claimUse),
                   value: options.focus.identifier?.value
                 }
               }
@@ -1692,153 +1622,9 @@ class CommunicationMapper {
     };
   }
 
-  /**
-   * Build Poll Parameters (simple format for reference)
-   * Note: NPHIES requires full Bundle with MessageHeader, use buildPollRequestBundle instead
-   */
-  buildPollParameters(messageTypes = ['communication'], count = 10, identifier = null) {
-    const parameters = {
-      resourceType: 'Parameters',
-      parameter: []
-    };
-
-    for (const messageType of messageTypes) {
-      parameters.parameter.push({
-        name: 'message-type',
-        valueCode: messageType
-      });
-    }
-
-    parameters.parameter.push({
-      name: 'count',
-      valueInteger: count
-    });
-
-    if (identifier) {
-      parameters.parameter.push({
-        name: 'identifier',
-        valueString: identifier
-      });
-    }
-
-    return parameters;
-  }
-
-  /**
-   * Build Poll Request for specific prior authorization
-   * Filters by the original request identifier
-   * 
-   * @param {string} providerId - Provider NPHIES ID
-   * @param {string} requestIdentifier - Original request identifier
-   * @param {Array} messageTypes - Message types to poll for
-   * @returns {Object} FHIR Bundle
-   */
-  /**
-   * Build Prior Auth Poll Bundle (for backwards compatibility)
-   * 
-   * @deprecated This method signature is maintained for backwards compatibility.
-   * The Task-based poll structure doesn't support messageTypes or requestIdentifier filters.
-   * Use buildPollRequestBundle() directly instead.
-   * 
-   * @param {string} providerId - Provider NPHIES ID
-   * @param {string} requestIdentifier - Ignored (not in Task structure)
-   * @param {Array} messageTypes - Ignored (not in Task structure)
-   * @param {string} providerName - Provider organization name (optional)
-   * @returns {Object} FHIR Bundle for poll request
-   */
-  buildPriorAuthPollBundle(providerId, requestIdentifier, messageTypes = ['priorauth-response', 'communication-request', 'communication'], providerName = 'Healthcare Provider') {
-    // Task-based poll structure doesn't support filtering by messageTypes or requestIdentifier
-    // Delegate to buildPollRequestBundle which uses the correct Task structure
-    return this.buildPollRequestBundle(providerId, providerName);
-  }
-
   // ============================================================================
   // RESPONSE PARSERS
   // ============================================================================
-
-  /**
-   * Parse poll response and extract different message types
-   * 
-   * @param {Object} responseBundle - FHIR Bundle from poll response
-   * @returns {Object} Parsed messages by type
-   */
-  parsePollResponse(responseBundle) {
-    const result = {
-      claimResponses: [],
-      communicationRequests: [],
-      communications: [],
-      errors: []
-    };
-
-    if (!responseBundle || responseBundle.resourceType !== 'Bundle') {
-      result.errors.push('Invalid response bundle');
-      return result;
-    }
-
-    // Handle different bundle types
-    const entries = responseBundle.entry || [];
-    
-    for (const entry of entries) {
-      const resource = entry.resource;
-      if (!resource) continue;
-
-      // Check for nested bundles (poll response may contain multiple message bundles)
-      if (resource.resourceType === 'Bundle' && resource.type === 'message') {
-        const nestedResult = this.parseMessageBundle(resource);
-        result.claimResponses.push(...nestedResult.claimResponses);
-        result.communicationRequests.push(...nestedResult.communicationRequests);
-        result.communications.push(...nestedResult.communications);
-      } else {
-        // Direct resource
-        this.categorizeResource(resource, result);
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Parse a single message bundle
-   * 
-   * @param {Object} bundle - FHIR message Bundle
-   * @returns {Object} Parsed resources
-   */
-  parseMessageBundle(bundle) {
-    const result = {
-      claimResponses: [],
-      communicationRequests: [],
-      communications: []
-    };
-
-    const entries = bundle.entry || [];
-    for (const entry of entries) {
-      this.categorizeResource(entry.resource, result);
-    }
-
-    return result;
-  }
-
-  /**
-   * Categorize a resource by type
-   * 
-   * @param {Object} resource - FHIR resource
-   * @param {Object} result - Result object to populate
-   */
-  categorizeResource(resource, result) {
-    if (!resource) return;
-
-    switch (resource.resourceType) {
-      case 'ClaimResponse':
-        result.claimResponses.push(resource);
-        break;
-      case 'CommunicationRequest':
-        result.communicationRequests.push(this.parseCommunicationRequest(resource));
-        break;
-      case 'Communication':
-        result.communications.push(this.parseCommunication(resource));
-        break;
-    }
-  }
 
   /**
    * Parse CommunicationRequest resource

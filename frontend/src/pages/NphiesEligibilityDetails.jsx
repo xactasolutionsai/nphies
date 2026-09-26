@@ -4,12 +4,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import api from '@/services/api';
+import { safeJsonParse } from '@/utils/json';
 import { 
   Shield, CheckCircle, XCircle, AlertCircle, Info, FileText, 
   ChevronDown, ChevronUp, ArrowLeft, RefreshCw, Copy, User, 
   Building, CreditCard, Calendar, Clock, Phone, Heart, Briefcase,
   Users, MapPin, DollarSign, Network, Hash
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { formatDisplayDate, formatDisplayDateTime } from '@/utils/date';
 
 // Status display helper
 const getStatusDisplay = (status) => {
@@ -58,15 +61,9 @@ const getSiteEligibilityColor = (code) => {
 };
 
 // Format date helper
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleDateString();
-};
-
-const formatDateTime = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleString();
-};
+// Date-only values (DATE columns) are shown without a time (utils/date.js)
+const formatDate = formatDisplayDate;
+const formatDateTime = formatDisplayDateTime;
 
 // Get gender display text
 const getGenderDisplay = (gender) => {
@@ -230,6 +227,7 @@ const extractFromFhirBundle = (bundle) => {
 };
 
 export default function NphiesEligibilityDetails() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   
@@ -273,22 +271,24 @@ export default function NphiesEligibilityDetails() {
   // Parse benefits and errors from JSON if needed - must be before any early returns
   const benefits = useMemo(() => {
     if (!record) return [];
-    return typeof record.benefits === 'string' ? JSON.parse(record.benefits || '[]') : (record.benefits || []);
+    const parsed = safeJsonParse(record.benefits, []);
+    return Array.isArray(parsed) ? parsed : [];
   }, [record]);
   
   const errors = useMemo(() => {
     if (!record) return [];
-    return typeof record.error_codes === 'string' ? JSON.parse(record.error_codes || '[]') : (record.error_codes || record.errors || []);
+    const parsed = safeJsonParse(record.error_codes, null) ?? record.errors ?? [];
+    return Array.isArray(parsed) ? parsed : [];
   }, [record]);
   
   const rawRequest = useMemo(() => {
     if (!record) return {};
-    return typeof record.raw_request === 'string' ? JSON.parse(record.raw_request || '{}') : (record.raw_request || record.raw?.request || {});
+    return safeJsonParse(record.raw_request, null) || record.raw?.request || {};
   }, [record]);
   
   const rawResponse = useMemo(() => {
     if (!record) return {};
-    return typeof record.raw_response === 'string' ? JSON.parse(record.raw_response || '{}') : (record.raw_response || record.raw?.response || {});
+    return safeJsonParse(record.raw_response, null) || record.raw?.response || {};
   }, [record]);
 
   // Extract detailed data from FHIR response bundle
@@ -469,13 +469,15 @@ export default function NphiesEligibilityDetails() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
-              <Button
-                onClick={() => navigate('/nphies-eligibility/new')}
-                className="bg-gradient-to-r from-primary-purple to-accent-purple text-white"
-              >
-                <Shield className="h-4 w-4 mr-2" />
-                New Check
-              </Button>
+              {can('create') && (
+                <Button
+                  onClick={() => navigate('/nphies-eligibility/new')}
+                  className="bg-gradient-to-r from-primary-purple to-accent-purple text-white"
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  New Check
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1513,7 +1515,7 @@ export default function NphiesEligibilityDetails() {
                         </Badge>
                         <span className="text-sm text-gray-500">Error #{index + 1}</span>
                       </div>
-                      <p className="text-red-700 font-medium mb-2">{err.message || err}</p>
+                      <p className="text-red-700 font-medium mb-2">{typeof err === 'string' ? err : (err?.message || err?.display || err?.code || JSON.stringify(err))}</p>
                       {err.location && (
                         <div className="bg-white rounded px-3 py-2 mt-2">
                           <p className="text-xs text-gray-600 mb-1">Location in Bundle:</p>

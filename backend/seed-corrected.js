@@ -1,19 +1,17 @@
+// LEGACY / DESTRUCTIVE: this faker seed targets the old schema.sql layout (e.g. eligibility_requests,
+// claim_batches with integer keys, 'Male'/'Female' genders, a `name`/`first_name` split) which does not
+// match the current database, so its inserts are expected to fail after the TRUNCATE. It is kept for
+// reference only. It runs only when executed directly, never in production, and only with
+// ALLOW_DESTRUCTIVE_SEED=true (see scripts/seedGuard.js).
 import { faker } from '@faker-js/faker';
-import pkg from 'pg';
-const { Pool } = pkg;
 import dotenv from 'dotenv';
+import { assertDestructiveSeedAllowed, isMainModule } from './scripts/seedGuard.js';
 
 // Load environment variables
 dotenv.config();
 
-// Database connection
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'nafes_healthcare',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'password',
-});
+// Database connection (db.js requires DB_NAME, DB_USER and DB_PASSWORD; no credential defaults)
+const { default: pool } = await import('./db.js');
 
 // Configuration for data generation
 const CONFIG = {
@@ -430,13 +428,16 @@ const seedDatabase = async () => {
   }
 };
 
-// Run the seeding
-seedDatabase()
-  .then(() => {
-    console.log('✅ Seeding process completed');
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error('❌ Seeding process failed:', error);
-    process.exit(1);
-  });
+// Run the seeding (only when executed directly and explicitly allowed)
+if (isMainModule(import.meta.url)) {
+  assertDestructiveSeedAllowed();
+  seedDatabase()
+    .then(() => {
+      console.log('✅ Seeding process completed');
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('❌ Seeding process failed:', error);
+      process.exit(1);
+    });
+}

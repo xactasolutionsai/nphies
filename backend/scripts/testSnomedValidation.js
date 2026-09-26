@@ -36,7 +36,7 @@ async function testSnomedValidation() {
       const result = await ollamaService.validateSnomedCode(testCase.code, testCase.description);
       
       console.log('\nResult:');
-      console.log(`  Valid: ${result.isValid ? '✅ YES' : '❌ NO'}`);
+      console.log(`  Valid: ${result.isValid === null || result.isValid === undefined ? '⚠️ UNKNOWN (reply not usable)' : result.isValid ? '✅ YES' : '❌ NO'}`);
       console.log(`  Confidence: ${(result.confidence * 100).toFixed(0)}%`);
       console.log(`  Explanation: ${result.explanation || 'N/A'}`);
       

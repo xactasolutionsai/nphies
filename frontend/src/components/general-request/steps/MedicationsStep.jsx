@@ -1,4 +1,6 @@
-import { API_BASE_URL, apiFetch } from '@/services/http';
+import api, { AI_UNAVAILABLE_MESSAGE } from '@/services/api';
+import useAIHealth from '@/hooks/useAIHealth';
+import { aiActionsAvailable } from '@/services/aiApi';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Pill, Shield, Sparkles, RefreshCw } from 'lucide-react';
@@ -29,11 +31,22 @@ const MedicationsStep = React.memo(({
   const [suggestionsError, setSuggestionsError] = useState(null);
   
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // Runtime AI status from GET /api/ai/health (null while loading or unknown)
+  const { health: aiHealth, loading: aiHealthLoading } = useAIHealth();
+  const aiSuggestionsAvailable = aiActionsAvailable(aiHealth);
 
-  // Memoize valid medications to prevent unnecessary recalculations
+  // Medications that have a name, keeping their index in the full list so that
+  // warnings are applied to the right rows (empty rows would otherwise shift them)
   const validMedications = useMemo(() => 
-    formData.medications.filter(med => med.medicationName?.trim()),
+    formData.medications
+      .map((med, index) => ({ med, index }))
+      .filter(({ med }) => med.medicationName?.trim()),
     [formData.medications]
+  );
+  // Re-run auto-analysis when any medication name changes, not only the count
+  const medicationNamesKey = useMemo(
+    () => validMedications.map(({ med }) => med.medicationName.trim().toLowerCase()).join('|'),
+    [validMedications]
   );
 
   // Track if we've already cleared warnings to prevent infinite loops
@@ -52,7 +65,8 @@ const MedicationsStep = React.memo(({
     return age;
   };
 
-  // Analyze medication safety
+  // Analyze medication safety. Always sent: with the AI disabled or down the backend answers with
+  // an analysis marked incomplete / manual review required, which the panel shows.
   const analyzeSafety = useCallback(async () => {
     if (validMedications.length === 0) {
       setSafetyAnalysis(null);
@@ -63,44 +77,38 @@ const MedicationsStep = React.memo(({
     setSafetyError(null);
 
     try {
-      const patientAge = calculateAge(formData.patient?.dateOfBirth);
+      const patientAge = calculateAge(formData.patient?.dob);
       
-      const response = await apiFetch(`${API_BASE_URL}/medication-safety/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          medications: validMedications.map(med => ({
-            name: med.medicationName,
-            activeIngredient: med.activeIngredient,
-            mrid: med.mrid
-          })),
-          patientContext: {
-            age: patientAge,
-            gender: formData.patient?.gender,
-            isPregnant: formData.service?.conditions?.pregnancy || false,
-            diagnosis: formData.service?.diagnosis
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Safety analysis failed');
+      const data = await api.analyzeMedicationSafety(
+        validMedications.map(({ med }) => ({
+          name: med.medicationName,
+          activeIngredient: med.activeIngredient,
+          mrid: med.mrid
+        })),
+        {
+          age: patientAge,
+          gender: formData.patient?.gender,
+          isPregnant: formData.service?.conditions?.pregnancy || false,
+          diagnosis: formData.service?.diagnosis
+        }
+      );
+      if (data?.disabled) {
+        const unavailable = { analysisIncomplete: true, requiresManualReview: true, message: data.message || AI_UNAVAILABLE_MESSAGE };
+        setSafetyAnalysis(unavailable);
+        setParentSafetyAnalysis(unavailable);
+        return;
       }
-
-      const data = await response.json();
       
       if (data.success && data.analysis) {
         // Store only the analysis part (not the whole response)
         setSafetyAnalysis(data.analysis);
         setParentSafetyAnalysis(data.analysis);
         
-        // Update medication warnings in form state
+        // Update medication warnings in form state, keyed by index in the full list
         const warnings = {};
         const analysis = data.analysis;
         
-        validMedications.forEach((med, index) => {
+        validMedications.forEach(({ med, index }) => {
           warnings[index] = {
             hasInteractions: analysis.drugInteractions?.some(i => 
               i.affectedDrugs?.includes(med.medicationName)
@@ -126,13 +134,13 @@ const MedicationsStep = React.memo(({
       }
     } catch (error) {
       console.error('Safety analysis error:', error);
-      setSafetyError(error.message);
+      setSafetyError(error.response?.data?.error || error.message);
     } finally {
       setSafetyLoading(false);
     }
-  }, [validMedications, formData.patient, formData.service, setMedicationWarnings]);
+  }, [validMedications, formData.patient, formData.service, setMedicationWarnings, setParentSafetyAnalysis]);
 
-  // Get AI medication suggestions
+  // Get AI medication suggestions (api.getMedicationSuggestions checks /api/ai/health)
   const getSuggestions = useCallback(async () => {
     if (!formData.service?.diagnosis) {
       setSuggestionsError('Diagnosis is required to generate suggestions');
@@ -143,26 +151,19 @@ const MedicationsStep = React.memo(({
     setSuggestionsError(null);
 
     try {
-      const patientAge = calculateAge(formData.patient?.dateOfBirth);
+      const patientAge = calculateAge(formData.patient?.dob);
       
-      const response = await apiFetch(`${API_BASE_URL}/medication-safety/suggest`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          diagnosis: formData.service.diagnosis,
-          patientAge: patientAge,
-          patientGender: formData.patient?.gender,
-          emergencyCase: formData.service?.urgency === 'Emergency'
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate suggestions');
+      const data = await api.getMedicationSuggestions(
+        formData.service.diagnosis,
+        patientAge,
+        formData.patient?.gender,
+        String(formData.service?.urgency || '').toLowerCase() === 'emergency'
+      );
+      if (data?.disabled) {
+        setSuggestionsError(data.message || AI_UNAVAILABLE_MESSAGE);
+        setShowSuggestions(true);
+        return;
       }
-
-      const data = await response.json();
       
       if (data.success && data.suggestions) {
         setSuggestions(data.suggestions);
@@ -172,7 +173,7 @@ const MedicationsStep = React.memo(({
       }
     } catch (error) {
       console.error('Suggestions error:', error);
-      setSuggestionsError(error.message);
+      setSuggestionsError(error.response?.data?.error || error.message);
     } finally {
       setSuggestionsLoading(false);
     }
@@ -190,7 +191,7 @@ const MedicationsStep = React.memo(({
     }, 100);
   };
 
-  // Auto-analyze when medications change
+  // Auto-analyze when medications (names) change
   useEffect(() => {
     if (validMedications.length > 0) {
       const timer = setTimeout(() => {
@@ -207,7 +208,8 @@ const MedicationsStep = React.memo(({
         hasWarningsRef.current = false;
       }
     }
-  }, [validMedications.length]);
+    return undefined;
+  }, [medicationNamesKey]);
 
   return (
     <div className="space-y-6">
@@ -221,6 +223,7 @@ const MedicationsStep = React.memo(({
             </CardTitle>
             {validMedications.length > 0 && (
               <button
+                type="button"
                 onClick={analyzeSafety}
                 disabled={safetyLoading}
                 className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 text-sm flex items-center gap-2"
@@ -243,7 +246,12 @@ const MedicationsStep = React.memo(({
       </Card>
       
       {/* AI Suggestions Button */}
-      {formData.service?.diagnosis && !showSuggestions && (
+      {formData.service?.diagnosis && !showSuggestions && !aiHealthLoading && !aiSuggestionsAvailable && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-900">
+          <p className="font-medium">AI medication suggestions: {AI_UNAVAILABLE_MESSAGE}</p>
+        </div>
+      )}
+      {aiSuggestionsAvailable && formData.service?.diagnosis && !showSuggestions && (
         <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
           <div className="flex items-start justify-between">
             <div>

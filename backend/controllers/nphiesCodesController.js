@@ -4,6 +4,7 @@
  */
 
 import nphiesCodeService from '../services/nphiesCodeService.js';
+import { query as dbQuery } from '../db.js';
 
 class NphiesCodesController {
   
@@ -12,8 +13,7 @@ class NphiesCodesController {
    */
   async getCodeSystems(req, res) {
     try {
-      const { query } = await import('../db.js');
-      const result = await query(`
+      const result = await dbQuery(`
         SELECT code, name, description, source_url
         FROM nphies_code_systems
         WHERE is_active = true
@@ -183,7 +183,6 @@ class NphiesCodesController {
    */
   async getIcd10Codes(req, res) {
     try {
-      const { query: dbQuery } = await import('../db.js');
       
       const {
         search = '',
@@ -271,7 +270,6 @@ class NphiesCodesController {
    */
   async getIcd10CodeByCode(req, res) {
     try {
-      const { query: dbQuery } = await import('../db.js');
       const { code } = req.params;
       
       const result = await dbQuery(`
@@ -302,7 +300,6 @@ class NphiesCodesController {
    */
   async searchIcd10Codes(req, res) {
     try {
-      const { query: dbQuery } = await import('../db.js');
       
       const {
         q = '',
@@ -368,7 +365,6 @@ class NphiesCodesController {
    */
   async getChiefComplaints(req, res) {
     try {
-      const { query: dbQuery } = await import('../db.js');
       
       const result = await dbQuery(`
         SELECT 
@@ -400,7 +396,6 @@ class NphiesCodesController {
    */
   async searchChiefComplaints(req, res) {
     try {
-      const { query: dbQuery } = await import('../db.js');
       
       const {
         q = '',
@@ -475,7 +470,6 @@ class NphiesCodesController {
    */
   async getMedicationCodes(req, res) {
     try {
-      const { query: dbQuery } = await import('../db.js');
       
       const {
         search = '',
@@ -560,7 +554,6 @@ class NphiesCodesController {
    */
   async getMedicationByCode(req, res) {
     try {
-      const { query: dbQuery } = await import('../db.js');
       const { code } = req.params;
       
       const result = await dbQuery(`
@@ -600,7 +593,6 @@ class NphiesCodesController {
    */
   async searchMedicationCodes(req, res) {
     try {
-      const { query: dbQuery } = await import('../db.js');
       
       const {
         q = '',

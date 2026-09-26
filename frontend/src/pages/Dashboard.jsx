@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import StatCard from '@/components/StatCard';
 import StatusBadge from '@/components/StatusBadge';
-import api from '@/services/api';
+import api, { clearApiCache } from '@/services/api';
 
 // Refined color palette for light minimal theme
 const CHART_COLORS = {
@@ -54,6 +54,9 @@ const STATUS_COLORS = {
 };
 
 const AUTO_REFRESH_INTERVAL = 60000;
+
+// Only these chart series are monetary; counts must not be labelled SAR
+const MONEY_DATA_KEYS = new Set(['amount', 'total_amount', 'avg_amount', 'paid_amount', 'outstanding_amount']);
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -116,7 +119,6 @@ export default function Dashboard() {
 
   // Calculate summary metrics
   const totalClaimsValue = claimsPipeline.reduce((sum, item) => sum + parseFloat(item.total_amount || 0), 0);
-  const avgClaimValue = claimsPipeline.reduce((sum, item) => sum + parseFloat(item.avg_amount || 0), 0) / (claimsPipeline.length || 1);
   
   // Process prior auth data for charts
   const priorAuthByType = (priorAuthorizations.summary || []).map(item => ({
@@ -153,8 +155,10 @@ export default function Dashboard() {
           <p className="font-medium text-gray-900 mb-1">{label}</p>
           {payload.map((entry, index) => (
             <p key={index} className="text-sm" style={{ color: entry.color }}>
-              {entry.name}: {typeof entry.value === 'number' && entry.value >= 1000 
-                ? `${entry.value.toLocaleString()} SAR` 
+              {entry.name}: {typeof entry.value === 'number'
+                ? (MONEY_DATA_KEYS.has(entry.dataKey)
+                  ? `${entry.value.toLocaleString()} SAR`
+                  : entry.value.toLocaleString())
                 : entry.value}
             </p>
           ))}
@@ -184,7 +188,7 @@ export default function Dashboard() {
                 <span>{lastRefreshTime.toLocaleTimeString()}</span>
               </div>
               <button
-                onClick={loadDashboardData}
+                onClick={() => { clearApiCache(); loadDashboardData(); }}
                 disabled={refreshing}
                 className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
@@ -448,7 +452,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {(enhancedPerformance.providers || [])
+                  {[...(enhancedPerformance.providers || [])]
                     .sort((a, b) => (parseFloat(b.auth_approval_rate) || 0) - (parseFloat(a.auth_approval_rate) || 0))
                     .slice(0, 5)
                     .map((provider, index) => (

@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import api, { extractErrorMessage } from '@/services/api';
+import api, { extractErrorMessage, clearApiCache } from '@/services/api';
 import {
   RefreshCw, Play, Clock, CheckCircle, AlertCircle, XCircle,
   ChevronDown, ChevronUp, FileJson, Copy, Activity,
   Inbox, Link2, HelpCircle, BarChart3, ArrowRight, ExternalLink
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import PollTimingAdvisory from '@/components/ai/PollTimingAdvisory';
 
 const tableToRoute = {
   prior_authorizations: '/prior-authorizations',
@@ -76,6 +78,7 @@ const processingStatusColors = {
 };
 
 function SystemPoll() {
+  const { can } = useAuth();
   const [stats, setStats] = useState(null);
   const [logs, setLogs] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 10, totalPages: 0 });
@@ -190,7 +193,8 @@ function SystemPoll() {
         </div>
         <Button
           onClick={handleTriggerPoll}
-          disabled={polling}
+          disabled={polling || !can('triggerSystemPoll')}
+          title={can('triggerSystemPoll') ? undefined : 'Triggering a system poll requires the admin role'}
           className="bg-blue-600 hover:bg-blue-700 text-white"
         >
           {polling ? (
@@ -249,6 +253,16 @@ function SystemPoll() {
         </div>
       )}
 
+      {/* Advisory poll timing statistics (read-only; the scheduler is not changed) */}
+      <Card>
+        <CardContent className="p-4">
+          <PollTimingAdvisory compact />
+          <Link to="/ai/insights" className="mt-2 inline-block text-xs text-blue-600 hover:underline">
+            Per-insurer response times on AI Insights
+          </Link>
+        </CardContent>
+      </Card>
+
       {/* Latest Poll Result */}
       {pollResult && (
         <Card className={`border-l-4 ${pollResult.success ? 'border-l-green-500' : 'border-l-red-500'}`}>
@@ -262,7 +276,7 @@ function SystemPoll() {
                 )}
                 Latest Poll Result
               </CardTitle>
-              {pollResult.duration && (
+              {pollResult.duration != null && (
                 <span className="text-xs text-gray-400">{pollResult.duration}ms</span>
               )}
             </div>
@@ -390,7 +404,7 @@ function SystemPoll() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => { loadLogs(pagination.page); loadStats(); }}
+              onClick={() => { clearApiCache(); loadLogs(pagination.page); loadStats(); }}
             >
               <RefreshCw className="w-4 h-4" />
             </Button>
@@ -436,7 +450,7 @@ function SystemPoll() {
                         <span title="Received">{log.messages_received || 0} msg</span>
                         <span title="Matched" className="text-green-600">{log.messages_matched || 0} matched</span>
                         <span title="Unmatched" className="text-orange-500">{log.messages_unmatched || 0} unmatched</span>
-                        {log.duration_ms && <span className="text-gray-400">{log.duration_ms}ms</span>}
+                        {log.duration_ms != null && <span className="text-gray-400">{log.duration_ms}ms</span>}
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </div>
                     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,9 +10,42 @@ import {
   FileText, Activity, Info, Copy, Download, Loader2, Calculator,
   ChevronDown, ChevronUp, User, Hash
 } from 'lucide-react';
-import api from '@/services/api';
+import api, { clearApiCache } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
+
+// JSONB columns normally arrive as objects; tolerate legacy string values.
+const parseMaybeJson = (value) => {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return null; }
+};
+
+// The batch is submitted as ONE batch-request Bundle in a single HTTP POST;
+// the individual claim bundles are nested entries inside it.
+const formatBatchBundlesForCopy = (bundles, batchIdentifier) => {
+  let output = `// ==========================================\n`;
+  output += `// Batch Claim: ${batchIdentifier}\n`;
+  output += `// Bundles: ${bundles.length}\n`;
+  output += `// The batch is sent to NPHIES as a single batch-request Bundle (one HTTP POST).\n`;
+  output += `// ==========================================\n\n`;
+
+  bundles.forEach((bundle, index) => {
+    const batchNumber = bundle.entry?.find(e => e.resource?.resourceType === 'Claim')
+      ?.resource?.extension?.find(ext => ext.url?.includes('extension-batch-number'))
+      ?.valuePositiveInt || (index + 1);
+
+    output += `// ------------------------------------------\n`;
+    output += `// Bundle #${index + 1} (batch-number: ${batchNumber})\n`;
+    output += `// ------------------------------------------\n`;
+    output += JSON.stringify(bundle, null, 2);
+    output += `\n\n`;
+  });
+
+  return output;
+};
 
 export default function BatchClaimDetails() {
+  const { can } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   
@@ -41,9 +74,11 @@ export default function BatchClaimDetails() {
     }
   }, [activeTab, batch]);
 
-  const loadBatchDetails = async () => {
+  const loadBatchDetails = async ({ fresh = false } = {}) => {
     try {
       setLoading(true);
+      // Skip the 30s GET cache after actions / explicit status checks
+      if (fresh) clearApiCache();
       const response = await api.getClaimBatch(id);
       setBatch(response.data);
     } catch (error) {
@@ -60,9 +95,10 @@ export default function BatchClaimDetails() {
       setBundlesError(null);
       
       if (batch && batch.status !== 'Draft' && batch.request_bundle) {
-        const storedBundle = typeof batch.request_bundle === 'string' 
-          ? JSON.parse(batch.request_bundle) 
-          : batch.request_bundle;
+        const storedBundle = parseMaybeJson(batch.request_bundle);
+        if (!storedBundle) {
+          throw new Error('Stored request bundle could not be parsed');
+        }
         
         let bundles = [];
         if (storedBundle.batchBundle) {
@@ -116,31 +152,13 @@ export default function BatchClaimDetails() {
     }
   };
 
-  // Copy all bundles as formatted text showing each HTTP request
+  // Copy all bundles as formatted text (one batch-request POST)
   const copyAllBundlesFormatted = async (bundles) => {
     try {
       const cleanBundles = bundles.map(cleanBundleForCopy);
       
-      // Format as separate HTTP requests
-      let formattedOutput = `// ==========================================\n`;
-      formattedOutput += `// Batch Claim: ${batch?.batch_identifier}\n`;
-      formattedOutput += `// Total HTTP Requests: ${cleanBundles.length}\n`;
-      formattedOutput += `// Each bundle below is sent as a SEPARATE HTTP POST request\n`;
-      formattedOutput += `// ==========================================\n\n`;
-      
-      cleanBundles.forEach((bundle, index) => {
-        const batchNumber = bundle.entry?.find(e => e.resource?.resourceType === 'Claim')
-          ?.resource?.extension?.find(ext => ext.url?.includes('extension-batch-number'))
-          ?.valuePositiveInt || (index + 1);
-        
-        formattedOutput += `// ------------------------------------------\n`;
-        formattedOutput += `// HTTP Request #${index + 1} (batch-number: ${batchNumber})\n`;
-        formattedOutput += `// POST to NPHIES API\n`;
-        formattedOutput += `// ------------------------------------------\n`;
-        formattedOutput += JSON.stringify(bundle, null, 2);
-        formattedOutput += `\n\n`;
-      });
-      
+      const formattedOutput = formatBatchBundlesForCopy(cleanBundles, batch?.batch_identifier);
+
       await navigator.clipboard.writeText(formattedOutput);
       setCopiedIndex('all');
       setTimeout(() => setCopiedIndex(null), 2000);
@@ -196,7 +214,7 @@ export default function BatchClaimDetails() {
       
       if (response.success) {
         alert(response.message || 'Batch submitted successfully');
-        loadBatchDetails();
+        loadBatchDetails({ fresh: true });
       } else {
         alert(response.error || 'Failed to submit batch');
       }
@@ -218,13 +236,49 @@ export default function BatchClaimDetails() {
       if (response.success) {
         setPollingStatus(response.pollResult?.message || 'Poll completed');
         setLastPollTime(new Date().toISOString());
-        loadBatchDetails();
+        loadBatchDetails({ fresh: true });
       } else {
         setPollingStatus('Poll failed: ' + (response.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error polling responses:', error);
       setPollingStatus('Poll failed: ' + (error.response?.data?.error || 'Unknown error'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // A batch stays 'Pending' while the send request is in flight. If the page is
+  // opened in that state (or the send was interrupted), let the user re-check it.
+  const handleCheckPendingStatus = async () => {
+    try {
+      setActionLoading(true);
+      setPollingStatus('Checking batch status...');
+      clearApiCache();
+      const response = await api.getClaimBatch(id);
+      const latest = response?.data;
+      if (latest) setBatch(latest);
+      if (!latest || latest.status !== 'Pending') {
+        setPollingStatus(`Batch status: ${latest?.status || 'unknown'}`);
+        setLastPollTime(new Date().toISOString());
+        return;
+      }
+      // Still pending - try a poll in case NPHIES already has responses for it
+      try {
+        const pollResponse = await api.pollBatchResponses(id);
+        setPollingStatus(pollResponse?.pollResult?.message || 'Poll completed');
+        loadBatchDetails({ fresh: true });
+      } catch (pollError) {
+        setPollingStatus(
+          'Batch is still Pending (submission in progress or interrupted). ' +
+          (pollError.response?.data?.error || pollError.message || '') +
+          ' If it stays Pending, contact an administrator before re-sending to avoid a duplicate submission.'
+        );
+      }
+      setLastPollTime(new Date().toISOString());
+    } catch (error) {
+      console.error('Error checking batch status:', error);
+      setPollingStatus('Status check failed: ' + (error.response?.data?.error || error.message || 'Unknown error'));
     } finally {
       setActionLoading(false);
     }
@@ -383,15 +437,17 @@ export default function BatchClaimDetails() {
                   <Eye className="h-4 w-4 mr-2" />
                   Preview Bundle
                 </Button>
-                <Button 
-                  onClick={handleSendToNphies} 
-                  disabled={actionLoading}
-                  className="bg-gradient-to-r from-primary-purple to-accent-purple"
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  {batch.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
-                </Button>
-                {batch.status === 'Draft' && (
+                {can('send') && (
+                  <Button 
+                    onClick={handleSendToNphies} 
+                    disabled={actionLoading}
+                    className="bg-gradient-to-r from-primary-purple to-accent-purple"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    {batch.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
+                  </Button>
+                )}
+                {batch.status === 'Draft' && can('delete') && (
                   <Button variant="destructive" onClick={handleDeleteBatch} disabled={actionLoading}>
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete
@@ -399,7 +455,18 @@ export default function BatchClaimDetails() {
                 )}
               </>
             )}
-            {['Submitted', 'Queued', 'Partial'].includes(batch.status) && (
+            {batch.status === 'Pending' && can('poll') && (
+              <Button
+                onClick={handleCheckPendingStatus}
+                disabled={actionLoading}
+                variant="outline"
+                title="The batch is marked Pending while it is being sent. Check its current status."
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${actionLoading ? 'animate-spin' : ''}`} />
+                Check Status / Poll
+              </Button>
+            )}
+            {['Submitted', 'Queued', 'Partial'].includes(batch.status) && can('poll') && (
               <Button 
                 onClick={handlePollResponses} 
                 disabled={actionLoading}
@@ -409,7 +476,7 @@ export default function BatchClaimDetails() {
                 Poll Responses
               </Button>
             )}
-            {batch.response_bundle && (
+            {batch.response_bundle && can('edit') && (
               <Button 
                 onClick={handleRecalculateStats} 
                 disabled={actionLoading}
@@ -485,7 +552,7 @@ export default function BatchClaimDetails() {
           <CardContent className="pt-6">
             <div className="text-center">
               <p className="text-sm text-gray-500">Approved Amount</p>
-              <p className="text-2xl font-bold text-cyan-600">SAR {parseFloat(batch.approved_amount || batch.statistics?.total_approved_amount || 0).toLocaleString()}</p>
+              <p className="text-2xl font-bold text-cyan-600">SAR {parseFloat(batch.approved_amount || batch.statistics?.approved_amount || 0).toLocaleString()}</p>
             </div>
           </CardContent>
         </Card>
@@ -913,29 +980,7 @@ export default function BatchClaimDetails() {
                         </div>
                       </div>
                       <pre className="bg-gray-900 text-green-400 p-4 overflow-x-auto text-sm font-mono leading-relaxed max-h-[600px] overflow-y-auto whitespace-pre-wrap break-all select-all">
-{(() => {
-  const cleanBundles = freshBundles.map(cleanBundleForCopy);
-  let output = `// ==========================================\n`;
-  output += `// Batch Claim: ${batch?.batch_identifier}\n`;
-  output += `// Total HTTP Requests: ${cleanBundles.length}\n`;
-  output += `// Each bundle below is sent as a SEPARATE HTTP POST request\n`;
-  output += `// ==========================================\n\n`;
-  
-  cleanBundles.forEach((bundle, index) => {
-    const batchNumber = bundle.entry?.find(e => e.resource?.resourceType === 'Claim')
-      ?.resource?.extension?.find(ext => ext.url?.includes('extension-batch-number'))
-      ?.valuePositiveInt || (index + 1);
-    
-    output += `// ------------------------------------------\n`;
-    output += `// HTTP Request #${index + 1} (batch-number: ${batchNumber})\n`;
-    output += `// POST to NPHIES API\n`;
-    output += `// ------------------------------------------\n`;
-    output += JSON.stringify(bundle, null, 2);
-    output += `\n\n`;
-  });
-  
-  return output;
-})()}
+{formatBatchBundlesForCopy(freshBundles.map(cleanBundleForCopy), batch?.batch_identifier)}
                       </pre>
                     </div>
                   )}
@@ -965,7 +1010,7 @@ export default function BatchClaimDetails() {
                             </div>
                             <div>
                               <span className="font-semibold text-gray-800">
-                                HTTP Request #{index + 1}
+                                Bundle #{index + 1}
                               </span>
                               <span className="text-gray-500 text-sm ml-2">
                                 (batch-number: {batchNumber})
@@ -1023,7 +1068,16 @@ export default function BatchClaimDetails() {
         {batch.response_bundle && (
           <TabsContent value="response">
             {(() => {
-              const rb = typeof batch.response_bundle === 'string' ? JSON.parse(batch.response_bundle) : batch.response_bundle;
+              const rb = parseMaybeJson(batch.response_bundle);
+              if (!rb) {
+                return (
+                  <Card>
+                    <CardContent className="py-8 text-center text-red-600">
+                      The stored response bundle could not be parsed.
+                    </CardContent>
+                  </Card>
+                );
+              }
               const isRawFhir = rb?.resourceType === 'Bundle' && Array.isArray(rb?.entry);
               const outerMH = isRawFhir ? rb.entry?.[0]?.resource : null;
               const responseCode = outerMH?.response?.code;
@@ -1139,7 +1193,7 @@ export default function BatchClaimDetails() {
                   )}
 
                   {/* Section 2: Per-Claim Response Summary Table */}
-                  {nestedBundles.length > 0 && (
+                  {(nestedBundles.length > 0 || polledResponses.length > 0) && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center">
@@ -1160,8 +1214,9 @@ export default function BatchClaimDetails() {
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Patient</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Response</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Outcome</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Adjudication</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Created</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Created / Received</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
@@ -1170,6 +1225,9 @@ export default function BatchClaimDetails() {
                                 const cr = nested.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
                                 const patient = nested.entry?.find(e => e.resource?.resourceType === 'Patient')?.resource;
                                 const patientName = patient?.name?.[0]?.text || `${patient?.name?.[0]?.given?.join(' ') || ''} ${patient?.name?.[0]?.family || ''}`.trim() || '-';
+                                const nestedAdjudication = cr?.extension?.find(
+                                  ext => ext.url?.includes('extension-adjudication-outcome')
+                                )?.valueCodeableConcept?.coding?.[0]?.code;
 
                                 return (
                                   <tr key={`claim-${idx}`} className="hover:bg-gray-50">
@@ -1195,6 +1253,14 @@ export default function BatchClaimDetails() {
                                       </Badge>
                                     </td>
                                     <td className="px-4 py-3">
+                                      <Badge variant={
+                                        nestedAdjudication === 'approved' ? 'default' :
+                                        nestedAdjudication === 'rejected' ? 'destructive' : 'secondary'
+                                      } className="text-xs" title={cr?.disposition || undefined}>
+                                        {nestedAdjudication || '-'}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3">
                                       <Badge variant={cr?.status === 'active' ? 'default' : 'outline'} className="text-xs">
                                         {cr?.status || '-'}
                                       </Badge>
@@ -1211,7 +1277,7 @@ export default function BatchClaimDetails() {
                                     {pr.batchNumber || idx + 1}
                                     <Badge variant="secondary" className="ml-1 text-xs">polled</Badge>
                                   </td>
-                                  <td className="px-4 py-3 text-sm font-mono">{pr.claimIdentifier || '-'}</td>
+                                  <td className="px-4 py-3 text-sm font-mono">{pr.claimIdentifier || (pr.itemId ? `item ${pr.itemId}` : '-')}</td>
                                   <td className="px-4 py-3 text-sm font-mono">{pr.nphiesClaimId || '-'}</td>
                                   <td className="px-4 py-3 text-sm">-</td>
                                   <td className="px-4 py-3 text-sm">-</td>
@@ -1233,11 +1299,14 @@ export default function BatchClaimDetails() {
                                     <Badge variant={
                                       pr.adjudicationOutcome === 'approved' ? 'default' :
                                       pr.adjudicationOutcome === 'rejected' ? 'destructive' : 'secondary'
-                                    } className="text-xs">
+                                    } className="text-xs" title={pr.disposition || undefined}>
                                       {pr.adjudicationOutcome || '-'}
                                     </Badge>
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-500">{pr.disposition || '-'}</td>
+                                  <td className="px-4 py-3 text-sm">-</td>
+                                  <td className="px-4 py-3 text-sm text-gray-500">
+                                    {pr.receivedAt ? new Date(pr.receivedAt).toLocaleString() : '-'}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1574,7 +1643,13 @@ export default function BatchClaimDetails() {
                                             {cr.processNote.map((note, ni) => (
                                               <div key={ni} className="bg-gray-50 rounded p-2 text-sm">
                                                 <span className="text-gray-400 mr-2">#{note.number}</span>
-                                                <span className="text-gray-600">[{note.type}]</span> {note.text}
+                                                {note.type && (
+                                                  <span className="text-gray-600">
+                                                    [{typeof note.type === 'string'
+                                                      ? note.type
+                                                      : (note.type?.coding?.[0]?.code || note.type?.coding?.[0]?.display || note.type?.text || '-')}]
+                                                  </span>
+                                                )} {typeof note.text === 'string' ? note.text : JSON.stringify(note.text ?? '')}
                                               </div>
                                             ))}
                                           </div>
@@ -1931,7 +2006,7 @@ export default function BatchClaimDetails() {
                               {polledResponses.map((pr, idx) => (
                                 <tr key={idx} className="hover:bg-gray-50">
                                   <td className="px-4 py-3 text-sm">{pr.batchNumber || idx + 1}</td>
-                                  <td className="px-4 py-3 text-sm font-mono">{pr.claimIdentifier || '-'}</td>
+                                  <td className="px-4 py-3 text-sm font-mono">{pr.claimIdentifier || (pr.itemId ? `item ${pr.itemId}` : '-')}</td>
                                   <td className="px-4 py-3 text-sm font-mono">{pr.nphiesClaimId || '-'}</td>
                                   <td className="px-4 py-3">
                                     <Badge variant={

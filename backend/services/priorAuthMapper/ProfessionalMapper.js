@@ -15,6 +15,7 @@
 
 import BaseMapper from './BaseMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import { cloneInput, mappingError, roundMoney } from './nphiesIdentity.js';
 
 class ProfessionalMapper extends BaseMapper {
   constructor() {
@@ -26,7 +27,10 @@ class ProfessionalMapper extends BaseMapper {
    * Build complete Prior Authorization Request Bundle for Professional type
    */
   buildPriorAuthRequestBundle(data) {
-    const { priorAuth, patient, provider, insurer, coverage, policyHolder, practitioner, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    // Deep copy: onset normalisation below must never mutate the caller's supporting_info
+    const priorAuth = cloneInput(data.priorAuth);
+    const practitioner = data.practitioner || priorAuth.practitioner;
 
     // Generate consistent IDs for all resources
     const bundleResourceIds = {
@@ -40,6 +44,8 @@ class ProfessionalMapper extends BaseMapper {
       policyHolder: policyHolder?.id || this.generateId(),
       motherPatient: (priorAuth.is_newborn && motherPatient) ? (motherPatient.patient_id || this.generateId()) : null
     };
+    const locationResource = this.buildFacilityLocationWithId(provider, this.generateId(), bundleResourceIds.provider);
+    bundleResourceIds.location = locationResource?.resource.id || null;
 
     // Build all resources
     // For newborn cases, patient is the newborn, and we also need mother patient resource
@@ -63,7 +69,7 @@ class ProfessionalMapper extends BaseMapper {
       bundleResourceIds.motherPatient
     );
     const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: '08.00' },
+      practitioner,
       bundleResourceIds.practitioner
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
@@ -85,6 +91,7 @@ class ProfessionalMapper extends BaseMapper {
       messageHeader,
       providerResource,      // Must be before Claim for facility reference validation
       insurerResource,        // Must be before Claim for reference validation
+      ...(locationResource ? [locationResource] : []), // Claim.facility target
       claimResource,
       encounterResource,
       coverageResource,
@@ -125,8 +132,7 @@ class ProfessionalMapper extends BaseMapper {
     const encounterRef = bundleResourceIds.encounter;
     const practitionerRef = bundleResourceIds.practitioner;
 
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build extensions
     const extensions = [];
@@ -246,7 +252,7 @@ class ProfessionalMapper extends BaseMapper {
 
     claim.identifier = [
       {
-        system: `${providerIdentifierSystem}/authorization`,
+        system: this.getClaimIdentifierSystem(provider),
         value: priorAuth.request_number || `req_${Date.now()}`
       }
     ];
@@ -286,8 +292,11 @@ class ProfessionalMapper extends BaseMapper {
     const needsFacility = encounterClassCode === 'AMB' || encounterClassCode === 'VR' || 
                           encounterClass === 'ambulatory' || encounterClass === 'virtual' || encounterClass === 'telemedicine';
     
-    if (needsFacility) {
-      claim.facility = { reference: `Organization/${providerRef}` };
+    // Claim.facility must reference a Location; omitted when the provider has no location license
+    if (needsFacility && bundleResourceIds.location) {
+      claim.facility = { reference: `Location/${bundleResourceIds.location}` };
+    } else if (needsFacility) {
+      console.warn('[ProfessionalMapper] No provider location license; Claim.facility omitted (BV-00905 may apply)');
     }
     
     claim.priority = {
@@ -370,27 +379,22 @@ class ProfessionalMapper extends BaseMapper {
     // SupportingInfo with REQUIRED chief-complaint for professional claims
     // BV-00779: Chief Complaint SHALL be provided in professional claim or authorization
     let supportingInfoSequences = [];
-    let supportingInfoList = [...(priorAuth.supporting_info || [])];
+    let supportingInfoList = this.tagCallerSupportingInfo(priorAuth.supporting_info);
     
-    // Ensure chief-complaint is present (required per BV-00779)
+    // Ensure chief-complaint is present (required per BV-00779); never a default complaint
     const hasChiefComplaint = supportingInfoList.some(info => info.category === 'chief-complaint');
     if (!hasChiefComplaint) {
       const clinicalInfo = priorAuth.clinical_info || {};
       const chiefComplaintText = clinicalInfo.chief_complaint || priorAuth.chief_complaint;
       
-      if (chiefComplaintText) {
-        // Free text format - use code.text per NPHIES Claim-173086.json example
-        supportingInfoList.unshift({
-          category: 'chief-complaint',
-          code_text: chiefComplaintText
-        });
-      } else {
-        // Default chief complaint if none provided
-        supportingInfoList.unshift({
-          category: 'chief-complaint',
-          code_text: 'Patient presenting for evaluation'
-        });
+      if (!chiefComplaintText) {
+        throw mappingError('Professional request requires a chief complaint (supporting_info category chief-complaint or chief_complaint)');
       }
+      // Free text format - use code.text per NPHIES Claim-173086.json example
+      supportingInfoList.unshift({
+        category: 'chief-complaint',
+        code_text: chiefComplaintText
+      });
     }
     
     // BV-00428: Fix onset supportingInfo - requires ICD-10 code and starting date
@@ -540,13 +544,16 @@ class ProfessionalMapper extends BaseMapper {
     // Build supportingInfo array
     const supportingInfoArray = [];
     let sequenceCounter = 1;
+    const numberedSupportingInfo = [];
     
     // Add regular supporting info items
     supportingInfoList.forEach(info => {
+      numberedSupportingInfo.push({ info, sequence: sequenceCounter });
       supportingInfoSequences.push(sequenceCounter);
       supportingInfoArray.push(this.buildSupportingInfo({ ...info, sequence: sequenceCounter }));
       sequenceCounter++;
     });
+    const informationSequenceMap = this.buildInformationSequenceMap(numberedSupportingInfo);
 
     // Add lab-test supportingInfo entries from priorAuth.lab_observations
     // Per NPHIES Professional PriorAuth IG: lab results are represented only in Claim.supportingInfo
@@ -623,7 +630,7 @@ class ProfessionalMapper extends BaseMapper {
     
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
-        this.buildClaimItemProfessional(item, idx + 1, supportingInfoSequences, encounterPeriod)
+        this.buildClaimItemProfessional(item, idx + 1, supportingInfoSequences, encounterPeriod, informationSequenceMap)
       );
     }
 
@@ -639,7 +646,7 @@ class ProfessionalMapper extends BaseMapper {
       }, 0);
     }
     claim.total = {
-      value: parseFloat(totalAmount || 0),
+      value: roundMoney(totalAmount),
       currency: priorAuth.currency || 'SAR'
     };
 
@@ -652,8 +659,8 @@ class ProfessionalMapper extends BaseMapper {
   /**
    * Build claim item for Professional auth type
    */
-  buildClaimItemProfessional(item, itemIndex, supportingInfoSequences, encounterPeriod) {
-    const claimItem = this.buildClaimItem(item, 'professional', itemIndex, supportingInfoSequences, encounterPeriod);
+  buildClaimItemProfessional(item, itemIndex, supportingInfoSequences, encounterPeriod, informationSequenceMap = null) {
+    const claimItem = this.buildClaimItem(item, 'professional', itemIndex, supportingInfoSequences, encounterPeriod, informationSequenceMap);
     
     // Add body site if provided (hands/feet/coronary)
     if (item.body_site_code) {
@@ -716,8 +723,11 @@ class ProfessionalMapper extends BaseMapper {
     // For Emergency encounters (EMER), add triage and service event extensions
     // BV-00733, BV-00734: Triage date and category are REQUIRED for emergency
     if (encounterClass === 'emergency') {
-      // Triage Category - REQUIRED for EMER (BV-00734)
-      const triageCategory = priorAuth.triage_category || 'U'; // Default to Urgent if not provided
+      // Triage Category - REQUIRED for EMER (BV-00734); a clinical assessment, never defaulted
+      const triageCategory = priorAuth.triage_category;
+      if (!triageCategory) {
+        throw mappingError('Emergency encounter requires a triage category (triage_category)');
+      }
       extensions.push({
         url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-triageCategory',
         valueCodeableConcept: {
@@ -888,44 +898,6 @@ class ProfessionalMapper extends BaseMapper {
       'T': 'timing critical',
       'UD': 'use as directed',
       'UR': 'urgent'
-    };
-    return displays[code] || code;
-  }
-
-  /**
-   * Get emergency arrival code display text
-   * Reference: https://portal.nphies.sa/ig/CodeSystem-emergency-arrival-code.html
-   * Valid codes per NPHIES ValueSet: unknown, PV, ACDA, OGV, GCDA, other, MOHA, EMSAA, GMA, AMA, GEMSA, GPA, POV
-   */
-  getEmergencyArrivalCodeDisplay(code) {
-    const displays = {
-      'unknown': 'Not stated/unknown',
-      'PV': 'Personal Vehicle',
-      'ACDA': 'Air Civil Defense Ambulance',
-      'OGV': 'Other Government Vehicles',
-      'GCDA': 'Ground Civil Defense Ambulance',
-      'other': 'Other',
-      'MOHA': 'Ground MOH Ambulance',
-      'EMSAA': 'EMS Air Ambulance',
-      'GMA': 'Ground Military Ambulance',
-      'AMA': 'Air Military Ambulance',
-      'GEMSA': 'Ground EMS Ambulance',
-      'GPA': 'Ground Private Ambulance',
-      'POV': 'Police Vehicle'
-    };
-    return displays[code] || code;
-  }
-
-  /**
-   * Get transport type display text
-   * Reference: http://nphies.sa/terminology/CodeSystem/transport-type
-   */
-  getTransportTypeDisplay(code) {
-    const displays = {
-      'GEMA': 'Ground EMS Ambulance',
-      'AEMA': 'Air EMS Ambulance',
-      'WEMA': 'Water EMS Ambulance',
-      'OTHR': 'Other'
     };
     return displays[code] || code;
   }

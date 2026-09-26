@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS medical_exams (
 CREATE INDEX IF NOT EXISTS idx_medical_exams_name ON medical_exams(LOWER(exam_name));
 
 -- Insert common imaging exams with their prerequisites
-INSERT INTO medical_exams (exam_name, prerequisites, description, category) VALUES
+-- Seed rows only once (re-running the migration used to duplicate them)
+INSERT INTO medical_exams (exam_name, prerequisites, description, category)
+SELECT v.exam_name, v.prerequisites, v.description, v.category FROM (VALUES
 -- X-Ray exams (typically no prerequisites)
 ('X-Ray', NULL, 'Standard radiographic imaging', 'Radiology'),
 ('Chest X-Ray', NULL, 'Chest radiograph', 'Radiology'),
@@ -69,7 +71,9 @@ INSERT INTO medical_exams (exam_name, prerequisites, description, category) VALU
 
 -- Interventional
 ('Angiography', 'Blood creatinine level, Coagulation profile', 'Vascular imaging with contrast', 'Interventional'),
-('Cardiac Catheterization', 'ECG, Blood creatinine level, Coagulation profile', 'Invasive cardiac procedure', 'Interventional');
+('Cardiac Catheterization', 'ECG, Blood creatinine level, Coagulation profile', 'Invasive cardiac procedure', 'Interventional')
+) AS v(exam_name, prerequisites, description, category)
+WHERE NOT EXISTS (SELECT 1 FROM medical_exams m WHERE LOWER(m.exam_name) = LOWER(v.exam_name));
 
 -- Create trigger to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_medical_exams_updated_at()
@@ -80,6 +84,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS medical_exams_updated_at_trigger ON medical_exams;
 CREATE TRIGGER medical_exams_updated_at_trigger
     BEFORE UPDATE ON medical_exams
     FOR EACH ROW

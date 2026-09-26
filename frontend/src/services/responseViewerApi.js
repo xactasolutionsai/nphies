@@ -7,12 +7,13 @@ class ResponseViewerApi {
 
   async request(endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`;
+    // Spread options first so options.headers cannot replace the merged headers
     const config = {
+      ...options,
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
       },
-      ...options,
     };
 
     try {
@@ -29,24 +30,40 @@ class ResponseViewerApi {
     }
   }
 
-  // Get claims with pagination
-  async getClaims(page = 1, limit = 10) {
-    return this.request(`/claims?page=${page}&limit=${limit}`);
+  // Build a query string from a params object, skipping empty values.
+  // Accepts either a params object ({ page, limit, search, status, dateRange, sortBy, sortOrder })
+  // or the legacy positional (page, limit) form.
+  buildQuery(params = {}, limit) {
+    const normalized = (typeof params === 'object' && params !== null)
+      ? params
+      : { page: params, limit };
+    const search = new URLSearchParams();
+    Object.entries(normalized).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '' || value === 'all') return;
+      search.append(key, String(value));
+    });
+    const qs = search.toString();
+    return qs ? `?${qs}` : '';
   }
 
-  // Get authorizations with pagination
-  async getAuthorizations(page = 1, limit = 10) {
-    return this.request(`/authorizations?page=${page}&limit=${limit}`);
+  // Get claims with pagination/filters
+  async getClaims(params = {}, limit) {
+    return this.request(`/claims${this.buildQuery(params, limit)}`);
   }
 
-  // Get eligibility with pagination
-  async getEligibility(page = 1, limit = 10) {
-    return this.request(`/eligibility?page=${page}&limit=${limit}`);
+  // Get authorizations with pagination/filters
+  async getAuthorizations(params = {}, limit) {
+    return this.request(`/authorizations${this.buildQuery(params, limit)}`);
   }
 
-  // Get payments with pagination
-  async getPayments(page = 1, limit = 10) {
-    return this.request(`/payments?page=${page}&limit=${limit}`);
+  // Get eligibility with pagination/filters
+  async getEligibility(params = {}, limit) {
+    return this.request(`/eligibility${this.buildQuery(params, limit)}`);
+  }
+
+  // Get payments with pagination/filters
+  async getPayments(params = {}, limit) {
+    return this.request(`/payments${this.buildQuery(params, limit)}`);
   }
 
   // Get dashboard statistics (fallback to main API)

@@ -1,24 +1,26 @@
-import { Ollama } from 'ollama';
 import dotenv from 'dotenv';
+import { getOllamaConfig, createOllamaClient, isTimeoutError } from './ollamaConfig.js';
 
 dotenv.config();
 
 /**
  * Chat Service
  * Handles AI chat interactions with streaming support
- * Supports two modes: drug (Goosedev/medbot) and general (cniongolo/biomistral)
+ * Supports two modes: drug (CHAT_DRUG_MODEL, default Goosedev/medbot) and general (OLLAMA_MODEL)
  */
 class ChatService {
   constructor() {
-    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://206.168.83.244:11434';
-    this.drugModel = 'Goosedev/medbot';
+    const { baseUrl, timeoutMs, configError } = getOllamaConfig();
+    this.baseUrl = baseUrl;
+    this.configError = configError;
+    this.drugModel = process.env.CHAT_DRUG_MODEL || 'Goosedev/medbot';
     this.generalModel = process.env.OLLAMA_MODEL || 'thewindmom/llama3-med42-8b:latest';
-    this.timeout = parseInt(process.env.OLLAMA_TIMEOUT) || 120000;
+    // Upper bound for a whole chat exchange; the stream is aborted when it expires.
+    this.timeout = timeoutMs;
     
-    this.client = new Ollama({
-      host: this.baseUrl
-    });
+    this.client = createOllamaClient({ baseUrl, timeoutMs });
     
+    if (configError) console.error(`❌ Chat Service disabled: ${configError.message}`);
     console.log('✅ Chat Service initialized');
     console.log(`   Drug Model: ${this.drugModel}`);
     console.log(`   General Model: ${this.generalModel}`);
@@ -85,8 +87,11 @@ class ChatService {
    * @param {Function} onChunk - Callback for each chunk
    * @param {Function} onComplete - Callback when complete
    * @param {Function} onError - Callback for errors
+   * @param {Object} [options]
+   * @param {AbortSignal} [options.signal] - aborts the Ollama stream (e.g. client disconnected);
+   *   an abort requested through it is not reported to onError
    */
-  async streamChat(message, mode, conversationHistory = [], onChunk, onComplete, onError) {
+  async streamChat(message, mode, conversationHistory = [], onChunk, onComplete, onError, { signal } = {}) {
     const model = this.getModelForMode(mode);
     const systemPrompt = this.getSystemPrompt(mode);
     const prompt = this.buildPromptWithContext(message, conversationHistory, systemPrompt);
@@ -95,11 +100,15 @@ class ChatService {
     console.log(`📅 Timestamp: ${new Date().toISOString()}`);
     console.log(`🎯 Mode: ${mode}`);
     console.log(`🤖 Model: ${model}`);
-    console.log(`💭 Message: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`);
+    console.log(`💭 Message length: ${message.length}`);
     console.log(`📚 History: ${conversationHistory.length} messages\n`);
     
+    let stream;
+    const abortStream = () => stream?.abort?.();
     try {
-      const stream = await this.client.generate({
+      if (this.configError) throw this.configError;
+      if (signal?.aborted) return;
+      stream = await this.client.generate({
         model: model,
         prompt: prompt,
         stream: true,
@@ -113,9 +122,14 @@ class ChatService {
         }
       });
 
+      // Stop generation on the Ollama side as soon as the caller goes away
+      signal?.addEventListener('abort', abortStream, { once: true });
+      if (signal?.aborted) abortStream();
+
       let fullResponse = '';
       
       for await (const chunk of stream) {
+        if (signal?.aborted) break;
         if (chunk.response) {
           // Filter out special tokens that shouldn't be visible
           let cleanedChunk = chunk.response
@@ -138,8 +152,14 @@ class ChatService {
       }
       
     } catch (error) {
-      console.error('❌ Error in chat streaming:', error.message);
-      onError(error);
+      if (signal?.aborted) return; // cancelled by the caller, not a failure
+      const reported = isTimeoutError(error)
+        ? new Error(`Chat response timed out after ${this.timeout}ms`)
+        : error;
+      console.error('❌ Error in chat streaming:', reported.message);
+      onError(reported);
+    } finally {
+      signal?.removeEventListener('abort', abortStream);
     }
   }
 
@@ -149,6 +169,7 @@ class ChatService {
    */
   async checkHealth() {
     try {
+      if (this.configError) throw this.configError;
       const models = await this.client.list();
       const drugModelAvailable = models.models.some(m => 
         m.name === this.drugModel || m.name.includes('medbot')

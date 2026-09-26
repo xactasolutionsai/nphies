@@ -6,6 +6,9 @@ const router = express.Router();
 // POST /api/medication-safety/check-interactions - Check drug interactions
 router.post('/check-interactions', medicationSafetyController.checkInteractions.bind(medicationSafetyController));
 
+// POST /api/medication-safety/duplicate-ingredients - Deterministic duplicate active-ingredient check
+router.post('/duplicate-ingredients', medicationSafetyController.duplicateIngredients.bind(medicationSafetyController));
+
 // POST /api/medication-safety/analyze - Comprehensive safety analysis
 router.post('/analyze', medicationSafetyController.analyzeSafety.bind(medicationSafetyController));
 

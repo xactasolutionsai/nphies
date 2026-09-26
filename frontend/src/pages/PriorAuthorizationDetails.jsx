@@ -3,28 +3,30 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import api, { extractErrorMessage } from '@/services/api';
 import { 
-  ArrowLeft, Edit, Send, RefreshCw, XCircle, ArrowRightLeft,
+  ArrowLeft, Edit, Send, RefreshCw, XCircle,
   FileText, User, Building, Shield, Stethoscope, Receipt, 
   Clock, CheckCircle, AlertCircle, Calendar, DollarSign,
   Code, Activity, Paperclip, History, Eye, X, Copy, ClipboardCheck, Pill,
-  MessageSquare, RotateCcw, PlusCircle, Download, Package,
-  ChevronDown, ChevronUp
+  MessageSquare, RotateCcw, PlusCircle, Download, Package
 } from 'lucide-react';
 
 // Import AI Medication Safety Panel
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
+import PractitionerSummary from '@/components/prior-auth/PractitionerSummary';
+import CompareWithAcceptedPanel from '@/components/ai/CompareWithAcceptedPanel';
 
 // Import Communication Panel for NPHIES communications
 import { CommunicationPanel } from '@/components/prior-auth';
-import { PRIORITY_OPTIONS, EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
-
-const SECTION_4_5_CODES = new Set(SHADOW_BILLING_CODES.map(c => c.value));
+import { PRIORITY_OPTIONS, EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, DISCHARGE_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
 import { selectStyles } from '@/components/prior-auth/styles';
 import Select from 'react-select';
+import { useAuth } from '@/context/AuthContext';
+import { formatDisplayDate, formatDisplayDateTime } from '@/utils/date';
+
+const SECTION_4_5_CODES = new Set(SHADOW_BILLING_CODES.map(c => c.value));
 
 // Helper functions
 const getAuthTypeDisplay = (authType) => {
@@ -40,6 +42,15 @@ const getAuthTypeDisplay = (authType) => {
 
 const getEncounterClassDisplay = (encounterClass) => {
   const classes = {
+    // Values stored in the database
+    ambulatory: 'Ambulatory',
+    outpatient: 'Outpatient',
+    emergency: 'Emergency',
+    home: 'Home Healthcare',
+    inpatient: 'Inpatient',
+    daycase: 'Day Case',
+    telemedicine: 'Telemedicine',
+    // FHIR v3-ActCode values
     AMB: 'Ambulatory',
     EMER: 'Emergency',
     HH: 'Home Healthcare',
@@ -48,6 +59,26 @@ const getEncounterClassDisplay = (encounterClass) => {
     VR: 'Telemedicine'
   };
   return classes[encounterClass] || encounterClass || '-';
+};
+
+// Claim subType derived from the encounter class; same mapping and defaults as the PA form
+const getSubTypeFromEncounterClass = (encounterClass, authType) => {
+  const subTypes = {
+    inpatient: 'ip', outpatient: 'op', daycase: 'ip', emergency: 'emr',
+    ambulatory: 'op', home: 'op', telemedicine: 'op'
+  };
+  const defaultByAuthType = {
+    institutional: 'ip', professional: 'op', pharmacy: 'op', dental: 'op', vision: 'op'
+  };
+  return subTypes[encounterClass] || defaultByAuthType[authType] || 'op';
+};
+
+// "N days remaining" text for an authorization period end, or null when the end is missing/invalid
+const getDaysRemaining = (endValue) => {
+  if (!endValue) return null;
+  const end = new Date(endValue);
+  if (isNaN(end.getTime())) return null;
+  return Math.ceil((end - new Date()) / (1000 * 60 * 60 * 24));
 };
 
 const formatAmount = (amount, currency = 'SAR') => {
@@ -95,15 +126,9 @@ const calculateTotalFromItems = (items) => {
   return total > 0 ? total : null;
 };
 
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleDateString();
-};
-
-const formatDateTime = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleString();
-};
+// Date-only values (DATE columns) are shown without a time (utils/date.js)
+const formatDate = formatDisplayDate;
+const formatDateTime = formatDisplayDateTime;
 
 // Pull a normalized error list from a prior_authorization_responses row.
 // Prefers the structured `errors` column. Falls back to parsing the raw
@@ -197,6 +222,7 @@ const TabButton = ({ active, onClick, children }) => (
 );
 
 export default function PriorAuthorizationDetails() {
+const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   
@@ -252,12 +278,23 @@ export default function PriorAuthorizationDetails() {
   // Item sequences (1-based) that are referenced by any NPHIES validation error
   // across all stored responses. Used to drive the "Errors only" filter and
   // to render quick-jump pills in the page-level banner.
-  const erroredSequences = useMemo(() => new Set(
-    (priorAuth?.responses || [])
-      .flatMap(extractErrorsFromResponse)
-      .map(e => e.itemSequence)
-      .filter(Boolean)
-  ), [priorAuth?.responses]);
+  // Parsed once per load (not once per item) - responses can be large with 300 items
+  const allResponseErrors = useMemo(
+    () => (priorAuth?.responses || []).flatMap(extractErrorsFromResponse),
+    [priorAuth?.responses]
+  );
+
+  const errorsBySequence = useMemo(() => {
+    const map = new Map();
+    allResponseErrors.forEach(e => {
+      if (!e.itemSequence) return;
+      if (!map.has(e.itemSequence)) map.set(e.itemSequence, []);
+      map.get(e.itemSequence).push(e);
+    });
+    return map;
+  }, [allResponseErrors]);
+
+  const erroredSequences = useMemo(() => new Set(errorsBySequence.keys()), [errorsBySequence]);
 
   // Switch to the Items tab and smooth-scroll the targeted item card into view,
   // briefly outlining it so the user can see where they landed.
@@ -660,7 +697,9 @@ export default function PriorAuthorizationDetails() {
 
   const handleSendToNphies = async () => {
     setConfirmMessage('Send this prior authorization to NPHIES?');
-    setConfirmCallback(async () => {
+    // Store the function itself: passing a function directly to a state setter makes React
+    // call it as an updater (which would send immediately and store a Promise).
+    setConfirmCallback(() => async () => {
       setShowConfirmModal(false);
       try {
         setActionLoading(true);
@@ -750,13 +789,6 @@ export default function PriorAuthorizationDetails() {
     navigate(`/prior-authorizations/new?${params.toString()}`);
   };
 
-  const handleSubmitAsClaim = async () => {
-    // Set default priority from prior auth
-    setSelectedPriority(priorAuth?.priority || 'normal');
-    // Show priority modal
-    setShowPriorityModal(true);
-  };
-
   // Preview Claim Bundle (what will be sent to NPHIES)
   const handlePreviewClaimBundle = async () => {
     try {
@@ -781,9 +813,17 @@ export default function PriorAuthorizationDetails() {
         encounterStartDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       }
       
+      // Lab observations are appended after the stored supporting info; number them after the
+      // highest stored sequence so they never collide with an existing entry.
+      const storedSupportingInfo = priorAuth.supporting_info || [];
+      const maxSupportingInfoSequence = storedSupportingInfo.reduce(
+        (max, info, idx) => Math.max(max, parseInt(info.sequence, 10) || idx + 1),
+        0
+      );
+
       const claimPreviewData = {
         claim_type: priorAuth.auth_type,
-        sub_type: priorAuth.sub_type || 'ip',
+        sub_type: priorAuth.sub_type || getSubTypeFromEncounterClass(priorAuth.encounter_class, priorAuth.auth_type),
         patient_id: priorAuth.patient_id,
         provider_id: priorAuth.provider_id,
         insurer_id: priorAuth.insurer_id,
@@ -796,6 +836,11 @@ export default function PriorAuthorizationDetails() {
         total_amount: priorAuth.approved_amount || priorAuth.total_amount,
         currency: priorAuth.currency || 'SAR',
         practice_code: priorAuth.practice_code,
+        // Treating practitioner is copied from the PA (never fabricated)
+        practitioner_license: priorAuth.practitioner_license || null,
+        practitioner_name: priorAuth.practitioner_name || null,
+        practitioner_specialty_code: priorAuth.practitioner_specialty_code || null,
+        practitioner_identifier_type: priorAuth.practitioner_identifier_type || null,
         service_type: priorAuth.service_type,
         eligibility_offline_ref: priorAuth.eligibility_offline_ref,
         eligibility_offline_date: priorAuth.eligibility_offline_date || null,
@@ -837,7 +882,7 @@ export default function PriorAuthorizationDetails() {
         }) || [],
         diagnoses: priorAuth.diagnoses || [],
         supporting_info: [
-          ...(priorAuth.supporting_info || []),
+          ...storedSupportingInfo,
           ...((priorAuth.lab_observations || []).map((obs, idx) => ({
             category: 'lab-test',
             code: obs.loinc_code,
@@ -850,7 +895,7 @@ export default function PriorAuthorizationDetails() {
               ? (obs.unit_code || obs.unit || '1') : null,
             value_string: obs.value != null && obs.value !== '' && isNaN(parseFloat(obs.value))
               ? String(obs.value) : null,
-            sequence: (priorAuth.supporting_info || []).length + idx + 1
+            sequence: maxSupportingInfoSequence + idx + 1
           })))
         ]
       };
@@ -933,8 +978,8 @@ export default function PriorAuthorizationDetails() {
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       
-      // Clean up URL after a delay (browser will handle cleanup when tab closes)
-      setTimeout(() => URL.revokeObjectURL(url), 100);
+      // Revoke later: the new tab must finish loading the blob first
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (error) {
       console.error('Error previewing attachment:', error);
       alert('Failed to preview file');
@@ -988,12 +1033,7 @@ export default function PriorAuthorizationDetails() {
         responseBundle: sendResponse.data?.response_bundle
       });
       
-      if (sendResponse.success) {
-        const claimRef = sendResponse.nphiesResponse?.nphiesClaimId || sendResponse.data?.nphies_claim_id || 'Pending';
-        setShowClaimResponseDialog(true);
-      } else {
-        setShowClaimResponseDialog(true);
-      }
+      setShowClaimResponseDialog(true);
     } catch (error) {
       console.error('Error creating/submitting claim:', error);
       setClaimResponse({
@@ -1105,14 +1145,18 @@ export default function PriorAuthorizationDetails() {
           {/* Draft/Error status actions */}
           {(priorAuth.status === 'draft' || priorAuth.status === 'error') && (
             <>
-              <Button variant="outline" size="sm" onClick={() => navigate(`/prior-authorizations/${id}/edit`)}>
-                <Edit className="h-4 w-4 mr-1" />
-                Edit
-              </Button>
-              <Button size="sm" onClick={handleSendToNphies} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
-                <Send className="h-4 w-4 mr-1" />
-                Send
-              </Button>
+              {can('edit') && (
+                <Button variant="outline" size="sm" onClick={() => navigate(`/prior-authorizations/${id}/edit`)}>
+                  <Edit className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              )}
+              {can('send') && (
+                <Button size="sm" onClick={handleSendToNphies} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
+                  <Send className="h-4 w-4 mr-1" />
+                  Send
+                </Button>
+              )}
             </>
           )}
           
@@ -1135,28 +1179,34 @@ export default function PriorAuthorizationDetails() {
                 <Code className="h-4 w-4 mr-1" />
                 {claimBundleLoading ? '...' : 'Claim JSON'}
               </Button>
-              <Button
-                size="sm"
-                onClick={handleSubmitAsClaimWithResponse}
-                disabled={actionLoading}
-                className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-              >
-                <Receipt className="h-4 w-4 mr-1" />
-                Submit Claim
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleCreateUpdate} disabled={actionLoading}>
-                <Edit className="h-4 w-4 mr-1" />
-                Update
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowCancelDialog(true)} className="text-red-500 border-red-300 hover:bg-red-50">
-                <XCircle className="h-4 w-4 mr-1" />
-                Cancel
-              </Button>
+              {can('send') && (
+                <Button
+                  size="sm"
+                  onClick={handleSubmitAsClaimWithResponse}
+                  disabled={actionLoading}
+                  className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                >
+                  <Receipt className="h-4 w-4 mr-1" />
+                  Submit Claim
+                </Button>
+              )}
+              {can('edit') && (
+                <Button variant="outline" size="sm" onClick={handleCreateUpdate} disabled={actionLoading}>
+                  <Edit className="h-4 w-4 mr-1" />
+                  Update
+                </Button>
+              )}
+              {can('cancel') && (
+                <Button variant="outline" size="sm" onClick={() => setShowCancelDialog(true)} className="text-red-500 border-red-300 hover:bg-red-50">
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Cancel
+                </Button>
+              )}
             </>
           )}
           
           {/* Follow Up button for approved authorizations (Use Case 7) */}
-          {priorAuth.status === 'approved' && (
+          {priorAuth.status === 'approved' && can('create') && (
             <Button 
               size="sm"
               onClick={handleFollowUp} 
@@ -1168,8 +1218,8 @@ export default function PriorAuthorizationDetails() {
             </Button>
           )}
           
-          {/* Resubmit button for rejected or partial authorizations */}
-          {(priorAuth.status === 'rejected' || priorAuth.adjudication_outcome === 'partial' || priorAuth.outcome === 'partial') && (
+          {/* Resubmit button for denied (legacy: rejected), errored or partial authorizations */}
+          {(['denied', 'rejected', 'error'].includes(priorAuth.status) || priorAuth.adjudication_outcome === 'partial' || priorAuth.outcome === 'partial') && can('create') && (
             <Button 
               size="sm"
               onClick={handleResubmit} 
@@ -1189,7 +1239,7 @@ export default function PriorAuthorizationDetails() {
         <div className="lg:col-span-2 space-y-6">
           {/* NPHIES validation errors banner */}
           {(() => {
-            const allErrors = (priorAuth.responses || []).flatMap(extractErrorsFromResponse);
+            const allErrors = allResponseErrors;
             if (allErrors.length === 0) return null;
             const affectedItems = new Set(allErrors.map(e => e.itemSequence).filter(Boolean));
             return (
@@ -1228,6 +1278,11 @@ export default function PriorAuthorizationDetails() {
               </Card>
             );
           })()}
+
+          {/* Rejected / failed request: structural diff against the last accepted request (rules; AI explanation optional) */}
+          {['error', 'denied'].includes(priorAuth.status) && (
+            <CompareWithAcceptedPanel kind="prior-authorizations" recordId={priorAuth.id} />
+          )}
 
           {/* Tabs */}
           <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
@@ -1302,6 +1357,12 @@ export default function PriorAuthorizationDetails() {
                     <Label className="text-gray-500">Outcome</Label>
                     <p className="font-medium capitalize">{priorAuth.outcome || '-'}</p>
                   </div>
+                  {priorAuth.discharge_disposition && (
+                    <div>
+                      <Label className="text-gray-500">Discharge Disposition</Label>
+                      <p className="font-medium">{DISCHARGE_DISPOSITION_OPTIONS.find(o => o.value === priorAuth.discharge_disposition)?.label || priorAuth.discharge_disposition}</p>
+                    </div>
+                  )}
                   {(priorAuth.encounter_class === 'emergency' || priorAuth.sub_type === 'emr') && priorAuth.emergency_department_disposition && (
                     <div>
                       <Label className="text-gray-500">ED Disposition</Label>
@@ -1475,9 +1536,7 @@ export default function PriorAuthorizationDetails() {
                       )?.valueCodeableConcept?.coding?.[0]?.code;
 
                       // NPHIES validation errors targeting this specific item (by sequence)
-                      const errorsForItem = (priorAuth.responses || [])
-                        .flatMap(extractErrorsFromResponse)
-                        .filter(e => e.itemSequence === item.sequence);
+                      const errorsForItem = errorsBySequence.get(item.sequence) || [];
 
                       return (
                         <div
@@ -2727,9 +2786,8 @@ export default function PriorAuthorizationDetails() {
                               <div className="ml-auto">
                                 <Badge variant="outline" className="text-blue-600 border-blue-300">
                                   {(() => {
-                                    const end = new Date(claimResponseDetails.preAuthPeriod.end);
-                                    const now = new Date();
-                                    const days = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+                                    const days = getDaysRemaining(claimResponseDetails.preAuthPeriod.end);
+                                    if (days == null) return 'No end date';
                                     if (days < 0) return 'Expired';
                                     if (days === 0) return 'Expires Today';
                                     return `${days} days remaining`;
@@ -3839,6 +3897,7 @@ export default function PriorAuthorizationDetails() {
             <CardContent>
               <p className="font-medium">{priorAuth.provider_name || '-'}</p>
               <p className="text-sm text-gray-500 font-mono">{priorAuth.provider_nphies_id}</p>
+              <PractitionerSummary record={priorAuth} />
               {/* Transfer Extension Details */}
               {priorAuth.is_transfer && (
                 <div className="mt-3 p-2 bg-blue-50 rounded-md border border-blue-200">
@@ -3944,11 +4003,9 @@ export default function PriorAuthorizationDetails() {
             const claimResponse = getClaimResponseDetails();
             if (!claimResponse?.preAuthPeriod) return null;
 
-            const endDate = new Date(claimResponse.preAuthPeriod.end);
-            const now = new Date();
-            const daysRemaining = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
-            const isExpired = daysRemaining < 0;
-            const isExpiringSoon = daysRemaining >= 0 && daysRemaining <= 7;
+            const daysRemaining = getDaysRemaining(claimResponse.preAuthPeriod.end);
+            const isExpired = daysRemaining != null && daysRemaining < 0;
+            const isExpiringSoon = daysRemaining != null && daysRemaining >= 0 && daysRemaining <= 7;
 
             return (
               <Card className={isExpired ? 'border-red-300 bg-red-50' : isExpiringSoon ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'}>
@@ -3977,7 +4034,9 @@ export default function PriorAuthorizationDetails() {
                         'bg-green-500'
                       }`}
                     >
-                      {isExpired 
+                      {daysRemaining == null
+                        ? 'No end date'
+                        : isExpired 
                         ? 'Expired' 
                         : daysRemaining === 0 
                           ? 'Expires Today' 

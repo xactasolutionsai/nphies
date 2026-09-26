@@ -6,6 +6,30 @@ import { loadQueries } from '../db/queryLoader.js';
 import batchClaimMapper from '../services/claimMapper/BatchClaimMapper.js';
 import { getClaimMapper } from '../services/claimMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
+import { safeJsonParse, practitionerFromRecord } from './controllerHelpers.js';
+
+// Statuses in which a batch still "owns" its items (Rejected/Error batches release them).
+const ACTIVE_BATCH_STATUSES_EXCLUDED = ['Rejected', 'Error'];
+// Statuses in which a batch has (or is being) submitted to NPHIES.
+const SUBMITTED_BATCH_STATUSES = ['Pending', 'Submitted', 'Queued', 'Processed', 'Partial', 'Under Review'];
+
+function normalizeBatchClaimType(type) {
+  if (!type) return null;
+  const normalized = type.toLowerCase();
+  if (['institutional', 'inpatient', 'daycase'].includes(normalized)) return 'institutional';
+  if (['dental', 'oral'].includes(normalized)) return 'oral';
+  return normalized;
+}
+
+function isApprovedBatchItem(item) {
+  return item.adjudication_status === 'approved' && ['approved', 'partial'].includes(item.auth_status);
+}
+
+function parseItemIds(ids) {
+  if (!Array.isArray(ids)) return null;
+  const parsed = ids.map(id => Number(id));
+  return parsed.every(id => Number.isInteger(id) && id > 0) ? parsed : null;
+}
 
 /**
  * Claim Batches Controller
@@ -187,10 +211,39 @@ class ClaimBatchesController extends BaseController {
 
   _extractItemIds(requestBundle) {
     if (!requestBundle) return [];
-    const bundleData = typeof requestBundle === 'string'
-      ? JSON.parse(requestBundle)
-      : requestBundle;
-    return bundleData.item_ids || bundleData._metadata?.item_ids || [];
+    let bundleData = requestBundle;
+    if (typeof requestBundle === 'string') {
+      try { bundleData = JSON.parse(requestBundle); } catch { return []; }
+    }
+    return bundleData?.item_ids || bundleData?._metadata?.item_ids || [];
+  }
+
+  /**
+   * Items (by id) already held by another batch.
+   * @param {number[]} itemIds
+   * @param {number|null} excludeBatchId - the batch being edited/sent
+   * @param {object} options - statuses: only count batches in these statuses (default: every active status)
+   */
+  async findItemsInOtherBatches(itemIds, excludeBatchId = null, { statuses = null } = {}) {
+    if (!itemIds.length) return [];
+    const statusCondition = statuses
+      ? 'cb.status = ANY($3::text[])'
+      : 'NOT (cb.status = ANY($3::text[]))';
+    const result = await query(`
+      SELECT cb.id AS batch_id, cb.batch_identifier, cb.status, ids.item_id::int AS item_id
+      FROM claim_batches cb
+      CROSS JOIN LATERAL jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(cb.request_bundle->'item_ids') = 'array' THEN cb.request_bundle->'item_ids'
+          WHEN jsonb_typeof(cb.request_bundle->'_metadata'->'item_ids') = 'array' THEN cb.request_bundle->'_metadata'->'item_ids'
+          ELSE '[]'::jsonb
+        END
+      ) AS ids(item_id)
+      WHERE ids.item_id = ANY($1::text[])
+        AND ($2::int IS NULL OR cb.id <> $2::int)
+        AND ${statusCondition}
+    `, [itemIds.map(String), excludeBatchId, statuses || ACTIVE_BATCH_STATUSES_EXCLUDED]);
+    return result.rows;
   }
 
   async getStats(req, res) {
@@ -220,7 +273,22 @@ class ClaimBatchesController extends BaseController {
 
       let whereConditions = [
         "pa.status IN ('approved', 'partial')",
-        "pai.adjudication_status = 'approved'"
+        "pai.adjudication_status = 'approved'",
+        // An item already held by an active batch cannot be batched again
+        `NOT EXISTS (
+          SELECT 1 FROM claim_batches cb
+          WHERE cb.status NOT IN ('Rejected', 'Error')
+            AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(
+                CASE
+                  WHEN jsonb_typeof(cb.request_bundle->'item_ids') = 'array' THEN cb.request_bundle->'item_ids'
+                  WHEN jsonb_typeof(cb.request_bundle->'_metadata'->'item_ids') = 'array' THEN cb.request_bundle->'_metadata'->'item_ids'
+                  ELSE '[]'::jsonb
+                END
+              ) AS ids(item_id)
+              WHERE ids.item_id = pai.id::text
+            )
+        )`
       ];
       let queryParams = [];
       let paramIndex = 1;
@@ -319,7 +387,6 @@ class ClaimBatchesController extends BaseController {
     try {
       const { 
         batch_identifier, 
-        claim_ids,
         batch_period_start,
         batch_period_end,
         description 
@@ -329,9 +396,14 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: 'Batch identifier is required' });
       }
 
-      if (!claim_ids || !Array.isArray(claim_ids) || claim_ids.length < 2) {
+      const requestedIds = parseItemIds(req.body.claim_ids);
+      if (!requestedIds || requestedIds.length < 2) {
         return res.status(400).json({ error: 'At least 2 approved items are required for a batch' });
       }
+      if (new Set(requestedIds).size !== requestedIds.length) {
+        return res.status(400).json({ error: 'Duplicate items in batch request' });
+      }
+      const claim_ids = requestedIds;
 
       if (claim_ids.length > 200) {
         return res.status(400).json({ error: 'Batch cannot exceed 200 items' });
@@ -371,10 +443,7 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: `Items not found: ${missingIds.join(', ')}` });
       }
 
-      const nonApprovedItems = itemsResult.rows.filter(item => 
-        item.adjudication_status !== 'approved' || 
-        !['approved', 'partial'].includes(item.auth_status)
-      );
+      const nonApprovedItems = itemsResult.rows.filter(item => !isApprovedBatchItem(item));
       if (nonApprovedItems.length > 0) {
         return res.status(400).json({ 
           error: `Some items are not approved: ${nonApprovedItems.map(i => `Item ${i.id} (${i.adjudication_status})`).join(', ')}` 
@@ -391,17 +460,17 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: 'All items in a batch must be for the same provider' });
       }
 
-      const claimTypes = [...new Set(itemsResult.rows.map(c => {
-        const type = c.auth_type;
-        if (!type) return null;
-        const normalized = type.toLowerCase();
-        if (['institutional', 'inpatient', 'daycase'].includes(normalized)) return 'institutional';
-        if (['dental', 'oral'].includes(normalized)) return 'oral';
-        return normalized;
-      }).filter(Boolean))];
+      const claimTypes = [...new Set(itemsResult.rows.map(c => normalizeBatchClaimType(c.auth_type)).filter(Boolean))];
       if (claimTypes.length > 1) {
         return res.status(400).json({ 
           error: `All items in a batch must be of the same claim type. Found: ${claimTypes.join(', ')}` 
+        });
+      }
+
+      const alreadyBatched = await this.findItemsInOtherBatches(claim_ids);
+      if (alreadyBatched.length > 0) {
+        return res.status(409).json({
+          error: `Items already in another batch: ${alreadyBatched.map(r => `Item ${r.item_id} (${r.batch_identifier})`).join(', ')}`
         });
       }
 
@@ -469,7 +538,7 @@ class ClaimBatchesController extends BaseController {
       if (error.code === '23505') {
         return res.status(409).json({ error: 'Batch identifier already exists' });
       }
-      res.status(500).json({ error: error.message || 'Failed to create batch' });
+      res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to create batch' });
     }
   }
 
@@ -480,10 +549,13 @@ class ClaimBatchesController extends BaseController {
   async addClaimsToBatch(req, res) {
     try {
       const { id } = req.params;
-      const { claim_ids } = req.body;
+      const claim_ids = parseItemIds(req.body.claim_ids);
 
-      if (!claim_ids || !Array.isArray(claim_ids) || claim_ids.length === 0) {
+      if (!claim_ids || claim_ids.length === 0) {
         return res.status(400).json({ error: 'claim_ids array is required' });
+      }
+      if (new Set(claim_ids).size !== claim_ids.length) {
+        return res.status(400).json({ error: 'Duplicate items in request' });
       }
 
       const batchResult = await query('SELECT * FROM claim_batches WHERE id = $1', [id]);
@@ -501,14 +573,14 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: `Cannot exceed 200 items. Current: ${currentItemIds.length}, Adding: ${claim_ids.length}` });
       }
 
-      const duplicates = claim_ids.filter(cid => currentItemIds.includes(cid));
+      const duplicates = claim_ids.filter(cid => currentItemIds.map(Number).includes(cid));
       if (duplicates.length > 0) {
         return res.status(400).json({ error: `Items already in batch: ${duplicates.join(', ')}` });
       }
 
       const itemsResult = await query(`
-        SELECT pai.id, pai.net_amount, pai.adjudication_amount,
-               pa.insurer_id, pa.provider_id, pa.auth_type
+        SELECT pai.id, pai.net_amount, pai.adjudication_amount, pai.adjudication_status,
+               pa.status as auth_status, pa.insurer_id, pa.provider_id, pa.auth_type
         FROM prior_authorization_items pai
         INNER JOIN prior_authorizations pa ON pai.prior_auth_id = pa.id
         WHERE pai.id = ANY($1::int[])
@@ -518,19 +590,42 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: 'Some items were not found' });
       }
 
+      // The batch's claim type comes from the items it already holds
+      let batchClaimType = null;
+      if (currentItemIds.length > 0) {
+        const typeResult = await query(`
+          SELECT DISTINCT pa.auth_type
+          FROM prior_authorization_items pai
+          INNER JOIN prior_authorizations pa ON pai.prior_auth_id = pa.id
+          WHERE pai.id = ANY($1::int[])
+        `, [currentItemIds.map(Number)]);
+        batchClaimType = normalizeBatchClaimType(typeResult.rows[0]?.auth_type);
+      }
+
       for (const item of itemsResult.rows) {
+        if (!isApprovedBatchItem(item)) {
+          return res.status(400).json({ error: `Item ${item.id} is not approved (${item.adjudication_status})` });
+        }
         if (item.insurer_id !== batch.insurer_id) {
           return res.status(400).json({ error: `Item ${item.id} is for a different insurer` });
         }
         if (item.provider_id !== batch.provider_id) {
           return res.status(400).json({ error: `Item ${item.id} is for a different provider` });
         }
+        if (batchClaimType && normalizeBatchClaimType(item.auth_type) !== batchClaimType) {
+          return res.status(400).json({ error: `Item ${item.id} is a ${item.auth_type} item; this batch is ${batchClaimType}` });
+        }
+      }
+
+      const alreadyBatched = await this.findItemsInOtherBatches(claim_ids, Number(id));
+      if (alreadyBatched.length > 0) {
+        return res.status(409).json({
+          error: `Items already in another batch: ${alreadyBatched.map(r => `Item ${r.item_id} (${r.batch_identifier})`).join(', ')}`
+        });
       }
 
       const newItemIds = [...currentItemIds, ...claim_ids];
-      const bundleData = typeof batch.request_bundle === 'string'
-        ? JSON.parse(batch.request_bundle)
-        : (batch.request_bundle || {});
+      const bundleData = safeJsonParse(batch.request_bundle, {}) || {};
       bundleData.item_ids = newItemIds;
 
       const addedAmount = itemsResult.rows.reduce((sum, c) => sum + parseFloat(c.adjudication_amount || c.net_amount || 0), 0);
@@ -559,9 +654,9 @@ class ClaimBatchesController extends BaseController {
   async removeClaimsFromBatch(req, res) {
     try {
       const { id } = req.params;
-      const { claim_ids } = req.body;
+      const claim_ids = parseItemIds(req.body.claim_ids);
 
-      if (!claim_ids || !Array.isArray(claim_ids) || claim_ids.length === 0) {
+      if (!claim_ids || claim_ids.length === 0) {
         return res.status(400).json({ error: 'claim_ids array is required' });
       }
 
@@ -576,7 +671,11 @@ class ClaimBatchesController extends BaseController {
       }
 
       const currentItemIds = this._extractItemIds(batch.request_bundle);
-      const newItemIds = currentItemIds.filter(cid => !claim_ids.includes(cid));
+      const newItemIds = currentItemIds.filter(cid => !claim_ids.includes(Number(cid)));
+      const removedIds = currentItemIds.filter(cid => claim_ids.includes(Number(cid))).map(Number);
+      if (removedIds.length === 0) {
+        return res.status(400).json({ error: 'None of the items are in this batch' });
+      }
 
       if (newItemIds.length < 2) {
         return res.status(400).json({ error: 'Batch must retain at least 2 items' });
@@ -586,16 +685,14 @@ class ClaimBatchesController extends BaseController {
         SELECT pai.id, pai.net_amount, pai.adjudication_amount
         FROM prior_authorization_items pai
         WHERE pai.id = ANY($1::int[])
-      `, [claim_ids]);
+      `, [removedIds]);
 
       const removedAmount = removedItemsResult.rows.reduce((sum, c) => sum + parseFloat(c.adjudication_amount || c.net_amount || 0), 0);
 
-      const bundleData = typeof batch.request_bundle === 'string'
-        ? JSON.parse(batch.request_bundle)
-        : (batch.request_bundle || {});
+      const bundleData = safeJsonParse(batch.request_bundle, {}) || {};
       bundleData.item_ids = newItemIds;
       if (bundleData.items) {
-        bundleData.items = bundleData.items.filter(i => !claim_ids.includes(i.item_id));
+        bundleData.items = bundleData.items.filter(i => !claim_ids.includes(Number(i.item_id)));
       }
 
       await query(`
@@ -638,7 +735,10 @@ class ClaimBatchesController extends BaseController {
 
       const bundleData = await this.prepareBatchBundleData(batch);
       const batchBundle = batchClaimMapper.buildBatchRequestBundle(bundleData);
-      const individualBundles = batchClaimMapper.buildIndividualClaimBundles(bundleData);
+      // The nested bundles of this very batch bundle, so ids and references match what is sent
+      const individualBundles = (batchBundle.entry || [])
+        .filter(entry => entry.resource?.resourceType === 'Bundle')
+        .map(entry => entry.resource);
 
       res.json({ 
         data: individualBundles,
@@ -650,7 +750,7 @@ class ClaimBatchesController extends BaseController {
       });
     } catch (error) {
       console.error('Error previewing batch bundles:', error);
-      res.status(500).json({ error: error.message || 'Failed to preview batch bundles' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to preview batch bundles' });
     }
   }
 
@@ -661,6 +761,7 @@ class ClaimBatchesController extends BaseController {
    * Deferred responses are retrieved via polling.
    */
   async sendToNphies(req, res) {
+    let reserved = false;
     try {
       const { id } = req.params;
       const batch = await this.getByIdInternal(id);
@@ -677,26 +778,43 @@ class ClaimBatchesController extends BaseController {
         return res.status(400).json({ error: 'Batch must have at least 2 claims' });
       }
 
-      // BV-00163: Generate a resubmit suffix to avoid duplicate identifier errors on retry
-      const resubmitSuffix = batch.request_bundle ? `-R${Date.now()}` : '';
+      // An Error batch being resent must not overlap a batch that was already submitted
+      const itemIdsToSend = this._extractItemIds(batch.request_bundle).map(Number);
+      const submittedElsewhere = await this.findItemsInOtherBatches(itemIdsToSend, Number(id), { statuses: SUBMITTED_BATCH_STATUSES });
+      if (submittedElsewhere.length > 0) {
+        return res.status(409).json({
+          error: `Items already submitted in another batch: ${submittedElsewhere.map(r => `Item ${r.item_id} (${r.batch_identifier})`).join(', ')}`
+        });
+      }
 
-      await query(`
-        UPDATE claim_batches 
-        SET status = 'Pending', submission_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1
-      `, [id]);
+      // BV-00163: Generate a resubmit suffix to avoid duplicate identifier errors on retry.
+      // request_bundle is set at creation, so only a previously submitted batch gets the suffix.
+      const previousRequest = safeJsonParse(batch.request_bundle, {}) || {};
+      const previouslySubmitted = Boolean(batch.submission_date) || Boolean(previousRequest.batchBundle);
+      const resubmitSuffix = previouslySubmitted ? `-R${Date.now()}` : '';
 
+      // Build before reserving so validation failures (e.g. missing coverage) leave the batch untouched
       const bundleData = await this.prepareBatchBundleData(batch, resubmitSuffix);
       const batchBundle = batchClaimMapper.buildBatchRequestBundle(bundleData);
 
-      console.log(`[BatchClaims] Submitting batch ${batch.batch_identifier} as single batch-request bundle with ${batch.claims.length} nested claims`);
+      // Guarded transition: only one request can move the batch out of Draft/Error
+      const reservation = await query(`
+        UPDATE claim_batches 
+        SET status = 'Pending', submission_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 AND status IN ('Draft', 'Error')
+        RETURNING id
+      `, [id]);
+      if (reservation.rowCount !== 1) {
+        return res.status(409).json({ error: 'Batch is already being submitted or its status changed' });
+      }
+      reserved = true;
 
-      const itemIds = this._extractItemIds(batch.request_bundle);
+      console.log(`[BatchClaims] Submitting batch ${batch.batch_identifier} as single batch-request bundle with ${batch.claims.length} nested claims`);
 
       const storedRequestBundle = {
         batchBundle,
         _metadata: {
-          item_ids: itemIds,
+          item_ids: itemIdsToSend,
           batchIdentifier: bundleData.batchIdentifier,
           totalClaims: batch.claims.length,
           items: bundleData.claims?.map((c, i) => ({
@@ -807,15 +925,21 @@ class ClaimBatchesController extends BaseController {
     } catch (error) {
       console.error('Error submitting batch to NPHIES:', error);
 
-      await query(`
-        UPDATE claim_batches 
-        SET status = 'Error', 
-            errors = $1,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2
-      `, [JSON.stringify([{ message: error.message }]), req.params.id]);
+      if (reserved) {
+        try {
+          await query(`
+            UPDATE claim_batches 
+            SET status = 'Error', 
+                errors = $1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2 AND status = 'Pending'
+          `, [JSON.stringify([{ message: error.message }]), req.params.id]);
+        } catch (resetError) {
+          console.error('Error resetting batch status:', resetError.message);
+        }
+      }
 
-      res.status(500).json({ error: error.message || 'Failed to submit batch to NPHIES' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to submit batch to NPHIES' });
     }
   }
 
@@ -848,7 +972,16 @@ class ClaimBatchesController extends BaseController {
       console.log(`[BatchClaims] Polling for batch ${batch.batch_identifier} responses`);
       const pollResponse = await nphiesService.pollBatchClaimResponses(provider, batch.batch_identifier);
 
-      if (pollResponse.success && pollResponse.claimResponses?.length > 0) {
+      if (!pollResponse.success) {
+        return res.status(502).json({
+          success: false,
+          data: batch,
+          error: pollResponse.error?.message || pollResponse.error || pollResponse.message || 'Failed to poll NPHIES',
+          pollResult: { responsesReceived: 0, message: pollResponse.message || 'Poll failed' }
+        });
+      }
+
+      if (pollResponse.claimResponses?.length > 0) {
         await this.processPolledClaimResponses(id, pollResponse.claimResponses, batch);
         await this.updateBatchStatistics(id);
 
@@ -890,14 +1023,9 @@ class ClaimBatchesController extends BaseController {
     try {
       const itemIds = this._extractItemIds(batch.request_bundle);
 
-      let existingResponseBundle = {};
-      if (batch.response_bundle) {
-        existingResponseBundle = typeof batch.response_bundle === 'string'
-          ? JSON.parse(batch.response_bundle)
-          : batch.response_bundle;
-      }
+      const existingResponseBundle = safeJsonParse(batch.response_bundle, {}) || {};
 
-      if (!existingResponseBundle.polledResponses) {
+      if (!Array.isArray(existingResponseBundle.polledResponses)) {
         existingResponseBundle.polledResponses = [];
       }
 
@@ -906,6 +1034,9 @@ class ClaimBatchesController extends BaseController {
         if (!batchNumber) continue;
 
         const itemId = itemIds[batchNumber - 1];
+        // One entry per claim (batch-number): a later poll replaces the earlier state
+        existingResponseBundle.polledResponses = existingResponseBundle.polledResponses
+          .filter(existing => existing.batchNumber !== batchNumber);
         existingResponseBundle.polledResponses.push({
           batchNumber,
           itemId,
@@ -947,10 +1078,24 @@ class ClaimBatchesController extends BaseController {
     const responseBundle = batch.response_bundle;
     const totalClaims = batch.total_claims || 0;
 
-    let approved = 0;
-    let rejected = 0;
-    let pending = 0;
-    let queued = 0;
+    // Final state per claim, keyed by batch-number; polled responses override the
+    // initial batch-response state so a claim is never counted twice.
+    const states = new Map();
+    let anonymous = 0;
+    const record = (batchNumber, state) => states.set(batchNumber ?? `anonymous-${anonymous++}`, state);
+    const classify = (outcome, adjudicationOutcome) => {
+      if (outcome === 'queued') return 'queued';
+      if (outcome === 'error') return 'rejected';
+      if (adjudicationOutcome === 'approved' || adjudicationOutcome === 'partial') return 'approved';
+      if (adjudicationOutcome === 'rejected') return 'rejected';
+      return 'pending';
+    };
+    const batchNumberOf = claimResponse => claimResponse?.extension?.find(
+      ext => ext.url?.includes('extension-batch-number')
+    )?.valuePositiveInt;
+    const adjudicationOf = claimResponse => claimResponse?.extension?.find(
+      ext => ext.url?.includes('extension-adjudication-outcome')
+    )?.valueCodeableConcept?.coding?.[0]?.code;
 
     if (responseBundle) {
       const responsesToAnalyze = responseBundle.responses || [];
@@ -958,7 +1103,7 @@ class ClaimBatchesController extends BaseController {
 
       for (const response of responsesToAnalyze) {
         if (!response.success) {
-          rejected++;
+          record(undefined, 'rejected');
           continue;
         }
 
@@ -967,30 +1112,14 @@ class ClaimBatchesController extends BaseController {
         )?.resource;
 
         if (!claimResponse) {
-          pending++;
+          record(undefined, 'pending');
           continue;
         }
 
         const outcome = claimResponse.outcome;
-        const adjudicationOutcome = claimResponse.extension?.find(
-          ext => ext.url?.includes('extension-adjudication-outcome')
-        )?.valueCodeableConcept?.coding?.[0]?.code;
-
-        if (outcome === 'complete') {
-          if (adjudicationOutcome === 'approved' || adjudicationOutcome === 'partial') {
-            approved++;
-          } else if (adjudicationOutcome === 'rejected') {
-            rejected++;
-          } else {
-            pending++;
-          }
-        } else if (outcome === 'queued') {
-          queued++;
-        } else if (outcome === 'error') {
-          rejected++;
-        } else {
-          pending++;
-        }
+        record(batchNumberOf(claimResponse), outcome === 'complete' || outcome === 'queued' || outcome === 'error'
+          ? classify(outcome, adjudicationOf(claimResponse))
+          : 'pending');
       }
 
       if (responseBundle.entry) {
@@ -1001,30 +1130,21 @@ class ClaimBatchesController extends BaseController {
               : entry.resource?.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource;
 
             if (!cr) continue;
-            const outcome = cr.outcome;
-            const adj = cr.extension?.find(ext => ext.url?.includes('extension-adjudication-outcome'))?.valueCodeableConcept?.coding?.[0]?.code;
-
-            if (outcome === 'queued') queued++;
-            else if (outcome === 'error') rejected++;
-            else if (adj === 'approved' || adj === 'partial') approved++;
-            else if (adj === 'rejected') rejected++;
-            else pending++;
+            record(batchNumberOf(cr), classify(cr.outcome, adjudicationOf(cr)));
           }
         }
       }
 
       for (const pr of polledResponses) {
-        if (pr.outcome === 'complete') {
-          if (pr.adjudicationOutcome === 'approved' || pr.adjudicationOutcome === 'partial') approved++;
-          else if (pr.adjudicationOutcome === 'rejected') rejected++;
-          else pending++;
-        } else if (pr.outcome === 'queued') {
-          queued++;
-        } else if (pr.outcome === 'error') {
-          rejected++;
+        if (pr.outcome === 'complete' || pr.outcome === 'queued' || pr.outcome === 'error') {
+          record(pr.batchNumber, classify(pr.outcome, pr.adjudicationOutcome));
         }
       }
     }
+
+    const counts = { approved: 0, rejected: 0, pending: 0, queued: 0 };
+    for (const state of states.values()) counts[state]++;
+    const { approved, rejected, queued } = counts;
 
     let batchStatus = 'Submitted';
     const processedCount = approved + rejected;
@@ -1041,13 +1161,16 @@ class ClaimBatchesController extends BaseController {
 
     console.log(`[BatchClaims] Statistics for batch ${batchId}: total=${totalClaims}, approved=${approved}, rejected=${rejected}, queued=${queued}, status=${batchStatus}`);
 
+    // Draft/Pending/Error are workflow states owned by send; recalculation must not
+    // turn a failed (resendable) batch into Rejected, or a draft into Submitted.
     await query(`
       UPDATE claim_batches 
       SET processed_claims = $1::int,
           approved_claims = $2::int,
           rejected_claims = $3::int,
-          status = $4::text,
-          processed_date = CASE WHEN $4::text IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
+          status = CASE WHEN status IN ('Draft', 'Pending', 'Error') THEN status ELSE $4::text END,
+          processed_date = CASE WHEN status NOT IN ('Draft', 'Pending', 'Error') AND $4::text IN ('Processed', 'Partial', 'Rejected')
+            THEN CURRENT_TIMESTAMP ELSE processed_date END,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = $5
     `, [processedCount, approved, rejected, batchStatus, batchId]);
@@ -1072,7 +1195,7 @@ class ClaimBatchesController extends BaseController {
       });
     } catch (error) {
       console.error('Error recalculating statistics:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: 'Failed to recalculate statistics' });
     }
   }
 
@@ -1088,9 +1211,9 @@ class ClaimBatchesController extends BaseController {
 
       const result = await query(`
         UPDATE claim_batches 
-        SET status = $1, 
-            description = COALESCE($2, description),
-            processed_date = CASE WHEN $1 IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
+        SET status = $1::text, 
+            description = COALESCE($2::text, description),
+            processed_date = CASE WHEN $1::text IN ('Processed', 'Partial', 'Rejected') THEN CURRENT_TIMESTAMP ELSE processed_date END,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $3
         RETURNING *
@@ -1192,7 +1315,11 @@ class ClaimBatchesController extends BaseController {
         pa.provider_id,
         pa.insurer_id,
         pa.practitioner_id,
-        pa.coverage_id,
+        pa.practitioner_license,
+        pa.practitioner_name,
+        pa.practitioner_specialty_code,
+        pa.practitioner_identifier_type,
+        pa.selected_coverage_id,
         pa.practice_code,
         pa.service_event_type,
         pa.request_bundle as auth_request_bundle,
@@ -1234,12 +1361,18 @@ class ClaimBatchesController extends BaseController {
       ORDER BY sequence ASC
     `, [item.auth_id]);
 
-    const coverageResult = await query(`
-      SELECT * FROM patient_coverage 
-      WHERE patient_id = $1 AND insurer_id = $2 AND is_active = true
-      ORDER BY created_at DESC
-      LIMIT 1
-    `, [item.patient_id, item.insurer_id]);
+    // Use the coverage selected on the prior authorization; fall back to the latest active one
+    const coverageResult = item.selected_coverage_id
+      ? await query(`
+          SELECT * FROM patient_coverage
+          WHERE coverage_id = $1 AND patient_id = $2 AND insurer_id = $3
+        `, [item.selected_coverage_id, item.patient_id, item.insurer_id])
+      : await query(`
+          SELECT * FROM patient_coverage 
+          WHERE patient_id = $1 AND insurer_id = $2 AND is_active = true
+          ORDER BY created_at DESC
+          LIMIT 1
+        `, [item.patient_id, item.insurer_id]);
 
     const diagnosesArray = diagnosesResult.rows.map(d => ({
       sequence: d.sequence,
@@ -1285,7 +1418,13 @@ class ClaimBatchesController extends BaseController {
     }];
 
     const coverageData = coverageResult.rows.length > 0 ? coverageResult.rows[0] : null;
-    const coverage = coverageData ? {
+    if (!coverageData) {
+      // Never invent a member id / coverage: the claim cannot be built without one.
+      const error = new Error(`No coverage found for prior authorization ${item.request_number} (item ${item.id}); coverage (member id) is required`);
+      error.status = 400;
+      throw error;
+    }
+    const coverage = {
       id: coverageData.coverage_id,
       coverage_id: coverageData.coverage_id,
       member_id: coverageData.member_id || coverageData.policy_number,
@@ -1297,12 +1436,6 @@ class ClaimBatchesController extends BaseController {
       class_name: coverageData.class_name || 'Insurance Plan',
       period_start: coverageData.start_date || coverageData.period_start,
       period_end: coverageData.end_date || coverageData.period_end
-    } : {
-      id: `cov-${item.patient_id}`,
-      coverage_id: `cov-${item.patient_id}`,
-      member_id: item.patient_identifier,
-      coverage_type: 'EHCPOL',
-      relationship: 'self'
     };
 
     return {
@@ -1321,8 +1454,8 @@ class ClaimBatchesController extends BaseController {
         encounter_identifier: item.encounter_identifier,
         pre_auth_ref: item.pre_auth_ref,
         primary_diagnosis: item.primary_diagnosis,
-        practice_code: item.practice_code || '08.00',
-        service_event_type: item.service_event_type || 'ICSE',
+        practice_code: item.practice_code || null,
+        service_event_type: item.service_event_type || null,
         items: itemsArray,
         diagnoses: diagnosesArray,
         supporting_info: supportingInfoResult.rows,
@@ -1352,10 +1485,8 @@ class ClaimBatchesController extends BaseController {
         nphies_id: item.insurer_nphies_id
       },
       coverage,
-      practitioner: {
-        name: 'Default Practitioner',
-        specialty_code: item.practice_code || '08.00'
-      },
+      // The batch claim is billed by the practitioner of its prior authorization
+      ...(practitionerFromRecord(item) && { practitioner: practitionerFromRecord(item) }),
       items: itemsArray,
       diagnoses: diagnosesArray,
       supporting_info: supportingInfoResult.rows,

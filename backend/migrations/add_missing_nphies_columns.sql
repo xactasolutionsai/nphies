@@ -23,6 +23,12 @@ ALTER TABLE eligibility ADD COLUMN IF NOT EXISTS serviced_period_end DATE;
 -- Add created_at timestamp
 ALTER TABLE eligibility ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
+-- Columns normally added by add_eligibility_extensions.sql; repeated here so the indexes
+-- below do not depend on running that file first.
+ALTER TABLE eligibility ADD COLUMN IF NOT EXISTS is_transfer BOOLEAN DEFAULT FALSE;
+ALTER TABLE eligibility ADD COLUMN IF NOT EXISTS site_eligibility VARCHAR(50);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS is_newborn BOOLEAN DEFAULT FALSE;
+
 -- Add indexes for eligibility
 CREATE INDEX IF NOT EXISTS idx_eligibility_response_code ON eligibility(response_code);
 CREATE INDEX IF NOT EXISTS idx_eligibility_is_nphies_generated ON eligibility(is_nphies_generated);

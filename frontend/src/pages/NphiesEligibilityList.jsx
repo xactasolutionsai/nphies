@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import DataTable from '@/components/DataTable';
-import api from '@/services/api';
+import api, { clearApiCache } from '@/services/api';
 import { 
   Shield, Plus, Eye, RefreshCw, 
   CheckCircle, XCircle, AlertCircle, Clock,
   Filter, Search, FileText
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 // Status display helper
 const getStatusDisplay = (status) => {
@@ -88,6 +89,7 @@ const getPurposeBadges = (purposeValue) => {
 };
 
 export default function NphiesEligibilityList() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [eligibilityRecords, setEligibilityRecords] = useState([]);
@@ -103,20 +105,29 @@ export default function NphiesEligibilityList() {
     status: searchParams.get('status') || ''
   });
 
+  // The search box is only applied on "Search"; status changes apply immediately.
+  const [appliedSearch, setAppliedSearch] = useState(filters.search);
+  // Bumped to force a reload when the user presses Search/Clear without changing anything
+  const [reloadToken, setReloadToken] = useState(0);
+  const requestIdRef = useRef(0);
+
   useEffect(() => {
     loadEligibilityRecords();
-  }, [pagination.page, filters.status]);
+  }, [pagination.page, filters.status, appliedSearch, reloadToken]);
 
   const loadEligibilityRecords = async () => {
+    // Ignore responses from superseded requests (last request wins, not last response)
+    const requestId = ++requestIdRef.current;
     try {
       setLoading(true);
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-        ...(filters.search && { search: filters.search }),
+        ...(appliedSearch && { search: appliedSearch }),
         ...(filters.status && { status: filters.status })
       };
       const response = await api.getEligibility(params);
+      if (requestId !== requestIdRef.current) return;
       const data = response?.data || [];
       setEligibilityRecords(Array.isArray(data) ? data : []);
       if (response?.pagination) {
@@ -127,16 +138,18 @@ export default function NphiesEligibilityList() {
         }));
       }
     } catch (error) {
+      if (requestId !== requestIdRef.current) return;
       console.error('Error loading eligibility records:', error);
       setEligibilityRecords([]);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   };
 
   const handleSearch = () => {
+    setAppliedSearch(filters.search);
     setPagination(prev => ({ ...prev, page: 1 }));
-    loadEligibilityRecords();
+    setReloadToken(t => t + 1);
     // Update URL params
     const params = new URLSearchParams();
     if (filters.search) params.set('search', filters.search);
@@ -146,9 +159,10 @@ export default function NphiesEligibilityList() {
 
   const handleClearFilters = () => {
     setFilters({ search: '', status: '' });
+    setAppliedSearch('');
     setSearchParams({});
     setPagination(prev => ({ ...prev, page: 1 }));
-    loadEligibilityRecords();
+    setReloadToken(t => t + 1);
   };
 
   const getStatusBadge = (status) => {
@@ -325,17 +339,19 @@ export default function NphiesEligibilityList() {
                   <span>Connected to NPHIES</span>
                 </div>
                 <div className="text-sm text-gray-500">
-                  Total: {stats.total} | Eligible: {stats.eligible} | Not Eligible: {stats.notEligible}
+                  Total: {stats.total} | On this page: Eligible {stats.eligible}, Not Eligible {stats.notEligible}
                 </div>
               </div>
             </div>
-            <Button 
-              onClick={() => navigate('/nphies-eligibility/new')} 
-              className="bg-gradient-to-r from-primary-purple to-accent-purple"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              New Eligibility Check
-            </Button>
+            {can('create') && (
+              <Button 
+                onClick={() => navigate('/nphies-eligibility/new')} 
+                className="bg-gradient-to-r from-primary-purple to-accent-purple"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                New Eligibility Check
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -357,7 +373,7 @@ export default function NphiesEligibilityList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600">Eligible</p>
+                <p className="text-sm text-green-600">Eligible <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-green-700">{stats.eligible}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-400" />
@@ -368,7 +384,7 @@ export default function NphiesEligibilityList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-red-600">Not Eligible</p>
+                <p className="text-sm text-red-600">Not Eligible <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-red-700">{stats.notEligible}</p>
               </div>
               <XCircle className="h-8 w-8 text-red-400" />
@@ -379,7 +395,7 @@ export default function NphiesEligibilityList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600">Pending</p>
+                <p className="text-sm text-blue-600">Pending <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-blue-700">{stats.pending}</p>
               </div>
               <Clock className="h-8 w-8 text-blue-400" />
@@ -441,7 +457,7 @@ export default function NphiesEligibilityList() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Eligibility Records</CardTitle>
-            <Button variant="outline" size="sm" onClick={loadEligibilityRecords} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={() => { clearApiCache(); loadEligibilityRecords(); }} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>

@@ -1,11 +1,76 @@
 import React from 'react';
 import { AlertCircle, AlertTriangle, Info, CheckCircle, XCircle } from 'lucide-react';
+import AIBadge from '@/components/ai/AIBadge';
+
+/**
+ * Deterministic duplicate-ingredient findings (source 'rules', from medication_codes.ingredients).
+ * Shown independently of the AI analysis, so they stay visible when the AI is disabled or down.
+ */
+export const RuleFindingsSection = ({ ruleFindings }) => {
+  if (!ruleFindings) return null;
+  if (ruleFindings.available === false) {
+    return (
+      <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-sm text-amber-900">
+        <p className="font-medium">Duplicate-ingredient check could not run — review manually.</p>
+        {ruleFindings.reason && <p>{ruleFindings.reason}</p>}
+      </div>
+    );
+  }
+  const findings = ruleFindings.findings || [];
+  const unmatched = ruleFindings.unmatchedCodes || [];
+  const noData = ruleFindings.codesWithoutIngredients || [];
+  return (
+    <div className="bg-white border border-slate-300 rounded-lg overflow-hidden">
+      <div className="bg-slate-100 px-4 py-3 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-md font-semibold text-gray-900">Duplicate active ingredients (rule check)</h4>
+        <AIBadge source={ruleFindings.source} certainty={ruleFindings.certainty} basis={ruleFindings.basis} />
+      </div>
+      <div className="p-4 space-y-2 text-sm">
+        {findings.length === 0 && unmatched.length === 0 && noData.length === 0 && (
+          <p className="text-gray-700">No shared active ingredient or repeated code among the checked items.</p>
+        )}
+        {findings.map((finding, idx) => (
+          <div key={idx} className="flex items-start gap-2 bg-yellow-50 border border-yellow-300 rounded p-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-700 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-gray-900">{finding.message}</p>
+              <p className="text-xs text-gray-600">Codes: {(finding.codes || []).join(', ')}</p>
+            </div>
+          </div>
+        ))}
+        {unmatched.length > 0 && (
+          <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+            Not in the local medication code list, so not checked: {unmatched.join(', ')}.
+          </p>
+        )}
+        {noData.length > 0 && (
+          <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+            No ingredient data for: {noData.join(', ')} — not checked.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 /**
  * MedicationSafetyPanel Component
- * Displays comprehensive medication safety analysis results
+ * Displays comprehensive medication safety analysis results.
+ * `ruleFindings` (optional) is the deterministic duplicate-ingredient check; it is shown even when
+ * the AI analysis is loading, failed or disabled.
+ * `ai` (optional) is the backend's { available, source, certainty } for the language-model part
+ * (falls back to analysis.ai, then to source 'llm', certainty 'low').
  */
-const MedicationSafetyPanel = ({ analysis, isLoading, error }) => {
+const MedicationSafetyPanel = ({ analysis, isLoading, error, ruleFindings, ai }) => {
+  const rules = ruleFindings ? <RuleFindingsSection ruleFindings={ruleFindings} /> : null;
+  if (rules && (isLoading || error || !analysis)) {
+    return (
+      <div className="space-y-4">
+        {rules}
+        {(isLoading || error) && <MedicationSafetyPanel analysis={analysis} isLoading={isLoading} error={error} />}
+      </div>
+    );
+  }
   if (isLoading) {
     return (
       <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -36,21 +101,66 @@ const MedicationSafetyPanel = ({ analysis, isLoading, error }) => {
   }
 
   const { 
-    drugInteractions = [], 
+    drugInteractions: rawDrugInteractions,
+    interactions: rawInteractions,
     ageRelatedWarnings = [], 
     pregnancyWarnings = [],
     duplicateIngredients = [],
     sideEffectsOverview = {},
-    overallRiskAssessment = 'moderate',
+    overallRiskAssessment: rawRisk,
     recommendations = []
   } = analysis;
+  // Accept both backend shapes: the safety analysis (drugInteractions) and the
+  // interaction check (interactions / hasInteractions).
+  const drugInteractions = Array.isArray(rawDrugInteractions) ? rawDrugInteractions
+    : Array.isArray(rawInteractions) ? rawInteractions : [];
+  const knownRisks = ['low', 'moderate', 'high'];
+  const overallRiskAssessment = knownRisks.includes(rawRisk) ? rawRisk : 'unknown';
+
+  // Fail closed: an unreadable/partial AI reply ("analysisIncomplete", hasInteractions null,
+  // risk "unknown") is NOT a confirmation that there are no interactions.
+  const analysisIncomplete = analysis.analysisIncomplete === true
+    || analysis.requiresManualReview === true
+    || analysis.parsingError === true
+    || analysis.hasInteractions === null
+    || (rawRisk !== undefined && overallRiskAssessment === 'unknown')
+    || (rawRisk === undefined && analysis.hasInteractions === undefined);
+
+  const aiMeta = ai || analysis.ai || {};
+  const llmHeader = (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-200 pb-2">
+      <h4 className="text-md font-semibold text-gray-900">AI medication safety analysis (language model)</h4>
+      <AIBadge
+        source={aiMeta.source || 'llm'}
+        certainty={analysisIncomplete ? undefined : (aiMeta.certainty || 'low')}
+        basis="Language-model review of the listed medications; advisory, verify with a pharmacist or physician"
+      />
+    </div>
+  );
 
   const hasIssues = drugInteractions.length > 0 || ageRelatedWarnings.length > 0 || 
                      pregnancyWarnings.length > 0 || duplicateIngredients.length > 0;
 
   return (
     <div className="space-y-4">
+      {rules}
+      {llmHeader}
       {/* Overall Risk Assessment */}
+      {analysisIncomplete ? (
+        <div className="border rounded-lg p-4 bg-amber-50 border-amber-300">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-600" />
+            <div>
+              <h3 className="text-lg font-semibold text-amber-900">
+                Analysis incomplete — manual review required
+              </h3>
+              <p className="text-sm text-amber-800">
+                {analysis.message || 'The AI safety analysis could not be completed. This is NOT a confirmation that there are no interactions or safety concerns.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className={`border rounded-lg p-4 ${
         overallRiskAssessment === 'high' ? 'bg-red-50 border-red-300' :
         overallRiskAssessment === 'moderate' ? 'bg-yellow-50 border-yellow-300' :
@@ -82,6 +192,7 @@ const MedicationSafetyPanel = ({ analysis, isLoading, error }) => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Drug Interactions */}
       {drugInteractions.length > 0 && (

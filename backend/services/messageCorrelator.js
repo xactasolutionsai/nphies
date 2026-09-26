@@ -20,7 +20,7 @@
  *   - PaymentReconciliation → store as new record (always payer-initiated)
  */
 
-import pool from '../db.js';
+import { connectWithSchema, releaseSchemaClient } from './dbSchema.js';
 import advancedAuthParser from './advancedAuthParser.js';
 
 class MessageCorrelator {
@@ -75,9 +75,8 @@ class MessageCorrelator {
    * @returns {Object|null} { table, recordId, strategy } or null
    */
   async correlateToOutboundRequest(responseIdentifier, resource, schemaName) {
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       // Strategy 1: Match via outbound_message_header_id
       if (responseIdentifier) {
@@ -99,7 +98,7 @@ class MessageCorrelator {
 
       return null;
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -116,9 +115,8 @@ class MessageCorrelator {
       return { type: 'unsolicited', unmatched: true, reason: 'No payload resource found' };
     }
 
-    const client = await pool.connect();
+    const client = await connectWithSchema(schemaName);
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
 
       switch (resource.resourceType) {
         case 'ClaimResponse': {
@@ -198,7 +196,7 @@ class MessageCorrelator {
           };
       }
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 

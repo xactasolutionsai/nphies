@@ -259,11 +259,13 @@ INSERT INTO nphies_codes (code_system_id, code, display_en, sort_order)
 SELECT cs.code_system_id, v.code, v.display_en, v.sort_order
 FROM nphies_code_systems cs
 CROSS JOIN (VALUES
+    -- NPHIES provider-type codes (1 Hospital, 2 Polyclinic, 3 Pharmacy, 4 Optical Shop, 5 Clinic),
+    -- matching add_nphies_example_providers.sql and NPHIES examples (5 = Clinic).
     ('1', 'Hospital', 1),
-    ('2', 'Clinic', 2),
+    ('2', 'Polyclinic', 2),
     ('3', 'Pharmacy', 3),
-    ('4', 'Laboratory', 4),
-    ('5', 'Dental', 5),
+    ('4', 'Optical Shop', 4),
+    ('5', 'Clinic', 5),
     ('6', 'Optical', 6),
     ('7', 'Home Health', 7),
     ('8', 'Nursing Home', 8)

@@ -184,7 +184,7 @@ export default function StandardApprovalsForm() {
     { value: 'L', label: 'L - Legally Separated' },
     { value: 'P', label: 'P - Polygamous' },
     { value: 'T', label: 'T - Domestic Partner' },
-    { value: 'U', label: 'U - Unknown' }
+    { value: 'U', label: 'U - Unmarried' }
   ];
 
   const visitTypeOptions = [
@@ -326,7 +326,8 @@ export default function StandardApprovalsForm() {
     if (!formData.diagnosis.trim()) newErrors.diagnosis = 'Diagnosis is required';
     
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    // Return the errors themselves: the `errors` state is not updated until the next render
+    return newErrors;
   };
 
   // Get errors for a specific tab (only show errors for touched fields)
@@ -494,15 +495,13 @@ export default function StandardApprovalsForm() {
     setTouched(allFields.reduce((acc, field) => ({ ...acc, [field]: true }), {}));
     
     // Validate form
-    if (!validateForm()) {
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
       // Find first tab with error and switch to it
       const tabsOrder = ['basic', 'insured', 'clinical'];
-      for (const tab of tabsOrder) {
-        if (getTabErrors(tab)) {
-          setActiveTab(tab);
-          break;
-        }
-      }
+      const errorTabs = Object.keys(validationErrors).map(getFieldTab);
+      const firstTab = tabsOrder.find(tab => errorTabs.includes(tab));
+      if (firstTab) setActiveTab(firstTab);
       return;
     }
 
@@ -979,7 +978,7 @@ export default function StandardApprovalsForm() {
                       {formData.emergency_case && (
                         <div className="ml-4 flex-1">
                           <Select
-                            value={emergencyLevelOptions.find(opt => opt.value === formData.emergency_care_level)}
+                            value={emergencyLevelOptions.find(opt => String(opt.value) === String(formData.emergency_care_level ?? '')) || null}
                             onChange={(option) => handleSelectChange('emergency_care_level', option)}
                             onBlur={() => handleBlur('emergency_care_level')}
                             options={emergencyLevelOptions}

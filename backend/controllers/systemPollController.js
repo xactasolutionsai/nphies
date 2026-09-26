@@ -59,7 +59,7 @@ class SystemPollController {
   async getPollLog(req, res) {
     try {
       const { id } = req.params;
-      const result = await systemPollService.getPollLog(parseInt(id));
+      const result = await systemPollService.getPollLog(parseInt(id), req.schemaName || 'public');
 
       if (!result) {
         return res.status(404).json({ error: 'Poll log not found' });
@@ -103,7 +103,7 @@ class SystemPollController {
       }
 
       const result = await systemPollService.getPollMessagesForRecord(
-        table, parseInt(recordId), { page, limit }
+        table, parseInt(recordId), { page, limit, schemaName: req.schemaName || 'public' }
       );
       res.json(result);
     } catch (error) {

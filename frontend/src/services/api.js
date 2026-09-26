@@ -1,9 +1,11 @@
 import { API_BASE_URL, apiFetch } from '@/services/http';
+import { filenameFromContentDisposition, saveBlob } from '@/utils/download';
 
-// AI Features Configuration
-// Set to false to disable AI medication safety analysis and suggestions
-// This prevents unnecessary API calls when the AI server (medbot) is not running
-const AI_FEATURES_ENABLED = false;
+// AI availability is decided at runtime by the backend: GET /api/ai/health reports the
+// AI_FEATURES_ENABLED switch and whether Ollama is reachable (see hooks/useAIHealth.js).
+// There is no build-time switch. When AI is unavailable the callers say so (never skip silently).
+export const AI_UNAVAILABLE_MESSAGE = 'AI unavailable — manual review required';
+const aiUnavailable = () => ({ success: false, disabled: true, message: AI_UNAVAILABLE_MESSAGE });
 
 // Request throttling and caching
 const requestQueue = new Map();
@@ -13,6 +15,39 @@ let cacheRevision = 0;
 export function clearApiCache() { cacheRevision++; cache.clear(); requestQueue.clear(); }
 if (typeof window !== 'undefined') window.addEventListener('auth:changed', clearApiCache);
 const CACHE_DURATION = 30000; // 30 seconds cache
+
+/**
+ * Human-readable message for a 403 from the role checks. The backend answers
+ * { error: 'forbidden', requiredRole } (older builds: { error: 'Forbidden', message: 'Administrator role required' }).
+ */
+export function forbiddenMessage(errorData = {}) {
+  let required = errorData?.requiredRole;
+  if (Array.isArray(required)) required = required.join(' or ');
+  if (!required) required = /admin/i.test(errorData?.message || '') ? 'admin' : 'a higher role';
+  return `You do not have permission for this action (requires ${required})`;
+}
+
+// Only role denials are rewritten; other 403s (e.g. "Public registration is disabled",
+// "Communication does not belong to this prior authorization") keep their own message.
+function isRoleDenial(errorData) {
+  if (!errorData || typeof errorData !== 'object') return false;
+  if (errorData.requiredRole) return true;
+  return String(errorData.error).toLowerCase() === 'forbidden'
+    && /(administrator role required|only super admin)/i.test(errorData.message || '');
+}
+
+function buildHttpError(status, errorData) {
+  let data = errorData;
+  let message = `HTTP error! status: ${status}`;
+  if (status === 403 && isRoleDenial(errorData)) {
+    message = forbiddenMessage(errorData);
+    // Pages display response.data.error first; keep the backend code under `code`.
+    data = { ...errorData, code: errorData?.error, error: message, message };
+  }
+  const error = new Error(message);
+  error.response = { status, data };
+  return error;
+}
 
 class ApiService {
   async request(endpoint, options = {}) {
@@ -67,9 +102,7 @@ class ApiService {
           const retryResponse = await apiFetch(url, config);
           if (!retryResponse.ok) {
             const errorData = await retryResponse.json().catch(() => ({}));
-            const error = new Error(`HTTP error! status: ${retryResponse.status}`);
-            error.response = { status: retryResponse.status, data: errorData };
-            throw error;
+            throw buildHttpError(retryResponse.status, errorData);
           }
           if (method !== 'GET') clearApiCache();
           const data = await retryResponse.json();
@@ -80,9 +113,7 @@ class ApiService {
         }
         // Parse error response and attach to error
         const errorData = await response.json().catch(() => ({}));
-        const error = new Error(`HTTP error! status: ${response.status}`);
-        error.response = { status: response.status, data: errorData };
-        throw error;
+        throw buildHttpError(response.status, errorData);
       }
       
       if (method !== 'GET') clearApiCache();
@@ -94,6 +125,31 @@ class ApiService {
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Download a binary attachment with the Authorization header and save it via an object URL.
+   * window.open() cannot send the Bearer token, so the backend would answer 401.
+   * The file is always saved (never rendered in the app origin).
+   * Resolves to true on success; on failure it alerts the user and resolves to false,
+   * so onClick callers that do not await never produce an unhandled rejection.
+   */
+  async downloadAttachment(endpoint, fallbackName = 'attachment') {
+    try {
+      const response = await apiFetch(`${API_BASE_URL}${endpoint}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const filename = filenameFromContentDisposition(response.headers.get('Content-Disposition'), fallbackName);
+      saveBlob(blob, filename);
+      return true;
+    } catch (error) {
+      console.error('Attachment download failed:', error);
+      if (typeof window !== 'undefined') window.alert(`Failed to download attachment: ${error.message}`);
+      return false;
     }
   }
 
@@ -476,11 +532,6 @@ class ApiService {
     });
   }
 
-  // Search functionality
-  async search(query, entity) {
-    return this.request(`/search?q=${encodeURIComponent(query)}&entity=${entity}`);
-  }
-
   // NPHIES Eligibility Methods
   async checkNphiesEligibility(data) {
     return this.request('/eligibility/check-nphies', {
@@ -755,7 +806,7 @@ class ApiService {
   }
 
   downloadCommunicationRequestAttachment(priorAuthId, requestId, payloadIndex) {
-    window.open(`${API_BASE_URL}/prior-authorizations/${priorAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, '_blank');
+    return this.downloadAttachment(`/prior-authorizations/${priorAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, `attachment-${payloadIndex}`);
   }
 
   /**
@@ -938,7 +989,7 @@ class ApiService {
   }
 
   downloadClaimCommunicationRequestAttachment(claimId, requestId, payloadIndex) {
-    window.open(`${API_BASE_URL}/claim-submissions/${claimId}/communication-requests/${requestId}/attachment/${payloadIndex}`, '_blank');
+    return this.downloadAttachment(`/claim-submissions/${claimId}/communication-requests/${requestId}/attachment/${payloadIndex}`, `attachment-${payloadIndex}`);
   }
 
   /**
@@ -1077,6 +1128,19 @@ class ApiService {
     return this.request(`/nphies-codes/medications/${encodeURIComponent(code)}`);
   }
 
+  /**
+   * True when GET /api/ai/health says the AI is enabled and Ollama is not known to be unreachable
+   * (GET responses are cached for 30 s). A failed health request counts as unavailable.
+   */
+  async aiAvailable() {
+    try {
+      const health = await this.request('/ai/health');
+      return Boolean(health && health.enabled === true && health.reachable !== false);
+    } catch {
+      return false;
+    }
+  }
+
   // Medication Safety Analysis (AI-powered)
   /**
    * Analyze medication safety using AI
@@ -1085,10 +1149,8 @@ class ApiService {
    * @param {Object} patientContext - Patient context (age, gender, pregnant, allergies, diagnosis)
    */
   async analyzeMedicationSafety(medications, patientContext = {}) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    // Always sent: the backend runs the deterministic duplicate-ingredient check and, when the AI
+    // is disabled or down, returns an analysis marked incomplete / manual review required.
     return this.request('/medication-safety/analyze', {
       method: 'POST',
       body: JSON.stringify({ medications, patientContext })
@@ -1103,10 +1165,7 @@ class ApiService {
    * @param {boolean} emergencyCase - Is this an emergency case
    */
   async getMedicationSuggestions(diagnosis, patientAge, patientGender, emergencyCase = false) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/medication-safety/suggest', {
       method: 'POST',
       body: JSON.stringify({ diagnosis, patientAge, patientGender, emergencyCase })
@@ -1118,10 +1177,7 @@ class ApiService {
    * @param {Array} medications - Array of medication objects
    */
   async checkDrugInteractions(medications) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/medication-safety/check-interactions', {
       method: 'POST',
       body: JSON.stringify({ medications })
@@ -1138,10 +1194,7 @@ class ApiService {
    * @param {Object} formData - Complete prior authorization form data
    */
   async validatePriorAuth(formData) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/ai-validation/validate-prior-auth', {
       method: 'POST',
       body: JSON.stringify(formData)
@@ -1156,10 +1209,7 @@ class ApiService {
    * @param {Object} context - Additional context (chief complaint, diagnosis, requested service)
    */
   async enhanceClinicalText(text, field, context = {}) {
-    // Return early if AI features are disabled
-    if (!AI_FEATURES_ENABLED) {
-      return { success: false, disabled: true, message: 'AI features are currently disabled' };
-    }
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/ai-validation/enhance-clinical', {
       method: 'POST',
       body: JSON.stringify({ text, field, context })
@@ -1172,6 +1222,7 @@ class ApiService {
    * @param {string} category - Category (chief_complaint, diagnosis, etc.)
    */
   async suggestSnomedCodes(text, category = 'chief_complaint') {
+    if (!(await this.aiAvailable())) return aiUnavailable();
     return this.request('/ai-validation/suggest-snomed', {
       method: 'POST',
       body: JSON.stringify({ text, category })
@@ -1304,6 +1355,18 @@ class ApiService {
    */
   async getUser(id) {
     return this.request(`/users/${id}`);
+  }
+
+  /**
+   * Change a user's role (admin only)
+   * @param {number} id - User ID
+   * @param {string} role - admin | submitter | reviewer | viewer
+   */
+  async updateUserRole(id, role) {
+    return this.request(`/users/${id}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role })
+    });
   }
 
   // ============================================================================
@@ -1460,7 +1523,7 @@ class ApiService {
   }
 
   downloadAdvancedAuthCommunicationRequestAttachment(advAuthId, requestId, payloadIndex) {
-    window.open(`${API_BASE_URL}/advanced-authorizations/${advAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, '_blank');
+    return this.downloadAttachment(`/advanced-authorizations/${advAuthId}/communication-requests/${requestId}/attachment/${payloadIndex}`, `attachment-${payloadIndex}`);
   }
 
   /**

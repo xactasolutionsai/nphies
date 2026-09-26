@@ -12,23 +12,22 @@ class NphiesCodeService {
     this.cache = new Map();
     this.cacheExpiry = 60 * 60 * 1000; // 1 hour cache
     this.lastLoaded = null;
-    this.isLoading = false;
+    this.lastFailed = null;
+    this.retryAfterFailureMs = 60 * 1000; // Don't hit the database on every lookup while it is down
+    this.loadingPromise = null;
   }
 
   /**
-   * Load all codes from database into cache
+   * Load all codes from database into cache (concurrent callers share one load)
    */
   async loadCodes() {
-    if (this.isLoading) {
-      // Wait for current load to complete
-      while (this.isLoading) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      return;
+    if (!this.loadingPromise) {
+      this.loadingPromise = this._loadCodes().finally(() => { this.loadingPromise = null; });
     }
+    return this.loadingPromise;
+  }
 
-    this.isLoading = true;
-
+  async _loadCodes() {
     try {
       const result = await query(`
         SELECT 
@@ -43,32 +42,29 @@ class NphiesCodeService {
         ORDER BY cs.code, c.sort_order
       `);
 
-      // Clear existing cache
-      this.cache.clear();
-
-      // Organize by code system
+      // Build the new cache before swapping it in so lookups never see a half-filled cache
+      const cache = new Map();
       for (const row of result.rows) {
         const systemCode = row.system_code;
-        
-        if (!this.cache.has(systemCode)) {
-          this.cache.set(systemCode, new Map());
+        if (!cache.has(systemCode)) {
+          cache.set(systemCode, new Map());
         }
-        
-        this.cache.get(systemCode).set(row.code, {
+        cache.get(systemCode).set(row.code, {
           displayEn: row.display_en,
           displayAr: row.display_ar,
           description: row.description
         });
       }
 
+      this.cache = cache;
       this.lastLoaded = Date.now();
+      this.lastFailed = null;
       console.log(`[NPHIES Codes] Loaded ${result.rows.length} codes from database`);
 
     } catch (error) {
+      this.lastFailed = Date.now();
       console.error('[NPHIES Codes] Error loading codes:', error.message);
       // Don't throw - allow fallback to hardcoded values
-    } finally {
-      this.isLoading = false;
     }
   }
 
@@ -76,6 +72,7 @@ class NphiesCodeService {
    * Check if cache needs refresh
    */
   needsRefresh() {
+    if (this.lastFailed && Date.now() - this.lastFailed < this.retryAfterFailureMs) return false;
     if (!this.lastLoaded) return true;
     return Date.now() - this.lastLoaded > this.cacheExpiry;
   }
@@ -87,6 +84,15 @@ class NphiesCodeService {
     if (this.needsRefresh()) {
       await this.loadCodes();
     }
+  }
+
+  /**
+   * Sync lookups cannot wait for the database; start a background load so later
+   * lookups return display text instead of raw codes.
+   */
+  triggerBackgroundLoad() {
+    if (process.env.NODE_ENV === 'test' || this.loadingPromise || !this.needsRefresh()) return;
+    this.loadCodes().catch(() => {});
   }
 
   /**
@@ -138,6 +144,7 @@ class NphiesCodeService {
    * @returns {string} The display value or code
    */
   getDisplaySync(systemCode, code, lang = 'en') {
+    this.triggerBackgroundLoad();
     const system = this.cache.get(systemCode);
     if (!system) return code;
     
@@ -234,6 +241,7 @@ class NphiesCodeService {
    */
   async refresh() {
     this.lastLoaded = null;
+    this.lastFailed = null;
     await this.loadCodes();
   }
 
@@ -241,8 +249,9 @@ class NphiesCodeService {
    * Clear cache
    */
   clearCache() {
-    this.cache.clear();
+    this.cache = new Map();
     this.lastLoaded = null;
+    this.lastFailed = null;
   }
 }
 

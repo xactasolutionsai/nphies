@@ -18,11 +18,16 @@ SET identifier_type = NULL
 WHERE identifier_type = 'visitor_permit';
 
 -- =====================================================
--- 2. Remove visitor_permit from policy_holders table
+-- 2. policy_holders: only if the table has an identifier_type column
+--    (add_policy_holders.sql does not create one, which used to abort this migration)
 -- =====================================================
-UPDATE policy_holders 
-SET identifier_type = NULL 
-WHERE identifier_type = 'visitor_permit';
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = current_schema() AND table_name = 'policy_holders' AND column_name = 'identifier_type') THEN
+    UPDATE policy_holders SET identifier_type = NULL WHERE identifier_type = 'visitor_permit';
+  END IF;
+END $$;
 
 -- =====================================================
 -- 3. Update nphies_codes table - remove VP

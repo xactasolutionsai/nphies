@@ -609,7 +609,7 @@ class PaymentReconciliationService {
       FROM payment_reconciliations
       WHERE payment_date >= CURRENT_DATE - INTERVAL '12 months'
       GROUP BY DATE_TRUNC('month', payment_date)
-      ORDER BY month DESC
+      ORDER BY month ASC
     `);
     
     // Get by insurer

@@ -1,5 +1,6 @@
 import express from 'express';
 import claimSubmissionsController from '../controllers/claimSubmissionsController.js';
+import { registerCompareSuccessRoutes } from './ai/compareSuccess.js';
 
 const router = express.Router();
 
@@ -75,6 +76,12 @@ router.post('/:id/status-check', (req, res) => claimSubmissionsController.sendSt
 router.post('/:id/poll', (req, res) => claimSubmissionsController.pollMessages(req, res));
 
 /**
+ * GET /api/claim-submissions/:id/poll/preview
+ * Preview the poll bundle that /poll would send (no NPHIES call)
+ */
+router.get('/:id/poll/preview', (req, res) => claimSubmissionsController.previewPollBundle(req, res));
+
+/**
  * Send Unsolicited Communication
  * POST /api/claim-submissions/:id/communication/unsolicited
  * 
@@ -134,5 +141,8 @@ router.post('/:id/communications/:communicationId/poll-acknowledgment', (req, re
  * Polls NPHIES for acknowledgments of all communications with status = 'queued'
  */
 router.post('/:id/communications/poll-all-acknowledgments', (req, res) => claimSubmissionsController.pollAllQueuedAcknowledgments(req, res));
+
+// Compare a rejected request with the last accepted one (deterministic diff + optional AI explanation)
+registerCompareSuccessRoutes(router, 'claim-submissions');
 
 export default router;

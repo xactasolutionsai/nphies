@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,13 +10,16 @@ import Select from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 import AsyncSelect from 'react-select/async';
 import 'react-datepicker/dist/react-datepicker.css';
-import api, { extractErrorMessage } from '@/services/api';
+import api, { extractErrorMessage, AI_UNAVAILABLE_MESSAGE } from '@/services/api';
+import aiApi from '@/services/aiApi';
+import AIBadge from '@/components/ai/AIBadge';
+import { buildEnhanceContext, interpretEnhanceResponse, readSnomedSuggestions } from '@/utils/aiAssist';
 import { 
   Save, Send, ArrowLeft, Plus, Trash2, FileText, User, Building, 
   Shield, Stethoscope, Activity, Receipt, Paperclip, Eye, Pill,
-  Calendar, DollarSign, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
-  Upload, File, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle, Package, RotateCcw,
-  Zap
+  Calendar, AlertCircle, CheckCircle, XCircle, Copy, CreditCard, Sparkles,
+  Upload, X, RefreshCw, AlertTriangle, Info, MessageSquare, PlusCircle, Package, RotateCcw,
+  Zap, Check
 } from 'lucide-react';
 
 // Import AI Medication Safety components
@@ -36,7 +39,6 @@ import {
   ADMIT_SOURCE_OPTIONS,
   CURRENCY_OPTIONS,
   DIAGNOSIS_TYPE_OPTIONS,
-  EYE_OPTIONS,
   BODY_SITE_OPTIONS_BY_AUTH_TYPE,
   FDI_TOOTH_OPTIONS,
   TOOTH_SURFACE_OPTIONS,
@@ -54,20 +56,21 @@ import {
   ENCOUNTER_SERVICE_TYPE_OPTIONS,
   ENCOUNTER_PRIORITY_OPTIONS,
   EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS,
-  DENTAL_PROCEDURE_OPTIONS,
-  NPHIES_PROCEDURE_OPTIONS,
+  DISCHARGE_DISPOSITION_OPTIONS,
   LOINC_LAB_OPTIONS,
   SERVICE_CODE_SYSTEM_OPTIONS,
   getServiceCodeOptions,
   getCodeSystemKeyFromUrl,
   getServiceCodeSystemsByAuthType,
   SHADOW_BILLING_CODES,
-  SHADOW_BILLING_TYPE_OPTIONS,
   getShadowBillingCodesByType,
   getShadowBillingTypesByAuthType,
   SHADOW_BILLING_TYPE_TO_SYSTEM,
   CODE_ENTRY_MODE_OPTIONS,
-  getAllKnownDescriptions
+  getAllKnownDescriptions,
+  PRACTITIONER_IDENTIFIER_TYPE_OPTIONS,
+  PRACTITIONER_REQUIRED_AUTH_TYPES,
+  validatePractitionerFields
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -75,7 +78,10 @@ import {
   getInitialItemData,
   getInitialDiagnosisData,
   getInitialSupportingInfoData,
-  getInitialLabObservationData
+  getInitialLabObservationData,
+  newRowKey,
+  withRowKeys,
+  stripRowKeys
 } from '@/components/prior-auth/helpers';
 import { TabButton, generateDummyVitalsAndClinical, AIValidationPanel, DrugInteractionJustificationModal, CommunicationPanel } from '@/components/prior-auth';
 
@@ -89,6 +95,9 @@ export default function PriorAuthorizationForm() {
   const queryParams = new URLSearchParams(location.search);
   const isResubmission = queryParams.get('resubmit') === 'true';
   const isFollowUp = queryParams.get('followup') === 'true';
+  // Update of an approved authorization (Details "Update" button): the edited data is
+  // submitted via POST /prior-authorizations/:id/update, which creates a new linked request.
+  const isUpdateRequest = isEditMode && queryParams.get('update') === 'true';
   const relatedClaimIdentifier = queryParams.get('related_claim_identifier');
   const sourceId = queryParams.get('source_id');
 
@@ -118,6 +127,8 @@ export default function PriorAuthorizationForm() {
   const [medicationSafetyAnalysis, setMedicationSafetyAnalysis] = useState(null);
   const [safetyLoading, setSafetyLoading] = useState(false);
   const [safetyError, setSafetyError] = useState(null);
+  // Deterministic duplicate-ingredient check (rules, no AI); runs even when AI features are off.
+  const [ruleFindings, setRuleFindings] = useState(null);
   const [medicationSuggestions, setMedicationSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState(null);
@@ -128,7 +139,12 @@ export default function PriorAuthorizationForm() {
   const [aiValidationLoading, setAiValidationLoading] = useState(false);
   const [showAiValidation, setShowAiValidation] = useState(false);
   const [enhancingField, setEnhancingField] = useState(null); // Track which field is being enhanced
+  // Per clinical field: { status: 'suggestion'|'accepted'|'unchanged'|'unavailable', text, original, reason }
+  const [enhanceSuggestions, setEnhanceSuggestions] = useState({});
+  // Chief complaint SNOMED suggestions: null | { loading } | { available, suggestions, reason }
+  const [snomedSuggest, setSnomedSuggest] = useState(null);
   const [suggestionsPatientContext, setSuggestionsPatientContext] = useState(null);
+  const [pendingAiRevalidation, setPendingAiRevalidation] = useState(false);
   
   // Drug Interaction Justification Modal State
   const [showJustificationModal, setShowJustificationModal] = useState(false);
@@ -139,6 +155,10 @@ export default function PriorAuthorizationForm() {
   const [resubmissionData, setResubmissionData] = useState(null);
   // Follow-up state - tracks the original PA for follow-up (Use Case 7)
   const [followUpData, setFollowUpData] = useState(null);
+  // Encounter end date that was cleared on load (resubmission/follow-up only), shown to the user
+  const [clearedEncounterEnd, setClearedEncounterEnd] = useState(null);
+  // Medication set the drug-interaction justification was written for
+  const [justifiedMedicationKey, setJustifiedMedicationKey] = useState(null);
   
   // Mother patient details state (for displaying selected mother patient info)
   const [selectedMotherPatientDetails, setSelectedMotherPatientDetails] = useState(null);
@@ -161,6 +181,7 @@ export default function PriorAuthorizationForm() {
     service_type: '', // Service type: acute-care, sub-acute-care, etc.
     encounter_priority: '', // For EMER: EM, UR, S, etc.
     emergency_department_disposition: '', // BV-00728: Required for EMER when encounter end date is provided
+    discharge_disposition: '', // BV-00759: Required for institutional encounters with an end date (entered, never defaulted)
     // Newborn extension fields (per NPHIES Test Case 8)
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
     is_newborn: false, // Flag indicating if this is a newborn patient authorization
@@ -181,6 +202,12 @@ export default function PriorAuthorizationForm() {
     patient_id: '',
     provider_id: '',
     practice_code: '08.00', // NPHIES: Practice code for careTeam.qualification (default: Internal Medicine)
+    // Treating practitioner (Practitioner resource / careTeam.provider). Required for
+    // professional, institutional, dental and vision; never fabricated.
+    practitioner_license: '',
+    practitioner_name: '',
+    practitioner_specialty_code: '',
+    practitioner_identifier_type: 'MD',
     insurer_id: '',
     coverage_id: '',
     diagnosis_codes: '',
@@ -259,12 +286,12 @@ export default function PriorAuthorizationForm() {
       loadPriorAuthorization();
     } else if (isResubmission && sourceId) {
       // Load source PA data for resubmission
-      loadSourceForResubmission();
+      loadSourceForNewRequest('resubmit');
     } else if (isFollowUp && sourceId) {
       // Load source PA data for follow-up (Use Case 7)
-      loadSourceForFollowUp();
+      loadSourceForNewRequest('followup');
     }
-  }, [id, isResubmission, isFollowUp, sourceId]);
+  }, [id, isResubmission, isFollowUp, isUpdateRequest, sourceId]);
 
   // Update selectedMotherPatientDetails when mother patient is selected
   useEffect(() => {
@@ -333,8 +360,32 @@ export default function PriorAuthorizationForm() {
   }, [formData.is_newborn, formData.patient_id, formData.mother_patient_id, lastFetchedPatientId]);
 
 
-  // Auto-analyze medication safety when pharmacy items change
-  // NOTE: This is disabled when AI_FEATURES_ENABLED is false in api.js
+  // Key describing the set of selected medications (order-independent). Used to re-run the
+  // AI safety analysis only when the medication set changes (not on every item keystroke)
+  // and to invalidate a drug-interaction justification written for a different set.
+  const medicationSetKey = useMemo(() => (formData.items || [])
+    .filter(item => item.medication_code && item.medication_name)
+    .map(item => `${item.medication_code}:${item.medication_name}`)
+    .sort()
+    .join('|'), [formData.items]);
+
+  const principalDiagnosisKey = useMemo(() => (
+    formData.diagnoses?.find(d => d.diagnosis_type === 'principal')?.diagnosis_display ||
+    formData.diagnoses?.[0]?.diagnosis_display || ''
+  ), [formData.diagnoses]);
+
+  // Keep total_amount in step with the items (sum of item net amounts)
+  const calculatedTotal = useMemo(() => Number(
+    (formData.items || []).reduce((sum, item) => sum + (parseFloat(item.net_amount) || 0), 0).toFixed(2)
+  ), [formData.items]);
+
+  useEffect(() => {
+    setFormData(prev => (prev.total_amount === calculatedTotal ? prev : { ...prev, total_amount: calculatedTotal }));
+  }, [calculatedTotal]);
+
+  // Auto-analyze medication safety when the pharmacy medication set changes
+  // When the AI is disabled or down the backend still answers (rule check + analysis marked
+  // incomplete / manual review required), so the panel always states the AI status.
   useEffect(() => {
     // Only run for pharmacy auth type
     if (formData.auth_type !== 'pharmacy') {
@@ -343,12 +394,7 @@ export default function PriorAuthorizationForm() {
       return;
     }
 
-    // Extract medications with valid medication codes
-    const validMedications = formData.items.filter(item => 
-      item.medication_code && item.medication_name
-    );
-
-    if (validMedications.length === 0) {
+    if (!medicationSetKey) {
       setMedicationSafetyAnalysis(null);
       setSafetyError(null);
       return;
@@ -360,7 +406,30 @@ export default function PriorAuthorizationForm() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [formData.auth_type, formData.items, formData.patient_id, formData.diagnoses]);
+  }, [formData.auth_type, medicationSetKey, formData.patient_id, principalDiagnosisKey]);
+
+  // Duplicate active-ingredient rule check for pharmacy items (medication_codes.ingredients).
+  // Independent of the AI status: this is a deterministic check, not an AI call.
+  useEffect(() => {
+    if (formData.auth_type !== 'pharmacy' || !medicationSetKey) {
+      setRuleFindings(null);
+      return undefined;
+    }
+    let active = true;
+    const items = (formData.items || [])
+      .map((item, index) => ({ sequence: item.sequence || index + 1, code: item.medication_code }))
+      .filter(item => item.code);
+    const timer = setTimeout(async () => {
+      try {
+        const result = await aiApi.checkDuplicateIngredients(items);
+        if (active) setRuleFindings(result);
+      } catch (error) {
+        if (active) setRuleFindings({ available: false, reason: extractErrorMessage(error) });
+      }
+    }, 600);
+    return () => { active = false; clearTimeout(timer); };
+    // medicationSetKey captures the coded items; formData.items itself changes on every keystroke.
+  }, [formData.auth_type, medicationSetKey]);
 
   // Parse a date string as a LOCAL date (avoids timezone shift)
   const parseLocalDate = (dateStr) => {
@@ -430,7 +499,8 @@ export default function PriorAuthorizationForm() {
           medicationName: item.medication_name,
           activeIngredient: item.medication_name, // Use medication name as fallback
           medicationCode: item.medication_code,
-          strength: item.quantity || '',
+          // quantity is the dispensed amount, not the strength; only send a real strength
+          strength: item.strength || '',
         })),
         {
           age: patientAge,
@@ -441,14 +511,20 @@ export default function PriorAuthorizationForm() {
         }
       );
 
-      // Handle disabled AI features - don't show error, just silently skip
+      // AI unavailable: say so in the panel (never skip silently); the rule check stays visible
       if (response.disabled) {
-        setSafetyLoading(false);
+        setMedicationSafetyAnalysis({
+          analysisIncomplete: true,
+          requiresManualReview: true,
+          message: response.message || AI_UNAVAILABLE_MESSAGE
+        });
         return;
       }
 
       if (response.success && response.analysis) {
-        setMedicationSafetyAnalysis(response.analysis);
+        // Keep the backend's { available, source, certainty } with the analysis so the panel
+        // (and the saved copy shown on the details page) can label the language-model part.
+        setMedicationSafetyAnalysis(response.ai ? { ...response.analysis, ai: response.ai } : response.analysis);
       } else {
         throw new Error(response.message || 'Analysis failed');
       }
@@ -487,7 +563,7 @@ export default function PriorAuthorizationForm() {
 
       // Handle disabled AI features
       if (response.disabled) {
-        setSuggestionsError('AI features are currently disabled');
+        setSuggestionsError(response.message || AI_UNAVAILABLE_MESSAGE);
         setSuggestionsLoading(false);
         return;
       }
@@ -525,164 +601,229 @@ export default function PriorAuthorizationForm() {
     }
   };
 
+  // Local calendar date (YYYY-MM-DD) of a date/datetime value, or null
+  const toLocalDateOnly = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return null;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  // Encounter end is picked as a date only (no time) for every class except
+  // institutional inpatient/daycase (see the Encounter Period section).
+  const isEncounterEndDateOnly = (data) =>
+    data.auth_type === 'dental' || !['inpatient', 'daycase'].includes(data.encounter_class);
+
+  /**
+   * Turn a stored prior authorization (flat supporting_info) back into the structured
+   * form state (vital_signs, clinical_info, admission_info). Shared by edit, update,
+   * resubmission and follow-up loading.
+   */
+  const buildFormStateFromRecord = (data) => {
+    const supportingInfo = data.supporting_info || [];
+    const vitalSigns = {
+      systolic: '', diastolic: '', height: '', weight: '',
+      pulse: '', temperature: '', oxygen_saturation: '', respiratory_rate: '',
+      measurement_time: null
+    };
+    const clinicalInfo = {
+      chief_complaint_format: 'snomed', // Default format
+      chief_complaint_code: '', chief_complaint_display: '',
+      chief_complaint_text: '', // Free text option
+      patient_history: '', history_of_present_illness: '',
+      physical_examination: '', treatment_plan: '',
+      investigation_result: ''
+    };
+    const admissionInfo = {
+      admission_weight: '', estimated_length_of_stay: ''
+    };
+
+    // Track which supporting_info items are parsed into structured fields
+    const parsedCategories = new Set();
+
+    supportingInfo.forEach(info => {
+      // Vital signs
+      const vitalField = VITAL_SIGNS_FIELDS.find(f => f.category === info.category);
+      if (vitalField && info.value_quantity != null) {
+        vitalSigns[vitalField.key] = String(info.value_quantity);
+        if (info.timing_period_start && !vitalSigns.measurement_time) {
+          vitalSigns.measurement_time = info.timing_period_start;
+        }
+        parsedCategories.add(info.category);
+      }
+
+      // Clinical text fields
+      const clinicalField = CLINICAL_TEXT_FIELDS.find(f => f.category === info.category);
+      if (clinicalField && info.value_string) {
+        clinicalInfo[clinicalField.key] = info.value_string;
+        parsedCategories.add(info.category);
+      }
+
+      // Chief complaint - SNOMED code, free text, or both.
+      // The backend stores the free text (code_text) in value_string, so keep it
+      // alongside the code instead of dropping it when a code is also present.
+      if (info.category === 'chief-complaint') {
+        const freeText = info.code_text || info.value_string || '';
+        if (info.code) {
+          clinicalInfo.chief_complaint_format = 'snomed';
+          clinicalInfo.chief_complaint_code = info.code;
+          clinicalInfo.chief_complaint_display = info.code_display || '';
+          clinicalInfo.chief_complaint_text = freeText;
+        } else if (freeText) {
+          clinicalInfo.chief_complaint_format = 'text';
+          clinicalInfo.chief_complaint_text = freeText;
+          clinicalInfo.chief_complaint_code = '';
+          clinicalInfo.chief_complaint_display = '';
+        }
+        parsedCategories.add(info.category);
+      }
+
+      // Investigation result
+      if (info.category === 'investigation-result' && info.code) {
+        clinicalInfo.investigation_result = info.code;
+        parsedCategories.add(info.category);
+      }
+
+      // Admission fields
+      const admissionField = ADMISSION_FIELDS.find(f => f.category === info.category);
+      if (admissionField && info.value_quantity != null) {
+        admissionInfo[admissionField.key] = String(info.value_quantity);
+        parsedCategories.add(info.category);
+      }
+    });
+
+    // Keep only manual/other entries (sequences are renumbered on save)
+    const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
+
+    // Preserve/infer manual_code_entry flag and clean up stale shadow billing data
+    const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
+      const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
+      const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
+
+      // For old records without code_entry_mode: infer mode and clear stale shadow_code.
+      // The shadow billing service previously shadow-billed ALL codes (DB had no standard codes),
+      // so non-manual items have incorrect shadow_code values that must be cleared.
+      const isOldRecord = !item.code_entry_mode;
+      const inferredMode = item.code_entry_mode || (hasManualCodeEntry ? 'manual' : 'nphies');
+      const shouldClearStaleShadow = isOldRecord && !hasManualCodeEntry;
+      const details = item.details || (item.is_package ? [] : undefined);
+      // Pharmacy medications saved before the backend kept medication_code in 'nphies' mode
+      // only carry product_or_service_code: show that code as the selected medication.
+      const restoreMedication = data.auth_type === 'pharmacy' && inferredMode === 'nphies' &&
+        item.item_type !== 'device' && !item.medication_code && item.product_or_service_code;
+
+      return {
+        ...item,
+        ...(restoreMedication ? {
+          medication_code: item.product_or_service_code,
+          medication_name: item.medication_name || item.product_or_service_display || ''
+        } : {}),
+        _rowKey: item._rowKey || newRowKey(),
+        manual_code_entry: hasManualCodeEntry,
+        manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
+        code_entry_mode: inferredMode,
+        shadow_code: shouldClearStaleShadow ? null : item.shadow_code,
+        shadow_code_system: shouldClearStaleShadow ? null : item.shadow_code_system,
+        shadow_code_display: shouldClearStaleShadow ? null : item.shadow_code_display,
+        details: Array.isArray(details) ? withRowKeys(details) : details
+      };
+    });
+
+    return {
+      ...data,
+      // Ensure sub_type is set - use database value or derive from encounter_class
+      sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
+      items: processedItems,
+      diagnoses: withRowKeys(data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)]),
+      supporting_info: withRowKeys(remainingSupportingInfo),
+      lab_observations: Array.isArray(data.lab_observations) ? withRowKeys(data.lab_observations) : data.lab_observations,
+      attachments: data.attachments || [],
+      vital_signs: vitalSigns,
+      clinical_info: clinicalInfo,
+      admission_info: admissionInfo,
+      practitioner_license: data.practitioner_license || '',
+      practitioner_name: data.practitioner_name || '',
+      practitioner_specialty_code: data.practitioner_specialty_code || '',
+      practitioner_identifier_type: data.practitioner_identifier_type || 'MD',
+      vision_prescription: data.vision_prescription || {
+        product_type: 'lens',
+        date_written: null,
+        prescriber_license: '',
+        right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
+        left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
+      }
+    };
+  };
+
+  // Fields of the source record that must not be carried into a new (resubmission/follow-up) request
+  const NEW_REQUEST_RESET_FIELDS = {
+    id: undefined, // Clear ID - this is a new record
+    request_number: undefined, // Will be generated
+    status: 'draft', // Reset to draft
+    pre_auth_ref: undefined, // Clear payer reference
+    outcome: undefined, // Clear outcome
+    disposition: undefined, // Clear disposition
+    response_date: undefined, // Clear response
+    request_bundle: undefined, // Clear previous bundle
+    response_bundle: undefined, // Clear previous response
+    is_cancelled: false, // Clear cancellation flag from source
+    cancellation_reason: undefined, // Clear cancellation reason from source
+    responses: undefined // Clear responses from source
+  };
+
+  /**
+   * For resubmission/follow-up only: decide whether the source encounter end date must be
+   * cleared. A follow-up adds new services (dated today), so a past end date would put them
+   * outside the encounter period (BV-00041). A resubmission keeps its services, so the end date
+   * is only cleared when a service is already dated after it. Plain edits never clear it.
+   */
+  const shouldClearSourceEncounterEnd = (data, mode) => {
+    const endDate = toLocalDateOnly(data.encounter_end);
+    if (!endDate) return false;
+    if (mode === 'followup') {
+      return endDate < toLocalDateOnly(new Date());
+    }
+    return (data.items || []).some(item => {
+      const servicedDate = item.serviced_date ? toLocalDateOnly(parseLocalDate(item.serviced_date)) : null;
+      return servicedDate && servicedDate > endDate;
+    });
+  };
+
+  const loadCoveragesForRecord = async (patientId) => {
+    if (!patientId) return;
+    try {
+      const coveragesRes = await api.getPatientCoverages(patientId);
+      setCoverages(coveragesRes?.data || []);
+    } catch (coverageError) {
+      console.error('Error loading patient coverages:', coverageError);
+    }
+    loadPatientEligibilities(patientId);
+  };
+
   const loadPriorAuthorization = async () => {
     try {
       setLoading(true);
+      setClearedEncounterEnd(null);
       const response = await api.getPriorAuthorization(id);
       const data = response.data;
-      
-      // Parse existing supporting_info into structured fields
-      const supportingInfo = data.supporting_info || [];
-      const vitalSigns = {
-        systolic: '', diastolic: '', height: '', weight: '',
-        pulse: '', temperature: '', oxygen_saturation: '', respiratory_rate: '',
-        measurement_time: null
-      };
-      const clinicalInfo = {
-        chief_complaint_format: 'snomed', // Default format
-        chief_complaint_code: '', chief_complaint_display: '',
-        chief_complaint_text: '', // Free text option
-        patient_history: '', history_of_present_illness: '',
-        physical_examination: '', treatment_plan: '',
-        investigation_result: ''
-      };
-      const admissionInfo = {
-        admission_weight: '', estimated_length_of_stay: ''
-      };
-      
-      // Track which supporting_info items are parsed into structured fields
-      const parsedCategories = new Set();
-      
-      supportingInfo.forEach(info => {
-        // Vital signs
-        const vitalField = VITAL_SIGNS_FIELDS.find(f => f.category === info.category);
-        if (vitalField && info.value_quantity != null) {
-          vitalSigns[vitalField.key] = String(info.value_quantity);
-          if (info.timing_period_start && !vitalSigns.measurement_time) {
-            vitalSigns.measurement_time = info.timing_period_start;
-          }
-          parsedCategories.add(info.category);
-        }
-        
-        // Clinical text fields
-        const clinicalField = CLINICAL_TEXT_FIELDS.find(f => f.category === info.category);
-        if (clinicalField && info.value_string) {
-          clinicalInfo[clinicalField.key] = info.value_string;
-          parsedCategories.add(info.category);
-        }
-        
-        // Chief complaint - supports both SNOMED code and free text formats
-        if (info.category === 'chief-complaint') {
-          if (info.code_text) {
-            // Free text format
-            clinicalInfo.chief_complaint_format = 'text';
-            clinicalInfo.chief_complaint_text = info.code_text;
-            clinicalInfo.chief_complaint_code = '';
-            clinicalInfo.chief_complaint_display = '';
-          } else if (info.code) {
-            // SNOMED code format
-            clinicalInfo.chief_complaint_format = 'snomed';
-            clinicalInfo.chief_complaint_code = info.code;
-            clinicalInfo.chief_complaint_display = info.code_display || '';
-            clinicalInfo.chief_complaint_text = '';
-          } else if (info.value_string) {
-            // Legacy: value_string format
-            clinicalInfo.chief_complaint_format = 'text';
-            clinicalInfo.chief_complaint_text = info.value_string;
-            clinicalInfo.chief_complaint_code = '';
-            clinicalInfo.chief_complaint_display = '';
-          }
-          parsedCategories.add(info.category);
-        }
-        
-        // Investigation result
-        if (info.category === 'investigation-result' && info.code) {
-          clinicalInfo.investigation_result = info.code;
-          parsedCategories.add(info.category);
-        }
-        
-        // Admission fields
-        const admissionField = ADMISSION_FIELDS.find(f => f.category === info.category);
-        if (admissionField && info.value_quantity != null) {
-          admissionInfo[admissionField.key] = String(info.value_quantity);
-          parsedCategories.add(info.category);
-        }
-      });
-      
-      // Filter out parsed items from supporting_info (keep only manual/other entries)
-      const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
-      
-      // Process items to preserve/infer manual_code_entry flag and clean up stale shadow billing data
-      const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
-        const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
-        const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
-        
-        // For old records without code_entry_mode: infer mode and clear stale shadow_code.
-        // The shadow billing service previously shadow-billed ALL codes (DB had no standard codes),
-        // so non-manual items have incorrect shadow_code values that must be cleared.
-        const isOldRecord = !item.code_entry_mode;
-        const inferredMode = item.code_entry_mode || (hasManualCodeEntry ? 'manual' : 'nphies');
-        const shouldClearStaleShadow = isOldRecord && !hasManualCodeEntry;
 
-        return {
-          ...item,
-          manual_code_entry: hasManualCodeEntry,
-          manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
-          code_entry_mode: inferredMode,
-          shadow_code: shouldClearStaleShadow ? null : item.shadow_code,
-          shadow_code_system: shouldClearStaleShadow ? null : item.shadow_code_system,
-          shadow_code_display: shouldClearStaleShadow ? null : item.shadow_code_display,
-          details: item.details || (item.is_package ? [] : undefined)
-        };
-      });
-      
-      // Auto-fix encounter_end if it's in the past (for editing/duplicating old records)
-      // This prevents BV-00041 validation errors when service dates are after a stale end date
-      let fixedEncounterEnd = data.encounter_end;
-      if (data.encounter_end) {
-        const encounterEndDate = new Date(data.encounter_end);
-        const today = new Date();
-        // Set today to end of day for comparison
-        today.setHours(23, 59, 59, 999);
-        if (encounterEndDate < today) {
-          // End date is in the past - clear it to make encounter "ongoing"
-          // This allows service dates up to today
-          fixedEncounterEnd = '';
-          console.log('Auto-cleared stale encounter_end date:', data.encounter_end, '-> ongoing (empty)');
-        }
+      // Update of an approved authorization: the new request references this one
+      if (isUpdateRequest) {
+        setFollowUpData({
+          is_update: true,
+          related_claim_identifier: data.request_number,
+          related_auth_id: id,
+          original_status: data.status,
+          original_outcome: data.outcome
+        });
+      } else {
+        setFollowUpData(null);
       }
-      
-      setFormData({
-        ...data,
-        // Ensure sub_type is set - use database value or derive from encounter_class
-        sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
-        encounter_end: fixedEncounterEnd,
-        items: processedItems,
-        diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
-        supporting_info: remainingSupportingInfo,
-        attachments: data.attachments || [],
-        vital_signs: vitalSigns,
-        clinical_info: clinicalInfo,
-        admission_info: admissionInfo,
-        vision_prescription: data.vision_prescription || {
-          product_type: 'lens',
-          date_written: null,
-          prescriber_license: '',
-          right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
-          left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
-        }
-      });
-      
-      // Load coverages and eligibilities for the patient (if patient exists)
-      if (data.patient_id) {
-        try {
-          const coveragesRes = await api.getPatientCoverages(data.patient_id);
-          setCoverages(coveragesRes?.data || []);
-        } catch (coverageError) {
-          console.error('Error loading patient coverages:', coverageError);
-        }
-        loadPatientEligibilities(data.patient_id);
-      }
+
+      // The stored encounter_end is kept as-is when editing
+      setFormData(buildFormStateFromRecord(data));
+
+      await loadCoveragesForRecord(data.patient_id);
     } catch (error) {
       console.error('Error loading prior authorization:', error);
       alert('Error loading prior authorization');
@@ -693,380 +834,52 @@ export default function PriorAuthorizationForm() {
   };
 
   /**
-   * Load source PA data for resubmission
+   * Load source PA data for resubmission or follow-up (Use Case 7).
    * Pre-fills the form with the original PA data but creates a new request
-   * linked to the original via Claim.related
+   * linked to the original via Claim.related.
    */
-  const loadSourceForResubmission = async () => {
+  const loadSourceForNewRequest = async (mode) => {
     try {
       setLoading(true);
+      setClearedEncounterEnd(null);
       const response = await api.getPriorAuthorization(sourceId);
       const data = response.data;
-      
-      // Store resubmission metadata
-      setResubmissionData({
-        is_resubmission: true,
-        related_claim_identifier: relatedClaimIdentifier || data.request_number,
-        source_id: sourceId,
-        original_status: data.status,
-        original_outcome: data.outcome
-      });
-      
-      // Parse existing supporting_info into structured fields
-      // Uses the same logic as loadPriorAuthorization for consistency
-      const supportingInfo = data.supporting_info || [];
-      const vitalSigns = {
-        systolic: '', diastolic: '', height: '', weight: '',
-        pulse: '', temperature: '', oxygen_saturation: '', respiratory_rate: '',
-        measurement_time: null
-      };
-      const clinicalInfo = {
-        chief_complaint_format: 'snomed', // Default format
-        chief_complaint_code: '', chief_complaint_display: '',
-        chief_complaint_text: '', // Free text option
-        patient_history: '', history_of_present_illness: '',
-        physical_examination: '', treatment_plan: '',
-        investigation_result: ''
-      };
-      const admissionInfo = {
-        admission_weight: '', estimated_length_of_stay: ''
-      };
-      
-      // Track which supporting_info items are parsed into structured fields
-      const parsedCategories = new Set();
-      
-      supportingInfo.forEach(info => {
-        // Vital signs - use VITAL_SIGNS_FIELDS constant for proper matching
-        const vitalField = VITAL_SIGNS_FIELDS.find(f => f.category === info.category);
-        if (vitalField && info.value_quantity != null) {
-          vitalSigns[vitalField.key] = String(info.value_quantity);
-          if (info.timing_period_start && !vitalSigns.measurement_time) {
-            vitalSigns.measurement_time = info.timing_period_start;
-          }
-          parsedCategories.add(info.category);
-        }
-        
-        // Clinical text fields - use CLINICAL_TEXT_FIELDS constant
-        const clinicalField = CLINICAL_TEXT_FIELDS.find(f => f.category === info.category);
-        if (clinicalField && info.value_string) {
-          clinicalInfo[clinicalField.key] = info.value_string;
-          parsedCategories.add(info.category);
-        }
-        
-        // Chief complaint - supports both SNOMED code and free text formats
-        if (info.category === 'chief-complaint') {
-          if (info.code_text) {
-            // Free text format
-            clinicalInfo.chief_complaint_format = 'text';
-            clinicalInfo.chief_complaint_text = info.code_text;
-            clinicalInfo.chief_complaint_code = '';
-            clinicalInfo.chief_complaint_display = '';
-          } else if (info.code) {
-            // SNOMED code format
-            clinicalInfo.chief_complaint_format = 'snomed';
-            clinicalInfo.chief_complaint_code = info.code;
-            clinicalInfo.chief_complaint_display = info.code_display || '';
-            clinicalInfo.chief_complaint_text = '';
-          } else if (info.value_string) {
-            // Legacy: value_string format
-            clinicalInfo.chief_complaint_format = 'text';
-            clinicalInfo.chief_complaint_text = info.value_string;
-            clinicalInfo.chief_complaint_code = '';
-            clinicalInfo.chief_complaint_display = '';
-          }
-          parsedCategories.add(info.category);
-        }
-        
-        // Investigation result
-        if (info.category === 'investigation-result' && info.code) {
-          clinicalInfo.investigation_result = info.code;
-          parsedCategories.add(info.category);
-        }
-        
-        // Admission fields - use ADMISSION_FIELDS constant
-        const admissionField = ADMISSION_FIELDS.find(f => f.category === info.category);
-        if (admissionField && info.value_quantity != null) {
-          admissionInfo[admissionField.key] = String(info.value_quantity);
-          parsedCategories.add(info.category);
-        }
-      });
-      
-      // Filter out parsed items from supporting_info (keep only manual/other entries)
-      const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
-      
-      // Process items to preserve/infer manual_code_entry flag and clean up stale shadow billing data
-      const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
-        const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
-        const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
-        
-        const isOldRecord = !item.code_entry_mode;
-        const inferredMode = item.code_entry_mode || (hasManualCodeEntry ? 'manual' : 'nphies');
-        const shouldClearStaleShadow = isOldRecord && !hasManualCodeEntry;
 
-        return {
-          ...item,
-          manual_code_entry: hasManualCodeEntry,
-          manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
-          code_entry_mode: inferredMode,
-          shadow_code: shouldClearStaleShadow ? null : item.shadow_code,
-          shadow_code_system: shouldClearStaleShadow ? null : item.shadow_code_system,
-          shadow_code_display: shouldClearStaleShadow ? null : item.shadow_code_display,
-          details: item.details || (item.is_package ? [] : undefined)
-        };
-      });
-      
-      // Auto-fix encounter_end if it's in the past (for resubmission of old records)
-      // This prevents BV-00041 validation errors when service dates are after a stale end date
-      let fixedEncounterEnd = data.encounter_end;
-      if (data.encounter_end) {
-        const encounterEndDate = new Date(data.encounter_end);
-        const today = new Date();
-        today.setHours(23, 59, 59, 999);
-        if (encounterEndDate < today) {
-          fixedEncounterEnd = '';
-          console.log('Auto-cleared stale encounter_end date for resubmission:', data.encounter_end, '-> ongoing (empty)');
-        }
+      if (mode === 'followup') {
+        setFollowUpData({
+          is_update: true,
+          related_claim_identifier: relatedClaimIdentifier || data.request_number,
+          related_auth_id: sourceId,
+          original_status: data.status,
+          original_outcome: data.outcome
+        });
+        setResubmissionData(null);
+      } else {
+        setResubmissionData({
+          is_resubmission: true,
+          related_claim_identifier: relatedClaimIdentifier || data.request_number,
+          source_id: sourceId,
+          original_status: data.status,
+          original_outcome: data.outcome
+        });
       }
-      
-      // Pre-fill form with source data but reset status for new submission
+
+      const clearEnd = shouldClearSourceEncounterEnd(data, mode);
+      if (clearEnd) {
+        // Shown to the user in a banner, with an option to restore it
+        setClearedEncounterEnd(data.encounter_end);
+      }
+
       setFormData({
-        ...data,
-        id: undefined, // Clear ID - this is a new record
-        request_number: undefined, // Will be generated
-        status: 'draft', // Reset to draft
-        pre_auth_ref: undefined, // Clear payer reference
-        outcome: undefined, // Clear outcome
-        disposition: undefined, // Clear disposition
-        response_date: undefined, // Clear response
-        request_bundle: undefined, // Clear previous bundle
-        response_bundle: undefined, // Clear previous response
-        is_cancelled: false, // Clear cancellation flag from source
-        cancellation_reason: undefined, // Clear cancellation reason from source
-        responses: undefined, // Clear responses from source
-        // Preserve sub_type from source data, or derive from encounter_class if missing
-        sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
-        encounter_end: fixedEncounterEnd,
-        items: processedItems,
-        diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
-        supporting_info: remainingSupportingInfo,
-        attachments: data.attachments || [],
-        vital_signs: vitalSigns,
-        clinical_info: clinicalInfo,
-        admission_info: admissionInfo,
-        vision_prescription: data.vision_prescription || {
-          product_type: 'lens',
-          date_written: null,
-          prescriber_license: '',
-          right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
-          left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
-        }
+        ...buildFormStateFromRecord(data),
+        ...NEW_REQUEST_RESET_FIELDS,
+        encounter_end: clearEnd ? '' : data.encounter_end
       });
-      
-      // Load coverages and eligibilities for the patient
-      if (data.patient_id) {
-        try {
-          const coveragesRes = await api.getPatientCoverages(data.patient_id);
-          setCoverages(coveragesRes?.data || []);
-        } catch (coverageError) {
-          console.error('Error loading patient coverages:', coverageError);
-        }
-        loadPatientEligibilities(data.patient_id);
-      }
-    } catch (error) {
-      console.error('Error loading source PA for resubmission:', error);
-      alert('Error loading prior authorization for resubmission');
-      navigate('/prior-authorizations');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  /**
-   * Load source PA data for follow-up (Use Case 7)
-   * Pre-fills the form with the original PA data but creates a new request
-   * linked to the original via Claim.related with relationship "prior"
-   * Used for adding services to an approved authorization
-   */
-  const loadSourceForFollowUp = async () => {
-    try {
-      setLoading(true);
-      const response = await api.getPriorAuthorization(sourceId);
-      const data = response.data;
-      
-      // Store follow-up metadata
-      setFollowUpData({
-        is_update: true,
-        related_claim_identifier: relatedClaimIdentifier || data.request_number,
-        related_auth_id: sourceId,
-        original_status: data.status,
-        original_outcome: data.outcome
-      });
-      
-      setResubmissionData(null); // Clear resubmission data if follow-up
-      
-      // Parse existing supporting_info into structured fields
-      // Uses the same logic as loadSourceForResubmission for consistency
-      const supportingInfo = data.supporting_info || [];
-      const vitalSigns = {
-        systolic: '', diastolic: '', height: '', weight: '',
-        pulse: '', temperature: '', oxygen_saturation: '', respiratory_rate: '',
-        measurement_time: null
-      };
-      const clinicalInfo = {
-        chief_complaint_format: 'snomed', // Default format
-        chief_complaint_code: '', chief_complaint_display: '',
-        chief_complaint_text: '', // Free text option
-        patient_history: '', history_of_present_illness: '',
-        physical_examination: '', treatment_plan: '',
-        investigation_result: ''
-      };
-      const admissionInfo = {
-        admission_weight: '', estimated_length_of_stay: ''
-      };
-      
-      // Track which supporting_info items are parsed into structured fields
-      const parsedCategories = new Set();
-      
-      supportingInfo.forEach(info => {
-        // Vital signs - use VITAL_SIGNS_FIELDS constant for proper matching
-        const vitalField = VITAL_SIGNS_FIELDS.find(f => f.category === info.category);
-        if (vitalField && info.value_quantity != null) {
-          vitalSigns[vitalField.key] = String(info.value_quantity);
-          if (info.timing_period_start && !vitalSigns.measurement_time) {
-            vitalSigns.measurement_time = info.timing_period_start;
-          }
-          parsedCategories.add(info.category);
-        }
-        
-        // Clinical text fields - use CLINICAL_TEXT_FIELDS constant
-        const clinicalField = CLINICAL_TEXT_FIELDS.find(f => f.category === info.category);
-        if (clinicalField && info.value_string) {
-          clinicalInfo[clinicalField.key] = info.value_string;
-          parsedCategories.add(info.category);
-        }
-        
-        // Chief complaint - supports both SNOMED code and free text formats
-        if (info.category === 'chief-complaint') {
-          if (info.code_text) {
-            // Free text format
-            clinicalInfo.chief_complaint_format = 'text';
-            clinicalInfo.chief_complaint_text = info.code_text;
-            clinicalInfo.chief_complaint_code = '';
-            clinicalInfo.chief_complaint_display = '';
-          } else if (info.code) {
-            // SNOMED code format
-            clinicalInfo.chief_complaint_format = 'snomed';
-            clinicalInfo.chief_complaint_code = info.code;
-            clinicalInfo.chief_complaint_display = info.code_display || '';
-            clinicalInfo.chief_complaint_text = '';
-          } else if (info.value_string) {
-            // Legacy: value_string format
-            clinicalInfo.chief_complaint_format = 'text';
-            clinicalInfo.chief_complaint_text = info.value_string;
-            clinicalInfo.chief_complaint_code = '';
-            clinicalInfo.chief_complaint_display = '';
-          }
-          parsedCategories.add(info.category);
-        }
-        
-        // Investigation result
-        if (info.category === 'investigation-result' && info.code) {
-          clinicalInfo.investigation_result = info.code;
-          parsedCategories.add(info.category);
-        }
-        
-        // Admission fields - use ADMISSION_FIELDS constant
-        const admissionField = ADMISSION_FIELDS.find(f => f.category === info.category);
-        if (admissionField && info.value_quantity != null) {
-          admissionInfo[admissionField.key] = String(info.value_quantity);
-          parsedCategories.add(info.category);
-        }
-      });
-      
-      // Filter out parsed items from supporting_info (keep only manual/other entries)
-      const remainingSupportingInfo = supportingInfo.filter(info => !parsedCategories.has(info.category));
-      
-      // Process items to preserve/infer manual_code_entry flag and clean up stale shadow billing data
-      const processedItems = (data.items?.length > 0 ? data.items : [getInitialItemData(1)]).map(item => {
-        const hasManualCodeEntry = item.manual_code_entry === true || item.manual_code_entry === 'true';
-        const hasManualPrescribedCodeEntry = item.manual_prescribed_code_entry === true || item.manual_prescribed_code_entry === 'true';
-        
-        const isOldRecord = !item.code_entry_mode;
-        const inferredMode = item.code_entry_mode || (hasManualCodeEntry ? 'manual' : 'nphies');
-        const shouldClearStaleShadow = isOldRecord && !hasManualCodeEntry;
-
-        return {
-          ...item,
-          manual_code_entry: hasManualCodeEntry,
-          manual_prescribed_code_entry: hasManualPrescribedCodeEntry,
-          code_entry_mode: inferredMode,
-          shadow_code: shouldClearStaleShadow ? null : item.shadow_code,
-          shadow_code_system: shouldClearStaleShadow ? null : item.shadow_code_system,
-          shadow_code_display: shouldClearStaleShadow ? null : item.shadow_code_display,
-          details: item.details || (item.is_package ? [] : undefined)
-        };
-      });
-      
-      // Auto-fix encounter_end if it's in the past (for follow-up of old records)
-      // This prevents BV-00041 validation errors when service dates are after a stale end date
-      let fixedEncounterEnd = data.encounter_end;
-      if (data.encounter_end) {
-        const encounterEndDate = new Date(data.encounter_end);
-        const today = new Date();
-        today.setHours(23, 59, 59, 999);
-        if (encounterEndDate < today) {
-          fixedEncounterEnd = '';
-          console.log('Auto-cleared stale encounter_end date for follow-up:', data.encounter_end, '-> ongoing (empty)');
-        }
-      }
-      
-      // Pre-fill form with source data but reset status for new submission
-      setFormData({
-        ...data,
-        id: undefined, // Clear ID - this is a new record
-        request_number: undefined, // Will be generated
-        status: 'draft', // Reset to draft
-        pre_auth_ref: undefined, // Clear payer reference (but keep for reference)
-        outcome: undefined, // Clear outcome
-        disposition: undefined, // Clear disposition
-        response_date: undefined, // Clear response
-        request_bundle: undefined, // Clear previous bundle
-        response_bundle: undefined, // Clear previous response
-        is_cancelled: false, // Clear cancellation flag from source
-        cancellation_reason: undefined, // Clear cancellation reason from source
-        responses: undefined, // Clear responses from source
-        // Preserve sub_type from source data, or derive from encounter_class if missing
-        sub_type: data.sub_type !== null && data.sub_type !== undefined ? data.sub_type : getSubTypeFromEncounterClass(data.encounter_class || 'ambulatory', data.auth_type || 'professional'),
-        encounter_end: fixedEncounterEnd,
-        items: processedItems,
-        diagnoses: data.diagnoses?.length > 0 ? data.diagnoses : [getInitialDiagnosisData(1)],
-        supporting_info: remainingSupportingInfo,
-        attachments: data.attachments || [],
-        vital_signs: vitalSigns,
-        clinical_info: clinicalInfo,
-        admission_info: admissionInfo,
-        vision_prescription: data.vision_prescription || {
-          product_type: 'lens',
-          date_written: null,
-          prescriber_license: '',
-          right_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' },
-          left_eye: { sphere: '', cylinder: '', axis: '', add: '', prism_amount: '', prism_base: '' }
-        }
-      });
-      
-      // Load coverages and eligibilities for the patient
-      if (data.patient_id) {
-        try {
-          const coveragesRes = await api.getPatientCoverages(data.patient_id);
-          setCoverages(coveragesRes?.data || []);
-        } catch (coverageError) {
-          console.error('Error loading patient coverages:', coverageError);
-        }
-        loadPatientEligibilities(data.patient_id);
-      }
+      await loadCoveragesForRecord(data.patient_id);
     } catch (error) {
-      console.error('Error loading source PA for follow-up:', error);
-      alert('Error loading prior authorization for follow-up');
+      console.error(`Error loading source PA for ${mode}:`, error);
+      alert(`Error loading prior authorization for ${mode === 'followup' ? 'follow-up' : 'resubmission'}`);
       navigate('/prior-authorizations');
     } finally {
       setLoading(false);
@@ -1216,12 +1029,16 @@ export default function PriorAuthorizationForm() {
       // Clear mother patient data when is_newborn is unchecked
       if (field === 'is_newborn' && !value) {
         updates.mother_patient_id = '';
-        setSelectedMotherPatientDetails(null);
-        setMotherAutoPopulated(false);
       }
       
       return { ...prev, ...updates };
     });
+
+    // Side effects stay outside the state updater (updaters must be pure)
+    if (field === 'is_newborn' && !value) {
+      setSelectedMotherPatientDetails(null);
+      setMotherAutoPopulated(false);
+    }
     
     // If patient changed, load their coverages and eligibilities
     if (field === 'patient_id') {
@@ -1243,7 +1060,7 @@ export default function PriorAuthorizationForm() {
         const price = field === 'unit_price' ? value : updatedItem.unit_price;
         // For package items, net amount should be sum of sub-items, so skip auto-calculation
         if (!updatedItem.is_package) {
-          newItems[index].net_amount = (parseFloat(qty) || 0) * (parseFloat(price) || 0);
+          newItems[index].net_amount = Number(((parseFloat(qty) || 0) * (parseFloat(price) || 0)).toFixed(2));
         }
       }
       
@@ -1252,12 +1069,12 @@ export default function PriorAuthorizationForm() {
         const subItemsTotal = value.reduce((sum, detail) => {
           return sum + (parseFloat(detail.net_amount) || 0);
         }, 0);
-        newItems[index].net_amount = subItemsTotal.toFixed(2);
+        newItems[index].net_amount = Number(subItemsTotal.toFixed(2));
       } else if (field === 'details' && updatedItem.is_package && (!value || value.length === 0)) {
         // No sub-items: reset to 0 or use regular calculation
         const qty = parseFloat(updatedItem.quantity || 0);
         const price = parseFloat(updatedItem.unit_price || 0);
-        newItems[index].net_amount = (qty * price).toFixed(2);
+        newItems[index].net_amount = Number((qty * price).toFixed(2));
       }
       
       // When is_package flag changes, recalculate net_amount appropriately
@@ -1267,12 +1084,12 @@ export default function PriorAuthorizationForm() {
           const subItemsTotal = updatedItem.details.reduce((sum, detail) => {
             return sum + (parseFloat(detail.net_amount) || 0);
           }, 0);
-          newItems[index].net_amount = subItemsTotal.toFixed(2);
+          newItems[index].net_amount = Number(subItemsTotal.toFixed(2));
         } else if (value === false) {
           // No longer a package: use regular calculation
           const qty = parseFloat(updatedItem.quantity || 0);
           const price = parseFloat(updatedItem.unit_price || 0);
-          newItems[index].net_amount = (qty * price).toFixed(2);
+          newItems[index].net_amount = Number((qty * price).toFixed(2));
         }
       }
       
@@ -1280,11 +1097,21 @@ export default function PriorAuthorizationForm() {
     });
   };
 
-  const addItem = () => {
+  // Append a new item, optionally pre-filled (functional update: no stale index/closure)
+  const addItem = (values = {}) => {
     setFormData(prev => ({
       ...prev,
-      items: [...prev.items, getInitialItemData(prev.items.length + 1, prev.auth_type)]
+      items: [...prev.items, { ...getInitialItemData(prev.items.length + 1, prev.auth_type), ...values }]
     }));
+  };
+
+  // Update one lab observation using the latest state
+  const updateLabObservation = (index, changes) => {
+    setFormData(prev => {
+      const newObs = [...(prev.lab_observations || [])];
+      newObs[index] = { ...newObs[index], ...changes };
+      return { ...prev, lab_observations: newObs };
+    });
   };
 
   // Generate N synthetic-but-unique items for volume testing (NPHIES Test Case #9: 300 items)
@@ -1424,12 +1251,10 @@ export default function PriorAuthorizationForm() {
   };
 
   const removeItem = (index) => {
-    if (formData.items.length > 1) {
-      setFormData(prev => ({
-        ...prev,
-        items: prev.items.filter((_, i) => i !== index).map((item, i) => ({ ...item, sequence: i + 1 }))
-      }));
-    }
+    setFormData(prev => (prev.items.length > 1 ? {
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index).map((item, i) => ({ ...item, sequence: i + 1 }))
+    } : prev));
   };
 
   const handleDiagnosisChange = (index, field, value) => {
@@ -1448,12 +1273,10 @@ export default function PriorAuthorizationForm() {
   };
 
   const removeDiagnosis = (index) => {
-    if (formData.diagnoses.length > 1) {
-      setFormData(prev => ({
-        ...prev,
-        diagnoses: prev.diagnoses.filter((_, i) => i !== index).map((diag, i) => ({ ...diag, sequence: i + 1 }))
-      }));
-    }
+    setFormData(prev => (prev.diagnoses.length > 1 ? {
+      ...prev,
+      diagnoses: prev.diagnoses.filter((_, i) => i !== index).map((diag, i) => ({ ...diag, sequence: i + 1 }))
+    } : prev));
   };
 
   const handleSupportingInfoChange = (index, field, value) => {
@@ -1467,14 +1290,17 @@ export default function PriorAuthorizationForm() {
   const addSupportingInfo = (category = 'info') => {
     setFormData(prev => ({
       ...prev,
-      supporting_info: [...prev.supporting_info, getInitialSupportingInfoData(prev.supporting_info.length + 1, category)]
+      // New entries get their sequence when the payload is built (see buildSupportingInfo)
+      supporting_info: [...prev.supporting_info, getInitialSupportingInfoData(null, category)]
     }));
   };
 
+  // Stored sequences are kept until save (buildSupportingInfo renumbers 1..n and remaps
+  // item information_sequences), so they still identify the original entries.
   const removeSupportingInfo = (index) => {
     setFormData(prev => ({
       ...prev,
-      supporting_info: prev.supporting_info.filter((_, i) => i !== index).map((info, i) => ({ ...info, sequence: i + 1 }))
+      supporting_info: prev.supporting_info.filter((_, i) => i !== index)
     }));
   };
 
@@ -1590,8 +1416,11 @@ export default function PriorAuthorizationForm() {
       if (response.disabled) {
         setAiValidationResult({
           success: false,
-          error: 'AI features are currently disabled',
-          riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+          error: response.message || AI_UNAVAILABLE_MESSAGE,
+          isValid: null,
+          aiUnavailable: true,
+          requiresManualReview: true,
+          riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
           suggestions: []
         });
         setAiValidationLoading(false);
@@ -1604,7 +1433,10 @@ export default function PriorAuthorizationForm() {
         setAiValidationResult({
           success: false,
           error: response.error || 'Validation failed',
-          riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+          isValid: null,
+          aiUnavailable: true,
+          requiresManualReview: true,
+          riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
           suggestions: []
         });
       }
@@ -1613,7 +1445,10 @@ export default function PriorAuthorizationForm() {
       setAiValidationResult({
         success: false,
         error: error.message || 'Failed to validate prior authorization',
-        riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+        isValid: null,
+        aiUnavailable: true,
+        requiresManualReview: true,
+        riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
         suggestions: []
       });
     } finally {
@@ -1650,11 +1485,21 @@ export default function PriorAuthorizationForm() {
       }
     }
     
-    // Re-run validation after applying suggestion
-    setTimeout(() => handleAIValidation(), 500);
+    // Re-run validation once the suggestion is in state (see effect below)
+    setPendingAiRevalidation(true);
   };
 
-  // Enhance clinical text with AI
+  // Runs after the render that applied a suggestion, so validation sees the updated data
+  useEffect(() => {
+    if (!pendingAiRevalidation) return;
+    setPendingAiRevalidation(false);
+    handleAIValidation();
+  }, [pendingAiRevalidation]);
+
+  // Enhance clinical text with AI (advisory): the suggestion is shown as a preview under the field
+  // and nothing in the form changes until the user clicks Accept (Undo restores the original).
+  const setEnhanceState = (field, value) => setEnhanceSuggestions(prev => ({ ...prev, [field]: value }));
+
   const handleEnhanceClinicalText = async (field) => {
     const currentText = formData.clinical_info[field];
     if (!currentText || currentText.trim().length < 5) {
@@ -1663,111 +1508,117 @@ export default function PriorAuthorizationForm() {
     }
 
     setEnhancingField(field);
+    setEnhanceState(field, null);
 
     try {
-      // Get selected patient from loaded patients (using patient_id)
       const selectedPatient = patients.find(p => p.patient_id == formData.patient_id);
       const patientAge = selectedPatient ? calculatePatientAge(selectedPatient.birth_date || selectedPatient.date_of_birth) : null;
-      
-      // Get selected provider from loaded providers
       const selectedProvider = providers.find(p => p.provider_id == formData.provider_id);
-      
-      // Get selected insurer from loaded insurers
-      const selectedInsurer = insurers.find(i => i.insurer_id == formData.insurer_id);
-      
-      // Build comprehensive context from all form data
-      const context = {
-        // Patient Information (from database)
-        patientName: selectedPatient?.name || selectedPatient?.full_name || '',
-        patientAge: patientAge,
-        patientGender: selectedPatient?.gender || '',
-        patientId: selectedPatient?.identifier || selectedPatient?.national_id || '',
-        
-        // Basic Information
-        authType: formData.auth_type || '',
-        priority: formData.priority || '',
-        encounterClass: formData.encounter_class || '',
-        claimSubtype: formData.claim_subtype || '',
-        
-        // Chief Complaint
-        chiefComplaint: formData.clinical_info.chief_complaint_display || formData.clinical_info.chief_complaint_text || '',
-        chiefComplaintCode: formData.clinical_info.chief_complaint_code || '',
-        
-        // Diagnoses (all of them)
-        diagnoses: (formData.diagnoses || []).map(d => ({
-          code: d.diagnosis_code || '',
-          display: d.diagnosis_display || '',
-          description: d.diagnosis_description || '',
-          type: d.diagnosis_type || ''
-        })),
-        
-        // Vital Signs (all of them)
-        vitalSigns: {
-          systolic: formData.vital_signs?.systolic || '',
-          diastolic: formData.vital_signs?.diastolic || '',
-          pulse: formData.vital_signs?.pulse || '',
-          temperature: formData.vital_signs?.temperature || '',
-          oxygen_saturation: formData.vital_signs?.oxygen_saturation || '',
-          respiratory_rate: formData.vital_signs?.respiratory_rate || '',
-          height: formData.vital_signs?.height || '',
-          weight: formData.vital_signs?.weight || ''
-        },
-        
-        // Requested Services/Procedures/Medications
-        requestedServices: (formData.items || []).map(item => ({
-          code: item.product_or_service_code || item.medication_code || '',
-          description: item.service_description || item.medication_name || '',
-          quantity: item.quantity || '',
-          bodySite: item.body_site || '',
-          tooth: item.tooth_number || ''
-        })),
-        
-        // Provider Information (from database)
-        providerName: selectedProvider?.name || selectedProvider?.facility_name || '',
-        providerType: selectedProvider?.provider_type || '',
-        
-        // Insurer Information (from database)
-        insurerName: selectedInsurer?.name || selectedInsurer?.organization_name || '',
-        
-        // Admission Info (for inpatient)
-        admissionWeight: formData.admission_info?.admission_weight || '',
-        estimatedLengthOfStay: formData.admission_info?.estimated_length_of_stay || ''
-      };
 
-      console.log(`🤖 Enhancing ${field} with AI...`);
-      console.log('📋 Context:', context);
+      // Only age/gender and clinical context are sent: no patient name or national ID.
+      const context = buildEnhanceContext(formData, {
+        patientAge,
+        patientGender: selectedPatient?.gender || '',
+        providerType: selectedProvider?.provider_type || ''
+      });
 
       const response = await api.enhanceClinicalText(currentText, field, context);
-      
-      // Handle disabled AI features
-      if (response.disabled) {
-        alert('AI features are currently disabled. Please enable them in the configuration.');
-        setEnhancingField(null);
-        return;
-      }
-      
-      if (response.success && response.enhancedText && response.enhancedText !== currentText) {
-        setFormData(prev => ({
-          ...prev,
-          clinical_info: {
-            ...prev.clinical_info,
-            [field]: response.enhancedText
-          }
-        }));
-        console.log(`✅ Enhanced ${field} successfully`);
-      } else if (response.error) {
-        console.error('Enhancement failed:', response.error);
-        alert(`Enhancement failed: ${response.error}\n\nPlease try again or add more detail to your text.`);
-      } else {
-        console.warn('No enhancement returned');
-        alert('AI could not enhance the text. Try adding more clinical details to your input.');
-      }
+      const result = interpretEnhanceResponse(response, currentText);
+      setEnhanceState(field, { ...result, original: currentText });
     } catch (error) {
-      console.error('Error enhancing clinical text:', error);
-      alert('Failed to connect to AI service. Please check the server is running and try again.');
+      setEnhanceState(field, { status: 'unavailable', reason: extractErrorMessage(error), original: currentText });
     } finally {
       setEnhancingField(null);
     }
+  };
+
+  const acceptEnhancement = (field) => {
+    const suggestion = enhanceSuggestions[field];
+    if (suggestion?.status !== 'suggestion') return;
+    // Undo restores the text as it was when Accept was clicked.
+    const original = formData.clinical_info?.[field] ?? '';
+    setFormData(prev => ({ ...prev, clinical_info: { ...prev.clinical_info, [field]: suggestion.text } }));
+    setEnhanceState(field, { ...suggestion, original, status: 'accepted' });
+  };
+
+  const undoEnhancement = (field) => {
+    const suggestion = enhanceSuggestions[field];
+    if (suggestion?.status !== 'accepted') return;
+    setFormData(prev => ({ ...prev, clinical_info: { ...prev.clinical_info, [field]: suggestion.original } }));
+    setEnhanceState(field, null);
+  };
+
+  // SNOMED suggestions for the free-text chief complaint (advisory; the user picks a chip).
+  const handleSuggestSnomed = async () => {
+    const text = formData.clinical_info?.chief_complaint_text?.trim();
+    if (!text || text.length < 3) return;
+    setSnomedSuggest({ loading: true });
+    try {
+      const response = await api.suggestSnomedCodes(text, 'chief_complaint');
+      setSnomedSuggest(readSnomedSuggestions(response, 3));
+    } catch (error) {
+      setSnomedSuggest({ available: false, reason: extractErrorMessage(error) });
+    }
+  };
+
+  const pickSnomedSuggestion = (suggestion) => {
+    handleClinicalInfoChange('chief_complaint_code', suggestion.code);
+    handleClinicalInfoChange('chief_complaint_display', suggestion.display);
+  };
+
+  const renderEnhancePreview = (field) => {
+    const suggestion = enhanceSuggestions[field];
+    if (!suggestion) return null;
+    if (suggestion.status === 'unavailable' || suggestion.status === 'unchanged') {
+      return (
+        <div className="flex items-start justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+          <span className="flex items-start gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            {suggestion.status === 'unchanged'
+              ? 'The AI suggested no changes — your text was kept.'
+              : `${AI_UNAVAILABLE_MESSAGE} — your text was kept.${suggestion.reason && suggestion.reason !== AI_UNAVAILABLE_MESSAGE ? ` (${suggestion.reason})` : ''}`}
+          </span>
+          <button type="button" onClick={() => setEnhanceState(field, null)} className="text-amber-700 hover:text-amber-900" aria-label="Dismiss">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      );
+    }
+    if (suggestion.status === 'accepted') {
+      const canUndo = formData.clinical_info?.[field] === suggestion.text;
+      return (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-green-200 bg-green-50 p-2 text-xs text-green-900">
+          <span>AI suggestion accepted{canUndo ? '' : ' and edited'}.</span>
+          <span className="flex items-center gap-2">
+            {canUndo && (
+              <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => undoEnhancement(field)}>
+                Undo (restore original)
+              </Button>
+            )}
+            <button type="button" onClick={() => setEnhanceState(field, null)} className="text-green-700 hover:text-green-900" aria-label="Dismiss">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2 rounded-md border border-purple-200 bg-purple-50/40 p-3" data-testid={`enhance-preview-${field}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-medium text-gray-700">AI suggestion — not applied until you accept</span>
+          <AIBadge source="llm" certainty="low" basis="Language-model rewrite of your text; check every statement before accepting" />
+        </div>
+        <p className="whitespace-pre-wrap text-sm text-gray-800">{suggestion.text}</p>
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" className="h-7 px-3 text-xs" onClick={() => acceptEnhancement(field)}>
+            <Check className="h-3 w-3 mr-1" />Accept
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={() => setEnhanceState(field, null)}>
+            <X className="h-3 w-3 mr-1" />Reject
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   // Handler for vision prescription fields
@@ -1798,10 +1649,19 @@ export default function PriorAuthorizationForm() {
     });
   };
 
-  // Build supporting info array from structured data (for save/preview)
-  const buildSupportingInfoArray = () => {
-    const supportingInfo = [...formData.supporting_info]; // Keep existing manual entries
-    let sequence = supportingInfo.length + 1;
+  // Build supporting info from manual entries + structured data (for save/preview).
+  // All entries are renumbered 1..n; sequenceMap maps a manual entry's previous
+  // sequence to its new one so item information_sequences can be remapped.
+  const buildSupportingInfo = () => {
+    const sequenceMap = new Map();
+    let sequence = 1;
+    const supportingInfo = (formData.supporting_info || []).map(info => {
+      const newSequence = sequence++;
+      if (info.sequence != null && info.sequence !== '' && !sequenceMap.has(Number(info.sequence))) {
+        sequenceMap.set(Number(info.sequence), newSequence);
+      }
+      return { ...info, sequence: newSequence };
+    });
 
     // Add vital signs
     VITAL_SIGNS_FIELDS.forEach(field => {
@@ -1875,20 +1735,10 @@ export default function PriorAuthorizationForm() {
     // Note: ICU hours is NOT added to supportingInfo - it's stored separately in icu_hours field
     // and will be added by the mapper when building the FHIR bundle
 
-    return supportingInfo;
+    return { supportingInfo: stripRowKeys(supportingInfo), sequenceMap };
   };
 
-  // Pure function for display - doesn't set state
-  const getCalculatedTotal = () => {
-    return formData.items.reduce((sum, item) => sum + (parseFloat(item.net_amount) || 0), 0);
-  };
-
-  // Click handler that sets state
-  const calculateTotal = () => {
-    const total = getCalculatedTotal();
-    handleChange('total_amount', total);
-    return total;
-  };
+  const buildSupportingInfoArray = () => buildSupportingInfo().supportingInfo;
 
   const validateForm = () => {
     const validationErrors = [];
@@ -1971,6 +1821,7 @@ export default function PriorAuthorizationForm() {
     if (!formData.patient_id) validationErrors.push({ field: 'patient_id', message: 'Patient is required' });
     if (!formData.provider_id) validationErrors.push({ field: 'provider_id', message: 'Provider is required' });
     if (!formData.insurer_id) validationErrors.push({ field: 'insurer_id', message: 'Insurer is required' });
+    validationErrors.push(...validatePractitionerFields(formData));
     if (!formData.items || formData.items.length === 0) validationErrors.push({ field: 'items', message: 'At least one service item is required' });
     
     // Validate item codes based on auth type and item type
@@ -2045,6 +1896,66 @@ export default function PriorAuthorizationForm() {
       }
     }
     
+    // Encounter period: end must not be before start. The end picker is date-only for
+    // non-inpatient/daycase classes, so compare calendar dates in that case.
+    const usesEncounter = formData.auth_type !== 'vision' && formData.auth_type !== 'pharmacy';
+    if (usesEncounter && formData.encounter_start && formData.encounter_end) {
+      const endBeforeStart = isEncounterEndDateOnly(formData)
+        ? toLocalDateOnly(formData.encounter_end) < toLocalDateOnly(formData.encounter_start)
+        : new Date(formData.encounter_end) < new Date(formData.encounter_start);
+      if (endBeforeStart) {
+        validationErrors.push({
+          field: 'encounter_end',
+          message: 'Encounter end date must be on or after the encounter start date'
+        });
+      }
+    }
+
+    // Emergency encounter fields marked as required (NPHIES Encounter-10122)
+    if (usesEncounter && formData.encounter_class === 'emergency') {
+      if (!formData.triage_category) {
+        validationErrors.push({ field: 'triage_category', message: 'Triage Category is required for Emergency encounters' });
+      }
+      if (!formData.triage_date) {
+        validationErrors.push({ field: 'triage_date', message: 'Triage Date & Time is required for Emergency encounters' });
+      }
+      if (formData.encounter_end && !formData.emergency_department_disposition) {
+        validationErrors.push({
+          field: 'emergency_department_disposition',
+          message: 'ED Disposition is required for Emergency encounters that have an end date (BV-00728)'
+        });
+      }
+    }
+
+    // BV-00759: institutional encounters with an end date need the discharge disposition
+    if (formData.auth_type === 'institutional' && formData.encounter_end && !formData.discharge_disposition) {
+      validationErrors.push({
+        field: 'discharge_disposition',
+        message: 'Discharge Disposition is required for institutional encounters that have an end date (BV-00759)'
+      });
+    }
+
+    // Newborn requests require the birth weight
+    if (formData.is_newborn) {
+      const birthWeight = parseFloat(formData.birth_weight);
+      if (!birthWeight || birthWeight <= 0) {
+        validationErrors.push({ field: 'birth_weight', message: 'Birth Weight (grams) is required for newborn requests' });
+      }
+    }
+
+    // Pharmacy medication items require Days Supply
+    if (formData.auth_type === 'pharmacy') {
+      const missingDaysSupply = (formData.items || []).filter(item =>
+        item.item_type !== 'device' && !(parseFloat(item.days_supply) > 0)
+      );
+      if (missingDaysSupply.length > 0) {
+        validationErrors.push({
+          field: 'items',
+          message: `Days Supply is required for medication item(s) ${missingDaysSupply.map(item => item.sequence).join(', ')}`
+        });
+      }
+    }
+
     // Validate attachment file types
     if (formData.attachments && formData.attachments.length > 0) {
       const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -2236,91 +2147,162 @@ export default function PriorAuthorizationForm() {
     );
   };
 
+  /**
+   * Build the request payload from the form state (shared by save, save & send and preview).
+   * @param {Object} options
+   * @param {string|null} options.justification - Drug interaction justification, if any
+   * @param {boolean} options.forPreview - Building for the JSON preview
+   */
+  const buildSubmissionPayload = ({ justification = null, forPreview = false } = {}) => {
+    const { supportingInfo, sequenceMap } = buildSupportingInfo();
+
+    // Merge structured vital signs and clinical data into supporting_info
+    const payload = {
+      ...formData,
+      supporting_info: supportingInfo,
+      // Remap item -> supportingInfo links to the renumbered sequences
+      items: stripRowKeys(formData.items).map(item => {
+        if (!Array.isArray(item.information_sequences)) return item;
+        const remapped = item.information_sequences
+          .map(seq => sequenceMap.get(Number(seq)))
+          .filter(seq => seq != null);
+        return { ...item, information_sequences: remapped.length > 0 ? remapped : null };
+      }),
+      diagnoses: stripRowKeys(formData.diagnoses),
+      lab_observations: stripRowKeys(formData.lab_observations)
+    };
+    // Treating practitioner: trimmed, empty -> null (API field names per the practitioner contract)
+    ['practitioner_license', 'practitioner_name', 'practitioner_specialty_code', 'practitioner_identifier_type'].forEach(key => {
+      const value = payload[key] == null ? '' : String(payload[key]).trim();
+      payload[key] = value || null;
+    });
+    // Discharge disposition only applies to institutional encounters (BV-00759)
+    if (payload.auth_type !== 'institutional') payload.discharge_disposition = null;
+    // Remove structured fields (already merged into supporting_info or handled separately)
+    delete payload.vital_signs;
+    delete payload.clinical_info;
+    delete payload.admission_info;
+    // Keep vision_prescription for vision auth types - needed for VisionPrescription FHIR resource
+    if (payload.auth_type !== 'vision') {
+      delete payload.vision_prescription;
+    }
+
+    // Dental/Vision claims use AMB encounter class
+    // Vision doesn't use encounters - remove end date
+    // Dental uses AMB encounter - end date is optional (allows multi-day service dates)
+    if (payload.auth_type === 'vision') {
+      delete payload.encounter_end;
+      payload.encounter_class = 'ambulatory';
+    }
+    if (payload.auth_type === 'dental') {
+      payload.encounter_class = 'ambulatory';
+      // encounter_end is optional for dental - keep it if provided
+    }
+
+    // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
+    // Per NPHIES BV-00741: Encounter Class Shall be either 'Inpatient Admission', 'Day Case Admission' or 'inpatient acute' for Institutional Claim
+    // Per NPHIES BV-00845: Encounter Class 'Outpatient' SHALL be used only when claim is 'oral' or 'professional'
+    if (payload.auth_type === 'institutional') {
+      if (!['inpatient', 'daycase'].includes(payload.encounter_class)) {
+        payload.encounter_class = 'daycase';
+      }
+    }
+
+    // A date-only end picker stores local midnight. For a same-day encounter that would
+    // be before the start time, so use the start time as the end in that case.
+    if (payload.encounter_start && payload.encounter_end && isEncounterEndDateOnly(payload) &&
+        toLocalDateOnly(payload.encounter_end) === toLocalDateOnly(payload.encounter_start) &&
+        new Date(payload.encounter_end) < new Date(payload.encounter_start)) {
+      payload.encounter_end = payload.encounter_start;
+    }
+
+    if (forPreview) {
+      // Include the ID if we're editing an existing record - this allows the backend to save
+      // the request bundle for later viewing in the details page. An update request becomes a
+      // new record, so it must not reuse the original ID.
+      if (id && !isUpdateRequest) {
+        payload.id = id;
+        payload.prior_auth_id = id;
+      }
+    } else {
+      // Include AI medication safety analysis for pharmacy authorizations
+      if (payload.auth_type === 'pharmacy' && medicationSafetyAnalysis) {
+        payload.medication_safety_analysis = medicationSafetyAnalysis;
+      }
+
+      // Include drug interaction justification if provided
+      if (justification) {
+        payload.drug_interaction_justification = justification;
+        payload.drug_interaction_justification_date = new Date().toISOString();
+      }
+
+      // Handle mother patient data for newborn requests
+      if (payload.is_newborn) {
+        // Only send mother_patient_id if it exists (always using existing patient)
+        if (!payload.mother_patient_id) {
+          delete payload.mother_patient_id;
+        }
+      } else {
+        // Not a newborn request - remove mother patient fields
+        delete payload.mother_patient_id;
+      }
+    }
+
+    // Include resubmission data if this is a resubmission of a rejected/partial PA
+    // (also makes the preview show the Claim.related structure)
+    if (resubmissionData) {
+      payload.is_resubmission = resubmissionData.is_resubmission;
+      payload.related_claim_identifier = resubmissionData.related_claim_identifier;
+    }
+
+    // Include follow-up/update data (Use Case 7) - adding services to an approved authorization
+    if (followUpData) {
+      payload.is_update = followUpData.is_update;
+      payload.related_claim_identifier = followUpData.related_claim_identifier;
+      payload.related_auth_id = followUpData.related_auth_id;
+    }
+
+    return payload;
+  };
+
+  /**
+   * Persist the form. Returns the id of the record that should be sent/viewed.
+   * - create mode: creates a new record
+   * - edit mode: updates the record
+   * - update mode (?update=true on an approved record): creates a linked update request
+   *   through POST /prior-authorizations/:id/update (items, supporting info, diagnoses
+   *   and attachments are taken from the form; other fields are copied from the original)
+   */
+  const persistPriorAuthorization = async (payload) => {
+    if (isUpdateRequest) {
+      const response = await api.submitPriorAuthorizationUpdate(id, {
+        items: payload.items,
+        supporting_info: payload.supporting_info,
+        diagnoses: payload.diagnoses,
+        attachments: payload.attachments
+      });
+      return response.data.id;
+    }
+    if (isEditMode) {
+      await api.updatePriorAuthorization(id, payload);
+      return id;
+    }
+    const response = await api.createPriorAuthorization(payload);
+    return response.data.id;
+  };
+
   // Execute the actual save operation
   const executeSave = async (justification = null) => {
     try {
       setSaving(true);
       setErrors([]);
 
-      // Merge structured vital signs and clinical data into supporting_info
-      const dataToSave = {
-        ...formData,
-        supporting_info: buildSupportingInfoArray()
-      };
-      // Remove structured fields (already merged into supporting_info or handled separately)
-      delete dataToSave.vital_signs;
-      delete dataToSave.clinical_info;
-      delete dataToSave.admission_info;
-      // Keep vision_prescription for vision auth types - needed for VisionPrescription FHIR resource
-      if (dataToSave.auth_type !== 'vision') {
-        delete dataToSave.vision_prescription;
-      }
-      
-      // Dental/Vision claims use AMB encounter class
-      // Vision doesn't use encounters - remove end date
-      // Dental uses AMB encounter - end date is optional (allows multi-day service dates)
-      if (dataToSave.auth_type === 'vision') {
-        delete dataToSave.encounter_end;
-        dataToSave.encounter_class = 'ambulatory';
-      }
-      if (dataToSave.auth_type === 'dental') {
-        dataToSave.encounter_class = 'ambulatory';
-        // encounter_end is optional for dental - keep it if provided
-      }
-      
-      // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
-      // Per NPHIES BV-00741: Encounter Class Shall be either 'Inpatient Admission', 'Day Case Admission' or 'inpatient acute' for Institutional Claim
-      // Per NPHIES BV-00845: Encounter Class 'Outpatient' SHALL be used only when claim is 'oral' or 'professional'
-      if (dataToSave.auth_type === 'institutional') {
-        if (!['inpatient', 'daycase'].includes(dataToSave.encounter_class)) {
-          dataToSave.encounter_class = 'daycase';
-        }
-      }
-      
-      // Include AI medication safety analysis for pharmacy authorizations
-      if (dataToSave.auth_type === 'pharmacy' && medicationSafetyAnalysis) {
-        dataToSave.medication_safety_analysis = medicationSafetyAnalysis;
-      }
-      
-      // Include drug interaction justification if provided
-      if (justification) {
-        dataToSave.drug_interaction_justification = justification;
-        dataToSave.drug_interaction_justification_date = new Date().toISOString();
-      }
-      
-      // Include resubmission data if this is a resubmission of a rejected/partial PA
-      if (resubmissionData) {
-        dataToSave.is_resubmission = resubmissionData.is_resubmission;
-        dataToSave.related_claim_identifier = resubmissionData.related_claim_identifier;
-      }
-      
-      // Include follow-up data if this is a follow-up (Use Case 7) - adding services to approved authorization
-      if (followUpData) {
-        dataToSave.is_update = followUpData.is_update;
-        dataToSave.related_claim_identifier = followUpData.related_claim_identifier;
-        dataToSave.related_auth_id = followUpData.related_auth_id;
-      }
-      
-      // Handle mother patient data for newborn requests
-      if (dataToSave.is_newborn) {
-        // Only send mother_patient_id if it exists (always using existing patient)
-        if (!dataToSave.mother_patient_id) {
-          delete dataToSave.mother_patient_id;
-        }
-      } else {
-        // Not a newborn request - remove mother patient fields
-        delete dataToSave.mother_patient_id;
-      }
+      const savedId = await persistPriorAuthorization(buildSubmissionPayload({ justification }));
 
-      let response;
-      if (isEditMode) {
-        response = await api.updatePriorAuthorization(id, dataToSave);
-      } else {
-        response = await api.createPriorAuthorization(dataToSave);
-      }
-
-      alert(isEditMode ? 'Prior authorization updated successfully!' : 'Prior authorization created successfully!');
-      navigate(`/prior-authorizations/${response.data.id}`);
+      alert(isUpdateRequest
+        ? 'Update request created. Review it and send it to NPHIES.'
+        : isEditMode ? 'Prior authorization updated successfully!' : 'Prior authorization created successfully!');
+      navigate(`/prior-authorizations/${savedId}`);
     } catch (error) {
       console.error('Error saving prior authorization:', error);
       const errorMsg = extractErrorMessage(error);
@@ -2331,6 +2313,10 @@ export default function PriorAuthorizationForm() {
     }
   };
 
+  // A drug-interaction justification only covers the medication set it was written for
+  const hasValidJustification = () =>
+    !!drugInteractionJustification && justifiedMedicationKey === medicationSetKey;
+
   const handleSave = async () => {
     const validation = validateForm();
     if (!validation.valid) {
@@ -2339,101 +2325,26 @@ export default function PriorAuthorizationForm() {
       return;
     }
     
-    // Check if drug safety issues exist and no justification has been provided
-    if (hasDrugSafetyIssues() && !drugInteractionJustification) {
+    // Check if drug safety issues exist and no justification covers the current medications
+    if (hasDrugSafetyIssues() && !hasValidJustification()) {
       setPendingSaveAction('save');
       setShowJustificationModal(true);
       return;
     }
     
     // Proceed with save (with existing justification if any)
-    await executeSave(drugInteractionJustification || null);
+    await executeSave(hasValidJustification() ? drugInteractionJustification : null);
   };
 
   // Execute the actual save and send operation
   const executeSaveAndSend = async (justification = null) => {
+    let savedId = null;
     try {
       setSending(true);
       setErrors([]);
 
-      // Merge structured vital signs and clinical data into supporting_info
-      const dataToSave = {
-        ...formData,
-        supporting_info: buildSupportingInfoArray()
-      };
-      // Remove structured fields (already merged into supporting_info or handled separately)
-      delete dataToSave.vital_signs;
-      delete dataToSave.clinical_info;
-      delete dataToSave.admission_info;
-      // Keep vision_prescription for vision auth types - needed for VisionPrescription FHIR resource
-      if (dataToSave.auth_type !== 'vision') {
-        delete dataToSave.vision_prescription;
-      }
-      
-      // Dental/Vision claims use AMB encounter class
-      // Vision doesn't use encounters - remove end date
-      // Dental uses AMB encounter - end date is optional (allows multi-day service dates)
-      if (dataToSave.auth_type === 'vision') {
-        delete dataToSave.encounter_end;
-        dataToSave.encounter_class = 'ambulatory';
-      }
-      if (dataToSave.auth_type === 'dental') {
-        dataToSave.encounter_class = 'ambulatory';
-        // encounter_end is optional for dental - keep it if provided
-      }
-      
-      // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
-      // Per NPHIES BV-00741: Encounter Class Shall be either 'Inpatient Admission', 'Day Case Admission' or 'inpatient acute' for Institutional Claim
-      // Per NPHIES BV-00845: Encounter Class 'Outpatient' SHALL be used only when claim is 'oral' or 'professional'
-      if (dataToSave.auth_type === 'institutional') {
-        if (!['inpatient', 'daycase'].includes(dataToSave.encounter_class)) {
-          dataToSave.encounter_class = 'daycase';
-        }
-      }
-      
-      // Include AI medication safety analysis for pharmacy authorizations
-      if (dataToSave.auth_type === 'pharmacy' && medicationSafetyAnalysis) {
-        dataToSave.medication_safety_analysis = medicationSafetyAnalysis;
-      }
-      
-      // Include drug interaction justification if provided
-      if (justification) {
-        dataToSave.drug_interaction_justification = justification;
-        dataToSave.drug_interaction_justification_date = new Date().toISOString();
-      }
-      
-      // Include resubmission data if this is a resubmission of a rejected/partial PA
-      if (resubmissionData) {
-        dataToSave.is_resubmission = resubmissionData.is_resubmission;
-        dataToSave.related_claim_identifier = resubmissionData.related_claim_identifier;
-      }
-      
-      // Include follow-up data if this is a follow-up (Use Case 7) - adding services to approved authorization
-      if (followUpData) {
-        dataToSave.is_update = followUpData.is_update;
-        dataToSave.related_claim_identifier = followUpData.related_claim_identifier;
-        dataToSave.related_auth_id = followUpData.related_auth_id;
-      }
-      
-      // Handle mother patient data for newborn requests
-      if (dataToSave.is_newborn) {
-        // Only send mother_patient_id if it exists (always using existing patient)
-        if (!dataToSave.mother_patient_id) {
-          delete dataToSave.mother_patient_id;
-        }
-      } else {
-        // Not a newborn request - remove mother patient fields
-        delete dataToSave.mother_patient_id;
-      }
-
       // Save first
-      let savedId = id;
-      if (!isEditMode) {
-        const createResponse = await api.createPriorAuthorization(dataToSave);
-        savedId = createResponse.data.id;
-      } else {
-        await api.updatePriorAuthorization(id, dataToSave);
-      }
+      savedId = await persistPriorAuthorization(buildSubmissionPayload({ justification }));
 
       // Then send to NPHIES
       const sendResponse = await api.sendPriorAuthorizationToNphies(savedId);
@@ -2441,9 +2352,9 @@ export default function PriorAuthorizationForm() {
       if (sendResponse.success) {
         alert(`Successfully sent to NPHIES!\nPre-Auth Ref: ${sendResponse.nphiesResponse?.preAuthRef || 'Pending'}`);
         navigate(`/prior-authorizations/${savedId}`);
-      } else {
-        alert(`NPHIES Error: ${sendResponse.error?.message || 'Unknown error'}`);
+        return;
       }
+      alert(`NPHIES Error: ${sendResponse.error?.message || 'Unknown error'}`);
     } catch (error) {
       console.error('Error sending to NPHIES:', error);
       const errorMsg = extractErrorMessage(error);
@@ -2451,6 +2362,12 @@ export default function PriorAuthorizationForm() {
       alert(`Error: ${errorMsg}`);
     } finally {
       setSending(false);
+    }
+
+    // The record was saved but not sent: continue editing that record so a retry
+    // updates and re-sends it instead of creating a duplicate.
+    if (savedId && String(savedId) !== String(id)) {
+      navigate(`/prior-authorizations/${savedId}/edit`, { replace: true });
     }
   };
 
@@ -2462,20 +2379,21 @@ export default function PriorAuthorizationForm() {
       return;
     }
     
-    // Check if drug safety issues exist and no justification has been provided
-    if (hasDrugSafetyIssues() && !drugInteractionJustification) {
+    // Check if drug safety issues exist and no justification covers the current medications
+    if (hasDrugSafetyIssues() && !hasValidJustification()) {
       setPendingSaveAction('saveAndSend');
       setShowJustificationModal(true);
       return;
     }
     
     // Proceed with save and send (with existing justification if any)
-    await executeSaveAndSend(drugInteractionJustification || null);
+    await executeSaveAndSend(hasValidJustification() ? drugInteractionJustification : null);
   };
 
   // Handle justification modal submission
   const handleJustificationSubmit = async (justification) => {
     setDrugInteractionJustification(justification);
+    setJustifiedMedicationKey(medicationSetKey);
     setShowJustificationModal(false);
     
     // Execute the pending save action with the justification
@@ -2506,64 +2424,7 @@ export default function PriorAuthorizationForm() {
         return;
       }
 
-      // Merge structured vital signs and clinical data into supporting_info
-      const dataToPreview = {
-        ...formData,
-        supporting_info: buildSupportingInfoArray()
-      };
-      // Remove structured fields (already merged into supporting_info or handled separately)
-      delete dataToPreview.vital_signs;
-      delete dataToPreview.clinical_info;
-      delete dataToPreview.admission_info;
-      // Keep vision_prescription for vision auth types - needed for VisionPrescription FHIR resource
-      if (dataToPreview.auth_type !== 'vision') {
-        delete dataToPreview.vision_prescription;
-      }
-      
-      // Dental/Vision claims use AMB encounter class
-      // Vision doesn't use encounters - remove end date
-      // Dental uses AMB encounter - end date is optional (allows multi-day service dates)
-      if (dataToPreview.auth_type === 'vision') {
-        delete dataToPreview.encounter_end;
-        dataToPreview.encounter_class = 'ambulatory';
-      }
-      if (dataToPreview.auth_type === 'dental') {
-        dataToPreview.encounter_class = 'ambulatory';
-        // encounter_end is optional for dental - keep it if provided
-      }
-      
-      // Institutional claims MUST use inpatient (IMP) or daycase (SS) encounter class
-      // Per NPHIES BV-00741: Encounter Class Shall be either 'Inpatient Admission', 'Day Case Admission' or 'inpatient acute' for Institutional Claim
-      // Per NPHIES BV-00845: Encounter Class 'Outpatient' SHALL be used only when claim is 'oral' or 'professional'
-      if (dataToPreview.auth_type === 'institutional') {
-        if (!['inpatient', 'daycase'].includes(dataToPreview.encounter_class)) {
-          dataToPreview.encounter_class = 'daycase';
-        }
-      }
-
-      // Include the ID if we're editing an existing record - this allows the backend to save
-      // the request bundle for later viewing in the details page
-      if (id) {
-        dataToPreview.id = id;
-        dataToPreview.prior_auth_id = id;
-      }
-      
-      // Include resubmission data if this is a resubmission
-      // This ensures the preview shows the Claim.related structure
-      if (resubmissionData) {
-        dataToPreview.is_resubmission = resubmissionData.is_resubmission;
-        dataToPreview.related_claim_identifier = resubmissionData.related_claim_identifier;
-      }
-      
-      // Include follow-up data if this is a follow-up (Use Case 7)
-      // This ensures the preview shows the Claim.related structure
-      if (followUpData) {
-        dataToPreview.is_update = followUpData.is_update;
-        dataToPreview.related_claim_identifier = followUpData.related_claim_identifier;
-        dataToPreview.related_auth_id = followUpData.related_auth_id;
-      }
-
-      const response = await api.previewPriorAuthorizationBundle(dataToPreview);
+      const response = await api.previewPriorAuthorizationBundle(buildSubmissionPayload({ forPreview: true }));
       setPreviewData(response);
       setShowPreview(true);
     } catch (error) {
@@ -2622,10 +2483,12 @@ export default function PriorAuthorizationForm() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {isEditMode ? 'Edit Prior Authorization' : isResubmission ? 'Resubmit Prior Authorization' : isFollowUp ? 'Follow Up Prior Authorization' : 'New Prior Authorization'}
+              {isUpdateRequest ? 'Update Prior Authorization' : isEditMode ? 'Edit Prior Authorization' : isResubmission ? 'Resubmit Prior Authorization' : isFollowUp ? 'Follow Up Prior Authorization' : 'New Prior Authorization'}
             </h1>
             <p className="text-gray-600">
-              {isEditMode 
+              {isUpdateRequest
+                ? `Creating an update request for approved authorization: ${formData.request_number}`
+                : isEditMode 
                 ? `Request #: ${formData.request_number}` 
                 : isResubmission 
                   ? `Resubmitting rejected/partial authorization: ${relatedClaimIdentifier}`
@@ -2673,6 +2536,44 @@ export default function PriorAuthorizationForm() {
           </Button>
         </div>
       </div>
+
+      {/* Update request notice */}
+      {isUpdateRequest && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4 flex items-start gap-2">
+            <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+            <p className="text-sm text-blue-800">
+              Saving creates a new update request linked to {formData.request_number}. Only the items,
+              diagnoses, supporting information (including vitals and clinical fields) and attachments
+              are taken from this form; all other fields are copied from the original authorization.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Encounter end date cleared on load (resubmission/follow-up) */}
+      {clearedEncounterEnd && !formData.encounter_end && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-amber-800">
+                The original encounter end date ({new Date(clearedEncounterEnd).toLocaleString()}) was cleared
+                because {isFollowUp ? 'it is in the past and new services are dated today' : 'some services are dated after it'} (BV-00041).
+                The encounter will be sent as ongoing unless you set an end date.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleChange('encounter_end', clearedEncounterEnd)}
+            >
+              Restore end date
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Validation Errors */}
       {errors.length > 0 && (
@@ -3040,11 +2941,8 @@ export default function PriorAuthorizationForm() {
                   // BV-00811: Always require datetime with seconds for claims (even for ambulatory)
                   // Per NPHIES: Date time format up to seconds SHALL be mandatory for encounter.period.start
                   const needsDateTime = !isDentalClaim && ['inpatient', 'daycase'].includes(formData.encounter_class);
-                  // Show end date for all encounter types (optional field)
-                  const showEndDate = true;
-                  
                   return (
-                    <div className={`grid grid-cols-1 ${showEndDate ? 'md:grid-cols-2' : ''} gap-4`}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>
                           Encounter Start Date & Time *
@@ -3070,23 +2968,45 @@ export default function PriorAuthorizationForm() {
                           <Calendar className="datepicker-icon h-4 w-4" />
                         </div>
                       </div>
-                      {showEndDate && (
+                      <div className="space-y-2">
+                        <Label>
+                          Encounter End Date{needsDateTime ? ' & Time' : ''} (Optional)
+                        </Label>
+                        <div className="datepicker-wrapper">
+                          <DatePicker
+                            selected={formData.encounter_end ? new Date(formData.encounter_end) : null}
+                            onChange={(date) => handleChange('encounter_end', date ? date.toISOString() : '')}
+                            showTimeSelect={needsDateTime}
+                            dateFormat={needsDateTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"}
+                            minDate={formData.encounter_start ? new Date(formData.encounter_start) : undefined}
+                            isClearable
+                            className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
+                            placeholderText={needsDateTime ? "Select date & time (optional)" : "Select date (optional)"}
+                          />
+                          <Calendar className="datepicker-icon h-4 w-4" />
+                        </div>
+                        {errors.some(e => e.field === 'encounter_end') && (
+                          <p className="text-xs text-red-600">End date must be on or after the start date</p>
+                        )}
+                      </div>
+                      {formData.auth_type === 'institutional' && (
                         <div className="space-y-2">
-                          <Label>
-                            Encounter End Date{needsDateTime ? ' & Time' : ''} (Optional)
-                          </Label>
-                          <div className="datepicker-wrapper">
-                            <DatePicker
-                              selected={formData.encounter_end ? new Date(formData.encounter_end) : null}
-                              onChange={(date) => handleChange('encounter_end', date ? date.toISOString() : '')}
-                              showTimeSelect={needsDateTime}
-                              dateFormat={needsDateTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"}
-                              isClearable
-                              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-purple/30"
-                              placeholderText={needsDateTime ? "Select date & time (optional)" : "Select date (optional)"}
-                            />
-                            <Calendar className="datepicker-icon h-4 w-4" />
-                          </div>
+                          <Label>Discharge Disposition{formData.encounter_end ? ' *' : ''}</Label>
+                          <Select
+                            value={DISCHARGE_DISPOSITION_OPTIONS.find(opt => opt.value === formData.discharge_disposition) || null}
+                            onChange={(option) => handleChange('discharge_disposition', option?.value || '')}
+                            options={DISCHARGE_DISPOSITION_OPTIONS}
+                            styles={selectStyles}
+                            menuPortalTarget={document.body}
+                            isClearable
+                            placeholder="Select discharge disposition..."
+                          />
+                          <p className="text-xs text-gray-500">
+                            Required when the encounter has an end date (BV-00759)
+                          </p>
+                          {errors.some(e => e.field === 'discharge_disposition') && (
+                            <p className="text-xs text-red-600">Select where the patient went on discharge</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3100,19 +3020,15 @@ export default function PriorAuthorizationForm() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="total_amount">Total Amount</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="total_amount"
-                    type="number"
-                    step="0.01"
-                    value={formData.total_amount ?? ''}
-                    onChange={(e) => handleChange('total_amount', e.target.value)}
-                    placeholder="0.00"
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={calculateTotal}>
-                    Calculate
-                  </Button>
-                </div>
+                <Input
+                  id="total_amount"
+                  type="number"
+                  step="0.01"
+                  value={calculatedTotal}
+                  readOnly
+                  className="bg-gray-50"
+                />
+                <p className="text-xs text-gray-500">Calculated automatically from the item net amounts</p>
               </div>
               <div className="space-y-2">
                 <Label>Currency</Label>
@@ -3253,6 +3169,73 @@ export default function PriorAuthorizationForm() {
                   </p>
                 </div>
               )}
+
+              {/* Treating practitioner - NPHIES Practitioner resource / careTeam.provider */}
+              <div className="md:col-span-3 rounded-lg border border-gray-200 p-4 space-y-3">
+                <Label className="flex items-center gap-2">
+                  <Stethoscope className="h-4 w-4" />
+                  Treating practitioner {PRACTITIONER_REQUIRED_AUTH_TYPES.includes(formData.auth_type) ? '*' : '(optional for this type)'}
+                </Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="practitioner_license" className="text-xs text-gray-600">
+                      License number{PRACTITIONER_REQUIRED_AUTH_TYPES.includes(formData.auth_type) && ' *'}
+                    </Label>
+                    <Input
+                      id="practitioner_license"
+                      value={formData.practitioner_license || ''}
+                      onChange={(e) => handleChange('practitioner_license', e.target.value)}
+                      maxLength={50}
+                      placeholder="Practitioner license number"
+                      className={errors.some(e => e.field === 'practitioner_license') ? 'border-red-400' : ''}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="practitioner_identifier_type" className="text-xs text-gray-600">
+                      Identifier type{PRACTITIONER_REQUIRED_AUTH_TYPES.includes(formData.auth_type) && ' *'}
+                    </Label>
+                    <select
+                      id="practitioner_identifier_type"
+                      value={formData.practitioner_identifier_type || ''}
+                      onChange={(e) => handleChange('practitioner_identifier_type', e.target.value)}
+                      className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm bg-white"
+                    >
+                      {PRACTITIONER_IDENTIFIER_TYPE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="practitioner_name" className="text-xs text-gray-600">
+                      Full name{PRACTITIONER_REQUIRED_AUTH_TYPES.includes(formData.auth_type) && ' *'}
+                    </Label>
+                    <Input
+                      id="practitioner_name"
+                      value={formData.practitioner_name || ''}
+                      onChange={(e) => handleChange('practitioner_name', e.target.value)}
+                      maxLength={255}
+                      placeholder="Practitioner full name"
+                      className={errors.some(e => e.field === 'practitioner_name') ? 'border-red-400' : ''}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-gray-600">Specialty (practice code)</Label>
+                    <Select
+                      value={PRACTICE_CODES_OPTIONS.flatMap(group => group.options).find(opt => opt.value === formData.practitioner_specialty_code) || null}
+                      onChange={(option) => handleChange('practitioner_specialty_code', option?.value || '')}
+                      options={PRACTICE_CODES_OPTIONS}
+                      styles={selectStyles}
+                      placeholder="Select the practitioner's specialty..."
+                      isClearable
+                      isSearchable
+                      menuPortalTarget={document.body}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Sent as the NPHIES Practitioner (license, name, qualification). Required for professional, institutional, dental and vision requests.
+                </p>
+              </div>
 
               {/* Coverage - Shows patient's insurance coverages */}
               <div className="space-y-2">
@@ -3581,14 +3564,21 @@ export default function PriorAuthorizationForm() {
                           setMotherAutoPopulated(false); // Reset flag when manually changed
                         }}
                         options={patients.filter(p => {
-                          // Filter to show patients with Iqama identifier type (typically starting with 2)
-                          return p.identifier_type === 'iqama' || (p.identifier && p.identifier.startsWith('2'));
+                          // Candidate mothers: any female patient (Saudi national ID or Iqama) who is
+                          // not the newborn and is old enough to be a mother. Unknown gender/birth date
+                          // are not excluded; the current selection is always kept.
+                          if (p.patient_id == formData.mother_patient_id) return true;
+                          if (p.patient_id == formData.patient_id) return false;
+                          const gender = (p.gender || '').toLowerCase();
+                          if (gender && gender !== 'female') return false;
+                          const age = p.birth_date ? calculatePatientAge(p.birth_date) : null;
+                          return age == null || age >= 12;
                         }).map(p => ({ 
                           value: p.patient_id, 
                           label: `${p.name}${p.identifier ? ` (${p.identifier})` : ''}` 
                         }))}
                         styles={selectStyles}
-                        placeholder="Search and select mother patient (Iqama ID)..."
+                        placeholder="Search female patients by name, National ID or Iqama..."
                         isClearable
                         isSearchable
                         menuPortalTarget={document.body}
@@ -3608,7 +3598,7 @@ export default function PriorAuthorizationForm() {
                             <span className="font-medium text-gray-900">{selectedMotherPatientDetails.name || 'N/A'}</span>
                           </div>
                           <div>
-                            <span className="text-gray-500 block mb-1">Iqama Number</span>
+                            <span className="text-gray-500 block mb-1">Identifier (National ID / Iqama)</span>
                             <span className="font-medium text-gray-900 font-mono">{selectedMotherPatientDetails.identifier || 'N/A'}</span>
                           </div>
                           <div>
@@ -3663,7 +3653,7 @@ export default function PriorAuthorizationForm() {
           </CardHeader>
           <CardContent className="space-y-4">
             {formData.diagnoses.map((diagnosis, index) => (
-              <div key={index} className="flex items-start gap-4 p-4 border rounded-lg bg-gray-50">
+              <div key={diagnosis._rowKey || index} className="flex items-start gap-4 p-4 border rounded-lg bg-gray-50">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-purple text-white flex items-center justify-center text-sm font-medium">
                   {diagnosis.sequence}
                 </div>
@@ -3774,6 +3764,7 @@ export default function PriorAuthorizationForm() {
                     )}
                     AI Validate
                   </Button>
+                  {import.meta.env.DEV && (
                   <Button
                     type="button"
                     variant="outline"
@@ -3785,6 +3776,7 @@ export default function PriorAuthorizationForm() {
                     <Sparkles className="h-4 w-4" />
                     Fill Sample Data
                   </Button>
+                  )}
                   <div className="flex items-center gap-2">
                     <Label className="text-sm text-gray-500">Measurement Time:</Label>
                     <div className="datepicker-wrapper w-52">
@@ -3903,12 +3895,61 @@ export default function PriorAuthorizationForm() {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label>Chief Complaint (Free Text)</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="chief_complaint_text">Chief Complaint (Free Text)</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSuggestSnomed}
+                        disabled={snomedSuggest?.loading || (formData.clinical_info?.chief_complaint_text?.trim().length || 0) < 3}
+                        className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                        title="Ask the AI for SNOMED codes matching this text; you choose one"
+                      >
+                        {snomedSuggest?.loading ? (
+                          <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Suggesting...</>
+                        ) : (
+                          <><Sparkles className="h-3 w-3 mr-1" />Suggest SNOMED (AI)</>
+                        )}
+                      </Button>
+                    </div>
                     <Input
+                      id="chief_complaint_text"
                       value={formData.clinical_info?.chief_complaint_text ?? ''}
                       onChange={(e) => handleClinicalInfoChange('chief_complaint_text', e.target.value)}
                       placeholder="e.g., Patient presents with abdominal pain"
                     />
+                    {snomedSuggest && !snomedSuggest.loading && (
+                      snomedSuggest.available ? (
+                        <div className="space-y-1.5 rounded-md border border-purple-200 bg-purple-50/40 p-2" data-testid="snomed-suggestions">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs text-gray-600">AI suggestions — click one to fill the SNOMED code (verify before use)</span>
+                            <AIBadge source="llm" certainty="low" basis="Language-model suggestion from the free text; codes are not checked against SNOMED CT" />
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {snomedSuggest.suggestions.map(suggestion => {
+                              const selected = formData.clinical_info.chief_complaint_code === suggestion.code;
+                              return (
+                                <button
+                                  key={suggestion.code}
+                                  type="button"
+                                  onClick={() => pickSnomedSuggestion(suggestion)}
+                                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${selected ? 'border-purple-500 bg-purple-100 text-purple-900' : 'border-gray-300 bg-white text-gray-800 hover:border-purple-400 hover:bg-purple-50'}`}
+                                  title={selected ? 'Selected' : 'Use this code'}
+                                >
+                                  <span className="font-mono">{suggestion.code}</span> · {suggestion.display}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                          <span>{AI_UNAVAILABLE_MESSAGE}{snomedSuggest.reason && snomedSuggest.reason !== AI_UNAVAILABLE_MESSAGE ? ` (${snomedSuggest.reason})` : ''}</span>
+                        </p>
+                      )
+                    )}
                   </div>
                 </div>
               </div>
@@ -3966,6 +4007,7 @@ export default function PriorAuthorizationForm() {
                         : `${formData.clinical_info?.[field.key]?.length || 0} characters`
                       }
                     </p>
+                    {renderEnhancePreview(field.key)}
                   </div>
                 ))}
               </div>
@@ -4490,6 +4532,7 @@ export default function PriorAuthorizationForm() {
                   <CardDescription>Services, procedures, or medications requiring authorization</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
+                  {import.meta.env.DEV && (
                   <Button
                     type="button"
                     onClick={handleBulkAdd300Items}
@@ -4502,7 +4545,8 @@ export default function PriorAuthorizationForm() {
                     <Zap className="h-4 w-4 mr-2" />
                     {bulkAdding ? 'Filling…' : 'Quick Add 300 Test Items'}
                   </Button>
-                  <Button type="button" onClick={addItem} variant="outline" size="sm">
+                  )}
+                  <Button type="button" onClick={() => addItem()} variant="outline" size="sm">
                     <Plus className="h-4 w-4 mr-2" />
                     Add Item
                   </Button>
@@ -4511,7 +4555,7 @@ export default function PriorAuthorizationForm() {
             </CardHeader>
             <CardContent className="space-y-4">
             {formData.items.map((item, index) => (
-              <div key={index} className="p-4 border rounded-lg bg-gray-50 space-y-4">
+              <div key={item._rowKey || index} className="p-4 border rounded-lg bg-gray-50 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-primary-purple text-white flex items-center justify-center text-sm font-medium">
@@ -5064,6 +5108,7 @@ export default function PriorAuthorizationForm() {
                             size="sm"
                             onClick={() => {
                               const newDetails = [...(item.details || []), {
+                                _rowKey: newRowKey(),
                                 sequence: (item.details?.length || 0) + 1,
                                 product_or_service_code: '',
                                 product_or_service_display: '',
@@ -5096,7 +5141,7 @@ export default function PriorAuthorizationForm() {
                         {item.details && item.details.length > 0 && (
                           <div className="space-y-3">
                             {item.details.map((detail, detailIndex) => (
-                              <div key={detailIndex} className="p-3 bg-white rounded border border-amber-200">
+                              <div key={detail._rowKey || detailIndex} className="p-3 bg-white rounded border border-amber-200">
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="text-sm font-medium text-amber-800">Sub-item {detailIndex + 1}</span>
                                   <Button
@@ -5179,17 +5224,18 @@ export default function PriorAuthorizationForm() {
                                     <Input
                                       type="number"
                                       step="0.01"
-                                      value={detail.quantity || 1}
+                                      min="0"
+                                      value={detail.quantity ?? ''}
                                       onChange={(e) => {
-                                        const qty = parseFloat(e.target.value) || 1;
+                                        const qty = e.target.value === '' ? '' : parseFloat(e.target.value);
                                         const unitPrice = parseFloat(detail.unit_price || 0);
-                                        const factor = parseFloat(detail.factor || 1);
-                                        const net = qty * unitPrice * factor;
+                                        const factor = detail.factor === '' || detail.factor == null ? 1 : parseFloat(detail.factor);
+                                        const net = (parseFloat(qty) || 0) * unitPrice * (isNaN(factor) ? 1 : factor);
                                         const newDetails = [...item.details];
                                         newDetails[detailIndex] = { 
                                           ...detail, 
-                                          quantity: qty,
-                                          net_amount: net.toFixed(2)
+                                          quantity: Number.isNaN(qty) ? '' : qty,
+                                          net_amount: Number(net.toFixed(2))
                                         };
                                         handleItemChange(index, 'details', newDetails);
                                       }}
@@ -5204,14 +5250,14 @@ export default function PriorAuthorizationForm() {
                                       value={detail.unit_price || ''}
                                       onChange={(e) => {
                                         const unitPrice = parseFloat(e.target.value) || 0;
-                                        const qty = parseFloat(detail.quantity || 1);
-                                        const factor = parseFloat(detail.factor || 1);
-                                        const net = qty * unitPrice * factor;
+                                        const qty = parseFloat(detail.quantity) || 0;
+                                        const factor = detail.factor === '' || detail.factor == null ? 1 : parseFloat(detail.factor);
+                                        const net = qty * unitPrice * (isNaN(factor) ? 1 : factor);
                                         const newDetails = [...item.details];
                                         newDetails[detailIndex] = { 
                                           ...detail, 
                                           unit_price: unitPrice,
-                                          net_amount: net.toFixed(2)
+                                          net_amount: Number(net.toFixed(2))
                                         };
                                         handleItemChange(index, 'details', newDetails);
                                       }}
@@ -5224,17 +5270,19 @@ export default function PriorAuthorizationForm() {
                                     <Input
                                       type="number"
                                       step="0.01"
-                                      value={detail.factor || 1}
+                                      min="0"
+                                      value={detail.factor ?? ''}
                                       onChange={(e) => {
-                                        const factor = parseFloat(e.target.value) || 1;
-                                        const qty = parseFloat(detail.quantity || 1);
+                                        const factor = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                        const qty = parseFloat(detail.quantity) || 0;
                                         const unitPrice = parseFloat(detail.unit_price || 0);
-                                        const net = qty * unitPrice * factor;
+                                        const effectiveFactor = factor === '' || Number.isNaN(factor) ? 1 : factor;
+                                        const net = qty * unitPrice * effectiveFactor;
                                         const newDetails = [...item.details];
                                         newDetails[detailIndex] = { 
                                           ...detail, 
-                                          factor: factor,
-                                          net_amount: net.toFixed(2)
+                                          factor: Number.isNaN(factor) ? '' : factor,
+                                          net_amount: Number(net.toFixed(2))
                                         };
                                         handleItemChange(index, 'details', newDetails);
                                       }}
@@ -5247,7 +5295,7 @@ export default function PriorAuthorizationForm() {
                                     <Input
                                       type="number"
                                       step="0.01"
-                                      value={detail.net_amount || ''}
+                                      value={detail.net_amount ?? ''}
                                       readOnly
                                       className="text-sm bg-gray-50"
                                     />
@@ -5409,9 +5457,10 @@ export default function PriorAuthorizationForm() {
                           <Label>Days Supply *</Label>
                           <Input
                             type="number"
-                            value={item.days_supply || 30}
+                            min="1"
+                            value={item.days_supply ?? ''}
                             onChange={(e) => handleItemChange(index, 'days_supply', e.target.value)}
-                            placeholder="30"
+                            placeholder="e.g., 30"
                           />
                           <p className="text-xs text-gray-500">
                             This will automatically link to the matching days-supply supporting info entry
@@ -5513,7 +5562,7 @@ export default function PriorAuthorizationForm() {
               <div className="text-right">
                 <p className="text-sm text-gray-500">Total Amount</p>
                 <p className="text-2xl font-bold text-primary-purple">
-                  {formatAmount(formData.total_amount || getCalculatedTotal(), formData.currency)}
+                  {formatAmount(calculatedTotal, formData.currency)}
                 </p>
               </div>
             </div>
@@ -5613,38 +5662,23 @@ export default function PriorAuthorizationForm() {
                     error={suggestionsError}
                     patientContext={suggestionsPatientContext}
                     onAddMedication={(suggestion) => {
-                      // Add a new item with the suggested medication (generic - no system match)
-                      addItem();
-                      const newIndex = formData.items.length;
-                      setTimeout(() => {
-                        handleItemChange(newIndex, 'medication_name', suggestion.genericName);
-                        handleItemChange(newIndex, 'medication_code', ''); // User needs to search for actual code
-                      }, 100);
+                      // Add a new item with the suggested medication (generic - no system match).
+                      // The user still needs to search for the actual medication code.
+                      addItem({ medication_name: suggestion.genericName, medication_code: '' });
                     }}
-                    onAddSystemMedication={(systemMed, suggestion) => {
+                    onAddSystemMedication={(systemMed) => {
                       // Add medication directly from system database with full details
-                      addItem();
-                      const newIndex = formData.items.length;
-                      setTimeout(() => {
-                        // Set the medication code (GTIN)
-                        handleItemChange(newIndex, 'medication_code', systemMed.code);
-                        // Set the medication name (display name from database)
-                        handleItemChange(newIndex, 'medication_name', systemMed.display);
-                        // Set default quantity
-                        handleItemChange(newIndex, 'quantity', 1);
-                        // Set unit price if available
-                        if (systemMed.price) {
-                          handleItemChange(newIndex, 'unit_price', parseFloat(systemMed.price));
-                          handleItemChange(newIndex, 'net_amount', parseFloat(systemMed.price));
-                        }
-                        // Set product/service code to GTIN for NPHIES
-                        handleItemChange(newIndex, 'product_or_service_code', systemMed.code);
-                        handleItemChange(newIndex, 'product_or_service_display', systemMed.display);
-                        handleItemChange(newIndex, 'product_or_service_system', 'http://nphies.sa/terminology/CodeSystem/medication-codes');
-                        // Set days supply default (only for medication items, not devices)
-                        // Note: Default item_type is 'medication', so days_supply should be set
-                        handleItemChange(newIndex, 'days_supply', 30);
-                      }, 100);
+                      const price = systemMed.price ? parseFloat(systemMed.price) : null;
+                      addItem({
+                        medication_code: systemMed.code, // GTIN
+                        medication_name: systemMed.display,
+                        quantity: 1,
+                        ...(price ? { unit_price: price, net_amount: price } : {}),
+                        // Product/service code is the GTIN for NPHIES
+                        product_or_service_code: systemMed.code,
+                        product_or_service_display: systemMed.display,
+                        product_or_service_system: 'http://nphies.sa/terminology/CodeSystem/medication-codes'
+                      });
                     }}
                   />
                   <button
@@ -5686,6 +5720,7 @@ export default function PriorAuthorizationForm() {
                       analysis={medicationSafetyAnalysis}
                       isLoading={safetyLoading}
                       error={safetyError}
+                      ruleFindings={ruleFindings}
                     />
                   </CardContent>
                 </Card>
@@ -5761,7 +5796,7 @@ export default function PriorAuthorizationForm() {
                   </div>
                 ) : (
                   formData.lab_observations.map((obs, index) => (
-                    <div key={index} className="p-4 border rounded-lg bg-white space-y-4">
+                    <div key={obs._rowKey || index} className="p-4 border rounded-lg bg-white space-y-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-medium">
@@ -5791,19 +5826,14 @@ export default function PriorAuthorizationForm() {
                           <Label>LOINC Code *</Label>
                           <Select
                             value={LOINC_LAB_OPTIONS.find(opt => opt.value === obs.loinc_code)}
-                            onChange={(option) => {
-                              const newObs = [...formData.lab_observations];
-                              newObs[index] = {
-                                ...newObs[index],
-                                loinc_code: option?.value || '',
-                                loinc_display: option?.label?.includes(' - ') 
-                                  ? option.label.split(' - ').slice(1).join(' - ')
-                                  : '',
-                                unit: option?.unit || '',
-                                unit_code: option?.unit || ''
-                              };
-                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
-                            }}
+                            onChange={(option) => updateLabObservation(index, {
+                              loinc_code: option?.value || '',
+                              loinc_display: option?.label?.includes(' - ') 
+                                ? option.label.split(' - ').slice(1).join(' - ')
+                                : '',
+                              unit: option?.unit || '',
+                              unit_code: option?.unit || ''
+                            })}
                             options={LOINC_LAB_OPTIONS}
                             styles={selectStyles}
                             placeholder="Select LOINC lab test..."
@@ -5819,11 +5849,7 @@ export default function PriorAuthorizationForm() {
                           <Label>Test Name</Label>
                           <Input
                             value={obs.loinc_display || obs.test_name || ''}
-                            onChange={(e) => {
-                              const newObs = [...formData.lab_observations];
-                              newObs[index] = { ...newObs[index], test_name: e.target.value };
-                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
-                            }}
+                            onChange={(e) => updateLabObservation(index, { test_name: e.target.value })}
                             placeholder="Auto-filled from LOINC selection"
                             readOnly={!!obs.loinc_display}
                             className={obs.loinc_display ? "bg-gray-50" : ""}
@@ -5837,11 +5863,7 @@ export default function PriorAuthorizationForm() {
                           <Input
                             type={obs.value_type === 'string' ? 'text' : 'number'}
                             value={obs.value || ''}
-                            onChange={(e) => {
-                              const newObs = [...formData.lab_observations];
-                              newObs[index] = { ...newObs[index], value: e.target.value };
-                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
-                            }}
+                            onChange={(e) => updateLabObservation(index, { value: e.target.value })}
                             placeholder="Enter result value"
                           />
                         </div>
@@ -5849,11 +5871,7 @@ export default function PriorAuthorizationForm() {
                           <Label>Unit</Label>
                           <Input
                             value={obs.unit || ''}
-                            onChange={(e) => {
-                              const newObs = [...formData.lab_observations];
-                              newObs[index] = { ...newObs[index], unit: e.target.value };
-                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
-                            }}
+                            onChange={(e) => updateLabObservation(index, { unit: e.target.value })}
                             placeholder="e.g., mg/dL"
                             readOnly={!!obs.unit_code}
                             className={obs.unit_code ? "bg-gray-50" : ""}
@@ -5868,11 +5886,7 @@ export default function PriorAuthorizationForm() {
                               { value: 'final', label: 'Final' },
                               { value: 'amended', label: 'Amended' }
                             ].find(opt => opt.value === obs.status)}
-                            onChange={(option) => {
-                              const newObs = [...formData.lab_observations];
-                              newObs[index] = { ...newObs[index], status: option?.value || 'registered' };
-                              setFormData(prev => ({ ...prev, lab_observations: newObs }));
-                            }}
+                            onChange={(option) => updateLabObservation(index, { status: option?.value || 'registered' })}
                             options={[
                               { value: 'registered', label: 'Registered (Ordered)' },
                               { value: 'preliminary', label: 'Preliminary' },
@@ -5889,11 +5903,7 @@ export default function PriorAuthorizationForm() {
                         <Label>Note (optional)</Label>
                         <Input
                           value={obs.note || ''}
-                          onChange={(e) => {
-                            const newObs = [...formData.lab_observations];
-                            newObs[index] = { ...newObs[index], note: e.target.value };
-                            setFormData(prev => ({ ...prev, lab_observations: newObs }));
-                          }}
+                          onChange={(e) => updateLabObservation(index, { note: e.target.value })}
                           placeholder="Additional notes about this lab test"
                         />
                       </div>
@@ -5942,10 +5952,10 @@ export default function PriorAuthorizationForm() {
                 const needsCode = selectedCategory?.needsCode || false;
                 
                 return (
-                  <div key={index} className="space-y-4">
+                  <div key={info._rowKey || index} className="space-y-4">
                     <div className="flex items-start gap-4 p-4 border rounded-lg bg-gray-50">
                       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-cyan text-white flex items-center justify-center text-sm font-medium">
-                        {info.sequence}
+                        {index + 1}
                       </div>
                       <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">

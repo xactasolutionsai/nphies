@@ -18,8 +18,10 @@ import {
   FileText
 } from 'lucide-react';
 import api, { extractErrorMessage } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 export default function InsurerDetails() {
+  const { can } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -165,20 +167,24 @@ export default function InsurerDetails() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <button
-                onClick={() => navigate(`/insurers/${insurer.insurer_id}/edit`)}
-                className="bg-primary-purple hover:bg-primary-purple/90 text-white px-4 py-2 rounded-lg transition-colors font-medium flex items-center space-x-2"
-              >
-                <Edit className="h-4 w-4" />
-                <span>Edit Insurer</span>
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors font-medium flex items-center space-x-2"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Delete</span>
-              </button>
+              {can('edit') && (
+                <button
+                  onClick={() => navigate(`/insurers/${insurer.insurer_id}/edit`)}
+                  className="bg-primary-purple hover:bg-primary-purple/90 text-white px-4 py-2 rounded-lg transition-colors font-medium flex items-center space-x-2"
+                >
+                  <Edit className="h-4 w-4" />
+                  <span>Edit Insurer</span>
+                </button>
+              )}
+              {can('delete') && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors font-medium flex items-center space-x-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

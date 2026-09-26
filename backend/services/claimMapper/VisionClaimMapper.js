@@ -39,6 +39,9 @@
 
 import VisionPAMapper from '../priorAuthMapper/VisionMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import {
+  cloneInput, mappingError, roundMoney, requireProviderLicense, requireInsurerLicense, formatSaudiDate, parseJsonField, ICD10_SYSTEM
+} from '../priorAuthMapper/nphiesIdentity.js';
 
 class VisionClaimMapper extends VisionPAMapper {
   constructor() {
@@ -53,12 +56,20 @@ class VisionClaimMapper extends VisionPAMapper {
     return 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/vision-claim|1.0.0';
   }
 
+  /** Claims use Claim.use=claim and the provider's /claim identifier system. */
+  getClaimUse() {
+    return 'claim';
+  }
+
   /**
    * Build complete Claim Request Bundle for Vision type
    * Note: Vision claims do NOT include Encounter resource (BV-00354)
    */
   buildClaimRequestBundle(data) {
-    const { claim, patient, provider, insurer, coverage, policyHolder, practitioner, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    // Deep copy: mapping must never mutate the caller's record
+    const claim = cloneInput(data.claim);
+    const practitioner = data.practitioner || claim.practitioner;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -93,14 +104,12 @@ class VisionClaimMapper extends VisionPAMapper {
       bundleResourceIds.motherPatient
     );
     const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: claim.practice_code || '11.09' }, // Ophthalmology
+      practitioner,
       bundleResourceIds.practitioner
     );
 
-    // VisionPrescription resource (required for vision claims, same as PA)
-    const visionPrescriptionData = typeof claim.vision_prescription === 'string'
-      ? JSON.parse(claim.vision_prescription)
-      : (claim.vision_prescription || {});
+    // VisionPrescription resource (required for vision claims, same as PA); malformed JSON is a validation error
+    const visionPrescriptionData = parseJsonField(claim.vision_prescription, 'vision_prescription') || {};
     const visionPrescriptionResource = this.buildVisionPrescriptionResource(
       visionPrescriptionData,
       bundleResourceIds.patient,
@@ -145,8 +154,8 @@ class VisionClaimMapper extends VisionPAMapper {
    */
   buildClaimMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+    const senderNphiesId = requireProviderLicense(provider);
+    const destinationNphiesId = requireInsurerLicense(insurer);
 
     return {
       fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -197,8 +206,7 @@ class VisionClaimMapper extends VisionPAMapper {
    */
   buildVisionClaimResource(claim, patient, provider, insurer, coverage, practitioner, bundleResourceIds) {
     const claimId = bundleResourceIds.claim;
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build extensions per NPHIES validation requirements
     // Note: Although Claim-123773.json example doesn't show accountingPeriod,
@@ -208,8 +216,8 @@ class VisionClaimMapper extends VisionPAMapper {
     // 1. AccountingPeriod extension (required per NPHIES validation IC-01620)
     // Must be FIRST extension as per error: "Bundle.entry[1].resource.extension[0].AccountingPeriod"
     // BV-01010: Day must be defaulted to "01" (e.g., "2025-12-01" not "2025-12-08")
-    const serviceDate = new Date(claim.service_date || claim.request_date || new Date());
-    const accountingPeriodDate = `${serviceDate.getFullYear()}-${String(serviceDate.getMonth() + 1).padStart(2, '0')}-01`;
+    // Saudi calendar month (independent of the host timezone)
+    const accountingPeriodDate = `${formatSaudiDate(claim.service_date || claim.request_date || new Date()).slice(0, 7)}-01`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
       valueDate: accountingPeriodDate
@@ -291,7 +299,7 @@ class VisionClaimMapper extends VisionPAMapper {
       meta: { profile: [this.getClaimProfileUrl()] },
       extension: extensions,
       identifier: [{ 
-        system: `${providerIdentifierSystem}/claim`, 
+        system: this.getClaimIdentifierSystem(provider), 
         value: claim.claim_number || `req_${Date.now()}` 
       }],
       status: 'active',
@@ -360,7 +368,7 @@ class VisionClaimMapper extends VisionPAMapper {
         sequence: diag.sequence || idx + 1,
         diagnosisCodeableConcept: { 
           coding: [{ 
-            system: 'http://hl7.org/fhir/sid/icd-10-am', 
+            system: ICD10_SYSTEM, 
             code: diag.diagnosis_code, 
             display: diag.diagnosis_display 
           }] 
@@ -380,7 +388,8 @@ class VisionClaimMapper extends VisionPAMapper {
     // Only include if claim has actual supporting info data from the PA
     // Do NOT add default/placeholder values - this causes BV-00530 errors
     let supportingInfoSequences = [];
-    let existingSupportingInfo = [...(claim.supporting_info || [])];
+    let existingSupportingInfo = this.tagCallerSupportingInfo(claim.supporting_info);
+    let informationSequenceMap = null;
     
     // Add birth-weight supportingInfo for newborn patients
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
@@ -405,11 +414,12 @@ class VisionClaimMapper extends VisionPAMapper {
     if (existingSupportingInfo.length > 0) {
       // Process existing supporting info, ensuring proper structure for each category
       const processedSupportingInfo = this.processVisionSupportingInfo(existingSupportingInfo);
-      if (processedSupportingInfo.length > 0) {
-        claimResource.supportingInfo = processedSupportingInfo.map((info, idx) => {
-          const seq = idx + 1;
-          supportingInfoSequences.push(seq);
-          return this.buildSupportingInfo({ ...info, sequence: seq });
+      const numberedSupportingInfo = processedSupportingInfo.map((info, idx) => ({ info, sequence: idx + 1 }));
+      informationSequenceMap = this.buildInformationSequenceMap(numberedSupportingInfo);
+      if (numberedSupportingInfo.length > 0) {
+        claimResource.supportingInfo = numberedSupportingInfo.map(({ info, sequence }) => {
+          supportingInfoSequences.push(sequence);
+          return this.buildSupportingInfo({ ...info, sequence });
         });
       }
     }
@@ -429,7 +439,7 @@ class VisionClaimMapper extends VisionPAMapper {
     const claimServicedDate = claim.service_date || claim.request_date || new Date();
     if (claim.items?.length > 0) {
       claimResource.item = claim.items.map((item, idx) => 
-        this.buildVisionClaimItem(item, idx + 1, claimServicedDate, providerIdentifierSystem, claim, supportingInfoSequences)
+        this.buildVisionClaimItem(item, idx + 1, claimServicedDate, providerIdentifierSystem, claim, supportingInfoSequences, informationSequenceMap)
       );
     }
 
@@ -448,7 +458,7 @@ class VisionClaimMapper extends VisionPAMapper {
       totalAmount = parseFloat(claim.total_amount);
     }
     claimResource.total = { 
-      value: totalAmount, 
+      value: roundMoney(totalAmount), 
       currency: claim.currency || 'SAR' 
     };
 
@@ -470,38 +480,46 @@ class VisionClaimMapper extends VisionPAMapper {
    * - other categories: use valueString only (remove code_text to avoid BV-00530)
    */
   processVisionSupportingInfo(existingSupportingInfo = []) {
+    const hasStructuredValue = info =>
+      (info.value_quantity !== undefined && info.value_quantity !== null && info.value_quantity !== '') ||
+      !!info.value_attachment ||
+      (info.value_boolean !== undefined && info.value_boolean !== null) ||
+      !!info.value_date || !!info.value_period_start || !!info.value_reference;
+
     return existingSupportingInfo.map(info => {
       const category = (info.category || '').toLowerCase();
       
       // For investigation-result, ensure proper code structure
       if (category === 'investigation-result') {
-        // If it already has a proper code, use it; otherwise set default INP
-        if (info.code) {
-          return {
-            ...info,
-            code_text: undefined, // Remove code_text to avoid BV-00530
-            value_string: undefined // Remove valueString when using code
-          };
-        } else {
-          return {
-            category: 'investigation-result',
-            code: info.code || 'INP',
-            code_system: info.code_system || 'http://nphies.sa/terminology/CodeSystem/investigation-result',
-            code_display: info.code_display || 'INP - Investigation(s) not performed'
-          };
+        // The user's coded result only; never a default 'not performed'
+        if (!info.code) {
+          throw mappingError('Vision investigation-result supporting info requires a code');
         }
+        return {
+          ...info,
+          code_system: info.code_system || 'http://nphies.sa/terminology/CodeSystem/investigation-result',
+          code_text: undefined, // Remove code_text to avoid BV-00530
+          value_string: undefined // Remove valueString when using code
+        };
+      }
+
+      // Quantities (e.g. newborn birth-weight), attachments and other structured values are kept
+      if (hasStructuredValue(info)) {
+        return { ...info, code_text: undefined };
       }
       
-      // For all other categories, use valueString ONLY (no code element)
+      // For free-text categories, use valueString ONLY (no code element)
       // This avoids BV-00530 error
       return {
         category: info.category,
+        _callerSequence: info._callerSequence,
         value_string: info.value_string || info.code_text || info.code_display || ''
         // Explicitly NOT including code, code_text, code_system, code_display
       };
     }).filter(info => {
-      // Filter out entries with empty values
+      // Filter out entries with no value at all
       if (info.code) return true;
+      if (hasStructuredValue(info)) return true;
       if (info.value_string && info.value_string.trim()) return true;
       return false;
     });
@@ -512,7 +530,7 @@ class VisionClaimMapper extends VisionPAMapper {
    * Per NPHIES example: only patient-share, tax, patientInvoice extensions
    * NO extension-package, NO extension-maternity
    */
-  buildVisionClaimItem(item, sequence, servicedDate, providerIdentifierSystem, claim, supportingInfoSequences = []) {
+  buildVisionClaimItem(item, sequence, servicedDate, providerIdentifierSystem, claim, supportingInfoSequences = [], informationSequenceMap = null) {
     const quantity = parseFloat(item.quantity || 1);
     const unitPrice = parseFloat(item.unit_price || 0);
     const factor = parseFloat(item.factor ?? 1);
@@ -554,7 +572,7 @@ class VisionClaimMapper extends VisionPAMapper {
       sequence,
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
-      informationSequence: item.information_sequences || supportingInfoSequences,
+      informationSequence: this.resolveInformationSequences(item, supportingInfoSequences, informationSequenceMap),
       productOrService: {
         coding: (() => {
           const codings = [{

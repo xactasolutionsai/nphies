@@ -1,13 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, PlusCircle, Loader2, AlertCircle, Eye, Edit, Trash2 } from 'lucide-react';
 import DataTable from '@/components/DataTable';
 import api, { extractErrorMessage } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Providers() {
+  const { can } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Success message passed by the create/edit form via navigate(..., { state: { message } })
+  const [successMessage, setSuccessMessage] = useState(location.state?.message || null);
+
+  useEffect(() => {
+    if (!location.state?.message) return undefined;
+    setSuccessMessage(location.state.message);
+    // Clear the history state so the message is not shown again on refresh/back
+    navigate(location.pathname, { replace: true, state: null });
+    const timer = setTimeout(() => setSuccessMessage(null), 5000);
+    return () => clearTimeout(timer);
+  }, [location.state, location.pathname, navigate]);
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -89,27 +103,31 @@ export default function Providers() {
           >
             <Eye className="h-4 w-4" />
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/providers/${row.provider_id}/edit`);
-            }}
-            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-            title="Edit"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setProviderToDelete(row);
-              setShowDeleteConfirm(true);
-            }}
-            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title="Delete"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {can('edit') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/providers/${row.provider_id}/edit`);
+              }}
+              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              title="Edit"
+            >
+              <Edit className="h-4 w-4" />
+            </button>
+          )}
+          {can('delete') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setProviderToDelete(row);
+                setShowDeleteConfirm(true);
+              }}
+              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )
     }
@@ -148,6 +166,11 @@ export default function Providers() {
 
   return (
     <div className="space-y-8">
+      {successMessage && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {successMessage}
+        </div>
+      )}
       {/* Enhanced Header */}
       <div className="relative">
         <div className="relative bg-white rounded-2xl p-8 border border-gray-100">
@@ -171,13 +194,15 @@ export default function Providers() {
               </div>
             </div>
             <div className="hidden md:flex items-center space-x-3">
-              <button
-                onClick={() => navigate('/providers/new')}
-                className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-4 py-2 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-lg hover:scale-105"
-              >
-                <PlusCircle className="h-5 w-5" />
-                <span>New Provider</span>
-              </button>
+              {can('create') && (
+                <button
+                  onClick={() => navigate('/providers/new')}
+                  className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-4 py-2 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-lg hover:scale-105"
+                >
+                  <PlusCircle className="h-5 w-5" />
+                  <span>New Provider</span>
+                </button>
+              )}
               <div className="bg-white rounded-xl p-3 border border-gray-100">
                 <Building2 className="h-8 w-8 text-primary-purple" />
               </div>

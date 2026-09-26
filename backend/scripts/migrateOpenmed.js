@@ -1,7 +1,11 @@
 import fs from 'node:fs/promises';
 import pool from '../db.js';
 try {
-  await pool.query(await fs.readFile(new URL('../migrations/064_openmed_advisory.sql', import.meta.url), 'utf8'));
+  for (const file of ['064_openmed_advisory.sql', '071_clinical_ai_access_and_reviews.sql',
+    '072_clinical_knowledge_sources.sql', '073_openmed_idempotency.sql',
+    '074_clinical_pilot.sql', '075_clinical_ai_rollout_generation.sql']) {
+    await pool.query(await fs.readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+  }
   console.log('OpenMed advisory schema and restricted group created. Configure a separate login in nafes_openmed.');
 } catch {
   console.error('OpenMed migration failed. Verify migration privileges and prerequisite tables.');

@@ -1,12 +1,44 @@
 import ollamaService from './ollamaService.js';
 import ragService from './ragService.js';
+import { parseStructuredReply, INVALID_REPLY_MESSAGE } from './ai/structuredOutput.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 /**
+ * Structured-output contract for the AI clinical review (owner item C5): sent to Ollama as
+ * `format` and validated on return. A reply that does not match is never read as a pass.
+ */
+export const PA_AI_VALIDATION_SCHEMA = {
+  type: 'object',
+  properties: {
+    medicalNecessityScore: { type: 'number', minimum: 0, maximum: 1 },
+    consistencyCheck: {
+      type: 'object',
+      properties: { passed: { type: 'boolean' }, explanation: { type: 'string' } },
+      required: ['passed', 'explanation']
+    },
+    documentationGaps: { type: 'array', items: { type: 'string', minLength: 1 } },
+    rejectionRisks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          code: { type: ['string', 'null'] },
+          description: { type: 'string', minLength: 1 }
+        },
+        required: ['code', 'description']
+      }
+    },
+    recommendations: { type: 'array', items: { type: 'string', minLength: 1 } },
+    justificationNarrative: { type: 'string' }
+  },
+  required: ['medicalNecessityScore', 'consistencyCheck', 'documentationGaps', 'rejectionRisks', 'recommendations', 'justificationNarrative']
+};
+
+/**
  * Prior Authorization Validation Service
- * Uses biomistral AI model to validate and enhance prior authorization data
+ * Uses the configured Ollama model to validate and enhance prior authorization data
  * before NPHIES submission to reduce rejection rates
  */
 class PriorAuthValidationService {
@@ -91,43 +123,58 @@ class PriorAuthValidationService {
    * @returns {Promise<object>} - Validation result with risk scores and suggestions
    */
   async validatePriorAuth(formData) {
-    if (!this.enabled) {
-      return this.getDisabledResponse();
-    }
-
     const startTime = Date.now();
     const authType = formData.auth_type || 'professional';
     const rules = this.validationRules[authType] || this.validationRules.professional;
 
+    // Rule-based checks never depend on the AI and are always returned.
+    let basicValidation, vitalsValidation, timeValidation;
     try {
+      basicValidation = this.performBasicValidation(formData, rules);
+      vitalsValidation = this.validateVitalsPlausibility(formData.vital_signs);
+      timeValidation = this.validateTimeRelevance(formData);
+    } catch (error) {
+      console.error('❌ Error in rule-based prior auth validation:', error.message);
+      return {
+        success: false,
+        isValid: false,
+        requiresManualReview: true,
+        error: error.message,
+        riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
+        suggestions: [],
+        metadata: {
+          error: true,
+          errorMessage: error.message,
+          timestamp: new Date().toISOString()
+        }
+      };
+    }
+
+    let aiValidation;
+    let guidelines = [];
+    if (!this.enabled) {
+      aiValidation = this.getUnavailableAIValidation('AI validation is currently disabled');
+    } else {
       console.log(`🏥 Starting prior auth validation for ${authType} type...`);
+      aiValidation = await this.performAIValidation(formData, authType);
+      guidelines = aiValidation.aiUnavailable ? [] : await this.retrieveRelevantGuidelines(formData);
+    }
 
-      // Step 1: Basic validation (non-AI)
-      const basicValidation = this.performBasicValidation(formData, rules);
-      
-      // Step 2: Vitals plausibility check
-      const vitalsValidation = this.validateVitalsPlausibility(formData.vital_signs);
-      
-      // Step 3: Time relevance check
-      const timeValidation = this.validateTimeRelevance(formData);
-      
-      // Step 4: AI-powered validation using biomistral
-      const aiValidation = await this.performAIValidation(formData, authType);
-      
-      // Step 5: Retrieve relevant medical guidelines
-      const guidelines = await this.retrieveRelevantGuidelines(formData);
-      
-      // Step 6: Calculate risk scores
+    try {
       const riskScores = this.calculateRiskScores(basicValidation, vitalsValidation, timeValidation, aiValidation);
-      
-      // Step 7: Generate suggestions
       const suggestions = this.generateSuggestions(basicValidation, vitalsValidation, aiValidation, formData);
-
-      const duration = Date.now() - startTime;
+      const ruleBasedValid = riskScores.overall < 0.5;
+      const aiUnavailable = aiValidation.aiUnavailable === true;
+      const aiIncomplete = aiValidation.analysisIncomplete === true;
 
       return {
         success: true,
-        isValid: riskScores.overall < 0.5,
+        // Without a readable AI review the request is not reported as valid: it needs a
+        // human to review it. The rule-based verdict is still returned separately.
+        isValid: ruleBasedValid && !aiUnavailable && !aiIncomplete,
+        ruleBasedValid,
+        aiUnavailable,
+        requiresManualReview: aiUnavailable || aiIncomplete,
         authType,
         riskScores,
         validation: {
@@ -139,8 +186,9 @@ class PriorAuthValidationService {
         suggestions,
         guidelines: guidelines.slice(0, 3), // Top 3 relevant guidelines
         metadata: {
-          validationDuration: duration,
+          validationDuration: Date.now() - startTime,
           model: ollamaService.model,
+          enabled: this.enabled,
           timestamp: new Date().toISOString()
         }
       };
@@ -149,9 +197,17 @@ class PriorAuthValidationService {
       console.error('❌ Error in prior auth validation:', error.message);
       return {
         success: false,
-        isValid: true, // Default to valid on error to not block workflow
+        isValid: false,
+        aiUnavailable: aiValidation?.aiUnavailable === true,
+        requiresManualReview: true,
         error: error.message,
-        riskScores: { overall: 0, categories: {} },
+        riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
+        validation: {
+          basic: basicValidation,
+          vitals: vitalsValidation,
+          time: timeValidation,
+          ai: aiValidation
+        },
         suggestions: [],
         metadata: {
           error: true,
@@ -160,6 +216,24 @@ class PriorAuthValidationService {
         }
       };
     }
+  }
+
+  /**
+   * AI result used when the model could not be consulted. It carries every field
+   * the scoring/suggestion code reads, with "unknown" values instead of passes.
+   */
+  getUnavailableAIValidation(reason) {
+    return {
+      passed: null,
+      aiUnavailable: true,
+      medicalNecessityScore: null,
+      consistencyCheck: { passed: null, explanation: '' },
+      documentationGaps: [],
+      rejectionRisks: [],
+      recommendations: [],
+      justificationNarrative: '',
+      error: reason
+    };
   }
 
   /**
@@ -396,20 +470,14 @@ class PriorAuthValidationService {
       const result = await ollamaService.generateCompletion(prompt, {
         temperature: 0.3,
         num_predict: 2000,
-        repeat_penalty: 1.2
+        format: PA_AI_VALIDATION_SCHEMA
       });
 
-      return this.parseAIValidationResponse(result.response, formData);
+      return this.parseAIValidationResponse(result.response);
 
     } catch (error) {
       console.error('❌ AI validation error:', error.message);
-      return {
-        passed: true,
-        issues: [],
-        recommendations: [],
-        medicalNecessityScore: 0.5,
-        error: error.message
-      };
+      return this.getUnavailableAIValidation(`AI validation unavailable: ${error.message}`);
     }
   }
 
@@ -545,119 +613,46 @@ Analyze this prior authorization request and provide:
 
 5. RECOMMENDATIONS: Specific improvements to strengthen the authorization
 
-=== OUTPUT FORMAT ===
-
-MEDICAL_NECESSITY_SCORE: [0.0-1.0]
-
-CONSISTENCY_CHECK: [PASS/FAIL]
-[Explanation if FAIL]
-
-DOCUMENTATION_GAPS:
-- [Gap 1]
-- [Gap 2]
-
-REJECTION_RISKS:
-- [Code]: [Description]
-
-RECOMMENDATIONS:
-- [Recommendation 1]
-- [Recommendation 2]
-
-JUSTIFICATION_NARRATIVE:
-[A brief medical necessity justification that could be added to strengthen the request]
-
-=== BEGIN ANALYSIS ===`;
+=== OUTPUT ===
+Answer with one JSON object only:
+{"medicalNecessityScore": 0.0-1.0,
+ "consistencyCheck": {"passed": true|false, "explanation": "why, if it failed"},
+ "documentationGaps": ["..."],
+ "rejectionRisks": [{"code": "NPHIES code such as MN-1-1, or null", "description": "..."}],
+ "recommendations": ["..."],
+ "justificationNarrative": "a brief medical necessity justification that could be added to the request"}`;
   }
 
   /**
-   * Parse AI validation response
+   * Read the AI clinical review (PA_AI_VALIDATION_SCHEMA). Fails closed: a reply that is not
+   * valid JSON or does not match the schema is `analysisIncomplete` with unknown (null) values.
    */
-  parseAIValidationResponse(responseText, formData) {
-    const result = {
-      passed: true,
-      medicalNecessityScore: 0.5,
-      consistencyCheck: { passed: true, explanation: '' },
-      documentationGaps: [],
-      rejectionRisks: [],
-      recommendations: [],
-      justificationNarrative: ''
-    };
-
-    try {
-      // Extract medical necessity score
-      const scoreMatch = responseText.match(/MEDICAL_NECESSITY_SCORE:\s*([\d.]+)/i);
-      if (scoreMatch) {
-        result.medicalNecessityScore = parseFloat(scoreMatch[1]);
-        if (result.medicalNecessityScore < 0.6) {
-          result.passed = false;
-        }
-      }
-
-      // Extract consistency check
-      const consistencyMatch = responseText.match(/CONSISTENCY_CHECK:\s*(PASS|FAIL)/i);
-      if (consistencyMatch) {
-        result.consistencyCheck.passed = consistencyMatch[1].toUpperCase() === 'PASS';
-        if (!result.consistencyCheck.passed) {
-          result.passed = false;
-          // Try to extract explanation
-          const explMatch = responseText.match(/CONSISTENCY_CHECK:\s*FAIL\s*\n([^\n]+)/i);
-          if (explMatch) {
-            result.consistencyCheck.explanation = explMatch[1].trim();
-          }
-        }
-      }
-
-      // Extract documentation gaps
-      const gapsSection = responseText.match(/DOCUMENTATION_GAPS:([\s\S]*?)(?=REJECTION_RISKS:|RECOMMENDATIONS:|$)/i);
-      if (gapsSection) {
-        const gapLines = gapsSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
-        result.documentationGaps = gapLines.map(line => line.replace(/^-\s*/, '').trim()).filter(g => g.length > 5);
-      }
-
-      // Extract rejection risks
-      const risksSection = responseText.match(/REJECTION_RISKS:([\s\S]*?)(?=RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i);
-      if (risksSection) {
-        const riskLines = risksSection[1].trim().split('\n').filter(line => line.trim().match(/^[-*•]/));
-        result.rejectionRisks = riskLines.map(line => {
-          const cleaned = line.replace(/^[-*•]\s*/, '').trim();
-          // Try to match NPHIES-style codes: XX-XXXX, MN-XXX, SE-XXX, CV-XXX, BV-XXXXX, etc.
-          const codeMatch = cleaned.match(/^([A-Z]{2,3}-[\d-]+):\s*(.+)/);
-          if (codeMatch) {
-            return { code: codeMatch[1], description: codeMatch[2] };
-          }
-          // If no code found but description is meaningful, return without code (null)
-          // This prevents showing "UNKNOWN" badges in the UI
-          if (cleaned.length > 10) {
-            return { code: null, description: cleaned };
-          }
-          return null;
-        }).filter(r => r && r.description && r.description.length > 5);
-      }
-
-      // Extract recommendations
-      const recsSection = responseText.match(/RECOMMENDATIONS:([\s\S]*?)(?=JUSTIFICATION_NARRATIVE:|$)/i);
-      if (recsSection) {
-        const recLines = recsSection[1].trim().split('\n').filter(line => line.trim().startsWith('-'));
-        result.recommendations = recLines.map(line => line.replace(/^-\s*/, '').trim()).filter(r => r.length > 5);
-      }
-
-      // Extract justification narrative
-      const narrativeSection = responseText.match(/JUSTIFICATION_NARRATIVE:([\s\S]*?)$/i);
-      if (narrativeSection) {
-        result.justificationNarrative = narrativeSection[1].trim()
-          .replace(/^[\s\n]+/, '')
-          .replace(/[\s\n]+$/, '')
-          .split('\n')
-          .filter(line => !line.match(/^(===|---)/))
-          .join(' ')
-          .trim();
-      }
-
-    } catch (error) {
-      console.error('❌ Error parsing AI response:', error.message);
+  parseAIValidationResponse(responseText) {
+    const { ok, data, errors } = parseStructuredReply(responseText, PA_AI_VALIDATION_SCHEMA);
+    if (!ok) {
+      console.warn(`⚠️ Prior auth AI review rejected (${errors.slice(0, 3).join('; ')})`);
+      return {
+        ...this.getUnavailableAIValidation(INVALID_REPLY_MESSAGE),
+        aiUnavailable: false,
+        analysisIncomplete: true
+      };
     }
-
-    return result;
+    const consistencyPassed = data.consistencyCheck.passed;
+    return {
+      passed: consistencyPassed && data.medicalNecessityScore >= 0.6,
+      medicalNecessityScore: data.medicalNecessityScore,
+      consistencyCheck: {
+        passed: consistencyPassed,
+        explanation: consistencyPassed ? '' : data.consistencyCheck.explanation.trim()
+      },
+      documentationGaps: data.documentationGaps,
+      rejectionRisks: data.rejectionRisks.map(risk => ({
+        code: typeof risk.code === 'string' && risk.code.trim() ? risk.code.trim() : null,
+        description: risk.description.trim()
+      })),
+      recommendations: data.recommendations,
+      justificationNarrative: data.justificationNarrative.trim()
+    };
   }
 
   /**
@@ -678,13 +673,10 @@ JUSTIFICATION_NARRATIVE:
         return [];
       }
 
+      // General knowledge search: retrieveRelevantGuidelines() is the eye-form
+      // (ophthalmology-only) retrieval and must not be used for prior authorizations.
       const query = queryParts.join(', ');
-      const guidelines = await ragService.retrieveRelevantGuidelines({ 
-        chief_complaints: query,
-        diagnoses: diagnoses.map(d => d.diagnosis_display).join(', ')
-      });
-
-      return guidelines;
+      return await ragService.searchKnowledge(query, ragService.maxRetrievalResults);
 
     } catch (error) {
       console.error('❌ Error retrieving guidelines:', error.message);
@@ -735,19 +727,22 @@ JUSTIFICATION_NARRATIVE:
       scores.supportingEvidence += 0.15;
     });
 
-    // Add AI validation risks
-    if (aiValidation.medicalNecessityScore < 0.6) {
-      scores.medicalNecessity += (1 - aiValidation.medicalNecessityScore) * 0.5;
+    // Add AI validation risks (unknown AI values add nothing; the result is
+    // flagged aiUnavailable/analysisIncomplete instead)
+    const necessityScore = aiValidation?.medicalNecessityScore;
+    if (typeof necessityScore === 'number' && necessityScore < 0.6) {
+      scores.medicalNecessity += (1 - necessityScore) * 0.5;
     }
 
-    if (!aiValidation.consistencyCheck.passed) {
+    if (aiValidation?.consistencyCheck?.passed === false) {
       scores.medicalNecessity += 0.2;
     }
 
-    aiValidation.rejectionRisks.forEach(risk => {
-      if (risk.code.startsWith('MN')) scores.medicalNecessity += 0.15;
-      else if (risk.code.startsWith('SE')) scores.supportingEvidence += 0.15;
-      else if (risk.code.startsWith('CV')) scores.coverage += 0.15;
+    (aiValidation?.rejectionRisks || []).forEach(risk => {
+      const code = typeof risk?.code === 'string' ? risk.code : '';
+      if (code.startsWith('MN')) scores.medicalNecessity += 0.15;
+      else if (code.startsWith('SE')) scores.supportingEvidence += 0.15;
+      else if (code.startsWith('CV')) scores.coverage += 0.15;
     });
 
     // Cap scores at 1.0
@@ -801,8 +796,24 @@ JUSTIFICATION_NARRATIVE:
       });
     });
 
+    if (aiValidation?.aiUnavailable) {
+      suggestions.push({
+        type: 'ai_unavailable',
+        message: 'AI clinical review was not performed. Only rule-based checks ran; manual clinical review is required.',
+        severity: 'high',
+        action: 'review'
+      });
+    } else if (aiValidation?.analysisIncomplete) {
+      suggestions.push({
+        type: 'ai_incomplete',
+        message: 'The AI clinical review could not be fully read. Manual clinical review is required.',
+        severity: 'high',
+        action: 'review'
+      });
+    }
+
     // Suggestions from AI validation
-    aiValidation.recommendations.forEach(rec => {
+    (aiValidation?.recommendations || []).forEach(rec => {
       suggestions.push({
         type: 'ai_recommendation',
         message: rec,
@@ -812,7 +823,7 @@ JUSTIFICATION_NARRATIVE:
     });
 
     // Add justification narrative suggestion if available
-    if (aiValidation.justificationNarrative && aiValidation.justificationNarrative.length > 20) {
+    if (aiValidation?.justificationNarrative && aiValidation.justificationNarrative.length > 20) {
       suggestions.push({
         type: 'justification',
         field: 'clinical_info.treatment_plan',
@@ -824,7 +835,7 @@ JUSTIFICATION_NARRATIVE:
     }
 
     // Add consistency warning if needed
-    if (!aiValidation.consistencyCheck.passed) {
+    if (aiValidation?.consistencyCheck?.passed === false) {
       suggestions.push({
         type: 'consistency',
         message: `Clinical consistency issue: ${aiValidation.consistencyCheck.explanation || 'Chief complaint, diagnoses, and requested services may not align'}`,
@@ -834,260 +845,6 @@ JUSTIFICATION_NARRATIVE:
     }
 
     return suggestions;
-  }
-
-  /**
-   * Enhance clinical text using AI
-   */
-  async enhanceClinicalText(text, field, context = {}) {
-    if (!this.enabled) {
-      return { success: false, error: 'AI validation disabled' };
-    }
-
-    try {
-      const prompt = this.buildEnhancementPrompt(text, field, context);
-      
-      const result = await ollamaService.generateCompletion(prompt, {
-        temperature: 0.4,
-        num_predict: 1500
-      });
-
-      return {
-        success: true,
-        originalText: text,
-        enhancedText: this.parseEnhancedText(result.response),
-        metadata: {
-          model: ollamaService.model,
-          timestamp: new Date().toISOString()
-        }
-      };
-
-    } catch (error) {
-      console.error('❌ Error enhancing clinical text:', error.message);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Build prompt for clinical text enhancement
-   */
-  buildEnhancementPrompt(text, field, context) {
-    const fieldDescriptions = {
-      history_of_present_illness: 'History of Present Illness (HPI)',
-      physical_examination: 'Physical Examination findings',
-      treatment_plan: 'Treatment Plan',
-      patient_history: 'Patient Medical History'
-    };
-
-    const fieldName = fieldDescriptions[field] || field;
-
-    return `You are a medical documentation specialist. Enhance the following ${fieldName} to meet insurance prior authorization requirements.
-
-=== CONTEXT ===
-Chief Complaint: ${context.chiefComplaint || 'Not specified'}
-Diagnosis: ${context.diagnosis || 'Not specified'}
-Requested Service: ${context.requestedService || 'Not specified'}
-
-=== ORIGINAL TEXT ===
-${text || 'No text provided'}
-
-=== REQUIREMENTS ===
-1. Expand the text to be more detailed and clinically complete
-2. Include relevant clinical findings that support the diagnosis
-3. Document any prior treatments tried (if applicable)
-4. Use professional medical terminology
-5. Keep the content factual and based on the original text
-6. Format appropriately for the ${fieldName} section
-
-=== OUTPUT ===
-Provide ONLY the enhanced text, without any explanations or headers. The text should be ready to use directly in the medical record.
-
-ENHANCED_TEXT:`;
-  }
-
-  /**
-   * Parse enhanced text from AI response
-   */
-  parseEnhancedText(response) {
-    // Remove any leading markers
-    let text = response.replace(/^ENHANCED_TEXT:\s*/i, '').trim();
-    
-    // Remove any trailing markers or instructions
-    text = text.replace(/\n===.*$/s, '').trim();
-    
-    return text;
-  }
-
-  /**
-   * Suggest SNOMED codes from free text
-   */
-  async suggestSnomedCodes(text, category = 'chief_complaint') {
-    if (!this.enabled || !text) {
-      return { success: false, suggestions: [] };
-    }
-
-    try {
-      const prompt = `You are a medical coding specialist. Suggest appropriate SNOMED CT codes for the following clinical text.
-
-=== CLINICAL TEXT ===
-${text}
-
-=== CATEGORY ===
-${category}
-
-=== REQUIREMENTS ===
-Provide up to 5 relevant SNOMED CT codes with their descriptions. Format as:
-CODE: [SNOMED code] - [Description]
-
-Focus on the most specific and accurate codes for the clinical description.
-
-=== SNOMED SUGGESTIONS ===`;
-
-      const result = await ollamaService.generateCompletion(prompt, {
-        temperature: 0.2,
-        num_predict: 500
-      });
-
-      const suggestions = this.parseSnomedSuggestions(result.response);
-
-      return {
-        success: true,
-        originalText: text,
-        suggestions,
-        metadata: {
-          model: ollamaService.model,
-          timestamp: new Date().toISOString()
-        }
-      };
-
-    } catch (error) {
-      console.error('❌ Error suggesting SNOMED codes:', error.message);
-      return { success: false, error: error.message, suggestions: [] };
-    }
-  }
-
-  /**
-   * Parse SNOMED suggestions from AI response
-   */
-  parseSnomedSuggestions(response) {
-    const suggestions = [];
-    const lines = response.split('\n');
-
-    lines.forEach(line => {
-      const match = line.match(/CODE:\s*(\d+)\s*-\s*(.+)/i) || 
-                    line.match(/(\d{6,})\s*[-:]\s*(.+)/);
-      if (match) {
-        suggestions.push({
-          code: match[1].trim(),
-          display: match[2].trim()
-        });
-      }
-    });
-
-    return suggestions.slice(0, 5);
-  }
-
-  /**
-   * Assess medical necessity risk
-   */
-  async assessMedicalNecessity(formData) {
-    if (!this.enabled) {
-      return this.getDisabledResponse();
-    }
-
-    try {
-      const prompt = this.buildMedicalNecessityPrompt(formData);
-      
-      const result = await ollamaService.generateCompletion(prompt, {
-        temperature: 0.3,
-        num_predict: 1500
-      });
-
-      return this.parseMedicalNecessityResponse(result.response);
-
-    } catch (error) {
-      console.error('❌ Error assessing medical necessity:', error.message);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Build medical necessity assessment prompt
-   */
-  buildMedicalNecessityPrompt(formData) {
-    const diagnoses = formData.diagnoses || [];
-    const items = formData.items || [];
-    const clinicalInfo = formData.clinical_info || {};
-
-    return `You are a medical necessity reviewer for insurance prior authorizations. Assess whether the requested services are medically necessary based on the clinical documentation.
-
-=== DIAGNOSES ===
-${diagnoses.map(d => `- ${d.diagnosis_code}: ${d.diagnosis_display || d.diagnosis_description}`).join('\n') || 'None specified'}
-
-=== REQUESTED SERVICES ===
-${items.map(i => `- ${i.product_or_service_code || i.medication_code}: ${i.service_description || i.medication_name}`).join('\n') || 'None specified'}
-
-=== CLINICAL DOCUMENTATION ===
-Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}
-HPI: ${clinicalInfo.history_of_present_illness || 'Not documented'}
-Exam: ${clinicalInfo.physical_examination || 'Not documented'}
-Plan: ${clinicalInfo.treatment_plan || 'Not documented'}
-
-=== ASSESSMENT REQUIRED ===
-1. Is the service medically necessary for the diagnosis?
-2. Is there sufficient documentation to support the request?
-3. What additional documentation would strengthen the case?
-
-=== OUTPUT FORMAT ===
-NECESSITY_SCORE: [0.0-1.0]
-ASSESSMENT: [APPROVED/NEEDS_INFO/LIKELY_DENIED]
-REASONING: [Brief explanation]
-MISSING_ELEMENTS:
-- [Element 1]
-- [Element 2]
-SUGGESTED_JUSTIFICATION: [A sentence that could be added to support medical necessity]`;
-  }
-
-  /**
-   * Parse medical necessity response
-   */
-  parseMedicalNecessityResponse(response) {
-    const result = {
-      success: true,
-      necessityScore: 0.5,
-      assessment: 'NEEDS_INFO',
-      reasoning: '',
-      missingElements: [],
-      suggestedJustification: ''
-    };
-
-    try {
-      const scoreMatch = response.match(/NECESSITY_SCORE:\s*([\d.]+)/i);
-      if (scoreMatch) result.necessityScore = parseFloat(scoreMatch[1]);
-
-      const assessmentMatch = response.match(/ASSESSMENT:\s*(APPROVED|NEEDS_INFO|LIKELY_DENIED)/i);
-      if (assessmentMatch) result.assessment = assessmentMatch[1];
-
-      const reasoningMatch = response.match(/REASONING:\s*([^\n]+)/i);
-      if (reasoningMatch) result.reasoning = reasoningMatch[1].trim();
-
-      const missingSection = response.match(/MISSING_ELEMENTS:([\s\S]*?)(?=SUGGESTED_JUSTIFICATION:|$)/i);
-      if (missingSection) {
-        result.missingElements = missingSection[1].trim()
-          .split('\n')
-          .filter(line => line.trim().startsWith('-'))
-          .map(line => line.replace(/^-\s*/, '').trim())
-          .filter(e => e.length > 3);
-      }
-
-      const justificationMatch = response.match(/SUGGESTED_JUSTIFICATION:\s*([^\n]+)/i);
-      if (justificationMatch) result.suggestedJustification = justificationMatch[1].trim();
-
-    } catch (error) {
-      console.error('❌ Error parsing medical necessity response:', error.message);
-    }
-
-    return result;
   }
 
   /**
@@ -1163,24 +920,6 @@ SUGGESTED_JUSTIFICATION: [A sentence that could be added to support medical nece
       investigation_result: 'Investigation Result'
     };
     return names[field] || field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  }
-
-  /**
-   * Get disabled response
-   */
-  getDisabledResponse() {
-    return {
-      success: true,
-      isValid: true,
-      riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
-      validation: {},
-      suggestions: [],
-      metadata: {
-        enabled: false,
-        message: 'AI validation is currently disabled',
-        timestamp: new Date().toISOString()
-      }
-    };
   }
 
   /**

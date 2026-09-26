@@ -1,4 +1,5 @@
 import medicationSafetyService from '../services/medicationSafetyService.js';
+import { checkDuplicateIngredients, toCodedItems } from '../services/ingredientDuplicates.js';
 import { query as dbQuery } from '../db.js';
 
 class MedicationSafetyController {
@@ -34,6 +35,32 @@ class MedicationSafetyController {
         error: 'Interaction check failed',
         message: error.message
       });
+    }
+  }
+
+  /**
+   * Deterministic active-ingredient duplication check (no AI)
+   * POST /api/medication-safety/duplicate-ingredients  { codes: ['GTIN', ...] | [{ sequence, code }, ...] }
+   */
+  async duplicateIngredients(req, res) {
+    const { codes } = req.body || {};
+    const invalid = !Array.isArray(codes) || codes.length === 0 || codes.length > 100 || codes.some(entry => {
+      const code = entry && typeof entry === 'object' ? entry.code : entry;
+      return (typeof code !== 'string' && typeof code !== 'number') || String(code).length > 50;
+    });
+    if (invalid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request',
+        message: 'codes must be a non-empty array (at most 100) of medication codes of at most 50 characters'
+      });
+    }
+    try {
+      const result = await checkDuplicateIngredients(toCodedItems(codes));
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error('❌ Duplicate-ingredient check failed:', error.message);
+      res.status(500).json({ success: false, error: 'Duplicate-ingredient check failed' });
     }
   }
 

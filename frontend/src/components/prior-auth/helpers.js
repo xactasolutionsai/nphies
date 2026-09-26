@@ -11,6 +11,33 @@ export const formatAmount = (amount, currency = 'SAR') => {
   return `${parseFloat(amount).toFixed(2)} ${currency}`;
 };
 
+// Client-only React key for editable list rows. Stripped before sending (see stripRowKeys).
+let rowKeyCounter = 0;
+export const newRowKey = () => `row-${++rowKeyCounter}`;
+
+/**
+ * Ensure every row in a list has a stable client-side `_rowKey`.
+ * @param {Array} rows
+ * @returns {Array}
+ */
+export const withRowKeys = (rows) =>
+  Array.isArray(rows) ? rows.map(row => (row && row._rowKey ? row : { ...row, _rowKey: newRowKey() })) : rows;
+
+/**
+ * Remove client-side `_rowKey` fields from a list of rows (and their package details).
+ * @param {Array} rows
+ * @returns {Array}
+ */
+export const stripRowKeys = (rows) =>
+  Array.isArray(rows)
+    ? rows.map(row => {
+        if (!row || typeof row !== 'object') return row;
+        const { _rowKey, ...rest } = row;
+        if (Array.isArray(rest.details)) rest.details = stripRowKeys(rest.details);
+        return rest;
+      })
+    : rows;
+
 /**
  * Get initial data for a service item
  * @param {number} sequence - Item sequence number
@@ -19,6 +46,7 @@ export const formatAmount = (amount, currency = 'SAR') => {
  */
 export const getInitialItemData = (sequence, authType = '') => {
   const baseItem = {
+    _rowKey: newRowKey(),
     sequence,
     product_or_service_code: '',
     product_or_service_display: '',
@@ -41,7 +69,8 @@ export const getInitialItemData = (sequence, authType = '') => {
       medication_name: '',
       prescribed_medication_code: '',
       pharmacist_selection_reason: 'patient-request',
-      pharmacist_substitute: 'Irreplaceable',
+      // Only set when a substitution actually happened (NPHIES pharmacist-substitute is optional)
+      pharmacist_substitute: null,
       days_supply: 30,
       shadow_code: '',
       shadow_code_system: '',
@@ -58,6 +87,7 @@ export const getInitialItemData = (sequence, authType = '') => {
  * @returns {object} Initial diagnosis data object
  */
 export const getInitialDiagnosisData = (sequence) => ({
+  _rowKey: newRowKey(),
   sequence,
   diagnosis_code: '',
   diagnosis_display: '',
@@ -71,6 +101,7 @@ export const getInitialDiagnosisData = (sequence) => ({
  * @returns {object} Initial supporting info data object
  */
 export const getInitialSupportingInfoData = (sequence, category = 'info') => ({
+  _rowKey: newRowKey(),
   sequence,
   category,
   code: '',
@@ -87,6 +118,7 @@ export const getInitialSupportingInfoData = (sequence, category = 'info') => ({
  * @returns {object} Initial lab observation data object
  */
 export const getInitialLabObservationData = (sequence) => ({
+  _rowKey: newRowKey(),
   sequence,
   loinc_code: '',
   loinc_display: '',

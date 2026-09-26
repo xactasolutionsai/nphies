@@ -54,6 +54,18 @@ export default function DataTable({
 
   const totalPages = Math.ceil(sortedData.length / pageSize);
 
+  // Never show a page past the end (e.g. after data shrinks)
+  React.useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
+
+  // Window of up to 5 page buttons centred on the current page
+  const pageWindowStart = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+  const pageNumbers = Array.from(
+    { length: Math.min(5, totalPages) },
+    (_, i) => pageWindowStart + i
+  );
+
   const handleSort = (key) => {
     if (!sortable) return;
     
@@ -77,7 +89,7 @@ export default function DataTable({
             <Input
               placeholder="Search..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="pl-8"
             />
           </div>
@@ -148,8 +160,7 @@ export default function DataTable({
               Previous
             </Button>
             <div className="flex items-center space-x-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const page = i + 1;
+              {pageNumbers.map((page) => {
                 return (
                   <Button
                     key={page}

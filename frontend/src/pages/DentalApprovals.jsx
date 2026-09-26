@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import DataTable from '@/components/DataTable';
 import api from '@/services/api';
 import { FileText, Plus, Edit, Trash2, Eye } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function DentalApprovals() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -104,26 +106,30 @@ export default function DentalApprovals() {
           >
             <Eye className="h-4 w-4" />
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/dental-approvals/${row.id}/edit`);
-            }}
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDeleteForm(row.id);
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {can('edit') && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/dental-approvals/${row.id}/edit`);
+              }}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+          )}
+          {can('delete') && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteForm(row.id);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       )
     }
@@ -161,13 +167,15 @@ export default function DentalApprovals() {
                 </div>
               </div>
             </div>
-            <Button 
-              onClick={() => navigate('/dental-approvals/new')} 
-              className="bg-gradient-to-r from-primary-purple to-accent-purple"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              Add New Dental Form
-            </Button>
+            {can('create') && (
+              <Button 
+                onClick={() => navigate('/dental-approvals/new')} 
+                className="bg-gradient-to-r from-primary-purple to-accent-purple"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                Add New Dental Form
+              </Button>
+            )}
           </div>
         </div>
       </div>

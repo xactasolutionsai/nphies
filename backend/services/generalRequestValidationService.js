@@ -1,25 +1,75 @@
 import ollamaService from './ollamaService.js';
 import { query } from '../db.js';
+import { parseStructuredReply } from './ai/structuredOutput.js';
+
+/*
+ * Structured-output contracts (owner item C5): sent to Ollama as `format` and validated
+ * on return. A reply that does not match is never read: the result is flagged
+ * analysisIncomplete / requiresManualReview with the existing fail-closed values.
+ */
+export const FIT_SCHEMA = {
+  type: 'object',
+  properties: {
+    fit: { type: 'boolean' },
+    diagnoses: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } }
+  },
+  required: ['fit', 'diagnoses']
+};
+
+const textList = { type: 'array', items: { type: 'string', minLength: 1 } };
+export const TEST_RECOMMENDATIONS_SCHEMA = {
+  type: 'object',
+  properties: {
+    testAppropriate: { type: 'boolean' },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    reasoning: { type: 'string' },
+    prerequisiteChain: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          order: { type: 'integer' },
+          testName: { type: 'string', minLength: 1 },
+          clinicalReason: { type: 'string' },
+          urgency: { type: 'string', enum: ['immediate', 'urgent', 'routine', 'optional'] },
+          typicalFindings: { type: 'string' },
+          mustCompleteBeforeNext: { type: 'boolean' }
+        },
+        required: ['order', 'testName', 'clinicalReason', 'urgency']
+      }
+    },
+    recommendedTests: textList,
+    alternativeTests: textList,
+    contraindications: textList,
+    criticalPrerequisites: textList,
+    emergencyModifications: { type: ['string', 'null'] }
+  },
+  required: ['testAppropriate', 'confidence', 'reasoning', 'prerequisiteChain', 'recommendedTests',
+    'alternativeTests', 'contraindications', 'criticalPrerequisites', 'emergencyModifications']
+};
+
+const escapeLike = (value) => String(value).replace(/[\\%_]/g, ch => `\\${ch}`);
 
 class GeneralRequestValidationService {
   /**
-   * Extract direction (laterality) from text
-   * Matches the n8n Code node logic
+   * Extract direction (laterality) from text.
+   * Whole words only, case-insensitive: "Cleft palate" or "bright" are not a side.
    * @param {string} text - Text to extract direction from
-   * @returns {string} - 'left', 'right', or ''
+   * @returns {string} - 'left', 'right', 'bilateral', or ''
    */
   extractDirection(text) {
     if (!text || typeof text !== 'string') {
       return '';
     }
     
-    const lowerText = text.toLowerCase();
+    const hasLeft = /\bleft\b/i.test(text);
+    const hasRight = /\bright\b/i.test(text);
     
-    if (lowerText.includes('left')) {
-      return 'left';
-    } else if (lowerText.includes('right')) {
-      return 'right';
+    if (/\bbilateral\b/i.test(text) || (hasLeft && hasRight)) {
+      return 'bilateral';
     }
+    if (hasLeft) return 'left';
+    if (hasRight) return 'right';
     
     return '';
   }
@@ -46,18 +96,26 @@ class GeneralRequestValidationService {
    * @returns {boolean} - True if they match or if diagnosis has no direction
    */
   checkLateralityMatch(diagnosisDirection, scanLaterality) {
+    const diagnosisSide = String(diagnosisDirection || '').trim().toLowerCase();
+    const scanSide = String(scanLaterality || '').trim().toLowerCase();
+
     // If diagnosis has no direction specified, it's considered a match
-    if (!diagnosisDirection || diagnosisDirection === '') {
+    if (!diagnosisSide) {
+      return true;
+    }
+
+    // No side on the scan request (or a bilateral diagnosis): nothing to contradict
+    if (!scanSide || diagnosisSide === 'bilateral') {
       return true;
     }
     
     // Direct match
-    if (diagnosisDirection === scanLaterality) {
+    if (diagnosisSide === scanSide) {
       return true;
     }
     
     // Bilateral matches everything
-    if (scanLaterality === 'bilateral') {
+    if (scanSide === 'bilateral') {
       return true;
     }
     
@@ -110,100 +168,21 @@ Analyze and respond ONLY with the JSON structure specified above.`;
   }
 
   /**
-   * Parse AI response to extract fit and diagnoses
+   * Read the diagnosis <-> scan reply (FIT_SCHEMA). Fails closed: an unusable reply is
+   * fit:false with analysisIncomplete (the UI shows a warning and asks for review).
    * @param {string} responseText - Raw AI response
-   * @returns {object} - Parsed { fit, diagnoses }
+   * @returns {object} - { fit, diagnoses, analysisIncomplete? }
    */
   parseAIResponse(responseText) {
-    console.log('\n🔍 ==> PARSING AI RESPONSE <==');
-    console.log('Raw response length:', responseText.length);
-    console.log('First 200 chars:', responseText.substring(0, 200));
-    
-    try {
-      // Method 1: Try to parse the entire response as JSON
-      try {
-        const parsed = JSON.parse(responseText);
-        if (parsed.fit !== undefined && parsed.diagnoses !== undefined) {
-          console.log('✓ Method 1: Direct JSON parse successful');
-          return {
-            fit: parsed.fit === true || parsed.fit === 'true',
-            diagnoses: Array.isArray(parsed.diagnoses) ? parsed.diagnoses : [String(parsed.diagnoses)]
-          };
-        }
-      } catch (e) {
-        // Not a direct JSON, continue to other methods
-      }
-      
-      // Method 2: Try to find JSON object in the response (may have text before/after)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.fit !== undefined && parsed.diagnoses !== undefined) {
-            console.log('✓ Method 2: Extracted JSON parse successful');
-            return {
-              fit: parsed.fit === true || parsed.fit === 'true',
-              diagnoses: Array.isArray(parsed.diagnoses) ? parsed.diagnoses : [String(parsed.diagnoses)]
-            };
-          }
-        } catch (e) {
-          console.log('⚠️ Method 2: JSON extraction found but parse failed:', e.message);
-        }
-      }
-      
-      // Method 3: Try to find the first complete JSON object (in case of multiple)
-      const firstJsonMatch = responseText.match(/\{[^{}]*"fit"[^{}]*"diagnoses"[^{}]*\}/);
-      if (firstJsonMatch) {
-        try {
-          const parsed = JSON.parse(firstJsonMatch[0]);
-          console.log('✓ Method 3: First JSON object parse successful');
-          return {
-            fit: parsed.fit === true || parsed.fit === 'true',
-            diagnoses: Array.isArray(parsed.diagnoses) ? parsed.diagnoses : [String(parsed.diagnoses)]
-          };
-        } catch (e) {
-          console.log('⚠️ Method 3: Failed:', e.message);
-        }
-      }
-      
-      // Method 4: Manual extraction fallback
-      const fitMatch = responseText.match(/"fit"\s*:\s*(true|false)/i);
-      const diagnosesMatch = responseText.match(/"diagnoses"\s*:\s*\[(.*?)\]/s);
-      
-      if (fitMatch) {
-        console.log('✓ Method 4: Manual extraction');
-        const fit = fitMatch[1].toLowerCase() === 'true';
-        let diagnoses = [];
-        
-        if (diagnosesMatch) {
-          // Extract items between quotes
-          const items = diagnosesMatch[1].match(/"([^"]*)"/g);
-          if (items) {
-            diagnoses = items.map(item => item.replace(/"/g, ''));
-          }
-        }
-        
-        return { fit, diagnoses: diagnoses.length > 0 ? diagnoses : ['Unable to extract diagnoses from response'] };
-      }
-      
-      // If all methods fail, log full response for debugging
-      console.error('❌ All parsing methods failed');
-      console.error('Full response text:');
-      console.error(responseText);
-      
-      return {
-        fit: false,
-        diagnoses: ['AI response format not recognized. Check server logs for details.']
-      };
-      
-    } catch (error) {
-      console.error('❌ Critical error in parseAIResponse:', error.message);
-      console.error('Stack:', error.stack);
-      return {
-        fit: false,
-        diagnoses: ['Error: ' + error.message]
-      };
-    }
+    const { ok, data, errors } = parseStructuredReply(responseText, FIT_SCHEMA);
+    if (ok) return { fit: data.fit, diagnoses: data.diagnoses };
+    // Raw model output is not logged: it can echo patient data.
+    console.error(`❌ Diagnosis/scan AI reply rejected (${errors.slice(0, 3).join('; ')})`);
+    return {
+      fit: false,
+      diagnoses: ['AI response format not recognized. Manual review required.'],
+      analysisIncomplete: true
+    };
   }
 
   /**
@@ -222,7 +201,7 @@ Analyze and respond ONLY with the JSON structure specified above.`;
          FROM medical_exams 
          WHERE LOWER(exam_name) LIKE LOWER($1)
          LIMIT 1`,
-        [`%${examName}%`]
+        [`%${escapeLike(examName)}%`]
       );
       
       if (result.rows.length > 0) {
@@ -288,7 +267,8 @@ Analyze and respond ONLY with the JSON structure specified above.`;
    * @returns {string} - Formatted prompt
    */
   buildDiagnosisTestRecommendationPrompt(fullFormData) {
-    // Extract all relevant fields
+    // Extract all relevant fields. Only clinically relevant data goes to the model:
+    // no national ID, names, facility or physician identity.
     const patient = fullFormData.patient || {};
     const service = fullFormData.service || {};
     const provider = fullFormData.provider || {};
@@ -318,7 +298,6 @@ Analyze and respond ONLY with the JSON structure specified above.`;
 === PATIENT CONTEXT ===
 Age: ${ageStr}
 Gender: ${patient.gender || 'Unknown'}
-Patient ID: ${patient.idNumber || 'N/A'}
 
 === CLINICAL SCENARIO ===
 Primary Diagnosis: ${service.diagnosis || 'Not specified'}
@@ -334,9 +313,7 @@ Current Medications:${medicationsContext}
 Previous Tests/Imaging: ${service.previousTest || 'None documented'}
 
 === PROVIDER INFORMATION ===
-Facility: ${provider.facilityName || 'N/A'}
 Department: ${provider.department || 'N/A'}
-Ordering Physician: ${provider.doctorName || 'N/A'}
 
 === YOUR TASK ===
 Provide a comprehensive clinical assessment and diagnostic testing pathway for this patient.
@@ -374,7 +351,7 @@ Provide a comprehensive clinical assessment and diagnostic testing pathway for t
     "Must-have results or conditions before proceeding with requested test"
   ],
   
-  "emergencyModifications": "If emergency case, explain how the standard pathway should be modified (expedited, parallel testing, etc.)"
+  "emergencyModifications": "If emergency case, explain how the standard pathway should be modified (expedited, parallel testing, etc.); otherwise null"
 }
 
 === CLINICAL GUIDELINES ===
@@ -398,18 +375,34 @@ Provide a comprehensive clinical assessment and diagnostic testing pathway for t
   }
 
   /**
-   * Parse AI response for test recommendations
+   * Read the test-recommendation reply (TEST_RECOMMENDATIONS_SCHEMA). Fails closed: an
+   * unusable reply is testAppropriate:false, confidence 0, analysisIncomplete.
    * @param {string} responseText - Raw AI response
    * @returns {object} - Parsed test recommendations
    */
   parseTestRecommendations(responseText) {
-    console.log('\n🔍 ==> PARSING AI TEST RECOMMENDATIONS <==');
-    console.log('Raw response length:', responseText.length);
-    
-    const defaultResult = {
+    const { ok, data, errors } = parseStructuredReply(responseText, TEST_RECOMMENDATIONS_SCHEMA);
+    if (ok) {
+      return {
+        testAppropriate: data.testAppropriate,
+        confidence: data.confidence,
+        reasoning: data.reasoning,
+        prerequisiteChain: data.prerequisiteChain,
+        recommendedTests: data.recommendedTests,
+        alternativeTests: data.alternativeTests,
+        contraindications: data.contraindications,
+        criticalPrerequisites: data.criticalPrerequisites,
+        emergencyModifications: data.emergencyModifications
+      };
+    }
+    // Raw model output is not logged: it can echo patient data.
+    console.error(`❌ Test recommendation AI reply rejected (${errors.slice(0, 3).join('; ')})`);
+    return {
       testAppropriate: false,
-      confidence: 0.5,
-      reasoning: 'Unable to parse AI response',
+      confidence: 0,
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      reasoning: 'The AI reply did not match the expected format. Manual review required.',
       prerequisiteChain: [],
       recommendedTests: [],
       alternativeTests: [],
@@ -417,62 +410,6 @@ Provide a comprehensive clinical assessment and diagnostic testing pathway for t
       criticalPrerequisites: [],
       emergencyModifications: null
     };
-    
-    try {
-      // Method 1: Try to parse entire response as JSON
-      try {
-        const parsed = JSON.parse(responseText);
-        if (parsed.testAppropriate !== undefined) {
-          console.log('✓ Direct JSON parse successful');
-          return {
-            testAppropriate: parsed.testAppropriate === true,
-            confidence: parseFloat(parsed.confidence) || 0.5,
-            reasoning: parsed.reasoning || 'No reasoning provided',
-            prerequisiteChain: Array.isArray(parsed.prerequisiteChain) ? parsed.prerequisiteChain : [],
-            recommendedTests: Array.isArray(parsed.recommendedTests) ? parsed.recommendedTests : [],
-            alternativeTests: Array.isArray(parsed.alternativeTests) ? parsed.alternativeTests : [],
-            contraindications: Array.isArray(parsed.contraindications) ? parsed.contraindications : [],
-            criticalPrerequisites: Array.isArray(parsed.criticalPrerequisites) ? parsed.criticalPrerequisites : [],
-            emergencyModifications: parsed.emergencyModifications || null
-          };
-        }
-      } catch (e) {
-        // Not direct JSON, try extraction
-      }
-      
-      // Method 2: Extract JSON from response text
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.testAppropriate !== undefined) {
-            console.log('✓ Extracted JSON parse successful');
-            return {
-              testAppropriate: parsed.testAppropriate === true,
-              confidence: parseFloat(parsed.confidence) || 0.5,
-              reasoning: parsed.reasoning || 'No reasoning provided',
-              prerequisiteChain: Array.isArray(parsed.prerequisiteChain) ? parsed.prerequisiteChain : [],
-              recommendedTests: Array.isArray(parsed.recommendedTests) ? parsed.recommendedTests : [],
-              alternativeTests: Array.isArray(parsed.alternativeTests) ? parsed.alternativeTests : [],
-              contraindications: Array.isArray(parsed.contraindications) ? parsed.contraindications : [],
-              criticalPrerequisites: Array.isArray(parsed.criticalPrerequisites) ? parsed.criticalPrerequisites : [],
-              emergencyModifications: parsed.emergencyModifications || null
-            };
-          }
-        } catch (e) {
-          console.log('⚠️ JSON extraction failed:', e.message);
-        }
-      }
-      
-      // If all parsing fails, return default with warning
-      console.error('❌ Unable to parse AI test recommendations');
-      console.error('Full response:', responseText);
-      return defaultResult;
-      
-    } catch (error) {
-      console.error('❌ Critical error in parseTestRecommendations:', error.message);
-      return defaultResult;
-    }
   }
 
   /**
@@ -491,7 +428,7 @@ Provide a comprehensive clinical assessment and diagnostic testing pathway for t
       const patient = fullFormData.patient || {};
       const age = this.calculateAge(patient.dob);
       
-      console.log(`👤 Patient: ${patient.fullName || 'Unknown'}, Age: ${age || 'Unknown'}, Gender: ${patient.gender || 'Unknown'}`);
+      console.log(`👤 Age: ${age ?? 'Unknown'}, Gender: ${patient.gender || 'Unknown'}`);
       console.log(`🏥 Diagnosis: ${service.diagnosis || 'N/A'}`);
       console.log(`📊 Requested: ${service.description || 'N/A'}`);
       console.log(`⚡ Emergency: ${service.emergencyCase ? 'YES' : 'NO'}, Urgency: ${service.urgency || 'Routine'}`);
@@ -503,13 +440,10 @@ Provide a comprehensive clinical assessment and diagnostic testing pathway for t
         temperature: 0.2,
         num_ctx: 10000,
         num_predict: 2500,
-        format: 'json'
+        format: TEST_RECOMMENDATIONS_SCHEMA
       });
       
-      console.log('📥 AI Response received');
-      console.log('─'.repeat(80));
-      console.log(aiResult.response);
-      console.log('─'.repeat(80));
+      console.log(`📥 AI Response received (${aiResult.response?.length || 0} chars)`);
       
       const recommendations = this.parseTestRecommendations(aiResult.response);
       
@@ -531,12 +465,13 @@ Provide a comprehensive clinical assessment and diagnostic testing pathway for t
       
     } catch (error) {
       console.error('❌ Error in getAIBasedTestRecommendations:', error.message);
-      console.error(error.stack);
       
-      // Return error result
+      // Return error result (fail closed and flagged)
       return {
         testAppropriate: false,
         confidence: 0,
+        aiUnavailable: true,
+        requiresManualReview: true,
         reasoning: `AI service error: ${error.message}`,
         prerequisiteChain: [],
         recommendedTests: [],
@@ -647,16 +582,13 @@ Provide a comprehensive clinical assessment and diagnostic testing pathway for t
         temperature: 0,
         num_ctx: 10000,
         num_predict: 500, // Increase to ensure complete response
-        format: 'json'
+        format: FIT_SCHEMA
       });
       
-      console.log('📥 AI Response received');
-      console.log('─'.repeat(80));
-      console.log(aiResult.response);
-      console.log('─'.repeat(80));
+      console.log(`📥 AI Response received (${aiResult.response?.length || 0} chars)`);
       
       // Parse AI response
-      const { fit, diagnoses } = this.parseAIResponse(aiResult.response);
+      const { fit, diagnoses, analysisIncomplete = false } = this.parseAIResponse(aiResult.response);
       console.log(`✓ AI Validation - Fit: ${fit}`);
       console.log(`✓ AI Diagnoses: ${JSON.stringify(diagnoses)}`);
       
@@ -730,6 +662,7 @@ Provide a comprehensive clinical assessment and diagnostic testing pathway for t
         success: true,
         fit,
         diagnoses,
+        ...(analysisIncomplete ? { analysisIncomplete: true, requiresManualReview: true } : {}),
         requiresPrerequisites: false,
         prerequisitesNeeded: null,
         metadata: {
@@ -768,11 +701,12 @@ Provide a comprehensive clinical assessment and diagnostic testing pathway for t
       
     } catch (error) {
       console.error('❌ Error in validateDiagnosisToScan:', error.message);
-      console.error(error.stack);
       
       const traditionalResult = {
         success: false,
         error: error.message,
+        aiUnavailable: true,
+        requiresManualReview: true,
         fit: false,
         diagnoses: ['Validation error occurred'],
         requiresPrerequisites: false,

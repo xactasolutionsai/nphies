@@ -5,12 +5,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import DataTable from '@/components/DataTable';
-import api, { extractErrorMessage } from '@/services/api';
+import api, { extractErrorMessage, clearApiCache } from '@/services/api';
 import { 
   FileText, Plus, Edit, Trash2, Eye, Send, RefreshCw, 
   XCircle, ArrowRightLeft, Clock, CheckCircle, AlertCircle,
   Filter, Search, Copy
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 // Auth type display helper
 const getAuthTypeDisplay = (authType) => {
@@ -37,6 +38,7 @@ const formatDate = (dateString) => {
 };
 
 export default function PriorAuthorizations() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [authorizations, setAuthorizations] = useState([]);
@@ -145,7 +147,7 @@ export default function PriorAuthorizations() {
   const handlePoll = async (id) => {
     try {
       setLoading(true);
-      const response = await api.pollNphiesAuthorizationResponse(id);
+      const response = await api.pollPriorAuthorizationResponse(id);
       await loadAuthorizations();
       alert(response.message || 'Polling complete');
     } catch (error) {
@@ -300,57 +302,65 @@ export default function PriorAuthorizations() {
             <Eye className="h-4 w-4" />
           </Button>
           {/* Duplicate button - available for all records */}
-          <Button
-            size="sm"
-            variant="outline"
-            title="Duplicate as new draft"
-            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDuplicate(row.id);
-            }}
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
+          {can('create') && (
+            <Button
+              size="sm"
+              variant="outline"
+              title="Duplicate as new draft"
+              className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDuplicate(row.id);
+              }}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          )}
           {(row.status === 'draft' || row.status === 'error') && (
             <>
-              <Button
-                size="sm"
-                variant="outline"
-                title="Edit"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/prior-authorizations/${row.id}/edit`);
-                }}
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                className="bg-blue-500 hover:bg-blue-600"
-                title="Send to NPHIES"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSendToNphies(row.id);
-                }}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                title="Delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(row.id);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {can('edit') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  title="Edit"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/prior-authorizations/${row.id}/edit`);
+                  }}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              )}
+              {can('send') && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="bg-blue-500 hover:bg-blue-600"
+                  title="Send to NPHIES"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSendToNphies(row.id);
+                  }}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              )}
+              {can('delete') && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  title="Delete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(row.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </>
           )}
-          {row.status === 'queued' && (
+          {row.status === 'queued' && can('poll') && (
             <Button
               size="sm"
               variant="outline"
@@ -407,17 +417,19 @@ export default function PriorAuthorizations() {
                   <span>Connected to NPHIES</span>
                 </div>
                 <div className="text-sm text-gray-500">
-                  Total: {stats.total} | Draft: {stats.draft} | Approved: {stats.approved}
+                  Total: {stats.total} | On this page: Draft {stats.draft}, Approved {stats.approved}
                 </div>
               </div>
             </div>
-            <Button 
-              onClick={() => navigate('/prior-authorizations/new')} 
-              className="bg-gradient-to-r from-primary-purple to-accent-purple"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              New Prior Authorization
-            </Button>
+            {can('create') && (
+              <Button 
+                onClick={() => navigate('/prior-authorizations/new')} 
+                className="bg-gradient-to-r from-primary-purple to-accent-purple"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                New Prior Authorization
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -439,7 +451,7 @@ export default function PriorAuthorizations() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600">Pending</p>
+                <p className="text-sm text-blue-600">Pending <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-blue-700">{stats.pending}</p>
               </div>
               <Clock className="h-8 w-8 text-blue-400" />
@@ -450,7 +462,7 @@ export default function PriorAuthorizations() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600">Approved</p>
+                <p className="text-sm text-green-600">Approved <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-green-700">{stats.approved}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-400" />
@@ -461,7 +473,7 @@ export default function PriorAuthorizations() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-red-600">Denied</p>
+                <p className="text-sm text-red-600">Denied <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-red-700">{stats.denied}</p>
               </div>
               <XCircle className="h-8 w-8 text-red-400" />
@@ -472,7 +484,7 @@ export default function PriorAuthorizations() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-yellow-600">Draft</p>
+                <p className="text-sm text-yellow-600">Draft <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-yellow-700">{stats.draft}</p>
               </div>
               <FileText className="h-8 w-8 text-yellow-400" />
@@ -559,7 +571,7 @@ export default function PriorAuthorizations() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Prior Authorization Requests</CardTitle>
-            <Button variant="outline" size="sm" onClick={loadAuthorizations} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={() => { clearApiCache(); loadAuthorizations(); }} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>

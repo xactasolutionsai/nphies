@@ -3,12 +3,20 @@ import { pathToFileURL } from 'node:url';
 import { authenticateToken } from './middleware/auth.js';
 import { getJwtSecret } from './config/auth.js';
 import openmedRoutes from './openmed/routes.js';
+import { closeRuntime as closeOpenmedRuntime, runtimeStatus as openmedRuntimeStatus } from './openmed/inference.js';
+import { evaluateAlerts as evaluateClinicalAlerts } from './openmed/alerts.js';
+import clinicalAiAccessRoutes from './routes/clinicalAiAccess.js';
+import clinicalKnowledgeRoutes from './routes/clinicalKnowledge.js';
+import clinicalPilotRoutes from './routes/clinicalPilot.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import { query } from './db.js';
+import { query, closePool } from './db.js';
 import { initializeQueryLoader } from './db/queryLoader.js';
+import { enforceRoles } from './middleware/requireRole.js';
+import { requirePublicRegistrationEnabled } from './middleware/publicRegistration.js';
+import { validateContactRequest } from './utils/contactValidation.js';
 
 // Import routes
 import patientsRoutes from './routes/patients.js';
@@ -40,7 +48,8 @@ import systemPollRoutes from './routes/systemPoll.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import contactsRoutes from './routes/contacts.js';
-import { startPollScheduler } from './scheduler/pollScheduler.js';
+import aiRoutes from './routes/ai/index.js';
+import { startPollScheduler, stopPollScheduler } from './scheduler/pollScheduler.js';
 
 // Load environment variables
 dotenv.config();
@@ -56,7 +65,6 @@ if (process.env.NODE_ENV === 'production') app.set('trust proxy', 'loopback');
 app.use(helmet());
 
 // CORS configuration (must be before rate limiting)
-// CORS configuration (FIXED)
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
   : [
@@ -74,10 +82,12 @@ app.use(cors({
       return callback(null, true);
     }
 
-    return callback(new Error(`CORS blocked: ${origin}`));
+    return callback(Object.assign(new Error('Origin not allowed by CORS policy'), { status: 403, code: 'CORS_ORIGIN_REJECTED' }));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  // Idempotency-Key: repeated OpenMed submissions return the first result (openmed/routes.js)
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+  exposedHeaders: ['Idempotent-Replay', 'Retry-After'],
   credentials: true
 }));
 
@@ -116,22 +126,33 @@ app.get('/health', async (req, res) => {
       database: 'connected'
     });
   } catch (error) {
+    // Public endpoint: log the cause, never return it.
+    console.error('Health check database error:', error.message);
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
-      database: 'disconnected',
-      error: error.message
+      database: 'disconnected'
     });
   }
 });
 
 // API routes
+// Self-registration is opt-in (ENABLE_PUBLIC_REGISTRATION=true).
+app.post('/api/auth/register', requirePublicRegistrationEnabled);
 app.use('/api/auth', authRoutes);
 // Auth and public contact submissions are registered before the protected API.
+app.post('/api/contacts', validateContactRequest);
 app.use('/api/contacts', contactsRoutes);
 app.use('/api', authenticateToken);
+// Roles (middleware/requireRole.js): viewer reads, reviewer also previews/validates, submitter
+// (and legacy 'user') creates and sends; deletes, system polls, code-cache refresh, raw NPHIES
+// relay and user administration need the admin role.
+app.use('/api', enforceRoles);
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 app.use('/api/openmed', openmedRoutes);
+app.use('/api/clinical-ai-access', clinicalAiAccessRoutes);
+app.use('/api/clinical-knowledge', clinicalKnowledgeRoutes);
+app.use('/api/clinical-pilot', clinicalPilotRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/patients', patientsRoutes);
 app.use('/api/providers', providersRoutes);
@@ -159,6 +180,7 @@ app.use('/api/payment-reconciliation', paymentReconciliationRoutes);
 app.use('/api/coverages', coveragesRoutes);
 app.use('/api/advanced-authorizations', advancedAuthorizationsRoutes);
 app.use('/api/system-poll', systemPollRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -193,6 +215,7 @@ app.get('/', (req, res) => {
       coverages: '/api/coverages',
       advancedAuthorizations: '/api/advanced-authorizations',
       contacts: '/api/contacts',
+      ai: '/api/ai',
       health: '/health'
     }
   });
@@ -222,6 +245,11 @@ app.use('*', (req, res) => {
 
 // Global error handler
 app.use((error, req, res, next) => {
+  if (error.code === 'CORS_ORIGIN_REJECTED') {
+    console.warn(`CORS origin rejected: ${req.headers.origin}`);
+    return res.status(403).json({ error: 'Forbidden', message: 'Origin not allowed' });
+  }
+
   console.error('Global error handler:', error);
   
   // Handle specific error types
@@ -253,29 +281,55 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
-
-// Start server
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) app.listen(PORT, HOST, async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`📚 API Documentation: http://localhost:${PORT}/`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  
-  // Initialize dynamic query loader
+// Start server (only when run directly, not when imported by tests)
+let alertTimer = null;
+async function start() {
+  // Load queries before accepting requests so the first dashboard call cannot race the loader.
   await initializeQueryLoader();
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    console.log(`📚 API Documentation: http://localhost:${PORT}/`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 
-  // Start optional scheduled polling (disabled by default)
-  startPollScheduler();
-});
+    // Start optional scheduled polling (disabled by default)
+    startPollScheduler();
+    // Optional clinical-assistant alert evaluation (aggregates only; stored, never sent out).
+    const alertMinutes = Number(process.env.CLINICAL_AI_ALERT_INTERVAL_MIN || 0);
+    if (alertMinutes > 0) {
+      alertTimer = setInterval(() => {
+        evaluateClinicalAlerts({ query, runtime: openmedRuntimeStatus() }).catch(e => console.error('[clinical-ai] alert evaluation failed:', e.message));
+      }, alertMinutes * 60000);
+      alertTimer.unref();
+    }
+  });
+
+  // Single graceful shutdown path: stop polling, stop accepting connections, then close the pool.
+  let shuttingDown = false;
+  const shutdown = signal => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} received, shutting down gracefully`);
+    stopPollScheduler();
+    clearInterval(alertTimer);
+    const force = setTimeout(() => process.exit(1), 10000);
+    force.unref();
+    server.close(async () => {
+      await closeOpenmedRuntime().catch(() => {});
+      await closePool();
+      process.exit(0);
+    });
+    server.closeIdleConnections?.();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  start().catch(error => {
+    console.error('Failed to start server:', error.message);
+    process.exit(1);
+  });
+}
 
 export default app;

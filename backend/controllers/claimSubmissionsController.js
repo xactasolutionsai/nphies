@@ -8,25 +8,13 @@ import { validationSchemas } from '../models/schema.js';
 import claimMapper, { getClaimMapper } from '../services/claimMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
 import claimCommunicationService from '../services/claimCommunicationService.js';
+import CommunicationMapper from '../services/communicationMapper.js';
 import shadowBillingService from '../services/shadowBillingService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
+import { randomUUID } from 'node:crypto';
+import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, storedItemType, safeJsonParse, subTypeFromEncounterClass, practitionerFromRecord } from './controllerHelpers.js';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
-
-function sanitizePharmacyDeviceFields(items, claimType) {
-  if (claimType !== 'pharmacy' || !Array.isArray(items)) return;
-  for (const item of items) {
-    if ((item.item_type || 'medication') === 'device') {
-      item.prescribed_medication_code = null;
-      item.pharmacist_selection_reason = null;
-      item.pharmacist_substitute = null;
-      item.days_supply = null;
-      item.medication_code = null;
-      item.medication_name = null;
-      item.medication_system = null;
-    }
-  }
-}
 
 class ClaimSubmissionsController extends BaseController {
   constructor() {
@@ -39,36 +27,14 @@ class ClaimSubmissionsController extends BaseController {
    * This ensures consistency between Prior Auth and Claims
    */
   getSubTypeFromEncounterClass(encounterClass, authType) {
-    // Map encounter class to claim subtype
-    const subTypes = {
-      'inpatient': 'ip',
-      'outpatient': 'op',
-      'daycase': 'ip',
-      'emergency': 'emr',
-      'ambulatory': 'op',
-      'home': 'op',
-      'telemedicine': 'op'
-    };
-    
-    // Default based on auth type if encounter class not found
-    const defaultByAuthType = {
-      'institutional': 'ip',
-      'professional': 'op',
-      'pharmacy': 'op',
-      'dental': 'op',
-      'vision': 'op'
-    };
-    
-    return subTypes[encounterClass] || defaultByAuthType[authType] || 'op';
+    return subTypeFromEncounterClass(encounterClass, authType);
   }
 
   async getCoverageData(patientId, insurerId, coverageId = null) {
     if (coverageId) return getSelectedCoverage(patientId, insurerId, coverageId);
     try {
       let coverageResult;
-      if (coverageId) {
-        coverageResult = await query(`SELECT pc.*, i.insurer_name, i.nphies_id as insurer_nphies_id FROM patient_coverage pc LEFT JOIN insurers i ON pc.insurer_id = i.insurer_id WHERE pc.coverage_id = $1`, [coverageId]);
-      } else if (patientId && insurerId) {
+      if (patientId && insurerId) {
         coverageResult = await query(`SELECT pc.*, i.insurer_name, i.nphies_id as insurer_nphies_id FROM patient_coverage pc LEFT JOIN insurers i ON pc.insurer_id = i.insurer_id WHERE pc.patient_id = $1 AND pc.insurer_id = $2 AND pc.is_active = true ORDER BY pc.created_at DESC LIMIT 1`, [patientId, insurerId]);
       }
       return coverageResult?.rows[0] || null;
@@ -272,7 +238,7 @@ class ClaimSubmissionsController extends BaseController {
       if (items?.length > 0) {
         sanitizePharmacyDeviceFields(items, cleanedData.claim_type);
         await shadowBillingService.processItems(items, cleanedData.claim_type, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(claimId, items);
+        await this.insertItems(claimId, items, cleanedData.claim_type);
       }
       if (supporting_info?.length > 0) await this.insertSupportingInfo(claimId, supporting_info);
       if (diagnoses?.length > 0) await this.insertDiagnoses(claimId, diagnoses);
@@ -293,6 +259,11 @@ class ClaimSubmissionsController extends BaseController {
       const { paId } = req.params;
       const { itemOverrides, priority, excludeReferences } = req.body || {}; // Optional service code overrides, priority, and reference stripping
 
+      // Lock the PA row (this method runs in a transaction) so concurrent requests
+      // cannot both pass the duplicate-claim check below.
+      const paLock = await query('SELECT id FROM prior_authorizations WHERE id = $1 FOR UPDATE', [paId]);
+      if (paLock.rows.length === 0) return res.status(404).json({ error: 'Prior authorization not found' });
+
       const paResult = await query(`
         SELECT pa.*, p.name as patient_name, pr.provider_name, i.insurer_name
         FROM prior_authorizations pa
@@ -305,7 +276,23 @@ class ClaimSubmissionsController extends BaseController {
       if (paResult.rows.length === 0) return res.status(404).json({ error: 'Prior authorization not found' });
 
       const pa = paResult.rows[0];
-      if (pa.status !== 'approved') return res.status(400).json({ error: 'Can only create claims from approved prior authorizations' });
+      if (!['approved', 'partial'].includes(pa.status)) {
+        return res.status(400).json({ error: 'Can only create claims from approved or partially approved prior authorizations' });
+      }
+
+      const existingClaims = await query(
+        `SELECT id, claim_number, status FROM claim_submissions
+         WHERE prior_auth_id = $1 AND status NOT IN ('cancelled', 'error')
+         ORDER BY created_at DESC LIMIT 1`,
+        [paId]
+      );
+      if (existingClaims.rows.length > 0) {
+        const existingClaim = existingClaims.rows[0];
+        return res.status(409).json({
+          error: `A claim (${existingClaim.claim_number}, status: ${existingClaim.status}) already exists for this prior authorization`,
+          existingClaimId: existingClaim.id
+        });
+      }
 
       const [paItemsResult, paDiagnosesResult, paSupportingInfoResult, paAttachmentsResult] = await Promise.all([
         query('SELECT * FROM prior_authorization_items WHERE prior_auth_id = $1 ORDER BY sequence ASC', [paId]),
@@ -333,14 +320,31 @@ class ClaimSubmissionsController extends BaseController {
         });
       }
       
-      // Attach details to PA items
-      const paItemsWithDetails = paItemsResult.rows.map(item => {
-        const itemObj = { ...item };
+      // Attach details to PA items; keep the original position for itemOverrides matching.
+      // Items the insurer denied are not billed on the claim.
+      const paItemsWithDetails = paItemsResult.rows.map((item, originalIndex) => {
+        const itemObj = { ...item, originalIndex };
         if (paItemDetailsMap[item.id]) {
           itemObj.details = paItemDetailsMap[item.id];
         }
         return itemObj;
-      });
+      }).filter(item => item.adjudication_status !== 'denied');
+
+      if (paItemsResult.rows.length > 0 && paItemsWithDetails.length === 0) {
+        return res.status(400).json({ error: 'All prior authorization items were denied; there is nothing to claim' });
+      }
+
+      // The claim total must equal the sum of the billed items.
+      const itemNet = item => {
+        const net = Number(item.net_amount);
+        if (item.net_amount != null && Number.isFinite(net)) return net;
+        const quantity = Number(item.quantity ?? 1);
+        const unitPrice = Number(item.unit_price ?? 0);
+        return Number.isFinite(quantity * unitPrice) ? quantity * unitPrice : 0;
+      };
+      const claimTotal = paItemsWithDetails.length > 0
+        ? Math.round(paItemsWithDetails.reduce((sum, item) => sum + itemNet(item), 0) * 100) / 100
+        : pa.total_amount;
 
       // For claims, service_date must be within encounter period (BV-00041)
       // Use encounter_start as the service date, or today if no encounter dates exist
@@ -368,10 +372,14 @@ class ClaimSubmissionsController extends BaseController {
         eligibility_offline_date: pa.eligibility_offline_date,
         eligibility_response_id: pa.eligibility_response_id || null,
         eligibility_response_system: pa.eligibility_response_system || null,
-        mother_patient_id: pa.mother_patient_id, // Copy mother_patient_id from prior auth for newborn claims
         practice_code: pa.practice_code,
+        // Treating practitioner of the authorization (migration 067)
+        practitioner_license: pa.practitioner_license || null,
+        practitioner_name: pa.practitioner_name || null,
+        practitioner_specialty_code: pa.practitioner_specialty_code || null,
+        practitioner_identifier_type: pa.practitioner_identifier_type || null,
         priority: priority || pa.priority || 'normal', // Use provided priority, fallback to PA priority, then 'normal'
-        total_amount: pa.approved_amount ?? pa.total_amount,
+        total_amount: claimTotal,
         currency: pa.currency,
         service_date: serviceDate,
         // Copy newborn extension fields from prior authorization
@@ -393,6 +401,8 @@ class ClaimSubmissionsController extends BaseController {
         triage_date: pa.triage_date || null,
         encounter_priority: pa.encounter_priority || null,
         emergency_department_disposition: pa.emergency_department_disposition || null,
+        // Institutional discharge disposition (migration 070, BV-00759)
+        discharge_disposition: pa.discharge_disposition || null,
         // Offline authorization fields (per NPHIES extension-authorization-offline-date)
         authorization_offline_date: pa.authorization_offline_date || null,
         authorization_offline_reference: pa.authorization_offline_reference || null
@@ -419,10 +429,12 @@ class ClaimSubmissionsController extends BaseController {
       if (paItemsWithDetails.length > 0) {
         // Apply service code overrides for professional claims if provided
         // Item servicedDate must be within encounter period (BV-00041)
-        const items = paItemsWithDetails.map((item, idx) => {
-          const override = itemOverrides?.find(o => o.sequence === idx + 1);
+        const items = paItemsWithDetails.map(({ originalIndex, ...item }, idx) => {
+          const override = Array.isArray(itemOverrides) ? itemOverrides.find(o => o.sequence === originalIndex + 1) : undefined;
           return {
             ...item,
+            // Renumber so DB sequences match the positional Claim.item.sequence the mapper sends
+            sequence: idx + 1,
             // Use item's original serviced_date, or encounter start, or today
             serviced_date: item.serviced_date || serviceDate,
             // For professional claims, override the service code and system if provided
@@ -439,7 +451,7 @@ class ClaimSubmissionsController extends BaseController {
         });
         sanitizePharmacyDeviceFields(items, pa.auth_type);
         await shadowBillingService.processItems(items, pa.auth_type, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(claimId, items);
+        await this.insertItems(claimId, items, pa.auth_type);
       }
 
       if (paDiagnosesResult.rows.length > 0) await this.insertDiagnoses(claimId, paDiagnosesResult.rows);
@@ -522,7 +534,7 @@ class ClaimSubmissionsController extends BaseController {
         const claimType = cleanedData.claim_type || existing.claim_type;
         sanitizePharmacyDeviceFields(items, claimType);
         await shadowBillingService.processItems(items, claimType, PROVIDER_SHADOW_DOMAIN);
-        await this.insertItems(id, items);
+        await this.insertItems(id, items, claimType);
       }
       if (supporting_info?.length > 0) await this.insertSupportingInfo(id, supporting_info);
       if (diagnoses?.length > 0) await this.insertDiagnoses(id, diagnoses);
@@ -552,8 +564,9 @@ class ClaimSubmissionsController extends BaseController {
   }
 
   async sendToNphies(req, res) {
+    const { id } = req.params;
+    let reservedPending = false;
     try {
-      const { id } = req.params;
       const claim = await this.getByIdInternal(id);
       if (!claim) return res.status(404).json({ error: 'Claim submission not found' });
       if (!['draft', 'error'].includes(claim.status)) return res.status(400).json({ error: 'Can only send claims with draft or error status' });
@@ -588,7 +601,7 @@ class ClaimSubmissionsController extends BaseController {
         }
       }
 
-      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, policyHolder: null, motherPatient });
+      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, practitioner: practitionerFromRecord(claim), policyHolder: null, motherPatient });
       const nphiesRequestId = `clm-req-${Date.now()}`;
 
       // Extract outbound MessageHeader.id for poll response correlation
@@ -598,27 +611,59 @@ class ClaimSubmissionsController extends BaseController {
 
       const reserved = await query(`UPDATE claim_submissions SET status = 'pending', nphies_request_id = $1, request_bundle = $2, outbound_message_header_id = $3, claim_number = $5, request_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $4 AND status IN ('draft', 'error') RETURNING id`, [nphiesRequestId, JSON.stringify(bundle), outboundMessageHeaderId, id, claim.claim_number]);
       if (reserved.rowCount !== 1) return res.status(409).json({ error: 'Claim is already being sent or its status changed' });
+      reservedPending = true;
 
       const nphiesResponse = await nphiesService.submitClaim(bundle);
 
       if (nphiesResponse.success) {
         const parsedResponse = claimMapper.parseClaimResponse(nphiesResponse.data);
-        const newStatus = parsedResponse.outcome === 'queued' ? 'queued' : 
-                         parsedResponse.adjudicationOutcome === 'approved' ? 'approved' :
-                         parsedResponse.adjudicationOutcome === 'rejected' ? 'denied' :
-                         parsedResponse.success ? 'approved' : 'denied';
+        // Validation errors -> 'error' (resendable); rejected -> 'denied'; partial/pended handled.
+        const newStatus = statusFromParsedResponse(parsedResponse);
+        // ClaimResponse identifier (the institutional parser reports it as nphiesResponseId).
+        const nphiesClaimId = parsedResponse.nphiesClaimId ?? parsedResponse.nphiesResponseId ?? null;
+        // The response message's own id, distinct from the ClaimResponse identifier.
+        const nphiesResponseMessageId = parsedResponse.messageHeaderId || nphiesResponse.data?.id || null;
+        const totalOf = category => parsedResponse.totals?.find(t => t.category === category)?.amount ?? null;
+        // claim_submissions.adjudication_outcome only accepts these values (check constraint).
+        const adjudicationOutcome = ['approved', 'rejected', 'partial', 'pended'].includes(parsedResponse.adjudicationOutcome)
+          ? parsedResponse.adjudicationOutcome : null;
 
         await query(`
           UPDATE claim_submissions SET status = $1, outcome = $2, disposition = $3, nphies_claim_id = $4, nphies_response_id = $5,
-            is_nphies_generated = $6, response_bundle = $7, response_date = CURRENT_TIMESTAMP, adjudication_outcome = $8, updated_at = CURRENT_TIMESTAMP
-          WHERE id = $9
-        `, [newStatus, parsedResponse.outcome, parsedResponse.disposition, parsedResponse.nphiesClaimId, parsedResponse.nphiesClaimId, parsedResponse.isNphiesGenerated || false, JSON.stringify(nphiesResponse.data), parsedResponse.adjudicationOutcome, id]);
+            is_nphies_generated = $6, response_bundle = $7, response_date = CURRENT_TIMESTAMP, adjudication_outcome = $8,
+            approved_amount = COALESCE($9, approved_amount), eligible_amount = COALESCE($10, eligible_amount),
+            benefit_amount = COALESCE($11, benefit_amount), copay_amount = COALESCE($12, copay_amount),
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = $13
+        `, [newStatus, parsedResponse.outcome, parsedResponse.disposition, nphiesClaimId, nphiesResponseMessageId, parsedResponse.isNphiesGenerated || false, JSON.stringify(nphiesResponse.data), adjudicationOutcome,
+          totalOf('benefit') ?? totalOf('eligible'), totalOf('eligible'), totalOf('benefit'), totalOf('copay'), id]);
 
         await query(`INSERT INTO claim_submission_responses (claim_id, response_type, outcome, disposition, nphies_claim_id, bundle_json, has_errors, errors, is_nphies_generated, nphies_response_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [id, 'initial', parsedResponse.outcome || 'complete', parsedResponse.disposition, parsedResponse.nphiesClaimId, JSON.stringify(nphiesResponse.data), !parsedResponse.success, parsedResponse.errors ? JSON.stringify(parsedResponse.errors) : null, parsedResponse.isNphiesGenerated || false, parsedResponse.nphiesClaimId]);
+          [id, 'initial', parsedResponse.outcome || 'complete', parsedResponse.disposition, nphiesClaimId, JSON.stringify(nphiesResponse.data), !parsedResponse.success, parsedResponse.errors ? JSON.stringify(parsedResponse.errors) : null, parsedResponse.isNphiesGenerated || false, nphiesResponseMessageId]);
+
+        // Item-level adjudication (needed to show which lines of a partial claim were paid)
+        const itemStatus = { approved: 'approved', rejected: 'denied', denied: 'denied', partial: 'partial', pended: 'pending', pending: 'pending', queued: 'pending' };
+        for (const itemResult of parsedResponse.itemResults || []) {
+          if (itemResult.itemSequence == null) continue;
+          await query(`
+            UPDATE claim_submission_items
+            SET adjudication_status = $1, adjudication_amount = $2, adjudication_eligible_amount = $3,
+                adjudication_copay_amount = $4, adjudication_approved_quantity = $5, adjudication_reason = $6
+            WHERE claim_id = $7 AND sequence = $8
+          `, [
+            itemStatus[itemResult.outcome?.toLowerCase()] || null,
+            itemResult.benefitAmount ?? itemResult.eligibleAmount ?? null,
+            itemResult.eligibleAmount ?? null,
+            itemResult.copayAmount ?? null,
+            itemResult.approvedQuantity ?? null,
+            itemResult.adjudication?.find(a => a.reason)?.reasonDisplay || itemResult.adjudication?.find(a => a.reason)?.reason || null,
+            id,
+            itemResult.itemSequence
+          ]);
+        }
 
         const updatedData = await this.getByIdInternal(id);
-        res.json({ success: true, data: updatedData, nphiesResponse: { ...parsedResponse, rawBundle: undefined } });
+        res.json({ success: true, data: updatedData, nphiesResponse: { ...parsedResponse, nphiesClaimId, rawBundle: undefined } });
       } else {
         await query(`UPDATE claim_submissions SET status = 'error', outcome = 'error', disposition = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, [nphiesResponse.error?.message || 'NPHIES request failed', id]);
         await query(`INSERT INTO claim_submission_responses (claim_id, response_type, outcome, bundle_json, has_errors, errors) VALUES ($1, $2, $3, $4, $5, $6)`, [id, 'initial', 'error', JSON.stringify(nphiesResponse.raw || {}), true, JSON.stringify([nphiesResponse.error])]);
@@ -626,6 +671,7 @@ class ClaimSubmissionsController extends BaseController {
       }
     } catch (error) {
       console.error('Error sending claim to NPHIES:', error);
+      if (reservedPending) await markSendFailed('claim_submissions', id, error);
       res.status(error.status || 500).json({ error: error.message || 'Failed to send claim' });
     }
   }
@@ -663,6 +709,7 @@ class ClaimSubmissionsController extends BaseController {
         provider: providerResult.rows[0], 
         insurer: insurerResult.rows[0], 
         coverage, 
+        practitioner: practitionerFromRecord(claim),
         policyHolder: null,
         motherPatient: motherPatient
       });
@@ -758,6 +805,7 @@ class ClaimSubmissionsController extends BaseController {
         provider, 
         insurer, 
         coverage, 
+        practitioner: practitionerFromRecord(formData),
         policyHolder: null, 
         motherPatient: motherPatient
       });
@@ -784,13 +832,14 @@ class ClaimSubmissionsController extends BaseController {
     return cleanedData;
   }
 
-  async insertItems(claimId, items) {
+  /** Insert items (claimType decides the stored item_type, see storedItemType). */
+  async insertItems(claimId, items, claimType) {
     for (const item of items) {
       const itemResult = await query(`
         INSERT INTO claim_submission_items (claim_id, sequence, product_or_service_code, product_or_service_system, product_or_service_display, tooth_number, tooth_surface, eye, medication_code, medication_system, days_supply, quantity, unit_price, factor, tax, patient_share, payer_share, net_amount, currency, serviced_date, serviced_period_start, serviced_period_end, body_site_code, body_site_system, sub_site_code, is_package, is_maternity, patient_invoice, description, notes, item_type, shadow_code, shadow_code_system, shadow_code_display, prescribed_medication_code, pharmacist_selection_reason, pharmacist_substitute)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
         RETURNING id
-      `, [claimId, item.sequence, item.product_or_service_code, item.product_or_service_system, item.product_or_service_display, item.tooth_number, item.tooth_surface, item.eye, item.medication_code, item.medication_system, item.days_supply, item.quantity, item.unit_price, item.factor || 1, item.tax || 0, item.patient_share || 0, item.payer_share, item.net_amount, item.currency || 'SAR', item.serviced_date, item.serviced_period_start, item.serviced_period_end, item.body_site_code, item.body_site_system, item.sub_site_code, item.is_package || false, item.is_maternity || false, item.patient_invoice, item.description, item.notes, item.item_type || 'medication', item.shadow_code || null, item.shadow_code_system || null, item.shadow_code_display || null, item.prescribed_medication_code || null, item.pharmacist_selection_reason || null, item.pharmacist_substitute || null]);
+      `, [claimId, item.sequence, item.product_or_service_code, item.product_or_service_system, item.product_or_service_display, item.tooth_number, item.tooth_surface, item.eye, item.medication_code, item.medication_system, item.days_supply, item.quantity, item.unit_price, item.factor || 1, item.tax || 0, item.patient_share || 0, item.payer_share, item.net_amount, item.currency || 'SAR', item.serviced_date, item.serviced_period_start, item.serviced_period_end, item.body_site_code, item.body_site_system, item.sub_site_code, item.is_package || false, item.is_maternity || false, item.patient_invoice, item.description, item.notes, storedItemType(item, claimType), item.shadow_code || null, item.shadow_code_system || null, item.shadow_code_display || null, item.prescribed_medication_code || null, item.pharmacist_selection_reason || null, item.pharmacist_substitute || null]);
       
       const itemId = itemResult.rows[0].id;
       
@@ -855,7 +904,7 @@ class ClaimSubmissionsController extends BaseController {
   async insertAttachments(claimId, attachments) {
     for (const att of attachments) {
       await query(`INSERT INTO claim_submission_attachments (claim_id, file_name, content_type, file_size, base64_content, title, description, category, binary_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [claimId, att.file_name, att.content_type, att.file_size, att.base64_content, att.title, att.description, att.category, att.binary_id || `binary-${Date.now()}`]);
+        [claimId, att.file_name, att.content_type, att.file_size, att.base64_content, att.title, att.description, att.category, att.binary_id || `binary-${Date.now()}-${randomUUID()}`]);
     }
   }
 
@@ -959,6 +1008,60 @@ class ClaimSubmissionsController extends BaseController {
         success: false,
         error: error.message || 'Failed to poll for messages'
       });
+    }
+  }
+
+  /**
+   * Preview the poll bundle for a claim (without sending)
+   * GET /claim-submissions/:id/poll/preview
+   * Mirrors the bundle claimCommunicationService.pollForMessages sends.
+   */
+  async previewPollBundle(req, res) {
+    try {
+      const { id } = req.params;
+      const claimResult = await query(`
+        SELECT cs.id, cs.claim_number, cs.nphies_claim_id, cs.nphies_request_id, cs.status,
+               pr.nphies_id AS provider_nphies_id, pr.provider_name
+        FROM claim_submissions cs
+        LEFT JOIN providers pr ON cs.provider_id = pr.provider_id
+        WHERE cs.id = $1
+      `, [id]);
+      if (claimResult.rows.length === 0) return res.status(404).json({ error: 'Claim submission not found' });
+
+      const claim = claimResult.rows[0];
+      const communicationMapper = new CommunicationMapper();
+      const providerName = claim.provider_name || 'Healthcare Provider';
+      const providerDomain = communicationMapper.extractProviderDomain(providerName);
+      const pollBundle = communicationMapper.buildPollRequestBundle(
+        claim.provider_nphies_id,
+        providerName,
+        undefined,
+        {
+          focus: {
+            type: 'Claim',
+            identifier: {
+              system: `http://${providerDomain}/identifiers/claim`,
+              value: claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id
+            }
+          }
+        }
+      );
+
+      res.json({
+        success: true,
+        bundle: pollBundle,
+        metadata: {
+          claimId: claim.id,
+          claimNumber: claim.claim_number,
+          nphiesRequestId: claim.nphies_request_id,
+          status: claim.status,
+          provider: { name: claim.provider_name, nphiesId: claim.provider_nphies_id },
+          messageTypes: ['claim-response', 'communication-request', 'communication']
+        }
+      });
+    } catch (error) {
+      console.error('[ClaimSubmissions] Poll preview error:', error);
+      res.status(error.status || 500).json({ success: false, error: 'Failed to generate poll bundle preview' });
     }
   }
 
@@ -1088,42 +1191,7 @@ class ClaimSubmissionsController extends BaseController {
    * Download an attachment from a CommunicationRequest payload
    */
   async downloadCommunicationRequestAttachment(req, res) {
-    try {
-      const { requestId, payloadIndex } = req.params;
-      const schemaName = req.schemaName || 'public';
-
-      await query(`SET search_path TO ${schemaName}`);
-      const result = await query(
-        'SELECT request_bundle FROM nphies_communication_requests WHERE id = $1',
-        [parseInt(requestId)]
-      );
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Communication request not found' });
-      }
-
-      const bundle = typeof result.rows[0].request_bundle === 'string'
-        ? JSON.parse(result.rows[0].request_bundle)
-        : result.rows[0].request_bundle;
-
-      const idx = parseInt(payloadIndex);
-      const payload = bundle?.payload?.[idx];
-      if (!payload?.contentAttachment?.data) {
-        return res.status(404).json({ error: 'Attachment not found at the specified payload index' });
-      }
-
-      const att = payload.contentAttachment;
-      const buffer = Buffer.from(att.data, 'base64');
-      const filename = att.title || `attachment_${idx}`;
-      const contentType = att.contentType || 'application/octet-stream';
-
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Length', buffer.length);
-      res.send(buffer);
-    } catch (error) {
-      console.error('Error downloading communication request attachment:', error);
-      res.status(error.status || 500).json({ error: error.message || 'Failed to download attachment' });
-    }
+    return sendCommunicationRequestAttachment(req, res, 'claim_id');
   }
 
   /**
@@ -1276,21 +1344,23 @@ class ClaimSubmissionsController extends BaseController {
   async cancel(req, res) {
     try {
       const { id } = req.params;
-      const { reason } = req.body;
-      const schemaName = req.schemaName || 'public';
+      const { reason } = req.body || {};
 
       console.log(`[ClaimSubmissions] Cancelling claim ${id} with reason: ${reason}`);
 
       // Get existing claim
-      const existing = await this.getByIdInternal(id, schemaName);
+      const existing = await this.getByIdInternal(id);
       if (!existing) {
         return res.status(404).json({ error: 'Claim submission not found' });
       }
 
-      // Must have claim identifier to cancel (nphies_claim_id or claim_number)
-      if (!existing.nphies_claim_id && !existing.claim_number) {
+      // A draft (or a claim whose request never reached NPHIES) has nothing to cancel.
+      const sentBundle = safeJsonParse(existing.request_bundle);
+      const sentClaim = sentBundle?.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource;
+      const sentIdentifier = sentClaim?.identifier?.[0];
+      if (existing.status === 'draft' || !existing.nphies_request_id || !sentIdentifier?.system || !sentIdentifier?.value) {
         return res.status(400).json({ 
-          error: 'Cannot cancel: no claim identifier exists' 
+          error: 'Cannot cancel: this claim has not been submitted to NPHIES' 
         });
       }
 
@@ -1319,11 +1389,11 @@ class ClaimSubmissionsController extends BaseController {
       const insurer = insurerResult.rows[0];
 
       // Build cancel request bundle using claim mapper (which extends BaseMapper)
-      // Adapt claim data to prior auth format for cancel bundle
-      // The identifier used should be nphies_claim_id if available, otherwise claim_number
+      // The Task.focus must be the provider-side Claim.identifier exactly as it was submitted
+      // (claim mapper: <provider system>/claim + claim_number), not the NPHIES ClaimResponse id.
       const claimForCancel = {
-        request_number: existing.nphies_claim_id || existing.claim_number,
-        nphies_request_id: existing.nphies_claim_id || existing.nphies_request_id,
+        request_number: sentIdentifier.value,
+        nphies_request_id: existing.nphies_request_id,
         pre_auth_ref: existing.pre_auth_ref,
         provider_id: existing.provider_id,
         insurer_id: existing.insurer_id
@@ -1332,13 +1402,17 @@ class ClaimSubmissionsController extends BaseController {
       // Get claim mapper and build cancel bundle
       const mapper = getClaimMapper(existing.claim_type);
       const cancelBundle = mapper.buildCancelRequestBundle(claimForCancel, provider, insurer, reason);
+      const cancelTask = cancelBundle?.entry?.find(e => e.resource?.resourceType === 'Task')?.resource;
+      if (!cancelTask?.focus) {
+        return res.status(500).json({ error: 'Failed to build cancel request' });
+      }
+      cancelTask.focus.identifier = { system: sentIdentifier.system, value: sentIdentifier.value };
 
       // Send to NPHIES using dedicated cancel method
       const nphiesResponse = await nphiesService.submitCancelRequest(cancelBundle);
 
       if (nphiesResponse.success) {
         // Update status
-        await query(`SET search_path TO ${schemaName}`);
         // Try to update cancellation_reason if column exists, otherwise just update status
         try {
           await query(`
@@ -1371,7 +1445,7 @@ class ClaimSubmissionsController extends BaseController {
           VALUES ($1, $2, $3, $4, NOW())
         `, [id, 'cancel', dbOutcome, JSON.stringify(nphiesResponse.data)]);
 
-        const updatedData = await this.getByIdInternal(id, schemaName);
+        const updatedData = await this.getByIdInternal(id);
 
         res.json({
           success: true,
@@ -1383,7 +1457,6 @@ class ClaimSubmissionsController extends BaseController {
         });
       } else {
         // Store failed response for debugging
-        await query(`SET search_path TO ${schemaName}`);
         await query(`
           INSERT INTO claim_submission_responses 
           (claim_id, response_type, outcome, bundle_json, has_errors, errors, received_at)

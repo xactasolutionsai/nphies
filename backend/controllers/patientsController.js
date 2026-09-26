@@ -11,8 +11,9 @@ class PatientsController extends BaseController {
   // Get all patients with optional search
   async getAll(req, res) {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      // Pickers load the whole list in one page, so the cap is high but bounded.
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 10), 1000);
       const offset = (page - 1) * limit;
       const search = req.query.search || '';
       const identifier = req.query.identifier || '';
@@ -47,7 +48,7 @@ class PatientsController extends BaseController {
       // Get paginated data
       const limitOffsetIndex = whereClause ? '$2 OFFSET $3' : '$1 OFFSET $2';
       const dataQuery = queries.PATIENTS.GET_ALL + whereClause + 
-        ` ORDER BY birth_date DESC LIMIT ${limitOffsetIndex}`;
+        ` ORDER BY name ASC, patient_id ASC LIMIT ${limitOffsetIndex}`;
       const result = await query(dataQuery, queryParams);
 
       res.json({

@@ -11,8 +11,9 @@ WHERE pr.payment_issuer_id IS NULL
     -- Match by identifier value in the paymentIssuer
     i.nphies_id = pr.request_bundle->'entry'->1->'resource'->'paymentIssuer'->'identifier'->>'value'
     OR
-    -- Match by display name
-    i.insurer_name ILIKE '%' || (pr.request_bundle->'entry'->1->'resource'->'paymentIssuer'->>'display') || '%'
+    -- Match by display name (a blank display would become ILIKE '%%' and match every insurer)
+    NULLIF(TRIM(pr.request_bundle->'entry'->1->'resource'->'paymentIssuer'->>'display'), '') IS NOT NULL
+    AND i.insurer_name ILIKE '%' || TRIM(pr.request_bundle->'entry'->1->'resource'->'paymentIssuer'->>'display') || '%'
   );
 
 -- Update requestor_id based on the identifier stored in the request_bundle
@@ -25,8 +26,9 @@ WHERE pr.requestor_id IS NULL
     -- Match by identifier value in the requestor
     p.nphies_id = pr.request_bundle->'entry'->1->'resource'->'requestor'->'identifier'->>'value'
     OR
-    -- Match by display name
-    p.provider_name ILIKE '%' || (pr.request_bundle->'entry'->1->'resource'->'requestor'->>'display') || '%'
+    -- Match by display name (a blank display would become ILIKE '%%' and match every provider)
+    NULLIF(TRIM(pr.request_bundle->'entry'->1->'resource'->'requestor'->>'display'), '') IS NOT NULL
+    AND p.provider_name ILIKE '%' || TRIM(pr.request_bundle->'entry'->1->'resource'->'requestor'->>'display') || '%'
   );
 
 -- Also try to link by the claim's insurer/provider (for simulated payments)

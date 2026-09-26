@@ -10,7 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { query } from '../db.js';
+import { query, transaction } from '../db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -119,61 +119,62 @@ async function importMedicationCodes() {
       console.log(`  ${i + 1}. ${med.code} - ${med.display || 'No name'}`);
     });
     
-    // Clear existing data
-    console.log('\n🗑️  Clearing existing medication codes...');
-    await query('TRUNCATE TABLE medication_codes RESTART IDENTITY CASCADE');
-    
-    // Batch insert
+    // Clear and reload in one transaction: a failed batch rolls back the TRUNCATE
+    // instead of leaving the table empty.
     const batchSize = 100;
     let inserted = 0;
+    await transaction(async () => {
+      console.log('\n🗑️  Clearing existing medication codes...');
+      await query('TRUNCATE TABLE medication_codes RESTART IDENTITY CASCADE');
     
-    console.log(`\n📥 Inserting ${medications.length} medications in batches of ${batchSize}...`);
+      console.log(`\n📥 Inserting ${medications.length} medications in batches of ${batchSize}...`);
     
-    for (let i = 0; i < medications.length; i += batchSize) {
-      const batch = medications.slice(i, i + batchSize);
+      for (let i = 0; i < medications.length; i += batchSize) {
+        const batch = medications.slice(i, i + batchSize);
       
-      const values = batch.map(med => `(
-        ${escapeSql(med.code)},
-        ${escapeSql(med.display)},
-        ${escapeSql(med.strength)},
-        ${escapeSql(med.generic_name)},
-        ${escapeSql(med.route_of_administration)},
-        ${escapeSql(med.dosage_form)},
-        ${escapeSql(med.package_size)},
-        ${escapeSql(med.unit_type)},
-        ${escapeSql(med.price)},
-        ${escapeSql(med.ingredients)},
-        ${escapeSql(med.atc_code)},
-        ${escapeSql(med.is_controlled)},
-        ${escapeSql(med.reg_owner)}
-      )`).join(',\n');
+        const values = batch.map(med => `(
+          ${escapeSql(med.code)},
+          ${escapeSql(med.display)},
+          ${escapeSql(med.strength)},
+          ${escapeSql(med.generic_name)},
+          ${escapeSql(med.route_of_administration)},
+          ${escapeSql(med.dosage_form)},
+          ${escapeSql(med.package_size)},
+          ${escapeSql(med.unit_type)},
+          ${escapeSql(med.price)},
+          ${escapeSql(med.ingredients)},
+          ${escapeSql(med.atc_code)},
+          ${escapeSql(med.is_controlled)},
+          ${escapeSql(med.reg_owner)}
+        )`).join(',\n');
       
-      await query(`
-        INSERT INTO medication_codes (
-          code, display, strength, generic_name, route_of_administration,
-          dosage_form, package_size, unit_type, price, ingredients,
-          atc_code, is_controlled, reg_owner
-        ) VALUES ${values}
-        ON CONFLICT (code) DO UPDATE SET
-          display = EXCLUDED.display,
-          strength = EXCLUDED.strength,
-          generic_name = EXCLUDED.generic_name,
-          route_of_administration = EXCLUDED.route_of_administration,
-          dosage_form = EXCLUDED.dosage_form,
-          package_size = EXCLUDED.package_size,
-          unit_type = EXCLUDED.unit_type,
-          price = EXCLUDED.price,
-          ingredients = EXCLUDED.ingredients,
-          atc_code = EXCLUDED.atc_code,
-          is_controlled = EXCLUDED.is_controlled,
-          reg_owner = EXCLUDED.reg_owner,
-          updated_at = NOW()
-      `);
+        await query(`
+          INSERT INTO medication_codes (
+            code, display, strength, generic_name, route_of_administration,
+            dosage_form, package_size, unit_type, price, ingredients,
+            atc_code, is_controlled, reg_owner
+          ) VALUES ${values}
+          ON CONFLICT (code) DO UPDATE SET
+            display = EXCLUDED.display,
+            strength = EXCLUDED.strength,
+            generic_name = EXCLUDED.generic_name,
+            route_of_administration = EXCLUDED.route_of_administration,
+            dosage_form = EXCLUDED.dosage_form,
+            package_size = EXCLUDED.package_size,
+            unit_type = EXCLUDED.unit_type,
+            price = EXCLUDED.price,
+            ingredients = EXCLUDED.ingredients,
+            atc_code = EXCLUDED.atc_code,
+            is_controlled = EXCLUDED.is_controlled,
+            reg_owner = EXCLUDED.reg_owner,
+            updated_at = NOW()
+        `);
       
-      inserted += batch.length;
-      const progress = Math.round((inserted / medications.length) * 100);
-      process.stdout.write(`\r   Progress: ${inserted}/${medications.length} (${progress}%)`);
-    }
+        inserted += batch.length;
+        const progress = Math.round((inserted / medications.length) * 100);
+        process.stdout.write(`\r   Progress: ${inserted}/${medications.length} (${progress}%)`);
+      }
+    });
     
     console.log('\n');
     

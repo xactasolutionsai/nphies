@@ -8,7 +8,10 @@ import { formatSaudiDateTime } from '../../utils/dateTime.js';
 
 import { randomUUID } from 'crypto';
 import nphiesMapper from '../nphiesMapper.js';
-import { NPHIES_CONFIG } from '../../config/nphies.js';
+import {
+  claimIdentifierSystem, providerIdentifierSystem, requireProviderLicense, requireInsurerLicense,
+  formatSaudiDate, mappingError, ICD10_SYSTEM, debugBundlesEnabled
+} from './nphiesIdentity.js';
 
 class BaseMapper {
   constructor() {
@@ -24,26 +27,9 @@ class BaseMapper {
    * Handles timezone properly to avoid date shifting
    */
   formatDate(date) {
-    if (!date) return null;
-    
-    // If it's already a string in YYYY-MM-DD format or ISO format, extract date part
-    if (typeof date === 'string') {
-      // Handle ISO strings like "2023-12-03T21:00:00.000Z" - extract date part directly
-      if (date.includes('T')) {
-        return date.split('T')[0];
-      }
-      // Already in YYYY-MM-DD format
-      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        return date;
-      }
-    }
-    
-    // For Date objects, use local date to avoid UTC conversion
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    // Plain YYYY-MM-DD passes through; instants are converted to the Riyadh calendar date
+    // (slicing "2023-12-03T21:00:00Z" would give 12-03, but it is 12-04 in Saudi Arabia).
+    return formatSaudiDate(date);
   }
 
   /**
@@ -238,7 +224,7 @@ class BaseMapper {
     const systems = {
       'chief-complaint': 'http://snomed.info/sct',
       'investigation-result': 'http://nphies.sa/terminology/CodeSystem/investigation-result',
-      'onset': 'http://hl7.org/fhir/sid/icd-10-am', // BV-00428: Onset requires ICD-10 code for symptoms/illness
+      'onset': ICD10_SYSTEM, // BV-00428: Onset requires ICD-10 code for symptoms/illness
       'hospitalized': 'http://snomed.info/sct'
     };
     return systems[category] || 'http://nphies.sa/terminology/CodeSystem/supporting-info-code';
@@ -614,6 +600,67 @@ class BaseMapper {
   }
 
   // ============================================
+  // IDENTIFIER HELPERS
+  // ============================================
+
+  /** Claim.use sent by this mapper; claim mappers override with 'claim'. */
+  getClaimUse() {
+    return 'preauthorization';
+  }
+
+  /** Base identifier system for provider-owned identifiers (shared with communications). */
+  getProviderIdentifierSystem(provider) {
+    return providerIdentifierSystem(provider);
+  }
+
+  /**
+   * System of the submitted Claim.identifier. Cancel and status-check Task.focus and
+   * Communication.about must use exactly this value.
+   */
+  getClaimIdentifierSystem(provider, use = this.getClaimUse()) {
+    return claimIdentifierSystem(provider, use);
+  }
+
+  // ============================================
+  // SUPPORTING INFO SEQUENCING
+  // ============================================
+
+  /**
+   * Remember each caller-supplied supportingInfo entry's own sequence (or position) before
+   * mappers add, remove or reorder entries, so item.information_sequences can be remapped.
+   */
+  tagCallerSupportingInfo(supportingInfo) {
+    return (supportingInfo || []).map((info, idx) => ({
+      ...info,
+      _callerSequence: info.sequence ?? idx + 1
+    }));
+  }
+
+  /** Map of caller sequence -> final sequence for a numbered supportingInfo list. */
+  buildInformationSequenceMap(finalEntries) {
+    const map = new Map();
+    finalEntries.forEach(({ info, sequence }) => {
+      const callerSequence = Number(info?._callerSequence);
+      if (Number.isFinite(callerSequence) && !map.has(callerSequence)) map.set(callerSequence, sequence);
+    });
+    return map;
+  }
+
+  /**
+   * Resolve an item's informationSequence. Caller sequences are translated to the renumbered
+   * supportingInfo; references to entries that were dropped are removed.
+   */
+  resolveInformationSequences(item, supportingInfoSequences, sequenceMap) {
+    const requested = item?.information_sequences;
+    if (!Array.isArray(requested) || requested.length === 0) {
+      return supportingInfoSequences?.length ? supportingInfoSequences : undefined;
+    }
+    if (!sequenceMap) return requested;
+    const mapped = [...new Set(requested.map(seq => sequenceMap.get(Number(seq))).filter(seq => seq !== undefined))];
+    return mapped.length ? mapped : undefined;
+  }
+
+  // ============================================
   // RESOURCE BUILDERS - Common resources shared across all auth types
   // ============================================
 
@@ -634,12 +681,20 @@ class BaseMapper {
     const providerResource = nphiesMapper.buildProviderOrganization(provider);
     providerResource.resource.id = providerId;
     providerResource.fullUrl = `http://provider.com/Organization/${providerId}`;
-    
-    if (provider.nphies_id && providerResource.resource.identifier?.[0]) {
-      providerResource.resource.identifier[0].value = provider.nphies_id;
-    }
-    
     return providerResource;
+  }
+
+  /**
+   * Build the facility Location (Claim.facility must reference a Location, not an Organization).
+   * Returns null when the provider has no location license; callers then omit Claim.facility.
+   */
+  buildFacilityLocationWithId(provider, locationId, providerId) {
+    const locationResource = nphiesMapper.buildLocationResource(provider);
+    if (!locationResource) return null;
+    locationResource.resource.id = locationId;
+    locationResource.fullUrl = `http://provider.com/Location/${locationId}`;
+    locationResource.resource.managingOrganization = { reference: `Organization/${providerId}` };
+    return locationResource;
   }
 
   /**
@@ -673,9 +728,17 @@ class BaseMapper {
     const subscriberPatientId = (motherPatient && motherPatientId) ? motherPatientId : patientId;
     const beneficiaryPatientId = patientId; // Always the newborn/primary patient
     const relationshipCode = (motherPatient && motherPatientId) ? 'child' : (coverage?.relationship || 'self');
-    const policyHolderPatientId = (motherPatient && motherPatientId && !policyHolder) 
-      ? motherPatientId 
-      : (policyHolder?.id || patientId);
+    // policyHolder is either an Organization (employer) or the subscribing Patient
+    const policyHolderReference = policyHolder?.id
+      ? `Organization/${policyHolder.id}`
+      : `Patient/${(motherPatient && motherPatientId) ? motherPatientId : patientId}`;
+    const memberId = coverage?.member_id || coverage?.memberId;
+    if (!memberId) {
+      throw mappingError('Coverage member ID (coverage.member_id) is required');
+    }
+    const isActive = coverage?.is_active ?? coverage?.isActive ?? true;
+    const planValue = coverage?.plan_id || coverage?.class_value || coverage?.plan_value;
+    const planName = coverage?.plan_name || coverage?.class_name;
 
     const coverageResource = {
       resourceType: 'Coverage',
@@ -686,10 +749,10 @@ class BaseMapper {
       identifier: [
         {
           system: 'http://payer.com/memberid',
-          value: coverage?.member_id || patient.identifier || `MEM-${Date.now()}`
+          value: String(memberId)
         }
       ],
-      status: 'active',
+      status: isActive === false ? 'cancelled' : 'active',
       type: {
         coding: [
           {
@@ -700,7 +763,7 @@ class BaseMapper {
         ]
       },
       policyHolder: {
-        reference: `Patient/${policyHolderPatientId}`
+        reference: policyHolderReference
       },
       subscriber: {
         reference: `Patient/${subscriberPatientId}`
@@ -721,8 +784,12 @@ class BaseMapper {
         {
           reference: `Organization/${insurerId}`
         }
-      ],
-      class: [
+      ]
+    };
+
+    // Plan class only when the plan is known (no 'default-plan' placeholder)
+    if (planValue || planName) {
+      coverageResource.class = [
         {
           type: {
             coding: [
@@ -732,11 +799,11 @@ class BaseMapper {
               }
             ]
           },
-          value: coverage?.plan_id || coverage?.class_value || 'default-plan',
-          name: coverage?.plan_name || coverage?.class_name || 'Insurance Plan'
+          value: String(planValue || planName),
+          ...(planName && { name: planName })
         }
-      ]
-    };
+      ];
+    }
 
     if (coverage?.period_start || coverage?.start_date) {
       coverageResource.period = {
@@ -766,6 +833,12 @@ class BaseMapper {
    */
   buildPractitionerResourceWithId(practitioner, practitionerId) {
     const pract = practitioner || {};
+    const license = pract.license_number || pract.nphies_id;
+    if (!license) {
+      throw mappingError('Practitioner license (practitioner.license_number) is required for the care team');
+    }
+    const specialtyCode = pract.specialty_code || pract.practice_code;
+    const name = pract.name || pract.full_name;
 
     return {
       fullUrl: `http://provider.com/Practitioner/${practitionerId}`,
@@ -787,32 +860,36 @@ class BaseMapper {
               ]
             },
             system: 'http://nphies.sa/license/practitioner-license',
-            value: pract.license_number || pract.nphies_id || `PRACT-${practitionerId.substring(0, 8)}`
+            value: String(license)
           }
         ],
         active: true,
-        name: [
-          {
-            use: 'official',
-            text: pract.name || pract.full_name || 'Healthcare Provider',
-            family: pract.family_name || (pract.name ? pract.name.split(' ').pop() : 'Provider'),
-            given: pract.given_name ? [pract.given_name] : 
-                   (pract.name ? [pract.name.split(' ')[0]] : ['Healthcare'])
-          }
-        ],
-        qualification: [
-          {
-            code: {
-              coding: [
-                {
-                  system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
-                  code: pract.specialty_code || pract.practice_code || '08.00',
-                  display: pract.specialty_display || 'Healthcare Professional'
-                }
-              ]
+        // Only the practitioner's real name and specialty; no placeholder values
+        ...((name || pract.family_name) && {
+          name: [
+            {
+              use: 'official',
+              ...(name && { text: name }),
+              family: pract.family_name || name.split(' ').pop(),
+              given: pract.given_name ? [pract.given_name] : [(name || pract.family_name).split(' ')[0]]
             }
-          }
-        ]
+          ]
+        }),
+        ...(specialtyCode && {
+          qualification: [
+            {
+              code: {
+                coding: [
+                  {
+                    system: 'http://nphies.sa/terminology/CodeSystem/practice-codes',
+                    code: specialtyCode,
+                    display: pract.specialty_display || this.getPracticeCodeDisplay(specialtyCode)
+                  }
+                ]
+              }
+            }
+          ]
+        })
       }
     };
   }
@@ -822,8 +899,8 @@ class BaseMapper {
    */
   buildMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+    const senderNphiesId = requireProviderLicense(provider);
+    const destinationNphiesId = requireInsurerLicense(insurer);
 
     return {
       fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -962,10 +1039,8 @@ class BaseMapper {
           }]
         };
       } else {
-        // Fallback: chief-complaint requires code, provide default text
-        supportingInfo.code = {
-          text: 'Chief complaint'
-        };
+        // BV-00531 requires a code; never invent a complaint
+        throw mappingError('chief-complaint supporting info requires a code or free text (code, code_text or value_string)');
       }
     } else if (info.code) {
       const codeableConcept = {
@@ -1142,7 +1217,28 @@ class BaseMapper {
   /**
    * Build a base claim item - override in child classes for specific handling
    */
-  buildClaimItem(item, authType, itemIndex, supportingInfoSequences = [], encounterPeriod = null) {
+  /**
+   * Item servicedDate (YYYY-MM-DD, Saudi calendar), kept within the encounter period (BV-00041).
+   * Comparison is by Saudi calendar date, so the result does not depend on the host timezone
+   * or on the time of day the bundle is built.
+   */
+  resolveServicedDate(servicedDate, encounterPeriod) {
+    let date = formatSaudiDate(servicedDate || encounterPeriod?.start || new Date());
+    const start = formatSaudiDate(encounterPeriod?.start);
+    const end = formatSaudiDate(encounterPeriod?.end);
+    if (start && date < start) date = start;
+    if (end && date > end) date = end;
+    return date;
+  }
+
+  /** Parsed payer share, or null when not provided (null, '', undefined or not a number). */
+  parsePayerShare(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  buildClaimItem(item, authType, itemIndex, supportingInfoSequences = [], encounterPeriod = null, sequenceMap = null) {
     const sequence = item.sequence || itemIndex;
     
     const quantity = parseFloat(item.quantity || 1);
@@ -1169,13 +1265,17 @@ class BaseMapper {
       }
     });
 
-    itemExtensions.push({
-      url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share',
-      valueMoney: {
-        value: item.payer_share !== undefined ? parseFloat(item.payer_share) : (calculatedNet - patientShare),
-        currency: item.currency || 'SAR'
-      }
-    });
+    // Only a real payer share; null/empty from the database would otherwise serialize as NaN/null
+    const payerShare = this.parsePayerShare(item.payer_share);
+    if (payerShare !== null) {
+      itemExtensions.push({
+        url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-payer-share',
+        valueMoney: {
+          value: payerShare,
+          currency: item.currency || 'SAR'
+        }
+      });
+    }
 
     itemExtensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-maternity',
@@ -1196,7 +1296,7 @@ class BaseMapper {
       sequence: sequence,
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
-      informationSequence: item.information_sequences || supportingInfoSequences,
+      informationSequence: this.resolveInformationSequences(item, supportingInfoSequences, sequenceMap),
       productOrService: {
         coding: (() => {
           const codings = [{
@@ -1214,56 +1314,7 @@ class BaseMapper {
       }
     };
 
-    // Determine serviced date
-    let servicedDate;
-    if (item.serviced_date) {
-      servicedDate = new Date(item.serviced_date);
-    } else if (encounterPeriod?.start) {
-      servicedDate = new Date(encounterPeriod.start);
-    } else {
-      servicedDate = new Date();
-    }
-    
-    // Validate servicedDate is within encounter period (with time validation)
-    // If serviced_date is date-only, default to current time
-    if (encounterPeriod?.start) {
-      const periodStart = new Date(encounterPeriod.start);
-      
-      // If servicedDate doesn't have a time component (is at midnight or was date-only),
-      // default to current time while keeping the date part
-      const isMidnight = servicedDate.getHours() === 0 && 
-                        servicedDate.getMinutes() === 0 && 
-                        servicedDate.getSeconds() === 0;
-      
-      // Check if original serviced_date was a date-only string (no time component)
-      const originalServicedDateStr = typeof item.serviced_date === 'string' 
-        ? item.serviced_date 
-        : (item.serviced_date instanceof Date ? item.serviced_date.toISOString() : String(item.serviced_date || ''));
-      const hasTimeInOriginal = originalServicedDateStr.includes('T') || originalServicedDateStr.match(/\d{2}:\d{2}/);
-      
-      if (isMidnight && item.serviced_date && !hasTimeInOriginal) {
-        // Date-only was provided, use current time with the same date
-        const now = new Date();
-        const datePart = servicedDate.toISOString().split('T')[0];
-        const timePart = now.toTimeString().split(' ')[0]; // Get HH:mm:ss
-        servicedDate = new Date(`${datePart}T${timePart}`);
-      }
-      
-      // Validate: serviced_date should be >= encounter_start (with time)
-      if (servicedDate < periodStart) {
-        servicedDate = periodStart; // Auto-correct to encounter start
-      }
-      
-      // Check if servicedDate is after encounter end (if end date exists)
-      if (encounterPeriod.end) {
-        const periodEnd = new Date(encounterPeriod.end);
-        if (servicedDate > periodEnd) {
-          servicedDate = periodEnd; // Auto-correct to encounter end
-        }
-      }
-    }
-    
-    claimItem.servicedDate = this.formatDate(servicedDate);
+    claimItem.servicedDate = this.resolveServicedDate(item.serviced_date, encounterPeriod);
 
     claimItem.quantity = { value: quantity };
 
@@ -1358,11 +1409,6 @@ class BaseMapper {
                tag.code === 'nphies-generated'
       );
 
-      // Debug: Log OperationOutcome if present
-      console.log('[BaseMapper] OperationOutcome found:', !!operationOutcome);
-      if (operationOutcome) {
-        console.log('[BaseMapper] OperationOutcome issues:', JSON.stringify(operationOutcome.issue, null, 2));
-      }
 
       // Handle OperationOutcome errors
       if (operationOutcome) {
@@ -1378,12 +1424,6 @@ class BaseMapper {
         }
       }
 
-      // Debug logging for parsing
-      console.log('[BaseMapper] ===== Parsing NPHIES Response =====');
-      console.log('[BaseMapper] Response bundle type:', responseBundle?.resourceType);
-      console.log('[BaseMapper] Response bundle has entries:', !!responseBundle?.entry, 'count:', responseBundle?.entry?.length);
-      console.log('[BaseMapper] ClaimResponse found:', !!claimResponse);
-
       if (!claimResponse) {
         console.log('[BaseMapper] ERROR: No ClaimResponse in bundle');
         return {
@@ -1394,38 +1434,20 @@ class BaseMapper {
         };
       }
 
-      // Debug ClaimResponse structure
-      console.log('[BaseMapper] ClaimResponse.id:', claimResponse.id);
-      console.log('[BaseMapper] ClaimResponse.outcome:', claimResponse.outcome);
-      console.log('[BaseMapper] ClaimResponse has extension:', !!claimResponse.extension, 'count:', claimResponse.extension?.length);
-      
-      // If outcome is error, log the error details from ClaimResponse
-      if (claimResponse.outcome === 'error' && claimResponse.error) {
-        console.log('[BaseMapper] ClaimResponse.error:', JSON.stringify(claimResponse.error, null, 2));
-      }
-      // Check for processNote which might contain error details
-      if (claimResponse.processNote) {
-        console.log('[BaseMapper] ClaimResponse.processNote:', JSON.stringify(claimResponse.processNote, null, 2));
-      }
-      
-      // Log all extensions for debugging
-      if (claimResponse.extension) {
-        claimResponse.extension.forEach((ext, idx) => {
-          console.log(`[BaseMapper] Extension[${idx}] URL:`, ext.url);
-          console.log(`[BaseMapper] Extension[${idx}] valueCodeableConcept:`, JSON.stringify(ext.valueCodeableConcept));
-        });
+      // Ids and codes only; full ClaimResponse content (extensions, patient data) only in debug mode
+      if (debugBundlesEnabled()) {
+        console.log('[BaseMapper] ClaimResponse:', JSON.stringify(claimResponse));
       }
 
       // Find the adjudication outcome extension
       const adjudicationExt = claimResponse.extension?.find(
         ext => ext.url?.includes('extension-adjudication-outcome')
       );
-      console.log('[BaseMapper] Found adjudication extension:', !!adjudicationExt);
-      console.log('[BaseMapper] Adjudication extension full value:', JSON.stringify(adjudicationExt));
-
       const adjudicationOutcome = adjudicationExt?.valueCodeableConcept?.coding?.[0]?.code;
-      console.log('[BaseMapper] Extracted adjudicationOutcome:', adjudicationOutcome);
-      console.log('[BaseMapper] =====================================');
+      console.log('[BaseMapper] Parsed ClaimResponse:', JSON.stringify({
+        id: claimResponse.id, outcome: claimResponse.outcome, adjudicationOutcome,
+        errorCount: claimResponse.error?.length || 0
+      }));
 
       const preAuthRef = claimResponse.preAuthRef;
       const preAuthPeriod = claimResponse.preAuthPeriod;
@@ -1747,12 +1769,14 @@ class BaseMapper {
     const providerId = bundleResourceIds.provider;
     const insurerId = bundleResourceIds.insurer;
     
-    // Provider identifier system for the cancel task
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com/identifiers`;
+    // Same derivation as the submitted Claim.identifier (".com.sa/identifiers/<authorization|claim>")
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
+    // The record may carry the exact system of the submitted Claim.identifier (e.g. read back
+    // from ClaimResponse.request.identifier); otherwise derive it the same way the Claim did.
+    const focusIdentifierSystem = priorAuth.focus_identifier_system || this.getClaimIdentifierSystem(provider);
     
-    // Generate unique cancel task identifier
-    const cancelTaskIdentifier = `Cancel_${priorAuth.request_number || priorAuth.id?.substring(0, 8) || Date.now()}`;
+    // Unique per attempt: re-trying a cancel must not reuse the previous Task identifier
+    const cancelTaskIdentifier = `Cancel_${priorAuth.request_number || priorAuth.id || 'request'}_${taskId}`;
     
     // Get current date in YYYY-MM-DD format for authoredOn and lastModified
     const currentDate = this.formatDate(new Date());
@@ -1789,7 +1813,7 @@ class BaseMapper {
       focus: {
         type: 'Claim',
         identifier: {
-          system: `${providerIdentifierSystem}/authorization`,
+          system: focusIdentifierSystem,
           value: priorAuth.request_number || priorAuth.nphies_request_id || priorAuth.pre_auth_ref
         }
       },
@@ -1875,12 +1899,12 @@ class BaseMapper {
         },
         destination: [
           {
-            endpoint: `http://nphies.sa/license/payer-license/${insurer.nphies_id || 'INS-FHIR'}`,
+            endpoint: `http://nphies.sa/license/payer-license/${requireInsurerLicense(insurer)}`,
             receiver: {
               type: 'Organization',
               identifier: {
                 system: 'http://nphies.sa/license/payer-license',
-                value: insurer.nphies_id || 'INS-FHIR'
+                value: requireInsurerLicense(insurer)
               }
             }
           }
@@ -1889,11 +1913,12 @@ class BaseMapper {
           type: 'Organization',
           identifier: {
             system: 'http://nphies.sa/license/provider-license',
-            value: provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID
+            value: requireProviderLicense(provider)
           }
         },
+        // Same source endpoint as every other provider message
         source: {
-          endpoint: `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com`
+          endpoint: 'http://provider.com'
         },
         focus: [
           {

@@ -62,6 +62,7 @@ export default function InlineValidationWarning({ warning, onDismiss }) {
           </div>
           {onDismiss && (
             <button
+              type="button"
               onClick={handleDismiss}
               className="ml-2 opacity-60 hover:opacity-100 transition-opacity"
               aria-label="Dismiss warning"

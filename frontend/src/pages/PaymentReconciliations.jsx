@@ -36,57 +36,87 @@ export default function PaymentReconciliations() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  useEffect(() => {
-    loadData();
-  }, [pagination.page, statusFilter, startDate, endDate]);
+  // Bumped by Apply Filters / Reset so the list reloads once with the committed filter state
+  const [reloadToken, setReloadToken] = useState(0);
 
-  const loadData = async () => {
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  useEffect(() => {
+    loadList({
+      page: pagination.page,
+      search: searchTerm,
+      status: statusFilter,
+      startDate,
+      endDate
+    });
+  }, [pagination.page, statusFilter, startDate, endDate, reloadToken]);
+
+  const EMPTY_STATS = {
+    summary: {
+      total_reconciliations: 0,
+      total_payment_amount: 0,
+      active_count: 0,
+      processed_count: 0,
+      total_nphies_fees: 0,
+      total_early_fees: 0
+    },
+    monthlyTrends: [],
+    byInsurer: []
+  };
+
+  // Loads the list with explicit params (never reads possibly-stale state)
+  const loadList = async ({ page, search, status, startDate: from, endDate: to }) => {
     try {
       setLoading(true);
-      
-      // Load reconciliations using proper API method
-      const reconciliationsResponse = await api.getPaymentReconciliations({
-        page: pagination.page,
-        limit: pagination.limit,
-        search: searchTerm,
-        status: statusFilter,
-        startDate,
-        endDate
-      });
-      
+      const params = { page, limit: pagination.limit };
+      if (search) params.search = search;
+      if (status) params.status = status;
+      if (from) params.startDate = from;
+      if (to) params.endDate = to;
+      const reconciliationsResponse = await api.getPaymentReconciliations(params);
       setReconciliations(reconciliationsResponse.data || []);
       if (reconciliationsResponse.pagination) {
         setPagination(prev => ({ ...prev, ...reconciliationsResponse.pagination }));
       }
-      
-      // Load stats using proper API method
-      const statsResponse = await api.getPaymentReconciliationStats();
-      setStats(statsResponse.data || null);
-      
     } catch (error) {
       console.error('Error loading payment reconciliations:', error);
-      // Set mock data for demonstration
       setReconciliations([]);
-      setStats({
-        summary: {
-          total_reconciliations: 0,
-          total_payment_amount: 0,
-          active_count: 0,
-          processed_count: 0,
-          total_nphies_fees: 0,
-          total_early_fees: 0
-        },
-        monthlyTrends: [],
-        byInsurer: []
-      });
     } finally {
       setLoading(false);
     }
   };
 
+  // Stats are independent of the list: a stats failure must not empty the table
+  const loadStats = async () => {
+    try {
+      const statsResponse = await api.getPaymentReconciliationStats();
+      const data = statsResponse.data || null;
+      if (data && Array.isArray(data.monthlyTrends)) {
+        data.monthlyTrends = data.monthlyTrends
+          .map(t => ({ ...t, amount: Number(t.amount) || 0, count: Number(t.count) || 0 }))
+          .sort((a, b) => new Date(a.month) - new Date(b.month));
+      }
+      setStats(data);
+    } catch (error) {
+      console.error('Error loading payment reconciliation stats:', error);
+      setStats(EMPTY_STATS);
+    }
+  };
+
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
-    loadData();
+    setReloadToken(t => t + 1);
+  };
+
+  const handleReset = () => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setStartDate('');
+    setEndDate('');
+    setPagination(prev => ({ ...prev, page: 1 }));
+    setReloadToken(t => t + 1);
   };
 
   const handleRowClick = (reconciliation) => {
@@ -364,8 +394,8 @@ export default function PaymentReconciliations() {
                           borderRadius: '8px'
                         }}
                         formatter={(value, name) => [
-                          name === 'amount' ? formatCurrency(value) : value,
-                          name === 'amount' ? 'Amount' : 'Count'
+                          (name === 'amount' || name === 'Payment Amount') ? formatCurrency(value) : value,
+                          (name === 'amount' || name === 'Payment Amount') ? 'Amount' : 'Count'
                         ]}
                       />
                       <Legend />
@@ -509,14 +539,7 @@ export default function PaymentReconciliations() {
               Apply Filters
             </Button>
             
-            <Button variant="outline" onClick={() => {
-              setSearchTerm('');
-              setStatusFilter('');
-              setStartDate('');
-              setEndDate('');
-              setPagination(prev => ({ ...prev, page: 1 }));
-              loadData();
-            }}>
+            <Button variant="outline" onClick={handleReset}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Reset
             </Button>

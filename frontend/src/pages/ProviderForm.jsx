@@ -143,11 +143,12 @@ export default function ProviderForm() {
         contact_person: formData.contact_person
       };
       
-      // Remove empty strings and null values for optional fields (keep provider_name as required)
+      // Send cleared optional fields as null so an edit can actually clear them
+      // (the update endpoint only changes the keys it receives)
       Object.keys(submitData).forEach(key => {
-        if (key !== 'provider_name' && (submitData[key] === '' || submitData[key] === null || submitData[key] === undefined)) {
-          delete submitData[key];
-        }
+        if (key === 'provider_name') return;
+        const value = typeof submitData[key] === 'string' ? submitData[key].trim() : submitData[key];
+        submitData[key] = value === '' || value === undefined ? null : value;
       });
 
       if (isEditMode) {

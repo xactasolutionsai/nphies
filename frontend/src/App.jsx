@@ -6,6 +6,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import OpenMedAdvisory from './pages/OpenMedAdvisory';
+import ClinicalKnowledgeAdmin from './pages/ClinicalKnowledgeAdmin';
+import ClinicalPilotAdmin from './pages/ClinicalPilotAdmin';
 import Patients from './pages/Patients';
 import PatientDetails from './pages/PatientDetails';
 import PatientForm from './pages/PatientForm';
@@ -54,6 +56,7 @@ import PaymentReconciliationDetails from './pages/PaymentReconciliationDetails';
 import Users from './pages/Users';
 import Contacts from './pages/Contacts';
 import SystemPoll from './pages/SystemPoll';
+import AIInsights from './pages/ai/AIInsights';
 import ChatAssistant from './components/chat/ChatAssistant';
 
 // Protected Route Component
@@ -81,6 +84,20 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+// Blocks create/edit screens for roles that cannot persist changes (viewer, reviewer).
+function RequirePermission({ action, children }) {
+  const { can, user } = useAuth();
+  if (can(action)) return children;
+  return (
+    <div className="max-w-xl mx-auto mt-12 bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+      <p className="font-semibold text-amber-900">You do not have permission for this action</p>
+      <p className="text-sm text-amber-800 mt-2">
+        Your role ({user?.role || 'unknown'}) has read-only access to this area. Ask an administrator if you need to {action} records.
+      </p>
+    </div>
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -97,55 +114,57 @@ function AppRoutes() {
               <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/openmed" element={<OpenMedAdvisory />} />
+          <Route path="/clinical-knowledge" element={<ClinicalKnowledgeAdmin />} />
+          <Route path="/clinical-pilot" element={<ClinicalPilotAdmin />} />
           <Route path="/patients" element={<Patients />} />
-          <Route path="/patients/new" element={<PatientForm />} />
-          <Route path="/patients/:id/edit" element={<PatientForm />} />
+          <Route path="/patients/new" element={<RequirePermission action="create"><PatientForm /></RequirePermission>} />
+          <Route path="/patients/:id/edit" element={<RequirePermission action="edit"><PatientForm /></RequirePermission>} />
           <Route path="/patients/:id" element={<PatientDetails />} />
           <Route path="/providers" element={<Providers />} />
-          <Route path="/providers/new" element={<ProviderForm />} />
-          <Route path="/providers/:id/edit" element={<ProviderForm />} />
+          <Route path="/providers/new" element={<RequirePermission action="create"><ProviderForm /></RequirePermission>} />
+          <Route path="/providers/:id/edit" element={<RequirePermission action="edit"><ProviderForm /></RequirePermission>} />
           <Route path="/providers/:id" element={<ProviderDetails />} />
           <Route path="/insurers" element={<Insurers />} />
-          <Route path="/insurers/new" element={<InsurerForm />} />
-          <Route path="/insurers/:id/edit" element={<InsurerForm />} />
+          <Route path="/insurers/new" element={<RequirePermission action="create"><InsurerForm /></RequirePermission>} />
+          <Route path="/insurers/:id/edit" element={<RequirePermission action="edit"><InsurerForm /></RequirePermission>} />
           <Route path="/insurers/:id" element={<InsurerDetails />} />
           <Route path="/users" element={<Users />} />
           <Route path="/contacts" element={<Contacts />} />
           <Route path="/authorizations" element={<Authorizations />} />
           <Route path="/eligibility" element={<Eligibility />} />
           <Route path="/nphies-eligibility" element={<NphiesEligibilityList />} />
-          <Route path="/nphies-eligibility/new" element={<NphiesEligibilityForm />} />
+          <Route path="/nphies-eligibility/new" element={<RequirePermission action="create"><NphiesEligibilityForm /></RequirePermission>} />
           <Route path="/nphies-eligibility/:id" element={<NphiesEligibilityDetails />} />
           <Route path="/claims" element={<Claims />} />
           <Route path="/claim-batches" element={<ClaimBatches />} />
-          <Route path="/claim-batches/create" element={<CreateBatchClaim />} />
+          <Route path="/claim-batches/create" element={<RequirePermission action="create"><CreateBatchClaim /></RequirePermission>} />
           <Route path="/claim-batches/:id" element={<BatchClaimDetails />} />
           <Route path="/claim-batches/:id/preview" element={<BatchBundlePreview />} />
           <Route path="/payments" element={<Payments />} />
           <Route path="/response-viewer" element={<ResponseViewer />} />
           <Route path="/general-requests" element={<GeneralRequests />} />
-          <Route path="/general-requests/new" element={<GeneralForm />} />
+          <Route path="/general-requests/new" element={<RequirePermission action="create"><GeneralForm /></RequirePermission>} />
           <Route path="/general-requests/:id" element={<GeneralRequestDetails />} />
-          <Route path="/general-requests/:id/edit" element={<GeneralForm />} />
+          <Route path="/general-requests/:id/edit" element={<RequirePermission action="edit"><GeneralForm /></RequirePermission>} />
           <Route path="/dental-form" element={<DentalForm />} />
           <Route path="/eyesight-form" element={<EyesightForm />} />
           <Route path="/standard-approvals" element={<StandardApprovals />} />
-          <Route path="/standard-approvals/new" element={<StandardApprovalsForm />} />
-          <Route path="/standard-approvals/:id/edit" element={<StandardApprovalsForm />} />
+          <Route path="/standard-approvals/new" element={<RequirePermission action="create"><StandardApprovalsForm /></RequirePermission>} />
+          <Route path="/standard-approvals/:id/edit" element={<RequirePermission action="edit"><StandardApprovalsForm /></RequirePermission>} />
           <Route path="/standard-approvals/:id" element={<StandardApprovalsDetails />} />
           <Route path="/dental-approvals" element={<DentalApprovals />} />
-          <Route path="/dental-approvals/new" element={<DentalApprovalsForm />} />
-          <Route path="/dental-approvals/:id/edit" element={<DentalApprovalsForm />} />
+          <Route path="/dental-approvals/new" element={<RequirePermission action="create"><DentalApprovalsForm /></RequirePermission>} />
+          <Route path="/dental-approvals/:id/edit" element={<RequirePermission action="edit"><DentalApprovalsForm /></RequirePermission>} />
           <Route path="/dental-approvals/:id" element={<DentalApprovalsDetails />} />
           <Route path="/eye-approvals" element={<EyeApprovals />} />
-          <Route path="/eye-approvals/new" element={<EyeApprovalsForm />} />
-          <Route path="/eye-approvals/:id/edit" element={<EyeApprovalsForm />} />
+          <Route path="/eye-approvals/new" element={<RequirePermission action="create"><EyeApprovalsForm /></RequirePermission>} />
+          <Route path="/eye-approvals/:id/edit" element={<RequirePermission action="edit"><EyeApprovalsForm /></RequirePermission>} />
           <Route path="/eye-approvals/:id" element={<EyeApprovalsDetails />} />
           <Route path="/medicines" element={<MedicineSearch />} />
           <Route path="/prior-authorizations" element={<PriorAuthorizations />} />
-          <Route path="/prior-authorizations/new" element={<PriorAuthorizationForm />} />
+          <Route path="/prior-authorizations/new" element={<RequirePermission action="create"><PriorAuthorizationForm /></RequirePermission>} />
           <Route path="/prior-authorizations/:id" element={<PriorAuthorizationDetails />} />
-          <Route path="/prior-authorizations/:id/edit" element={<PriorAuthorizationForm />} />
+          <Route path="/prior-authorizations/:id/edit" element={<RequirePermission action="edit"><PriorAuthorizationForm /></RequirePermission>} />
           <Route path="/advanced-authorizations" element={<AdvancedAuthorizations />} />
           <Route path="/advanced-authorizations/:id" element={<AdvancedAuthorizationDetails />} />
           <Route path="/claim-submissions" element={<ClaimSubmissionsList />} />
@@ -153,6 +172,7 @@ function AppRoutes() {
           <Route path="/payment-reconciliations" element={<PaymentReconciliations />} />
                 <Route path="/payment-reconciliations/:id" element={<PaymentReconciliationDetails />} />
                 <Route path="/system-poll" element={<SystemPoll />} />
+                <Route path="/ai/insights" element={<AIInsights />} />
               </Routes>
             </Layout>
             <ChatAssistant />

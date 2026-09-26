@@ -10,6 +10,8 @@ import {
   ShieldCheck, ShieldAlert, ShieldX, Clock, CheckCircle,
   AlertCircle, XCircle, FileJson
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { formatDisplayDate, formatDisplayDateTime } from '@/utils/date';
 
 // Auth reason display helper
 const getAuthReasonDisplay = (reason) => {
@@ -51,17 +53,12 @@ const getOutcomeBadge = (outcome, adjudicationOutcome) => {
 };
 
 // Format date helper
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleDateString();
-};
-
-const formatDateTime = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleString();
-};
+// Date-only values (DATE columns) are shown without a time (utils/date.js)
+const formatDate = formatDisplayDate;
+const formatDateTime = formatDisplayDateTime;
 
 export default function AdvancedAuthorizations() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [authorizations, setAuthorizations] = useState([]);
@@ -324,7 +321,7 @@ export default function AdvancedAuthorizations() {
             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
               <ShieldAlert className="h-12 w-12 mb-3 text-gray-300" />
               <p className="text-lg font-medium">No Advanced Authorizations Found</p>
-              <p className="text-sm mt-1">Click "Poll for New" to check for incoming authorizations from payers.</p>
+              <p className="text-sm mt-1">Use "System Poll" to check for incoming authorizations from payers.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -402,15 +399,17 @@ export default function AdvancedAuthorizations() {
                           >
                             <Download className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(auth.id)}
-                            title="Delete"
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {can('delete') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(auth.id)}
+                              title="Delete"
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -2,6 +2,22 @@
 
 A comprehensive Node.js script that generates realistic fake data for the Nafes Healthcare Management System with NPHIES compliance.
 
+## ⚠️ Destructive: explicit opt-in required
+
+The seed scripts (`seed.js`, `seed-fixed.js`, `seed-corrected.js`) TRUNCATE patients, providers,
+insurers and every table referencing them. They refuse to run unless
+`ALLOW_DESTRUCTIVE_SEED=true` is set (in `.env` or the shell), and never run with
+`NODE_ENV=production` (see `scripts/seedGuard.js`). Only use them on a disposable database.
+
+```cmd
+REM Windows (cmd)
+set ALLOW_DESTRUCTIVE_SEED=true
+```
+```bash
+# Linux / macOS
+ALLOW_DESTRUCTIVE_SEED=true npm run seed
+```
+
 ## 🚀 Quick Start
 
 ### **Windows Users**

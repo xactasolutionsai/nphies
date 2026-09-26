@@ -25,6 +25,7 @@
 
 import BaseMapper from './BaseMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import { cloneInput, mappingError, roundMoney } from './nphiesIdentity.js';
 
 class DentalMapper extends BaseMapper {
   constructor() {
@@ -81,7 +82,10 @@ class DentalMapper extends BaseMapper {
    * Build complete Prior Authorization Request Bundle for Dental type
    */
   buildPriorAuthRequestBundle(data) {
-    const { priorAuth, patient, provider, insurer, coverage, policyHolder, practitioner, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    // Deep copy: chief-complaint normalisation must never mutate the caller's record
+    const priorAuth = cloneInput(data.priorAuth);
+    const practitioner = data.practitioner || priorAuth.practitioner;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -116,20 +120,13 @@ class DentalMapper extends BaseMapper {
       bundleResourceIds.motherPatient
     );
     const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: '22.00' }, // Dental specialty
+      practitioner,
       bundleResourceIds.practitioner
     );
     const encounterResource = this.buildEncounterResourceWithId(priorAuth, patient, provider, bundleResourceIds);
     const claimResource = this.buildClaimResource(priorAuth, patient, provider, insurer, coverage, encounterResource?.resource, practitioner, bundleResourceIds);
     
     const messageHeader = this.buildMessageHeader(provider, insurer, claimResource.fullUrl);
-
-    const binaryResources = [];
-    if (priorAuth.attachments && priorAuth.attachments.length > 0) {
-      priorAuth.attachments.forEach(attachment => {
-        binaryResources.push(this.buildBinaryResource(attachment));
-      });
-    }
 
     const entries = [
       messageHeader,
@@ -140,8 +137,7 @@ class DentalMapper extends BaseMapper {
       providerResource,
       insurerResource,
       newbornPatientResource, // Patient resource (named newbornPatientResource for consistency with other mappers)
-      ...(motherPatientResource ? [motherPatientResource] : []), // Mother patient if present (for newborn cases)
-      ...binaryResources
+      ...(motherPatientResource ? [motherPatientResource] : []) // Mother patient if present (for newborn cases)
     ];
 
     return {
@@ -168,8 +164,7 @@ class DentalMapper extends BaseMapper {
     const encounterRef = bundleResourceIds.encounter;
     const practitionerRef = bundleResourceIds.practitioner;
 
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build extensions
     const extensions = [];
@@ -280,7 +275,7 @@ class DentalMapper extends BaseMapper {
 
     claim.identifier = [
       {
-        system: `${providerIdentifierSystem}/authorization`,
+        system: this.getClaimIdentifierSystem(provider),
         value: priorAuth.request_number || `req_${Date.now()}`
       }
     ];
@@ -390,30 +385,23 @@ class DentalMapper extends BaseMapper {
 
     // SupportingInfo with REQUIRED chief-complaint
     let supportingInfoSequences = [];
-    let supportingInfoList = [...(priorAuth.supporting_info || [])];
+    // Tagged copies: the caller's supporting_info objects are never modified
+    let supportingInfoList = this.tagCallerSupportingInfo(priorAuth.supporting_info);
     
     // chief-complaint is REQUIRED for dental
     // BV-00531: For dental/oral claims, chief-complaint MUST use code.text format (free text)
     // NOT code.coding format - this is different from institutional/professional claims
     const existingChiefComplaint = supportingInfoList.find(info => info.category === 'chief-complaint');
-    if (existingChiefComplaint) {
-      // Convert any SNOMED code format to free text format for dental
-      // Also check value_string as fallback (DB round-trip: code_text saved as value_string)
-      if (existingChiefComplaint.code && !existingChiefComplaint.code_text) {
-        existingChiefComplaint.code_text = existingChiefComplaint.value_string || existingChiefComplaint.code_display || existingChiefComplaint.code || 'Dental complaint';
-        delete existingChiefComplaint.code;
-        delete existingChiefComplaint.code_system;
-        delete existingChiefComplaint.code_display;
-        delete existingChiefComplaint.value_string;
-      }
-    } else {
-      // Add chief complaint if not present
+    if (!existingChiefComplaint) {
+      // Add chief complaint if not present; never a default complaint
       const clinicalInfo = priorAuth.clinical_info || {};
       // For dental, always use free text format (code.text)
       const chiefComplaintText = clinicalInfo.chief_complaint_text || 
                                   clinicalInfo.chief_complaint_display || 
-                                  priorAuth.chief_complaint_display ||
-                                  'Periodic oral examination';
+                                  priorAuth.chief_complaint_display;
+      if (!chiefComplaintText) {
+        throw mappingError('Dental request requires a chief complaint (supporting_info category chief-complaint or chief_complaint_display)');
+      }
       supportingInfoList.unshift({
         category: 'chief-complaint',
         code_text: chiefComplaintText
@@ -437,9 +425,26 @@ class DentalMapper extends BaseMapper {
       }
     }
     
-    if (supportingInfoList.length > 0) {
-      claim.supportingInfo = supportingInfoList.map((info, idx) => {
-        const seq = idx + 1;
+    // Attachments are embedded as supportingInfo valueAttachment (as in the other mappers)
+    // rather than as Binary entries that nothing in the bundle references
+    (priorAuth.attachments || []).forEach(attachment => {
+      if (attachment && attachment.base64_content && attachment.content_type) {
+        supportingInfoList.push({
+          category: 'attachment',
+          value_attachment: {
+            contentType: attachment.content_type,
+            data: attachment.base64_content,
+            title: attachment.file_name || attachment.title || 'Attachment',
+            creation: attachment.uploaded_at ? this.formatDate(attachment.uploaded_at) : this.formatDate(new Date())
+          }
+        });
+      }
+    });
+
+    const numberedSupportingInfo = supportingInfoList.map((info, idx) => ({ info, sequence: idx + 1 }));
+    const informationSequenceMap = this.buildInformationSequenceMap(numberedSupportingInfo);
+    if (numberedSupportingInfo.length > 0) {
+      claim.supportingInfo = numberedSupportingInfo.map(({ info, sequence: seq }) => {
         supportingInfoSequences.push(seq);
         
         // BV-00531: For dental claims, chief-complaint MUST use code.text format
@@ -449,8 +454,10 @@ class DentalMapper extends BaseMapper {
           const chiefComplaintText = info.code_text || 
                                       info.value_string || 
                                       info.code_display || 
-                                      info.code || 
-                                      'Dental complaint';
+                                      info.code;
+          if (!chiefComplaintText) {
+            throw mappingError('Dental chief-complaint supporting info requires text (code_text or value_string)');
+          }
           
           const convertedInfo = {
             sequence: seq,
@@ -486,7 +493,7 @@ class DentalMapper extends BaseMapper {
     
     if (priorAuth.items && priorAuth.items.length > 0) {
       claim.item = priorAuth.items.map((item, idx) => 
-        this.buildDentalClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod)
+        this.buildDentalClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, informationSequenceMap)
       );
     }
 
@@ -502,7 +509,7 @@ class DentalMapper extends BaseMapper {
       }, 0);
     }
     claim.total = {
-      value: parseFloat(totalAmount || 0),
+      value: roundMoney(totalAmount),
       currency: priorAuth.currency || 'SAR'
     };
 
@@ -515,8 +522,8 @@ class DentalMapper extends BaseMapper {
   /**
    * Build claim item for Dental with FDI tooth numbers and surfaces
    */
-  buildDentalClaimItem(item, itemIndex, supportingInfoSequences, encounterPeriod) {
-    const claimItem = this.buildClaimItem(item, 'dental', itemIndex, supportingInfoSequences, encounterPeriod);
+  buildDentalClaimItem(item, itemIndex, supportingInfoSequences, encounterPeriod, informationSequenceMap = null) {
+    const claimItem = this.buildClaimItem(item, 'dental', itemIndex, supportingInfoSequences, encounterPeriod, informationSequenceMap);
     
     // Override productOrService to use oral-health-op system with shadow billing support
     claimItem.productOrService = {

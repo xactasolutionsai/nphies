@@ -9,6 +9,7 @@ import ValidationMessage from '../shared/ValidationMessage';
 import RequiredFieldIndicator from '../shared/RequiredFieldIndicator';
 import { GENDER_OPTIONS, MARITAL_STATUS_OPTIONS, PLAN_TYPE_OPTIONS } from '../config/wizardConfig';
 import api from '@/services/api';
+import { toLocalISODate, parseLocalISODate, toDateInputValue } from '@/utils/date';
 
 /**
  * PatientInfoStep Component
@@ -43,13 +44,13 @@ const PatientInfoStep = React.memo(({ formData, setField, errors }) => {
   // Parse date helper
   const parseDate = useCallback((dateString) => {
     if (!dateString) return null;
-    return new Date(dateString);
+    return parseLocalISODate(dateString);
   }, []);
   
   // Format date for API
   const formatDate = useCallback((date) => {
     if (!date) return '';
-    return date.toISOString().split('T')[0];
+    return toLocalISODate(date);
   }, []);
   
   // Fetch patient data from backend
@@ -100,13 +101,13 @@ const PatientInfoStep = React.memo(({ formData, setField, errors }) => {
       
       // Map fields with fallbacks
       setField('patient.fullName', patient.name || patient.full_name || patient.fullName || '');
-      const dob = patient.birthdate || patient.dob || '';
+      const dob = toDateInputValue(patient.birth_date || patient.birthdate || patient.dob);
       setField('patient.dob', dob);
       // Auto-calculate age from DOB
       if (dob) {
         setField('patient.age', calculateAge(dob));
       }
-      setField('patient.gender', (patient.gender || '').toLowerCase() || 'male');
+      if (patient.gender) setField('patient.gender', String(patient.gender).toLowerCase());
       setField('patient.contactPhone', patient.phone || patient.contactPhone || patient.contact_phone || '');
       setField('patient.email', patient.email || '');
       

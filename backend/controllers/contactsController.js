@@ -4,44 +4,32 @@ class ContactsController {
   // Create a new contact (public endpoint - no auth required)
   async create(req, res) {
     try {
-      const { name, email, company, message } = req.body;
+      const body = req.body || {};
+      const str = value => (typeof value === 'string' ? value.trim() : '');
+      const name = str(body.name);
+      const email = str(body.email);
+      const company = str(body.company);
+      const message = str(body.message);
 
-      // Validation
-      if (!name || !name.trim()) {
-        return res.status(400).json({
-          error: 'Validation error',
-          message: 'Name is required'
-        });
-      }
-
-      if (!email || !email.trim()) {
-        return res.status(400).json({
-          error: 'Validation error',
-          message: 'Email is required'
-        });
-      }
+      // Validation (types, required fields, and the column limits)
+      const invalid = text => res.status(400).json({ error: 'Validation error', message: text });
+      if (!name) return invalid('Name is required');
+      if (name.length > 255) return invalid('Name must be at most 255 characters');
+      if (!email) return invalid('Email is required');
+      if (email.length > 255) return invalid('Email must be at most 255 characters');
 
       // Basic email validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
-        return res.status(400).json({
-          error: 'Validation error',
-          message: 'Invalid email format'
-        });
-      }
-
-      if (!message || !message.trim()) {
-        return res.status(400).json({
-          error: 'Validation error',
-          message: 'Message is required'
-        });
-      }
+      if (!emailRegex.test(email)) return invalid('Invalid email format');
+      if (company.length > 255) return invalid('Company must be at most 255 characters');
+      if (!message) return invalid('Message is required');
+      if (message.length > 5000) return invalid('Message must be at most 5000 characters');
 
       // Get source URL from referer header or request body
-      const sourceUrl = req.body.source_url || req.headers.referer || null;
+      const sourceUrl = (str(body.source_url) || str(req.headers.referer) || '').slice(0, 500) || null;
 
       // Get IP address
-      const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || null;
+      const ipAddress = String(req.ip || req.socket?.remoteAddress || '').slice(0, 45) || null;
 
       // Insert contact
       const result = await query(
@@ -49,10 +37,10 @@ class ContactsController {
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, name, email, company, message, source_url, status, created_at`,
         [
-          name.trim(),
-          email.trim().toLowerCase(),
-          company?.trim() || null,
-          message.trim(),
+          name,
+          email.toLowerCase(),
+          company || null,
+          message,
           sourceUrl,
           ipAddress
         ]

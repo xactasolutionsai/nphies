@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { selectStyles } from './styles';
+import { useAuth } from '@/context/AuthContext';
 
 const CommunicationPanel = ({ 
   priorAuthId, 
@@ -45,170 +46,13 @@ const CommunicationPanel = ({
   items = [],
   onStatusUpdate 
 }) => {
+  const { can } = useAuth();
   // State
   const [isPolling, setIsPolling] = useState(false);
   const [communicationRequests, setCommunicationRequests] = useState([]);
   const [communications, setCommunications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  const [pollPreviewCopied, setPollPreviewCopied] = useState(false);
-
-  // Generate the full Poll Request Bundle that will be sent to NPHIES
-  // Based on official NPHIES IG: https://portal.nphies.sa/ig/Bundle-a84aabfa-1163-407d-aa38-f8119a0b7aa1.json.html
-  // NPHIES Poll uses MessageHeader with eventCoding: 'poll-request' and Task resource
-  const generatePollRequestBundle = () => {
-    const bundleId = crypto.randomUUID();
-    const messageHeaderId = crypto.randomUUID();
-    // Use simple numeric ID format matching NPHIES example (e.g., "560082")
-    const taskId = `${Date.now()}`;
-    const providerOrgId = `provider-org-${Date.now()}`; // Simple ID format for provider org
-    // Get provider ID from the first communication if available, otherwise use placeholder
-    const providerId = communications?.[0]?.provider_nphies_id || '1010613708';
-    const providerName = 'Healthcare Provider';
-    const providerEndpoint = 'http://provider.com/fhir';
-    const nphiesBaseURL = 'http://176.105.150.83'; // Should match backend env
-    const timestamp = new Date().toISOString();
-    
-    // Extract base URL from provider endpoint (remove /fhir if present)
-    // Example: http://provider.com/fhir -> http://provider.com
-    const providerBaseUrl = providerEndpoint.replace(/\/fhir\/?$/, '');
-    
-    // Use absolute URLs for fullUrl values (matching NPHIES specification example)
-    // Example from spec: http://saudigeneralhospital.com.sa/Task/560082
-    const taskFullUrl = `${providerBaseUrl}/Task/${taskId}`;
-    const providerOrgFullUrl = `${providerBaseUrl}/Organization/${providerOrgId}`;
-    const nphiesOrgFullUrl = `${providerBaseUrl}/Organization/NPHIES`;
-
-    return {
-      resourceType: 'Bundle',
-      id: bundleId,
-      meta: {
-        profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
-      },
-      type: 'message',
-      timestamp: timestamp,
-      entry: [
-        // 1. MessageHeader
-        {
-          fullUrl: `urn:uuid:${messageHeaderId}`,
-          resource: {
-            resourceType: 'MessageHeader',
-            id: messageHeaderId,
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/message-header|1.0.0']
-            },
-            eventCoding: {
-              system: 'http://nphies.sa/terminology/CodeSystem/ksa-message-events',
-              code: 'poll-request'
-            },
-            sender: {
-              type: 'Organization',
-              identifier: {
-                system: 'http://nphies.sa/license/provider-license',
-                value: providerId
-              }
-            },
-            source: {
-              endpoint: providerBaseUrl
-            },
-            destination: [{
-              endpoint: `${nphiesBaseURL}/$process-message`,
-              receiver: {
-                type: 'Organization',
-                identifier: {
-                  system: 'http://nphies.sa/license/nphies',
-                  value: 'NPHIES'
-                }
-              }
-            }],
-            // Focus uses full URL matching Task fullUrl exactly
-            focus: [{
-              reference: taskFullUrl
-            }]
-          }
-        },
-        // 2. Task (poll-request) - minimal fields only
-        {
-          fullUrl: taskFullUrl,
-          resource: {
-            resourceType: 'Task',
-            id: taskId,
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/poll-request|1.0.0']
-            },
-            identifier: [{
-              system: `${providerBaseUrl}/identifiers/poll-request`,
-              value: `req_${taskId}`
-            }],
-            status: 'requested',
-            intent: 'order',
-            code: {
-              coding: [{
-                system: 'http://nphies.sa/terminology/CodeSystem/task-code',
-                code: 'poll'
-              }]
-            },
-            requester: {
-              reference: `Organization/${providerOrgId}`
-            },
-            owner: {
-              reference: 'Organization/NPHIES'
-            },
-            authoredOn: timestamp
-          }
-        },
-        // 3. Provider Organization - simplified (no extension, no address)
-        {
-          fullUrl: providerOrgFullUrl,
-          resource: {
-            resourceType: 'Organization',
-            id: providerOrgId,
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/provider-organization|1.0.0']
-            },
-            identifier: [{
-              system: 'http://nphies.sa/license/provider-license',
-              value: providerId
-            }],
-            active: true,
-            type: [{
-              coding: [{
-                system: 'http://nphies.sa/terminology/CodeSystem/organization-type',
-                code: 'prov'
-              }]
-            }],
-            name: providerName
-          }
-        },
-        // 4. NPHIES Organization - simplified (no use field in identifier)
-        {
-          fullUrl: nphiesOrgFullUrl,
-          resource: {
-            resourceType: 'Organization',
-            id: 'NPHIES',
-            meta: {
-              profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/organization|1.0.0']
-            },
-            identifier: [{
-              use: 'official',
-              system: 'http://nphies.sa/license/nphies',
-              value: 'NPHIES'
-            }],
-            active: true,
-            name: 'National Program for Health Information Exchange Services'
-          }
-        }
-      ]
-    };
-  };
-
-  const handleCopyPollJson = async () => {
-    const pollBundle = generatePollRequestBundle();
-    await navigator.clipboard.writeText(JSON.stringify(pollBundle, null, 2));
-    setPollPreviewCopied(true);
-    setTimeout(() => setPollPreviewCopied(false), 2000);
-  };
   
   // Form state
   const [showComposeForm, setShowComposeForm] = useState(false);
@@ -730,7 +574,8 @@ const CommunicationPanel = ({
   };
 
   // Check if can send communication - allow for queued, approved, and partial PAs
-  const canSendCommunication = priorAuthStatus === 'queued' || priorAuthStatus === 'approved' || priorAuthStatus === 'partial';
+  // Role check first: viewers and reviewers never get the compose/respond controls.
+  const canSendCommunication = can('send') && (priorAuthStatus === 'queued' || priorAuthStatus === 'approved' || priorAuthStatus === 'partial');
 
   if (loading) {
     return (
@@ -758,7 +603,9 @@ const CommunicationPanel = ({
           <p className="text-sm text-gray-600 mt-1">
             {canSendCommunication 
               ? 'Send additional information to the insurer or respond to their requests'
-              : 'Communication is only available for queued, approved, or partial authorizations'}
+              : !can('send')
+                ? 'Your role has view-only access to communications'
+                : 'Communication is only available for queued, approved, or partial authorizations'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1311,12 +1158,13 @@ const CommunicationPanel = ({
                         {(!comm.acknowledgment_received || comm.acknowledgment_status === 'queued') && (
                           <>
                             <button
-                              onClick={handleCopyPollJson}
-                              className="flex items-center px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
-                              title="Copy the $poll Parameters JSON that will be sent to NPHIES"
+                              onClick={copyPollBundleToClipboard}
+                              disabled={isLoadingPollPreview}
+                              className="flex items-center px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
+                              title="Copy the poll request bundle built by the server for this authorization"
                             >
                               <Copy className="w-3 h-3 mr-1" />
-                              {pollPreviewCopied ? '✓ Copied!' : 'Copy Poll JSON'}
+                              {pollBundleCopied ? '✓ Copied!' : 'Copy Poll JSON'}
                             </button>
                           </>
                         )}

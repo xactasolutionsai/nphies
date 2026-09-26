@@ -1,30 +1,134 @@
-import { Ollama } from 'ollama';
 import dotenv from 'dotenv';
+import { getOllamaConfig, createOllamaClient, isTimeoutError, DEFAULT_OLLAMA_MODEL } from './ollamaConfig.js';
+import { parseStructuredReply, INVALID_REPLY_MESSAGE } from './ai/structuredOutput.js';
 
 dotenv.config();
 
+/*
+ * Structured-output contracts (owner item C5). Each schema is sent to Ollama as `format`
+ * and the reply is validated against the same schema (services/ai/structuredOutput.js).
+ * A reply that is not valid JSON or does not match is never read as a verdict: the
+ * callers below return their fail-closed shape (isValid:null / analysisIncomplete).
+ */
+const unitScore = { type: 'number', minimum: 0, maximum: 1 };
+const textList = { type: 'array', items: { type: 'string', minLength: 1 } };
+
+export const EYE_VALIDATION_SCHEMA = {
+  type: 'object',
+  properties: {
+    isValid: { type: 'boolean' },
+    confidenceScore: unitScore,
+    warnings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          field: { type: 'string' },
+          message: { type: 'string', minLength: 1 },
+          severity: { type: 'string', enum: ['low', 'medium', 'high'] }
+        },
+        required: ['field', 'message', 'severity']
+      }
+    },
+    recommendations: textList,
+    missingAnalyses: textList
+  },
+  required: ['isValid', 'confidenceScore', 'warnings', 'recommendations', 'missingAnalyses']
+};
+
+export const ENHANCED_TEXT_SCHEMA = {
+  type: 'object',
+  properties: { enhancedText: { type: 'string', minLength: 1 } },
+  required: ['enhancedText']
+};
+
+export const SNOMED_SUGGESTIONS_SCHEMA = {
+  type: 'object',
+  properties: {
+    suggestions: {
+      type: 'array',
+      maxItems: 5,
+      items: {
+        type: 'object',
+        properties: {
+          code: { type: 'string', pattern: '^[0-9]{6,18}$' },
+          display: { type: 'string', minLength: 1 }
+        },
+        required: ['code', 'display']
+      }
+    }
+  },
+  required: ['suggestions']
+};
+
+const optionalText = { type: ['string', 'null'] };
+export const SNOMED_VALIDATION_SCHEMA = {
+  type: 'object',
+  properties: {
+    isValid: { type: 'boolean' },
+    confidence: unitScore,
+    explanation: { type: 'string' },
+    correctDescription: optionalText,
+    suggestedCode: { type: ['string', 'null'], pattern: '^[0-9]{6,18}$' },
+    suggestedDescription: optionalText
+  },
+  required: ['isValid', 'confidence', 'explanation']
+};
+
+export const MEDICAL_NECESSITY_SCHEMA = {
+  type: 'object',
+  properties: {
+    necessityScore: unitScore,
+    assessment: { type: 'string', enum: ['APPROVED', 'NEEDS_INFO', 'LIKELY_DENIED'] },
+    reasoning: { type: 'string' },
+    missingElements: textList,
+    suggestedJustification: { type: 'string' }
+  },
+  required: ['necessityScore', 'assessment', 'reasoning', 'missingElements', 'suggestedJustification']
+};
+
+/** Log only the first schema errors (paths and types, never values: replies can echo PHI). */
+const logInvalidReply = (label, errors) =>
+  console.warn(`⚠️ ${label}: AI reply rejected (${errors.slice(0, 3).join('; ')})`);
+
 class OllamaService {
   constructor() {
-    this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://206.168.83.244:11434';
-    this.model = process.env.OLLAMA_MODEL || 'thewindmom/llama3-med42-8b:latest';
-    this.timeout = parseInt(process.env.OLLAMA_TIMEOUT, 10) || 120000; // 120 seconds default
+    const { baseUrl, timeoutMs, configError } = getOllamaConfig();
+    this.baseUrl = baseUrl;
+    this.configError = configError;
+    this.model = process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
+    this.timeout = timeoutMs;
     this.maxRetries = 3;
     this.requestCounter = 0;
 
-    // Optional: separate embedding model
+    // Embeddings use their own model (OLLAMA_EMBED_MODEL). Falling back to the chat
+    // model keeps existing vector indexes working, but a dedicated embedding model
+    // is strongly recommended.
     this.embeddingModel = process.env.OLLAMA_EMBED_MODEL || this.model;
-    
-    this.client = new Ollama({
-      host: this.baseUrl
-    });
-    
-    console.log(`\n✅ Ollama Service initialized`);
-    console.log(`   📍 Base URL: ${this.baseUrl}`);
-    console.log(`   🤖 Model: ${this.model}`);
-    console.log(`   ⏱️  Timeout: ${this.timeout}ms`);
-    
+
+    // Every request made through this client is aborted after `this.timeout`, so a
+    // timed-out generation does not keep running while the next retry starts.
+    this.client = createOllamaClient({ baseUrl, timeoutMs });
+
+    if (configError) {
+      console.error(`\n❌ Ollama Service disabled: ${configError.message}`);
+    } else {
+      console.log(`\n✅ Ollama Service initialized`);
+      console.log(`   📍 Base URL: ${this.baseUrl}`);
+      console.log(`   🤖 Model: ${this.model}`);
+      console.log(`   ⏱️  Timeout: ${this.timeout}ms`);
+    }
+
     // Test connection on startup
-    if (process.env.NODE_ENV !== 'test') this.testConnection();
+    if (process.env.NODE_ENV !== 'test' && !configError) this.testConnection();
+  }
+
+  /**
+   * Refuse to send anything when the endpoint configuration is unsafe/invalid.
+   * @private
+   */
+  assertConfigured() {
+    if (this.configError) throw this.configError;
   }
 
   /**
@@ -62,58 +166,29 @@ class OllamaService {
   }
 
   // ============================================================================
-  // LOW-LEVEL HELPER
-  // ============================================================================
-
-  /**
-   * Run a promise with a soft timeout (no abort, only rejection)
-   * @private
-   */
-  async runWithTimeout(promise, ms, description = 'operation') {
-    let timeoutId;
-    const startTime = Date.now();
-    
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => {
-        const elapsed = Date.now() - startTime;
-        console.error(`\n⏰ TIMEOUT: ${description} after ${elapsed}ms (limit: ${ms}ms)`);
-        reject(new Error(`Ollama ${description} timed out after ${ms}ms`));
-      }, ms);
-    });
-
-    try {
-      const result = await Promise.race([promise, timeoutPromise]);
-      return result;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  // ============================================================================
   // CORE COMPLETION & EMBEDDINGS
   // ============================================================================
 
   /**
    * Generate a completion from the model
    * @param {string} prompt - The prompt to send to the model
-   * @param {object} options - Additional options for the completion
+   * @param {object} options - Additional options for the completion. `format` may be
+   *   'json' or a JSON schema object (Ollama structured outputs).
    * @returns {Promise<object>} - The completion response
    */
   async generateCompletion(prompt, options = {}) {
+    this.assertConfigured();
     const requestId = ++this.requestCounter;
     const startTime = Date.now();
     let lastError = null;
 
     console.log(`\n🚀 [REQ-${requestId}] Starting Ollama request`);
-    console.log(`   📍 Server: ${this.baseUrl}`);
     console.log(`   🤖 Model: ${this.model}`);
     console.log(`   📝 Prompt length: ${prompt?.length || 0} chars`);
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         console.log(`\n📤 [REQ-${requestId}] Sending request (attempt ${attempt}/${this.maxRetries})`);
-        console.log(`   Temperature: ${options.temperature ?? 0.7}`);
-        console.log(`   num_predict: ${options.num_predict ?? 2048}`);
         
         const requestConfig = {
           model: this.model,
@@ -142,20 +217,15 @@ class OllamaService {
         }, 10000);
 
         try {
-          const response = await this.runWithTimeout(
-            this.client.generate(requestConfig),
-            this.timeout,
-            'completion'
-          );
+          // The client aborts the HTTP request itself after this.timeout.
+          const response = await this.client.generate(requestConfig);
 
           clearInterval(progressInterval);
           const duration = Date.now() - startTime;
           
+          // Only sizes are logged: model output can echo patient data.
           console.log(`\n✅ [REQ-${requestId}] Response received in ${duration}ms`);
           console.log(`   📝 Response length: ${response.response?.length || 0} chars`);
-          if (response.response) {
-            console.log(`   📄 Preview: ${response.response.substring(0, 100)}...`);
-          }
 
           return {
             success: true,
@@ -169,6 +239,9 @@ class OllamaService {
           };
         } catch (innerError) {
           clearInterval(progressInterval);
+          if (isTimeoutError(innerError)) {
+            throw new Error(`Ollama completion timed out after ${this.timeout}ms`);
+          }
           throw innerError;
         }
       } catch (error) {
@@ -209,36 +282,42 @@ class OllamaService {
   }
 
   /**
-   * Generate embeddings for text
+   * Generate embeddings for text using the dedicated embedding model.
+   * Uses the current /api/embed endpoint, falling back to the legacy
+   * /api/embeddings endpoint only for Ollama servers that predate it.
    * @param {string} text - The text to embed
    * @returns {Promise<array>} - The embedding vector
    */
   async generateEmbedding(text) {
+    this.assertConfigured();
     try {
       console.log(`🔢 Generating embedding for text (length: ${text.length})`);
-      
-      const response = await this.runWithTimeout(
-        this.client.embeddings({
-          model: this.embeddingModel,
-        prompt: text
-        }),
-        this.timeout,
-        'embedding'
-      );
 
-      if (!response.embedding || !Array.isArray(response.embedding)) {
+      let embedding;
+      try {
+        const response = await this.client.embed({ model: this.embeddingModel, input: text });
+        embedding = response?.embeddings?.[0];
+      } catch (error) {
+        if (error?.status_code !== 404 || /model/i.test(error?.message || '')) throw error;
+        const legacy = await this.client.embeddings({ model: this.embeddingModel, prompt: text });
+        embedding = legacy?.embedding;
+      }
+
+      if (!Array.isArray(embedding) || embedding.length === 0) {
         throw new Error('Invalid embedding response from Ollama');
       }
 
-      console.log(`✅ Embedding generated (dimension: ${response.embedding.length})`);
-      return response.embedding;
+      console.log(`✅ Embedding generated (dimension: ${embedding.length})`);
+      return embedding;
     } catch (error) {
+      if (isTimeoutError(error)) {
+        throw new Error(`Ollama embedding timed out after ${this.timeout}ms`);
+      }
       console.error('❌ Error generating embedding:', error.message);
       
       if (error.message?.includes('does not support') || error.message?.includes('embeddings')) {
-        console.log('⚠️ Model does not support embeddings, consider using an embedding-specific model.');
         throw new Error(
-          `Model ${this.embeddingModel} does not support embeddings. Consider using an embedding-specific model.`
+          `Model ${this.embeddingModel} does not support embeddings. Set OLLAMA_EMBED_MODEL to an embedding model.`
         );
       }
       
@@ -263,38 +342,21 @@ class OllamaService {
       console.log('\n🔍 ==> AI VALIDATION REQUEST <==');
       console.log(`📅 Timestamp: ${new Date().toISOString()}`);
       console.log(`🤖 Model: ${this.model}`);
-      console.log(`📋 Patient: ${formData.insured_name || 'N/A'}, Age: ${formData.age || 'N/A'}`);
-      console.log(`💊 Chief Complaints: ${formData.chief_complaints?.substring(0, 60) || 'N/A'}...`);
+      console.log(`📋 Age: ${formData.age || 'N/A'}`);
       console.log(`📚 Guidelines Retrieved: ${relevantGuidelines.length}`);
       console.log(`📝 Prompt Length: ${prompt.length} characters\n`);
       
       const result = await this.generateCompletion(prompt, {
-        temperature: 0.2, // Lower temperature for more consistent format adherence
+        temperature: 0.2,
         num_predict: 3000,
-        repeat_penalty: 1.2 // Reduce prompt echoing and repetition
+        format: EYE_VALIDATION_SCHEMA
       });
 
-      console.log('\n📥 ==> RAW AI RESPONSE <==');
-      console.log('─'.repeat(80));
-      console.log(result.response);
-      console.log('─'.repeat(80));
-      console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s\n`);
+      // The raw reply is not logged: it can echo patient data from the prompt.
+      console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s (${result.response?.length || 0} chars)\n`);
 
-      // Check for prompt echoing
-      const hasEcho = this.detectPromptEcho(result.response);
+      const validation = this.parseValidationResponse(result.response);
 
-      // Parse the AI response into structured format
-      const validation = this.parseValidationResponse(result.response, formData);
-      
-      // Add warning if echo was detected
-      if (hasEcho) {
-        validation.warnings.push({
-          field: 'system',
-          message: 'AI response quality may be affected by prompt echo. Consider reviewing raw output.',
-          severity: 'low'
-        });
-      }
-      
       console.log('✅ ==> PARSED VALIDATION RESULT <==');
       console.log(`   Valid: ${validation.isValid}`);
       console.log(`   Confidence: ${(validation.confidenceScore * 100).toFixed(0)}%`);
@@ -319,35 +381,6 @@ class OllamaService {
   }
 
   /**
-   * Check if response contains prompt echoing
-   * @private
-   * @param {string} responseText - The AI response text
-   * @returns {boolean} - True if echo detected
-   */
-  detectPromptEcho(responseText) {
-    const echoPatterns = [
-      'You are reviewing an ophthalmology prescription',
-      'Analyze the data and respond ONLY',
-      'As a medical AI assistant',
-      'OUTPUT REQUIRED',
-      'copy this format exactly',
-      'Now analyze the above patient data',
-      'BEGIN YOUR ANALYSIS'
-    ];
-    
-    const lowerResponse = responseText.toLowerCase();
-    const hasEcho = echoPatterns.some(pattern => 
-      lowerResponse.includes(pattern.toLowerCase())
-    );
-    
-    if (hasEcho) {
-      console.log('⚠️ Prompt echo detected in AI response!');
-    }
-    
-    return hasEcho;
-  }
-
-  /**
    * Build the validation prompt with medical context
    * @private
    */
@@ -356,9 +389,7 @@ class OllamaService {
       ? `\n\nRelevant medical guidelines:\n${relevantGuidelines.map((g, i) => `${i + 1}. ${g.content}`).join('\n')}`
       : '';
 
-    return `As a medical AI assistant, review this ophthalmology prescription and provide your analysis in the structured format below.
-
-IMPORTANT: Do NOT repeat these instructions. Start directly with your analysis using the format shown.${guidelinesContext}
+    return `Review this ophthalmology prescription for clinical consistency.${guidelinesContext}
 
 === PATIENT DATA ===
 Age: ${formData.age} years, Sex: ${formData.sex || 'Unknown'}
@@ -373,184 +404,40 @@ LEFT EYE: Sphere ${formData.left_eye_specs?.distance?.sphere || 'N/A'}, Cylinder
 Lenses: ${formData.lens_type || 'Not specified'}
 Procedures: ${formData.procedures?.map(p => p.service_description).join(', ') || 'None'}
 
-=== REQUIRED OUTPUT FORMAT ===
-
-VALIDITY: [Yes or No]
-CONFIDENCE: [0.0 to 1.0]
-
-WARNINGS:
-- [field]: [clinical concern] - Severity: [low/medium/high]
-
-RECOMMENDATIONS:
-- [clinical recommendation based on findings]
-
-MISSING_ANALYSES:
-- [suggested test if needed]
-
-=== BEGIN YOUR ANALYSIS ===`;
+=== OUTPUT ===
+Answer with one JSON object only:
+{"isValid": true|false, "confidenceScore": 0.0-1.0,
+ "warnings": [{"field": "...", "message": "clinical concern", "severity": "low|medium|high"}],
+ "recommendations": ["..."], "missingAnalyses": ["suggested test, if any"]}`;
   }
 
   /**
-   * Parse AI response into structured validation result
+   * Read the eye-form validation reply (EYE_VALIDATION_SCHEMA). Fails closed: a reply that is
+   * not valid JSON or does not match the schema gives isValid:null and requires manual review.
    * @private
    */
   parseValidationResponse(responseText) {
-    const result = {
-      isValid: true,
-      confidenceScore: 0.85,
-      warnings: [],
+    const { ok, data, errors } = parseStructuredReply(responseText, EYE_VALIDATION_SCHEMA);
+    if (ok) {
+      return {
+        isValid: data.isValid,
+        confidenceScore: data.confidenceScore,
+        warnings: data.warnings,
+        recommendations: data.recommendations,
+        missingAnalyses: data.missingAnalyses,
+        analysisIncomplete: false
+      };
+    }
+    logInvalidReply('Eye form validation', errors);
+    return {
+      isValid: null,
+      confidenceScore: 0,
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      warnings: [{ field: 'system', message: `${INVALID_REPLY_MESSAGE} The form has NOT been validated.`, severity: 'high' }],
       recommendations: [],
       missingAnalyses: []
     };
-
-    try {
-      // Extract validity
-      const validityMatch = responseText.match(/VALIDITY:\s*(Yes|No)/i);
-      if (validityMatch) {
-        result.isValid = validityMatch[1].toLowerCase() === 'yes';
-      }
-
-      // Extract confidence score
-      const confidenceMatch = responseText.match(/CONFIDENCE:\s*([\d.]+)/i);
-      if (confidenceMatch) {
-        result.confidenceScore = parseFloat(confidenceMatch[1]);
-      }
-
-      // Extract warnings
-      const warningsSection = responseText.match(/WARNINGS:([\s\S]*?)(?=RECOMMENDATIONS:|MISSING_ANALYSES:|$)/i);
-      if (warningsSection) {
-        const warningLines = warningsSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/));
-
-        warningLines.forEach(line => {
-          const cleanLine = line.replace(/^[-*•]\s*/, '').trim();
-          const severityMatch = cleanLine.match(/Severity:\s*(high|medium|low)/i);
-          const severity = severityMatch ? severityMatch[1].toLowerCase() : 'medium';
-          const message = cleanLine.replace(/\s*-\s*Severity:\s*(high|medium|low)/i, '').trim();
-          
-          if (message && message.length > 5) {
-            const fieldMatch = message.match(/^\[(.*?)\]:\s*(.*)/) || message.match(/^(.*?):\s*(.*)/);
-            result.warnings.push({
-              field: fieldMatch ? fieldMatch[1].trim() : 'general',
-              message: fieldMatch ? fieldMatch[2].trim() : message,
-              severity
-            });
-          }
-        });
-      }
-
-      // Extract recommendations
-      const recommendationsSection = responseText.match(/RECOMMENDATIONS:([\s\S]*?)(?=MISSING_ANALYSES:|$)/i);
-      if (recommendationsSection) {
-        const recLines = recommendationsSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/));
-
-        recLines.forEach(line => {
-          const cleanLine = line.replace(/^[-*•]\s*/, '').trim();
-          if (cleanLine && cleanLine.length > 5) {
-            result.recommendations.push(cleanLine);
-          }
-        });
-      }
-
-      // Extract missing analyses
-      const missingSection = responseText.match(/MISSING_ANALYSES:([\s\S]*?)$/i);
-      if (missingSection) {
-        const missingLines = missingSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/));
-
-        missingLines.forEach(line => {
-          const cleanLine = line.replace(/^[-*•]\s*/, '').trim();
-          if (cleanLine && cleanLine.length > 5) {
-            result.missingAnalyses.push(cleanLine);
-          }
-        });
-      }
-
-      // If parsing found nothing, fallback
-      if (
-        result.warnings.length === 0 &&
-        result.recommendations.length === 0 &&
-        result.missingAnalyses.length === 0
-      ) {
-        console.log('⚠️ Structured parsing found nothing, using fallback parsing...');
-        console.log('📄 Full response text for debugging:');
-        console.log(responseText);
-        
-        const instructionPatterns = [
-          /you are (reviewing|analyzing)/i,
-          /analyze the data/i,
-          /respond only/i,
-          /output required/i,
-          /copy this format/i,
-          /now analyze/i,
-          /^(===|---)/,
-          /^\[.*\]$/,
-          /begin (your )?analysis/i,
-          /required output format/i,
-          /patient data/i,
-          /important:/i,
-          /do not repeat/i,
-          /structured format/i,
-          /medical ai assistant/i
-        ];
-        
-        const lines = responseText.split('\n').filter(l => l.trim().length > 10);
-        
-        let addedCount = 0;
-        for (const line of lines) {
-          const trimmed = line.trim();
-          const isInstruction = instructionPatterns.some(pattern => pattern.test(trimmed));
-          
-          if (
-            trimmed &&
-              !isInstruction &&
-              !trimmed.match(/^(VALIDITY|CONFIDENCE|WARNINGS|RECOMMENDATIONS|MISSING_ANALYSES):/i) &&
-            trimmed.length > 20 &&
-            addedCount < 10
-          ) {
-            const cleaned = trimmed
-              .replace(/^[-*•]\s*/, '')
-              .replace(/^\d+\.\s*/, '');
-
-            if (
-              cleaned.length > 20 &&
-              !cleaned.match(/^\[.*\]$/) &&
-              cleaned.split(' ').length >= 4
-            ) {
-              result.recommendations.push(cleaned);
-              addedCount++;
-            }
-          }
-        }
-        
-        if (result.recommendations.length === 0) {
-          result.recommendations.push(
-            'AI analysis completed. Please review the raw response in server logs for details.'
-          );
-          result.warnings.push({
-            field: 'parsing',
-            message: 'AI response format not recognized. Check server logs for full response.',
-            severity: 'low'
-          });
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error parsing validation response:', error.message);
-      result.warnings.push({
-        field: 'parsing',
-        message: 'Unable to fully parse AI response. Manual review recommended.',
-        severity: 'medium'
-      });
-    }
-
-    return result;
   }
 
   // ============================================================================
@@ -563,6 +450,7 @@ MISSING_ANALYSES:
    */
   async checkHealth() {
     try {
+      this.assertConfigured();
       const models = await this.client.list();
       const modelExists = models.models.some(
         m => m.name === this.model || m.name.startsWith(this.model)
@@ -611,779 +499,6 @@ MISSING_ANALYSES:
   }
 
   // ============================================================================
-  // MEDICINE INFORMATION (e.g. with medbot-like models)
-  // ============================================================================
-
-  /**
-   * Get detailed medicine information using AI
-   * @param {object} medicineData - Medicine data object
-   * @returns {Promise<object>} - Detailed medicine information
-   */
-  async getMedicineInformation(medicineData) {
-    const prompt = this.buildMedicineInfoPrompt(medicineData);
-    
-    try {
-      console.log('\n💊 ==> AI MEDICINE INFORMATION REQUEST <==');
-      console.log(`📅 Timestamp: ${new Date().toISOString()}`);
-      console.log(`🤖 Model: ${this.model}`);
-      console.log(`💊 Medicine: ${medicineData.activeIngredient}`);
-      console.log(`📊 Strength: ${medicineData.strength} ${medicineData.unit}`);
-      console.log(`📝 Dosage Form: ${medicineData.dosageForm?.parent || 'N/A'}`);
-      console.log(`📝 Prompt Length: ${prompt.length} characters\n`);
-      
-      const result = await this.generateCompletion(prompt, {
-        temperature: 0.3,
-        num_predict: 4000,
-        repeat_penalty: 1.1
-      });
-
-      console.log('\n📥 ==> RAW AI RESPONSE <==');
-      console.log('─'.repeat(80));
-      console.log(result.response);
-      console.log('─'.repeat(80));
-      console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s\n`);
-
-      const medicineInfo = this.parseMedicineInfoResponse(result.response, medicineData);
-      
-      console.log('✅ ==> PARSED MEDICINE INFORMATION <==');
-      console.log(`   Indications: ${medicineInfo.indications.length} items`);
-      console.log(`   Contraindications: ${medicineInfo.contraindications.length} items`);
-      console.log(`   Side Effects: ${medicineInfo.sideEffects.length} items`);
-      console.log(`   Interactions: ${medicineInfo.interactions.length} items\n`);
-      
-      return {
-        ...medicineInfo,
-        metadata: {
-          model: this.model,
-          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-          timestamp: new Date().toISOString(),
-          rawResponse: result.response
-        }
-      };
-    } catch (error) {
-      console.error('❌ Error getting medicine information:', error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * Build the prompt for medicine information request
-   * @private
-   */
-  buildMedicineInfoPrompt(medicineData) {
-    const brandsList =
-      medicineData.brands && medicineData.brands.length > 0
-        ? medicineData.brands
-          .map(b => b.brand_name || b.brandName)
-          .filter(Boolean)
-          .join(', ')
-      : 'No brand names available';
-
-    return `You are a medical AI assistant providing detailed pharmaceutical information. Analyze the following medicine and provide comprehensive clinical information.
-
-=== MEDICINE DATA ===
-Active Ingredient: ${medicineData.activeIngredient}
-Strength: ${medicineData.strength} ${medicineData.unit}
-Dosage Form: ${medicineData.dosageForm?.parent || 'N/A'} - ${medicineData.dosageForm?.child || 'N/A'}
-Brand Names: ${brandsList}
-MRID: ${medicineData.mrid}
-
-=== REQUIRED OUTPUT FORMAT ===
-
-INDICATIONS:
-- [Primary therapeutic use and condition treated]
-- [Additional indication if applicable]
-
-CONTRAINDICATIONS:
-- [Medical condition or situation where medicine should not be used]
-- [Additional contraindication if applicable]
-
-SIDE_EFFECTS:
-- [Common side effect with frequency if known]
-- [Additional side effect]
-
-DRUG_INTERACTIONS:
-- [Drug class or specific drug that interacts with this medicine]
-- [Additional interaction]
-
-DOSAGE_GUIDELINES:
-[Standard dosing information, administration route, and frequency]
-
-WARNINGS:
-- [Important warning or precaution]
-- [Additional warning]
-
-MECHANISM_OF_ACTION:
-[Brief explanation of how the medicine works in the body]
-
-=== IMPORTANT ===
-- Provide accurate, evidence-based information
-- If unsure about specific details, indicate this clearly
-- Focus on clinically relevant information
-- Use clear, professional medical terminology
-- Do NOT repeat these instructions in your response
-
-=== BEGIN YOUR ANALYSIS ===`;
-  }
-
-  /**
-   * Parse AI response for medicine information
-   * @private
-   */
-  parseMedicineInfoResponse(responseText, medicineData) {
-    const result = {
-      medicine: {
-        activeIngredient: medicineData.activeIngredient,
-        strength: medicineData.strength,
-        unit: medicineData.unit,
-        mrid: medicineData.mrid
-      },
-      indications: [],
-      contraindications: [],
-      sideEffects: [],
-      interactions: [],
-      dosageGuidelines: '',
-      warnings: [],
-      mechanismOfAction: ''
-    };
-
-    try {
-      // Extract indications
-      const indicationsMatch = responseText.match(/INDICATIONS:([\s\S]*?)(?=CONTRAINDICATIONS:|SIDE_EFFECTS:|$)/i);
-      if (indicationsMatch) {
-        result.indications = this.extractListItems(indicationsMatch[1]);
-      }
-
-      // Extract contraindications
-      const contraindicationsMatch = responseText.match(
-        /CONTRAINDICATIONS:([\s\S]*?)(?=SIDE_EFFECTS:|DRUG_INTERACTIONS:|$)/i
-      );
-      if (contraindicationsMatch) {
-        result.contraindications = this.extractListItems(contraindicationsMatch[1]);
-      }
-
-      // Extract side effects
-      const sideEffectsMatch = responseText.match(
-        /SIDE_EFFECTS:([\s\S]*?)(?=DRUG_INTERACTIONS:|DOSAGE_GUIDELINES:|$)/i
-      );
-      if (sideEffectsMatch) {
-        result.sideEffects = this.extractListItems(sideEffectsMatch[1]);
-      }
-
-      // Extract drug interactions
-      const interactionsMatch = responseText.match(
-        /DRUG_INTERACTIONS:([\s\S]*?)(?=DOSAGE_GUIDELINES:|WARNINGS:|$)/i
-      );
-      if (interactionsMatch) {
-        result.interactions = this.extractListItems(interactionsMatch[1]);
-      }
-
-      // Extract dosage guidelines
-      const dosageMatch = responseText.match(
-        /DOSAGE_GUIDELINES:([\s\S]*?)(?=WARNINGS:|MECHANISM_OF_ACTION:|$)/i
-      );
-      if (dosageMatch) {
-        result.dosageGuidelines = dosageMatch[1].trim().replace(/^[-*•]\s*/gm, '');
-      }
-
-      // Extract warnings
-      const warningsMatch = responseText.match(/WARNINGS:([\s\S]*?)(?=MECHANISM_OF_ACTION:|$)/i);
-      if (warningsMatch) {
-        result.warnings = this.extractListItems(warningsMatch[1]);
-      }
-
-      // Extract mechanism of action
-      const mechanismMatch = responseText.match(/MECHANISM_OF_ACTION:([\s\S]*?)$/i);
-      if (mechanismMatch) {
-        result.mechanismOfAction = mechanismMatch[1].trim().replace(/^[-*•]\s*/gm, '');
-      }
-
-      // Fallback: heuristic extraction if nothing parsed
-      if (
-        result.indications.length === 0 &&
-        result.contraindications.length === 0 &&
-        result.sideEffects.length === 0 &&
-        result.interactions.length === 0
-      ) {
-        console.log('⚠️ Structured parsing found nothing, attempting fallback extraction...');
-        
-        const lines = responseText
-          .split('\n')
-          .filter(line => line.trim().length > 10)
-          .filter(line => !this.isInstructionLine(line));
-        
-        lines.forEach(line => {
-          const cleaned = line.trim().replace(/^[-*•]\s*/, '');
-          if (cleaned.length > 15) {
-            const lower = cleaned.toLowerCase();
-            if (lower.includes('treat') || lower.includes('used for')) {
-              result.indications.push(cleaned);
-            } else if (lower.includes('should not') || lower.includes('avoid')) {
-              result.contraindications.push(cleaned);
-            } else if (lower.includes('side effect') || lower.includes('adverse')) {
-              result.sideEffects.push(cleaned);
-            } else if (lower.includes('interact') || lower.includes('with other')) {
-              result.interactions.push(cleaned);
-            }
-          }
-        });
-      }
-    } catch (error) {
-      console.error('❌ Error parsing medicine information response:', error.message);
-    }
-
-    return result;
-  }
-
-  /**
-   * Extract list items from a text section
-   * @private
-   */
-  extractListItems(text) {
-    if (!text) return [];
-    
-    const lines = text
-      .split('\n')
-      .filter(line => line.trim().match(/^[-*•]/))
-      .map(line => line.replace(/^[-*•]\s*/, '').trim())
-      .filter(line => line.length > 10);
-    
-    return lines;
-  }
-
-  /**
-   * Check if a line is part of instructions (should be filtered out)
-   * @private
-   */
-  isInstructionLine(line) {
-    const instructionPatterns = [
-      /you are (a |an )?medical/i,
-      /analyze the (following )?medicine/i,
-      /provide (comprehensive |detailed )?information/i,
-      /required output format/i,
-      /important:/i,
-      /begin (your )?analysis/i,
-      /do not repeat/i,
-      /^===/,
-      /medicine data/i
-    ];
-    
-    return instructionPatterns.some(pattern => pattern.test(line));
-  }
-
-  // ============================================================================
-  // PRIOR AUTHORIZATION VALIDATION (INSTITUTIONAL / PROFESSIONAL)
-  // ============================================================================
-
-  /**
-   * Validate prior authorization form data
-   * @param {object} formData - The prior auth form data to validate
-   * @param {string} authType - The authorization type (institutional, professional, etc.)
-   * @returns {Promise<object>} - Structured validation result
-   */
-  async validatePriorAuthForm(formData, authType = 'professional') {
-    const prompt = this.buildPriorAuthValidationPrompt(formData, authType);
-
-    try {
-      console.log('\n🏥 ==> AI PRIOR AUTH VALIDATION REQUEST <==');
-      console.log(`📅 Timestamp: ${new Date().toISOString()}`);
-      console.log(`🤖 Model: ${this.model}`);
-      console.log(`📋 Auth Type: ${authType}`);
-      console.log(`📝 Prompt Length: ${prompt.length} characters\n`);
-
-      const result = await this.generateCompletion(prompt, {
-        temperature: 0.3,
-        num_predict: 2500,
-        repeat_penalty: 1.2
-      });
-
-      console.log('\n📥 ==> RAW AI RESPONSE <==');
-      console.log('─'.repeat(80));
-      console.log(result.response);
-      console.log('─'.repeat(80));
-      console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s\n`);
-
-      const validation = this.parsePriorAuthValidationResponse(result.response);
-
-      console.log('✅ ==> PARSED VALIDATION RESULT <==');
-      console.log(`   Medical Necessity Score: ${(validation.medicalNecessityScore * 100).toFixed(0)}%`);
-      console.log(`   Consistency Check: ${validation.consistencyCheck.passed ? 'PASS' : 'FAIL'}`);
-      console.log(`   Rejection Risks: ${validation.rejectionRisks.length}`);
-      console.log(`   Recommendations: ${validation.recommendations.length}\n`);
-
-      return {
-        ...validation,
-        authType,
-        metadata: {
-          model: this.model,
-          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-          timestamp: new Date().toISOString(),
-          rawResponse: result.response
-        }
-      };
-    } catch (error) {
-      console.error('❌ Error in prior auth validation:', error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * Build the prior auth validation prompt
-   * @private
-   */
-  buildPriorAuthValidationPrompt(formData, authType) {
-    const vitalSigns = formData.vital_signs || {};
-    const clinicalInfo = formData.clinical_info || {};
-    const diagnoses = formData.diagnoses || [];
-    const items = formData.items || [];
-    const patient = formData.patient || {};
-
-    // Calculate patient age from birth date
-    let patientAge = 'Unknown';
-    let ageInDays = null;
-    let ageInMonths = null;
-    let ageInYears = null;
-    let ageCategory = 'adult'; // default
-    
-    if (patient.birth_date || patient.birthDate || formData.birth_date) {
-      const birthDate = new Date(patient.birth_date || patient.birthDate || formData.birth_date);
-      const today = new Date();
-      const diffTime = today - birthDate;
-      ageInDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      ageInMonths = Math.floor(ageInDays / 30.44);
-      ageInYears = Math.floor(ageInDays / 365.25);
-      
-      if (ageInDays < 0) {
-        patientAge = 'Not yet born (future date)';
-        ageCategory = 'invalid';
-      } else if (ageInDays < 28) {
-        patientAge = `${ageInDays} days (Neonate)`;
-        ageCategory = 'neonate';
-      } else if (ageInMonths < 12) {
-        patientAge = `${ageInMonths} months (Infant)`;
-        ageCategory = 'infant';
-      } else if (ageInYears < 2) {
-        patientAge = `${ageInMonths} months (Toddler)`;
-        ageCategory = 'toddler';
-      } else if (ageInYears < 12) {
-        patientAge = `${ageInYears} years (Child)`;
-        ageCategory = 'child';
-      } else if (ageInYears < 18) {
-        patientAge = `${ageInYears} years (Adolescent)`;
-        ageCategory = 'adolescent';
-      } else if (ageInYears < 65) {
-        patientAge = `${ageInYears} years (Adult)`;
-        ageCategory = 'adult';
-      } else {
-        patientAge = `${ageInYears} years (Elderly)`;
-        ageCategory = 'elderly';
-      }
-    }
-    
-    const patientGender = patient.gender || patient.sex || formData.gender || 'Unknown';
-    const patientName = patient.name || patient.full_name || formData.patient_name || 'Not specified';
-
-    let bmiInfo = '';
-    if (vitalSigns.height && vitalSigns.weight) {
-      const bmi =
-        parseFloat(vitalSigns.weight) /
-        Math.pow(parseFloat(vitalSigns.height) / 100, 2);
-      bmiInfo = `BMI: ${bmi.toFixed(1)} kg/m²`;
-    }
-
-    // Build age-specific warnings for the AI
-    let ageSpecificGuidance = '';
-    if (ageCategory === 'neonate' || ageCategory === 'infant') {
-      ageSpecificGuidance = `
-CRITICAL AGE CONSIDERATION:
-This patient is a ${ageCategory.toUpperCase()} (${patientAge}). You MUST:
-- Flag ANY dental procedures as inappropriate (infants have no teeth or only primary teeth erupting)
-- Verify vital signs are within pediatric/neonatal normal ranges (NOT adult ranges)
-- Ensure diagnoses and treatments are age-appropriate
-- Consider that many adult medications and procedures are contraindicated in infants
-- Neonatal normal vitals: HR 120-160, RR 30-60, BP 60-90/30-60, Temp 36.5-37.5°C
-- Infant normal vitals: HR 100-150, RR 25-40, BP 80-100/50-70`;
-    } else if (ageCategory === 'toddler' || ageCategory === 'child') {
-      ageSpecificGuidance = `
-AGE CONSIDERATION:
-This patient is a ${ageCategory.toUpperCase()} (${patientAge}). Consider:
-- Pediatric dosing and age-appropriate treatments
-- Vital sign ranges differ from adults
-- Some procedures may require pediatric specialist involvement`;
-    } else if (ageCategory === 'elderly') {
-      ageSpecificGuidance = `
-AGE CONSIDERATION:
-This patient is ELDERLY (${patientAge}). Consider:
-- Polypharmacy risks and drug interactions
-- Renal/hepatic function adjustments may be needed
-- Fall risk and frailty considerations`;
-    }
-
-    // Build auth type specific context
-    let authTypeContext = '';
-    let vitalsSection = '';
-    let clinicalSection = '';
-    
-    if (authType === 'vision') {
-      // Get supporting info for vision - REQUIRED per NPHIES BV-00803, BV-00804, BV-00805, BV-00806
-      const supportingInfo = formData.supporting_info || [];
-      // Note: Frontend sends value_string for text fields
-      const getInfoValue = (category) => {
-        const info = supportingInfo.find(s => s.category === category);
-        return info?.value_string || info?.value || 'NOT PROVIDED - REQUIRED';
-      };
-      const treatmentPlan = getInfoValue('treatment-plan');
-      const patientHistory = getInfoValue('patient-history');
-      const physicalExam = getInfoValue('physical-examination');
-      const hpi = getInfoValue('history-of-present-illness');
-      
-      authTypeContext = `
-IMPORTANT: This is a VISION authorization request.
-- Vision claims do NOT require encounter information per NPHIES IG
-- Vision claims do NOT require vital signs
-- BUT Vision claims REQUIRE the following supporting info (will cause rejection if missing):
-  * Treatment Plan (BV-00803) - REQUIRED
-  * Patient History (BV-00804) - REQUIRED
-  * Physical Examination (BV-00805) - REQUIRED
-  * History of Present Illness (BV-00806) - REQUIRED
-- VisionPrescription with lens specifications may be included
-- Do NOT flag missing vitals or encounter information as issues
-- DO flag missing supporting information as HIGH-PRIORITY rejection risks`;
-      
-      vitalsSection = `
-=== VITAL SIGNS ===
-(Not required for vision authorization type)`;
-      
-      clinicalSection = `
-=== SUPPORTING INFORMATION (REQUIRED FOR VISION) ===
-Treatment Plan (BV-00803): ${treatmentPlan}
-Patient History (BV-00804): ${patientHistory}
-Physical Examination (BV-00805): ${physicalExam}
-History of Present Illness (BV-00806): ${hpi}
-
-Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
-    } else if (authType === 'pharmacy') {
-      // Pharmacy claims: Require supporting info but no vitals or encounter
-      const supportingInfo = formData.supporting_info || [];
-      const getInfoValue = (category) => {
-        const info = supportingInfo.find(s => s.category === category);
-        return info?.value_string || info?.value || 'NOT PROVIDED - REQUIRED';
-      };
-      const treatmentPlan = getInfoValue('treatment-plan');
-      const patientHistory = getInfoValue('patient-history');
-      const physicalExam = getInfoValue('physical-examination');
-      const hpi = getInfoValue('history-of-present-illness');
-      
-      authTypeContext = `
-IMPORTANT: This is a PHARMACY authorization request.
-- Pharmacy claims do NOT require encounter information per NPHIES IG
-- Pharmacy claims do NOT require vital signs
-- Pharmacy claims REQUIRE the following supporting info:
-  * Treatment Plan - REQUIRED
-  * Patient History - REQUIRED
-  * Physical Examination - REQUIRED
-  * History of Present Illness - REQUIRED
-- Focus validation on: diagnosis-medication alignment, drug interactions, dosage appropriateness
-- Do NOT flag missing vitals or encounter as issues
-- DO flag missing supporting information as issues`;
-      
-      vitalsSection = `
-=== VITAL SIGNS ===
-(Not required for pharmacy authorization type)`;
-      
-      clinicalSection = `
-=== SUPPORTING INFORMATION (REQUIRED FOR PHARMACY) ===
-Treatment Plan: ${treatmentPlan}
-Patient History: ${patientHistory}
-Physical Examination: ${physicalExam}
-History of Present Illness: ${hpi}
-
-Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}`;
-    } else if (authType === 'dental') {
-      // Dental claims: Require clinical documentation but no vitals
-      // Get supporting info for dental - similar to vision
-      const supportingInfo = formData.supporting_info || [];
-      const getInfoValue = (category) => {
-        const info = supportingInfo.find(s => s.category === category);
-        return info?.value_string || info?.value || 'NOT PROVIDED - REQUIRED';
-      };
-      const treatmentPlan = getInfoValue('treatment-plan');
-      const patientHistory = getInfoValue('patient-history');
-      const physicalExam = getInfoValue('physical-examination');
-      const hpi = getInfoValue('history-of-present-illness');
-      
-      // Build dental-specific items info
-      const dentalItems = items.map((item, idx) => {
-        const procedureCode = item.product_or_service_code || item.dental_procedure_code || 'N/A';
-        const procedureDesc = item.service_description || item.product_or_service_display || 'N/A';
-        const toothNumber = item.body_site_code || item.tooth_number || 'N/A';
-        const toothSurfaces = item.sub_site_codes?.join(', ') || item.tooth_surfaces?.join(', ') || 'N/A';
-        return `  ${idx + 1}. Procedure: ${procedureCode} - ${procedureDesc}
-     Tooth Number (FDI): ${toothNumber}
-     Tooth Surfaces: ${toothSurfaces}
-     Quantity: ${item.quantity || 1}, Unit Price: ${item.unit_price || 0} SAR`;
-      }).join('\n');
-      
-      authTypeContext = `
-IMPORTANT: This is a DENTAL (Oral) authorization request.
-- Dental claims require ambulatory encounter class
-- Dental claims do NOT require vital signs
-- Dental claims REQUIRE the following supporting info:
-  * Treatment Plan - REQUIRED
-  * Patient History - REQUIRED
-  * Physical Examination - REQUIRED
-  * History of Present Illness - REQUIRED
-- Focus on dental-specific diagnoses (ICD-10 K00-K14) and dental procedures
-- Verify tooth numbers (FDI notation 11-48 for permanent, 51-85 for deciduous) are appropriate
-- Verify dental procedure codes match the treatment being performed
-- Check that tooth surfaces (M=Mesial, O=Occlusal, D=Distal, B=Buccal, L=Lingual) are appropriate for the procedure
-- Do NOT flag missing vitals as issues
-- DO flag missing supporting information as issues`;
-      
-      vitalsSection = `
-=== VITAL SIGNS ===
-(Not required for dental authorization type)`;
-      
-      clinicalSection = `
-=== SUPPORTING INFORMATION (REQUIRED FOR DENTAL) ===
-Treatment Plan: ${treatmentPlan}
-Patient History: ${patientHistory}
-Physical Examination: ${physicalExam}
-History of Present Illness: ${hpi}
-
-Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}
-
-=== DENTAL PROCEDURE DETAILS ===
-${dentalItems || 'No dental items specified'}`;
-    } else {
-      // For institutional, professional - include full vitals and clinical info
-      if (authType === 'institutional') {
-        authTypeContext = `
-IMPORTANT: This is an INSTITUTIONAL authorization request.
-- Requires inpatient or daycase encounter class
-- Full vital signs and clinical documentation are required
-- Admission information is mandatory`;
-      }
-      
-      vitalsSection = `
-=== VITAL SIGNS ===
-Systolic BP: ${vitalSigns.systolic || 'Not recorded'} mmHg
-Diastolic BP: ${vitalSigns.diastolic || 'Not recorded'} mmHg
-Height: ${vitalSigns.height || 'Not recorded'} cm
-Weight: ${vitalSigns.weight || 'Not recorded'} kg
-${bmiInfo}
-Pulse: ${vitalSigns.pulse || 'Not recorded'} bpm
-Temperature: ${vitalSigns.temperature || 'Not recorded'} °C
-O2 Saturation: ${vitalSigns.oxygen_saturation || 'Not recorded'} %
-Respiratory Rate: ${vitalSigns.respiratory_rate || 'Not recorded'} /min`;
-      
-      clinicalSection = `
-=== CLINICAL INFORMATION ===
-Chief Complaint: ${clinicalInfo.chief_complaint_display || clinicalInfo.chief_complaint_text || 'Not specified'}
-Chief Complaint Code: ${clinicalInfo.chief_complaint_code || 'Not coded'}
-
-Patient History:
-${clinicalInfo.patient_history || 'Not documented'}
-
-History of Present Illness:
-${clinicalInfo.history_of_present_illness || 'Not documented'}
-
-Physical Examination:
-${clinicalInfo.physical_examination || 'Not documented'}
-
-Treatment Plan:
-${clinicalInfo.treatment_plan || 'Not documented'}
-
-Investigation Result: ${clinicalInfo.investigation_result || 'Not specified'}`;
-    }
-
-    return `You are a medical AI assistant reviewing a prior authorization request for NPHIES (Saudi Arabia healthcare system). Analyze the clinical data and identify potential rejection risks.
-
-=== AUTHORIZATION TYPE ===
-${authType.toUpperCase()}
-${authTypeContext}
-
-=== PATIENT DEMOGRAPHICS ===
-Name: ${patientName}
-Age: ${patientAge}
-Gender: ${patientGender}
-Birth Date: ${patient.birth_date || patient.birthDate || formData.birth_date || 'Not provided'}
-${ageSpecificGuidance}
-${vitalsSection}
-${clinicalSection}
-
-=== DIAGNOSES ===
-${diagnoses
-    .map(
-      d =>
-        `- ${d.diagnosis_code || 'N/A'}: ${d.diagnosis_display || d.diagnosis_description || 'N/A'} (${d.diagnosis_type || 'secondary'})`
-    )
-    .join('\n') || 'No diagnoses specified'}
-
-=== REQUESTED SERVICES/PROCEDURES ===
-${items
-    .map(
-      i =>
-        `- ${i.product_or_service_code || i.medication_code || 'N/A'}: ${i.service_description || i.medication_name || 'N/A'}`
-    )
-    .join('\n') || 'No items specified'}
-
-=== ANALYSIS REQUIRED ===
-Analyze this prior authorization request and provide:
-
-1. MEDICAL_NECESSITY_SCORE: A score from 0.0 to 1.0 indicating how well the clinical documentation supports the requested services
-
-2. CONSISTENCY_CHECK: Are the diagnoses and requested services logically consistent?
-
-3. DOCUMENTATION_GAPS: List any missing documentation that could lead to rejection (considering the auth type requirements)
-
-4. REJECTION_RISKS: List specific rejection risks with NPHIES codes (MN-*, SE-*, CV-*)
-
-5. RECOMMENDATIONS: Specific improvements to strengthen the authorization
-
-=== OUTPUT FORMAT ===
-
-MEDICAL_NECESSITY_SCORE: [0.0-1.0]
-
-CONSISTENCY_CHECK: [PASS/FAIL]
-[Explanation if FAIL]
-
-DOCUMENTATION_GAPS:
-- [Gap 1]
-- [Gap 2]
-
-REJECTION_RISKS:
-- [Code]: [Description]
-
-RECOMMENDATIONS:
-- [Recommendation 1]
-- [Recommendation 2]
-
-JUSTIFICATION_NARRATIVE:
-[A brief medical necessity justification that could be added to strengthen the request]
-
-=== BEGIN ANALYSIS ===`;
-  }
-
-  /**
-   * Parse prior auth validation response
-   * @private
-   */
-  parsePriorAuthValidationResponse(responseText) {
-    const result = {
-      passed: true,
-      medicalNecessityScore: 0.5,
-      consistencyCheck: { passed: true, explanation: '' },
-      documentationGaps: [],
-      rejectionRisks: [],
-      recommendations: [],
-      justificationNarrative: ''
-    };
-
-    try {
-      // Extract medical necessity score
-      const scoreMatch = responseText.match(/MEDICAL_NECESSITY_SCORE:\s*([\d.]+)/i);
-      if (scoreMatch) {
-        result.medicalNecessityScore = parseFloat(scoreMatch[1]);
-        if (result.medicalNecessityScore < 0.6) {
-          result.passed = false;
-        }
-      }
-
-      // Extract consistency check
-      const consistencyMatch = responseText.match(/CONSISTENCY_CHECK:\s*(PASS|FAIL)/i);
-      if (consistencyMatch) {
-        result.consistencyCheck.passed = consistencyMatch[1].toUpperCase() === 'PASS';
-      }
-
-      if (!result.consistencyCheck.passed) {
-        result.passed = false;
-        const consistencyFailSection = responseText.match(
-          /CONSISTENCY_CHECK:\s*FAIL([\s\S]*?)(?=DOCUMENTATION_GAPS:|REJECTION_RISKS:|RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i
-        );
-        if (consistencyFailSection) {
-          result.consistencyCheck.explanation = consistencyFailSection[1].trim();
-        }
-      }
-
-      // Extract documentation gaps
-      const gapsSection = responseText.match(
-        /DOCUMENTATION_GAPS:([\s\S]*?)(?=REJECTION_RISKS:|RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i
-      );
-      if (gapsSection) {
-        const gapLines = gapsSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/));
-
-        result.documentationGaps = gapLines
-          .map(line => line.replace(/^[-*•]\s*/, '').trim())
-          .filter(g => g.length > 5);
-      }
-
-      // Extract rejection risks
-      const risksSection = responseText.match(
-        /REJECTION_RISKS:([\s\S]*?)(?=RECOMMENDATIONS:|JUSTIFICATION_NARRATIVE:|$)/i
-      );
-      if (risksSection) {
-        const riskLines = risksSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/));
-
-        result.rejectionRisks = riskLines
-          .map(line => {
-            const cleaned = line.replace(/^[-*•]\s*/, '').trim();
-            // Try to match NPHIES-style codes: XX-XXXX, MN-XXX, SE-XXX, CV-XXX, BV-XXXXX, etc.
-            const codeMatch = cleaned.match(/^([A-Z]{2,3}-[\d-]+):\s*(.+)/);
-            if (codeMatch) {
-              return { code: codeMatch[1], description: codeMatch[2] };
-            }
-            // If no code found but description is meaningful, return without code (null)
-            // This prevents showing "UNKNOWN" badges in the UI
-            if (cleaned.length > 10) {
-              return { code: null, description: cleaned };
-            }
-            return null;
-          })
-          .filter(r => r && r.description && r.description.length > 5);
-      }
-
-      // Extract recommendations
-      const recsSection = responseText.match(
-        /RECOMMENDATIONS:([\s\S]*?)(?=JUSTIFICATION_NARRATIVE:|$)/i
-      );
-      if (recsSection) {
-        const recLines = recsSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/));
-
-        result.recommendations = recLines
-          .map(line => line.replace(/^[-*•]\s*/, '').trim())
-          .filter(r => r.length > 5);
-      }
-
-      // Extract justification narrative
-      const narrativeSection = responseText.match(/JUSTIFICATION_NARRATIVE:([\s\S]*?)$/i);
-      if (narrativeSection) {
-        result.justificationNarrative = narrativeSection[1]
-          .trim()
-          .replace(/^[\s\n]+/, '')
-          .replace(/[\s\n]+$/, '')
-          .split('\n')
-          .filter(line => !line.match(/^(===|---)/))
-          .join(' ')
-          .trim();
-      }
-    } catch (error) {
-      console.error('❌ Error parsing prior auth validation response:', error.message);
-    }
-
-    return result;
-  }
-
-  // ============================================================================
   // CLINICAL TEXT ENHANCEMENT
   // ============================================================================
 
@@ -1395,164 +510,50 @@ JUSTIFICATION_NARRATIVE:
    * @returns {Promise<object>} - Enhanced text result
    */
   async enhanceClinicalText(text, field, context = {}) {
+    // Any failure returns the original text unchanged (enhanced:false); the UI keeps the input.
+    const unchanged = (error, extra = {}) => ({
+      success: false, enhanced: false, originalText: text, enhancedText: text, error, ...extra
+    });
     const prompt = this.buildClinicalEnhancementPrompt(text, field, context);
 
     try {
       console.log('\n📝 ==> AI CLINICAL TEXT ENHANCEMENT REQUEST <==');
-      console.log(`📅 Timestamp: ${new Date().toISOString()}`);
       console.log(`🤖 Model: ${this.model}`);
       console.log(`📋 Field: ${field}`);
-      console.log(`📝 Original Text: "${text}"`);
       console.log(`📝 Original Text Length: ${text?.length || 0} characters`);
-      console.log(`📋 Context: ${JSON.stringify(context)}\n`);
+      console.log(`📋 Context fields: ${Object.keys(context || {}).join(', ') || 'none'}\n`);
 
       const result = await this.generateCompletion(prompt, {
         temperature: 0.4,
         num_predict: 3000,
-        repeat_penalty: 1.1,
         top_p: 0.92,
-        num_ctx: 4096
+        num_ctx: 4096,
+        format: ENHANCED_TEXT_SCHEMA
       });
-
-      console.log('\n📥 ==> RAW AI RESPONSE <==');
-      console.log('─'.repeat(60));
-      console.log(result.response);
-      console.log('─'.repeat(60));
-
-      let enhancedText = this.parseEnhancedTextResponse(result.response);
-
-      console.log('\n📤 ==> PARSED ENHANCED TEXT <==');
-      console.log('─'.repeat(60));
-      console.log(enhancedText);
-      console.log('─'.repeat(60));
-      console.log(`✅ Enhanced text generated (${enhancedText.length} characters)\n`);
-
-      // Clean up the response
-      let cleanedText = enhancedText;
-      
-      // Remove any echo of the prompt
-      const promptEchoPatterns = [
-        /^rewrite this clinical note.*?:\s*/i,
-        /^detailed version:\s*/i,
-        /^["'].*?["']\s*\n*detailed version:\s*/i,
-        /^enhance this .* for a medical/i,
-        /^you are a medical documentation/i,
-      ];
-      
-      for (const pattern of promptEchoPatterns) {
-        cleanedText = cleanedText.replace(pattern, '');
-      }
-      
-      // If response starts with the original text in quotes, remove it
-      if (cleanedText.startsWith('"') || cleanedText.startsWith("'")) {
-        const quoteEnd = cleanedText.indexOf(cleanedText[0], 1);
-        if (quoteEnd > 0 && quoteEnd < 200) {
-          // Check if there's more content after the quoted original
-          const afterQuote = cleanedText.substring(quoteEnd + 1).trim();
-          if (afterQuote.length > 30) {
-            cleanedText = afterQuote.replace(/^detailed version:\s*/i, '').trim();
-          }
-        }
-      }
-      
-      // Remove leading/trailing quotes
-      cleanedText = cleanedText
-        .replace(/^["']+/, '')
-        .replace(/["']+$/, '')
-        .trim();
-      
-      // Check for various failure modes where AI echoes instructions instead of enhancing
-      const failurePatterns = [
-        /^i am a/i,
-        /^please write/i,
-        /^as a/i,
-        /^enhance this/i,
-        /^rewrite and expand/i,
-        /^your task is/i,
-        /^field type:/i,
-        /^clinical context:/i,
-        /^text to enhance:/i,
-        /^instructions:/i,
-        /^write the expanded/i,
-        /^you are a medical/i,
-        /^you are an expert/i,
-        /for a medical insurance prior authorization/i,
-        /into detailed professional medical documentation/i,
-        /into professional medical documentation/i,
-      ];
-      
-      const isFailure = failurePatterns.some(pattern => pattern.test(cleanedText));
-      if (isFailure) {
-        console.warn('⚠️ AI echoed instructions instead of enhancing the text');
-        return {
-          success: false,
-          originalText: text,
-          enhancedText: text,
-          error: 'AI did not enhance the text properly. The model may be overloaded. Please try again.',
-          metadata: {
-            model: this.model,
-            responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-            timestamp: new Date().toISOString()
-          }
-        };
-      }
-
-      // Check minimum length - enhanced text should be at least as long as original or close
-      if (!cleanedText || cleanedText.length < 20) {
-        console.warn('⚠️ Enhanced text too short or empty');
-        return {
-          success: false,
-          originalText: text,
-          enhancedText: text,
-          error: 'AI returned insufficient content. Try adding more detail to your input.',
-          metadata: {
-            model: this.model,
-            responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-            timestamp: new Date().toISOString()
-          }
-        };
-      }
-      
-      // Additional check: if the "enhanced" text is much shorter than original, something went wrong
-      if (cleanedText.length < text.length * 0.5) {
-        console.warn('⚠️ Enhanced text is significantly shorter than original - likely a parsing issue');
-        return {
-          success: false,
-          originalText: text,
-          enhancedText: text,
-          error: 'AI response was truncated or incomplete. Please try again.',
-          metadata: {
-            model: this.model,
-            responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-            timestamp: new Date().toISOString()
-          }
-        };
-      }
-
-      enhancedText = cleanedText;
-
-      return {
-        success: true,
-        originalText: text,
-        enhancedText,
-        metadata: {
-          model: this.model,
-          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-          timestamp: new Date().toISOString()
-        }
+      const metadata = {
+        model: this.model,
+        responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+        timestamp: new Date().toISOString()
       };
+
+      const { ok, data, errors } = parseStructuredReply(result.response, ENHANCED_TEXT_SCHEMA);
+      if (!ok) {
+        logInvalidReply('Clinical text enhancement', errors);
+        return unchanged('The AI reply did not match the expected format; your text was not changed. Please try again.',
+          { analysisIncomplete: true, metadata });
+      }
+
+      const enhancedText = data.enhancedText.trim();
+      // Length sanity check on the parsed value: a reply far shorter than the input was cut off.
+      if (enhancedText.length < (text?.length || 0) * 0.5) {
+        return unchanged('AI response was truncated or incomplete; your text was not changed. Please try again.', { metadata });
+      }
+
+      console.log(`✅ Enhanced text generated (${enhancedText.length} characters)\n`);
+      return { success: true, enhanced: true, originalText: text, enhancedText, metadata };
     } catch (error) {
       console.error('❌ Error enhancing clinical text:', error.message);
-      return {
-        success: false,
-        originalText: text,
-        enhancedText: text,
-        error: error.message,
-        metadata: {
-          model: this.model,
-          timestamp: new Date().toISOString()
-        }
-      };
+      return unchanged(error.message, { metadata: { model: this.model, timestamp: new Date().toISOString() } });
     }
   }
 
@@ -1574,9 +575,10 @@ JUSTIFICATION_NARRATIVE:
     let contextParts = [];
     
     // Patient Information (from database)
-    if (context.patientName || context.patientAge || context.patientBirthDate || context.patientGender) {
+    // The patient's name is deliberately not sent to the model: age and gender are
+    // the only demographics the enhancement needs.
+    if (context.patientAge || context.patientBirthDate || context.patientGender) {
       let patientInfo = 'Patient:';
-      if (context.patientName) patientInfo += ` ${context.patientName}`;
       
       // Calculate proper age display from birth date if available
       if (context.patientBirthDate) {
@@ -1606,7 +608,7 @@ JUSTIFICATION_NARRATIVE:
       }
       
       if (context.patientGender) patientInfo += `, ${context.patientGender}`;
-      contextParts.push(patientInfo);
+      contextParts.push(patientInfo.replace('Patient:, ', 'Patient: '));
     }
     
     // Basic Information
@@ -1725,114 +727,11 @@ REQUIREMENTS:
 3. Use professional medical language suitable for insurance documentation
 4. Include relevant temporal markers, severity descriptors, and clinical observations where appropriate
 5. Format as a cohesive narrative paragraph or structured note as appropriate for the field type
-6. Do NOT include any preamble, explanations, or meta-commentary - output ONLY the enhanced clinical text
+6. Answer with one JSON object only: {"enhancedText": "<the enhanced clinical text>"} - no preamble, explanations, or meta-commentary
 </|user|>
 
 <|assistant|>
 `;
-  }
-
-  /**
-   * Parse enhanced text response
-   * @private
-   */
-  parseEnhancedTextResponse(response) {
-    let text = response || '';
-
-    // Remove Llama3 chat format tokens first
-    text = text.replace(/<\|system\|>[\s\S]*?<\/\|system\|>/gi, '');
-    text = text.replace(/<\|user\|>[\s\S]*?<\/\|user\|>/gi, '');
-    text = text.replace(/<\|assistant\|>/gi, '');
-    text = text.replace(/<\/\|assistant\|>/gi, '');
-    text = text.replace(/<\|end\|>/gi, '');
-    text = text.replace(/<\|eot_id\|>/gi, '');
-    text = text.replace(/<\|start_header_id\|>.*?<\|end_header_id\|>/gi, '');
-
-    // Patterns that indicate the AI echoed the prompt instead of responding
-    const echoPatterns = [
-      /^Rewrite and expand this/i,
-      /^Enhance this .* for a medical/i,
-      /^You are a medical documentation specialist/i,
-      /^You are an expert medical/i,
-      /^You are a .* specialist/i,
-      /^Your task is to rewrite/i,
-      /^Your task is to expand/i,
-      /^FIELD TYPE:/i,
-      /^CLINICAL CONTEXT:/i,
-      /^TEXT TO ENHANCE:/i,
-      /^INSTRUCTIONS:/i,
-      /^1\. Expand the text/i,
-      /^Output ONLY the enhanced text/i,
-      /^Write the expanded .* now/i,
-      /into detailed professional medical documentation/i,
-      /into professional medical documentation suitable/i,
-      /suitable for insurance prior authorization/i,
-      /^Expand the following/i,
-      /^ORIGINAL TEXT:/i,
-      /^REQUIREMENTS:/i,
-    ];
-    
-    // Check if the response is just echoing the prompt
-    const isEcho = echoPatterns.some(pattern => pattern.test(text.trim()));
-    if (isEcho) {
-      console.warn('⚠️ AI echoed the prompt instead of enhancing. Returning empty.');
-      return '';
-    }
-
-    const prefixPatterns = [
-      /^ENHANCED_TEXT:\s*/i,
-      /^ENHANCED\s+[A-Z\s]+:\s*/i, // ENHANCED PATIENT HISTORY:, ENHANCED TREATMENT PLAN:, etc.
-      /^Enhanced\s*(Text|Version|Content)?:\s*/i,
-      /^Here('s| is) the enhanced.*?:\s*/i,
-      /^The enhanced.*?:\s*/i,
-      /^Here is the expanded.*?:\s*/i,
-      /^Below is the expanded.*?:\s*/i,
-      /^Please enhance.*$/im,
-      /^You are a medical.*$/im,
-      /^You are an expert.*$/im,
-      /^<\|assistant\|>\s*/i,
-      /^Assistant:\s*/i,
-      /^Sure[,!]?\s*(here('s| is))?.*?:\s*/i,
-      /^Certainly[,!]?\s*(here('s| is))?.*?:\s*/i,
-      /^Rewrite and expand.*?:\s*/i,
-      /^Write the expanded.*?:\s*/i,
-      /^\*\*Enhanced.*?\*\*:?\s*/i,
-      /^\*\*Expanded.*?\*\*:?\s*/i,
-    ];
-
-    for (const pattern of prefixPatterns) {
-      text = text.replace(pattern, '');
-    }
-
-    text = text.replace(/\n*<\|.*?\|>.*$/s, '');
-    text = text.replace(/\n*===.*$/s, '');
-    text = text.replace(/\n*---.*$/s, '');
-    
-    // Remove any trailing instruction echoes
-    text = text.replace(/\n*INSTRUCTIONS:[\s\S]*$/i, '');
-    text = text.replace(/\n*CLINICAL CONTEXT:[\s\S]*$/i, '');
-    text = text.replace(/\n*Context:[\s\S]*$/i, '');
-    text = text.replace(/\n*REQUIREMENTS:[\s\S]*$/i, '');
-    text = text.replace(/\n*Note:[\s\S]{0,200}$/i, ''); // Remove trailing notes
-
-    text = text.trim();
-    
-    // Remove surrounding quotes
-    if (
-      (text.startsWith('"') && text.endsWith('"')) ||
-      (text.startsWith("'") && text.endsWith("'"))
-    ) {
-      text = text.slice(1, -1);
-    }
-    
-    // Remove markdown bold markers around the entire text
-    if (text.startsWith('**') && text.endsWith('**')) {
-      text = text.slice(2, -2);
-    }
-
-    text = text.replace(/^[\s\n]+/, '').replace(/[\s\n]+$/, '');
-
-    return text;
   }
 
   // ============================================================================
@@ -1857,28 +756,29 @@ REQUIREMENTS:
       console.log(`📅 Timestamp: ${new Date().toISOString()}`);
       console.log(`🤖 Model: ${this.model}`);
       console.log(`📋 Category: ${category}`);
-      console.log(`📝 Text: ${text.substring(0, 50)}...\n`);
+      console.log(`📝 Text length: ${text.length}\n`);
 
       const result = await this.generateCompletion(prompt, {
         temperature: 0.2,
         num_predict: 600,
-        repeat_penalty: 1.1
+        format: SNOMED_SUGGESTIONS_SCHEMA
       });
-
-      const suggestions = this.parseSnomedSuggestionsResponse(result.response);
-
-      console.log(`✅ Found ${suggestions.length} SNOMED suggestions\n`);
-
-      return {
-        success: true,
-        originalText: text,
-        suggestions,
-        metadata: {
-          model: this.model,
-          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-          timestamp: new Date().toISOString()
-        }
+      const metadata = {
+        model: this.model,
+        responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+        timestamp: new Date().toISOString()
       };
+
+      const parsed = this.parseSnomedSuggestionsResponse(result.response);
+      if (!parsed) {
+        return {
+          success: false, originalText: text, suggestions: [], analysisIncomplete: true,
+          error: INVALID_REPLY_MESSAGE, metadata
+        };
+      }
+
+      console.log(`✅ Found ${parsed.length} SNOMED suggestions\n`);
+      return { success: true, originalText: text, suggestions: parsed, metadata };
     } catch (error) {
       console.error('❌ Error suggesting SNOMED codes:', error.message);
       return { success: false, suggestions: [], error: error.message };
@@ -1899,37 +799,23 @@ ${text}
 ${category}
 
 === REQUIREMENTS ===
-Provide up to 5 relevant SNOMED CT codes with their descriptions. Format each suggestion as:
-CODE: [SNOMED code] - [Description]
-
+Provide up to 5 relevant SNOMED CT codes with their descriptions.
 Focus on the most specific and accurate codes for the clinical description.
-
-=== SNOMED SUGGESTIONS ===`;
+Answer with one JSON object only: {"suggestions": [{"code": "<SNOMED CT concept id>", "display": "<description>"}]}`;
   }
 
   /**
-   * Parse SNOMED suggestions response
+   * Read the SNOMED suggestion reply (SNOMED_SUGGESTIONS_SCHEMA).
+   * @returns {Array|null} suggestions, or null when the reply is unusable
    * @private
    */
   parseSnomedSuggestionsResponse(response) {
-    const suggestions = [];
-    const lines = response.split('\n');
-
-    lines.forEach(line => {
-      const match =
-        line.match(/CODE:\s*(\d+)\s*-\s*(.+)/i) ||
-        line.match(/(\d{6,})\s*[-:]\s*(.+)/) ||
-        line.match(/^-?\s*(\d{6,})\s*[-:–]\s*(.+)/);
-
-      if (match) {
-        suggestions.push({
-          code: match[1].trim(),
-          display: match[2].trim().replace(/^\s*-\s*/, '')
-        });
-      }
-    });
-
-    return suggestions.slice(0, 5);
+    const { ok, data, errors } = parseStructuredReply(response, SNOMED_SUGGESTIONS_SCHEMA);
+    if (!ok) {
+      logInvalidReply('SNOMED suggestions', errors);
+      return null;
+    }
+    return data.suggestions.map(({ code, display }) => ({ code, display: display.trim() }));
   }
 
   /**
@@ -1960,27 +846,14 @@ Focus on the most specific and accurate codes for the clinical description.
       const result = await this.generateCompletion(prompt, {
         temperature: 0.1, // Very low temperature for consistent validation
         num_predict: 800,
-        repeat_penalty: 1.2
+        format: SNOMED_VALIDATION_SCHEMA
       });
 
-      console.log('\n📥 ==> RAW AI RESPONSE <==');
-      console.log('─'.repeat(60));
-      console.log(result.response);
-      console.log('─'.repeat(60));
-
       const validation = this.parseSnomedValidationResponse(result.response);
-
-      console.log(`\n✅ Validation Result: ${validation.isValid ? 'VALID' : 'INVALID'}`);
-      console.log(`   Confidence: ${(validation.confidence * 100).toFixed(0)}%`);
-      if (validation.correctDescription) {
-        console.log(`   Correct Description: ${validation.correctDescription}`);
-      }
-      if (validation.suggestedCode) {
-        console.log(`   Suggested Code: ${validation.suggestedCode}`);
-      }
+      console.log(`\n✅ Validation Result: ${validation.isValid === null ? 'UNREADABLE' : validation.isValid ? 'VALID' : 'INVALID'}`);
 
       return {
-        success: true,
+        success: !validation.analysisIncomplete,
         code,
         providedDescription: description,
         ...validation,
@@ -2023,75 +896,44 @@ Provided Description: ${description}
 4. If the description is valid but the code is wrong, suggest the correct code
 5. Rate your confidence in this validation (0.0 to 1.0)
 
-=== OUTPUT FORMAT ===
-VALID: [YES/NO]
-CONFIDENCE: [0.0-1.0]
-EXPLANATION: [Brief explanation of your validation]
-CORRECT_DESCRIPTION: [The official SNOMED CT description for this code, or "N/A" if code is invalid]
-SUGGESTED_CODE: [If description is valid but code is wrong, provide correct code, otherwise "N/A"]
-SUGGESTED_DESCRIPTION: [If you have a better matching term, provide it, otherwise "N/A"]
-
-=== BEGIN VALIDATION ===`;
+=== OUTPUT ===
+Answer with one JSON object only:
+{"isValid": true|false, "confidence": 0.0-1.0, "explanation": "brief explanation",
+ "correctDescription": "official description for this code, or null if the code is invalid",
+ "suggestedCode": "correct code if the description is valid but the code is wrong, otherwise null",
+ "suggestedDescription": "a better matching term, otherwise null"}`;
   }
 
   /**
-   * Parse SNOMED validation response
+   * Read the SNOMED validation reply (SNOMED_VALIDATION_SCHEMA). Fails closed: an unusable
+   * reply is isValid:null (unknown), never "valid" or "invalid".
    * @private
    */
   parseSnomedValidationResponse(response) {
-    const result = {
-      isValid: false,
-      confidence: 0.5,
+    const { ok, data, errors } = parseStructuredReply(response, SNOMED_VALIDATION_SCHEMA);
+    if (ok) {
+      return {
+        isValid: data.isValid,
+        confidence: data.confidence,
+        explanation: data.explanation,
+        correctDescription: data.correctDescription ?? null,
+        suggestedCode: data.suggestedCode ?? null,
+        suggestedDescription: data.suggestedDescription ?? null,
+        analysisIncomplete: false
+      };
+    }
+    logInvalidReply('SNOMED validation', errors);
+    return {
+      isValid: null,
+      confidence: 0,
       explanation: '',
       correctDescription: null,
       suggestedCode: null,
-      suggestedDescription: null
+      suggestedDescription: null,
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      error: INVALID_REPLY_MESSAGE
     };
-
-    try {
-      // Extract validity
-      const validMatch = response.match(/VALID:\s*(YES|NO)/i);
-      if (validMatch) {
-        result.isValid = validMatch[1].toUpperCase() === 'YES';
-      }
-
-      // Extract confidence
-      const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-      if (confidenceMatch) {
-        result.confidence = parseFloat(confidenceMatch[1]);
-        // Clamp to 0-1 range
-        result.confidence = Math.max(0, Math.min(1, result.confidence));
-      }
-
-      // Extract explanation
-      const explanationMatch = response.match(/EXPLANATION:\s*([^\n]+)/i);
-      if (explanationMatch) {
-        result.explanation = explanationMatch[1].trim();
-      }
-
-      // Extract correct description
-      const correctDescMatch = response.match(/CORRECT_DESCRIPTION:\s*([^\n]+)/i);
-      if (correctDescMatch && correctDescMatch[1].trim().toLowerCase() !== 'n/a') {
-        result.correctDescription = correctDescMatch[1].trim();
-      }
-
-      // Extract suggested code
-      const suggestedCodeMatch = response.match(/SUGGESTED_CODE:\s*(\d+|N\/A)/i);
-      if (suggestedCodeMatch && suggestedCodeMatch[1].toLowerCase() !== 'n/a') {
-        result.suggestedCode = suggestedCodeMatch[1].trim();
-      }
-
-      // Extract suggested description
-      const suggestedDescMatch = response.match(/SUGGESTED_DESCRIPTION:\s*([^\n]+)/i);
-      if (suggestedDescMatch && suggestedDescMatch[1].trim().toLowerCase() !== 'n/a') {
-        result.suggestedDescription = suggestedDescMatch[1].trim();
-      }
-
-    } catch (error) {
-      console.error('❌ Error parsing SNOMED validation response:', error.message);
-    }
-
-    return result;
   }
 
   // ============================================================================
@@ -2114,12 +956,12 @@ SUGGESTED_DESCRIPTION: [If you have a better matching term, provide it, otherwis
       const result = await this.generateCompletion(prompt, {
         temperature: 0.3,
         num_predict: 1500,
-        repeat_penalty: 1.2
+        format: MEDICAL_NECESSITY_SCHEMA
       });
 
       const assessment = this.parseMedicalNecessityResponse(result.response);
 
-      console.log(`✅ Assessment complete: ${assessment.assessment}\n`);
+      console.log(`✅ Assessment complete: ${assessment.assessment ?? 'unreadable reply'}\n`);
 
       return {
         ...assessment,
@@ -2224,59 +1066,43 @@ Plan: ${clinicalInfo.treatment_plan || 'Not documented'}
 3. Are the requested services appropriate for the patient's age?
 4. What additional documentation would strengthen the case?
 
-=== OUTPUT FORMAT ===
-NECESSITY_SCORE: [0.0-1.0]
-ASSESSMENT: [APPROVED/NEEDS_INFO/LIKELY_DENIED]
-REASONING: [Brief explanation]
-MISSING_ELEMENTS:
-- [Element 1]
-- [Element 2]
-SUGGESTED_JUSTIFICATION: [A sentence that could be added to support medical necessity]`;
+=== OUTPUT ===
+Answer with one JSON object only:
+{"necessityScore": 0.0-1.0, "assessment": "APPROVED|NEEDS_INFO|LIKELY_DENIED",
+ "reasoning": "brief explanation", "missingElements": ["..."],
+ "suggestedJustification": "a sentence that could be added to support medical necessity"}`;
   }
 
   /**
-   * Parse medical necessity response
+   * Read the medical necessity reply (MEDICAL_NECESSITY_SCHEMA). Fails closed: an unusable
+   * reply has no score and no assessment (null) and requires manual review.
    * @private
    */
   parseMedicalNecessityResponse(response) {
-    const result = {
-      success: true,
-      necessityScore: 0.5,
-      assessment: 'NEEDS_INFO',
+    const { ok, data, errors } = parseStructuredReply(response, MEDICAL_NECESSITY_SCHEMA);
+    if (ok) {
+      return {
+        success: true,
+        necessityScore: data.necessityScore,
+        assessment: data.assessment,
+        reasoning: data.reasoning,
+        missingElements: data.missingElements,
+        suggestedJustification: data.suggestedJustification,
+        analysisIncomplete: false
+      };
+    }
+    logInvalidReply('Medical necessity', errors);
+    return {
+      success: false,
+      necessityScore: null,
+      assessment: null,
       reasoning: '',
       missingElements: [],
-      suggestedJustification: ''
+      suggestedJustification: '',
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      error: INVALID_REPLY_MESSAGE
     };
-
-    try {
-      const scoreMatch = response.match(/NECESSITY_SCORE:\s*([\d.]+)/i);
-      if (scoreMatch) result.necessityScore = parseFloat(scoreMatch[1]);
-
-      const assessmentMatch = response.match(/ASSESSMENT:\s*(APPROVED|NEEDS_INFO|LIKELY_DENIED)/i);
-      if (assessmentMatch) result.assessment = assessmentMatch[1];
-
-      const reasoningMatch = response.match(/REASONING:\s*([^\n]+)/i);
-      if (reasoningMatch) result.reasoning = reasoningMatch[1].trim();
-
-      const missingSection = response.match(
-        /MISSING_ELEMENTS:([\s\S]*?)(?=SUGGESTED_JUSTIFICATION:|$)/i
-      );
-      if (missingSection) {
-        result.missingElements = missingSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/))
-          .map(line => line.replace(/^[-*•]\s*/, '').trim())
-          .filter(e => e.length > 3);
-      }
-
-      const justificationMatch = response.match(/SUGGESTED_JUSTIFICATION:\s*([^\n]+)/i);
-      if (justificationMatch) result.suggestedJustification = justificationMatch[1].trim();
-    } catch (error) {
-      console.error('❌ Error parsing medical necessity response:', error.message);
-    }
-
-    return result;
   }
 }
 

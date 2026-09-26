@@ -41,6 +41,8 @@ class GeneralRequestsController {
       }
 
       const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+      // The count query has no LIMIT/OFFSET, so its placeholders start at $1 instead of $3
+      const countWhereClause = whereClause.replace(/\$(\d+)/g, (_, n) => `$${Number(n) - 2}`);
 
       // Get total count
       const countQuery = `
@@ -49,7 +51,7 @@ class GeneralRequestsController {
         LEFT JOIN patients p ON gr.patient_id = p.patient_id
         LEFT JOIN providers pr ON gr.provider_id = pr.provider_id
         LEFT JOIN insurers i ON gr.insurer_id = i.insurer_id
-        ${whereClause}
+        ${countWhereClause}
       `;
       const countResult = await query(countQuery, countParams);
       const total = parseInt(countResult.rows[0].total);
@@ -234,10 +236,7 @@ class GeneralRequestsController {
       } else if (error.code === '23503') {
         res.status(400).json({ error: 'Invalid reference to patient, provider, or insurer' });
       } else {
-        res.status(500).json({ 
-          error: 'Failed to create general request',
-          details: error.message
-        });
+        res.status(500).json({ error: 'Failed to create general request' });
       }
     }
   }
@@ -249,35 +248,19 @@ class GeneralRequestsController {
   async update(req, res) {
     try {
       const { id } = req.params;
-      const formData = req.body;
+      const formData = req.body || {};
 
       // Check if record exists
-      const existsQuery = 'SELECT id, status FROM general_requests WHERE id = $1';
+      const existsQuery = 'SELECT id, status, submitted_at FROM general_requests WHERE id = $1';
       const existsResult = await query(existsQuery, [id]);
       
       if (existsResult.rows.length === 0) {
         return res.status(404).json({ error: 'General request not found' });
       }
-
-      // Extract form sections
-      const {
-        patient,
-        insured,
-        provider,
-        coverage,
-        encounterClass,
-        encounterStart,
-        encounterEnd,
-        service,
-        managementItems,
-        medications,
-        medicationSafetyAnalysis,
-        attachments,
-        prerequisiteJustification
-      } = formData;
+      const existing = existsResult.rows[0];
 
       // Determine status
-      const status = formData.status || existsResult.rows[0].status;
+      const status = formData.status || existing.status;
 
       // Run validation service to get updated AI suggestions
       let validationResults = null;
@@ -289,56 +272,43 @@ class GeneralRequestsController {
         // Continue without validation results if service fails
       }
 
-      // Update general request
+      // Only the sections present in the request are updated; omitted sections keep their data.
+      const assignments = [];
+      const values = [];
+      const set = (column, value) => {
+        values.push(value);
+        assignments.push(`${column} = $${values.length}`);
+      };
+      const has = key => Object.hasOwn(formData, key);
+
+      for (const column of ['patient_id', 'provider_id', 'insurer_id']) {
+        if (has(column)) set(column, formData[column] || null);
+      }
+      set('status', status);
+      for (const [key, column, fallback] of [
+        ['patient', 'patient_data', {}], ['insured', 'insured_data', {}], ['provider', 'provider_data', {}],
+        ['coverage', 'coverage_data', {}], ['service', 'service_data', {}], ['managementItems', 'management_items', []],
+        ['medications', 'medications', []], ['medicationSafetyAnalysis', 'medication_safety_analysis', null],
+        ['attachments', 'attachments', []]
+      ]) {
+        if (has(key)) set(column, JSON.stringify(formData[key] || fallback));
+      }
+      for (const [key, column] of [
+        ['encounterClass', 'encounter_class'], ['encounterStart', 'encounter_start'], ['encounterEnd', 'encounter_end'],
+        ['prerequisiteJustification', 'prerequisite_justification']
+      ]) {
+        if (has(key)) set(column, formData[key] || null);
+      }
+      if (validationResults) set('validation_results', JSON.stringify(validationResults));
+      set('submitted_at', status === 'Submitted' && !existing.submitted_at ? new Date() : existing.submitted_at);
+
+      values.push(id);
       const updateQuery = `
         UPDATE general_requests
-        SET
-          patient_id = $1,
-          provider_id = $2,
-          insurer_id = $3,
-          status = $4,
-          patient_data = $5,
-          insured_data = $6,
-          provider_data = $7,
-          coverage_data = $8,
-          encounter_class = $9,
-          encounter_start = $10,
-          encounter_end = $11,
-          service_data = $12,
-          management_items = $13,
-          medications = $14,
-          medication_safety_analysis = $15,
-          validation_results = $16,
-          prerequisite_justification = $17,
-          attachments = $18,
-          submitted_at = $19,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = $20
+        SET ${assignments.join(', ')}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $${values.length}
         RETURNING *
       `;
-
-      const values = [
-        formData.patient_id || null,
-        formData.provider_id || null,
-        formData.insurer_id || null,
-        status,
-        JSON.stringify(patient || {}),
-        JSON.stringify(insured || {}),
-        JSON.stringify(provider || {}),
-        JSON.stringify(coverage || {}),
-        encounterClass || null,
-        encounterStart || null,
-        encounterEnd || null,
-        JSON.stringify(service || {}),
-        JSON.stringify(managementItems || []),
-        JSON.stringify(medications || []),
-        JSON.stringify(medicationSafetyAnalysis || null),
-        JSON.stringify(validationResults || null),
-        prerequisiteJustification || null,
-        JSON.stringify(attachments || []),
-        status === 'Submitted' && !existsResult.rows[0].submitted_at ? new Date() : existsResult.rows[0].submitted_at,
-        id
-      ];
 
       const result = await query(updateQuery, values);
 
@@ -353,10 +323,7 @@ class GeneralRequestsController {
       } else if (error.code === '23503') {
         res.status(400).json({ error: 'Invalid reference to patient, provider, or insurer' });
       } else {
-        res.status(500).json({ 
-          error: 'Failed to update general request',
-          details: error.message
-        });
+        res.status(500).json({ error: 'Failed to update general request' });
       }
     }
   }

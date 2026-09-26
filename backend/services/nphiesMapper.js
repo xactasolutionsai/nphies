@@ -6,7 +6,8 @@
 
 import { randomUUID } from 'crypto';
 import nphiesCodeService from './nphiesCodeService.js';
-import { NPHIES_CONFIG } from '../config/nphies.js';
+import { formatSaudiDateTime } from '../utils/dateTime.js';
+import { formatSaudiDate, requireProviderLicense, requireInsurerLicense, mappingError, providerTypeCoding } from './priorAuthMapper/nphiesIdentity.js';
 
 class NphiesMapper {
   constructor() {
@@ -34,9 +35,8 @@ class NphiesMapper {
    * Format date to FHIR date format (YYYY-MM-DD)
    */
   formatDate(date) {
-    if (!date) return null;
-    const d = new Date(date);
-    return d.toISOString().split('T')[0];
+    // Saudi calendar date; UTC slicing shifts late-evening Riyadh times to the previous day
+    return formatSaudiDate(date);
   }
 
   /**
@@ -314,51 +314,13 @@ class NphiesMapper {
   buildProviderOrganization(provider, partialMode = false) {
     if (!provider) return null;
     const providerId = (provider.provider_id || provider.providerId)?.toString() || this.generateId();
-    // Use centralized NPHIES Provider ID from config
-    const nphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
+    // The provider's own license; never another provider's or a configured default
+    const nphiesId = partialMode ? (provider.nphies_id || provider.nphiesId) : requireProviderLicense({ nphies_id: provider.nphies_id || provider.nphiesId });
     const providerName = provider.provider_name || provider.providerName || provider.name || 'Provider Organization';
     const rawProviderType = provider.provider_type || provider.providerType || '1';
 
-    // Convert text provider types to NPHIES numeric codes
-    // NPHIES ValueSet: http://nphies.sa/terminology/CodeSystem/provider-type
-    // Reference: https://portal.nphies.sa/ig/CodeSystem-provider-type.html
-    const getProviderTypeCode = (type) => {
-      const typeMap = {
-        // Text values -> NPHIES codes
-        'hospital': '1',
-        'polyclinic': '2',
-        'pharmacy': '3',
-        'optical': '4',
-        'optical_shop': '4',
-        'clinic': '5',
-        'dental': '5',
-        'dental_clinic': '5',
-        'vision': '5',
-        'vision_clinic': '5',
-        // Already numeric codes
-        '1': '1',
-        '2': '2',
-        '3': '3',
-        '4': '4',
-        '5': '5'
-      };
-      return typeMap[type?.toLowerCase()] || '1'; // Default to Hospital
-    };
-
-    const providerType = getProviderTypeCode(rawProviderType);
-
-    // Get provider type display text per NPHIES ValueSet
-    // Reference: https://portal.nphies.sa/ig/CodeSystem-provider-type.html
-    const getProviderTypeDisplay = (code) => {
-      const displays = {
-        '1': 'Hospital',
-        '2': 'Polyclinic',
-        '3': 'Pharmacy',
-        '4': 'Optical Shop',
-        '5': 'Clinic'  // Used for Dental, Vision, Professional clinics
-      };
-      return displays[code] || 'Healthcare Provider';
-    };
+    // NPHIES provider-type code and display from the shared table
+    const providerTypeCodingValue = providerTypeCoding(rawProviderType);
 
     return {
       fullUrl: `http://provider.com/Organization/${providerId}`,
@@ -375,19 +337,21 @@ class NphiesMapper {
               coding: [
                 {
                   system: 'http://nphies.sa/terminology/CodeSystem/provider-type',
-                  code: providerType,
-                  display: getProviderTypeDisplay(providerType)
+                  code: providerTypeCodingValue.code,
+                  display: providerTypeCodingValue.display
                 }
               ]
             }
           }
         ],
-        identifier: [
-          {
-            system: 'http://nphies.sa/license/provider-license',
-            value: nphiesId
-          }
-        ],
+        ...(nphiesId && {
+          identifier: [
+            {
+              system: 'http://nphies.sa/license/provider-license',
+              value: nphiesId
+            }
+          ]
+        }),
         active: true,
         type: [
           {
@@ -423,8 +387,8 @@ class NphiesMapper {
   buildPayerOrganization(insurer, partialMode = false) {
     if (!insurer) return null;
     const insurerId = (insurer.insurer_id || insurer.insurerId)?.toString() || this.generateId();
-    // Static NPHIES test ID for now (TODO: use database value in production)
-    const nphiesId = 'INS-FHIR';
+    // The insurer's own payer license; never a hardcoded test payer
+    const nphiesId = partialMode ? (insurer.nphies_id || insurer.nphiesId) : requireInsurerLicense({ nphies_id: insurer.nphies_id || insurer.nphiesId });
     const insurerName = insurer.insurer_name || insurer.insurerName || insurer.name || 'Insurance Organization';
 
     return {
@@ -435,21 +399,23 @@ class NphiesMapper {
         meta: {
           profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/insurer-organization|1.0.0']
         },
-        identifier: [
-          {
-            use: 'official',
-            type: {
-              coding: [
-                {
-                  system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-                  code: 'NII'
-                }
-              ]
-            },
-            system: 'http://nphies.sa/license/payer-license',
-            value: nphiesId
-          }
-        ],
+        ...(nphiesId && {
+          identifier: [
+            {
+              use: 'official',
+              type: {
+                coding: [
+                  {
+                    system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    code: 'NII'
+                  }
+                ]
+              },
+              system: 'http://nphies.sa/license/payer-license',
+              value: nphiesId
+            }
+          ]
+        }),
         active: true,
         type: [
           {
@@ -488,7 +454,7 @@ class NphiesMapper {
     // Support both DB format (snake_case) and raw format (camelCase)
     const policyHolderId = policyHolder?.policy_holder_id || policyHolder?.policyHolderId || this.generateId();
     const name = policyHolder?.name || 'Policy Holder Organization';
-    const identifier = policyHolder?.identifier || '5009';
+    const identifier = policyHolder?.identifier;
     const identifierSystem = policyHolder?.identifier_system || policyHolder?.identifierSystem || 'http://nphies.sa/identifiers/organization';
     const isActive = policyHolder?.is_active !== undefined ? policyHolder.is_active : true;
 
@@ -500,12 +466,15 @@ class NphiesMapper {
         meta: {
           profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/policyholder-organization|1.0.0']
         },
-        identifier: [
-          {
-            system: identifierSystem,
-            value: identifier
-          }
-        ],
+        // Only the policy holder's real identifier; omit rather than send a placeholder
+        ...(identifier && {
+          identifier: [
+            {
+              system: identifierSystem,
+              value: identifier.toString()
+            }
+          ]
+        }),
         active: isActive,
         name: name
       }
@@ -546,6 +515,10 @@ class NphiesMapper {
     const dependent = coverage.dependent || coverage.dependent_number;
     // For newborn cases, relationship should be "child" (newborn is child of mother subscriber)
     const relationship = motherPatient ? 'child' : (coverage.relationship || 'self');
+    const memberIdentifier = memberId || policyNumber;
+    if (!memberIdentifier && !partialMode) {
+      throw mappingError('Coverage member ID (coverage.member_id) is required');
+    }
 
     // Get display text for coverage type
     const getCoverageTypeDisplay = (code) => {
@@ -590,12 +563,14 @@ class NphiesMapper {
         meta: {
           profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/coverage|1.0.0']
         },
-        identifier: [
-          {
-            system: 'http://provider.com/identifiers/memberid',
-            value: memberId || policyNumber
-          }
-        ],
+        ...(memberIdentifier && {
+          identifier: [
+            {
+              system: 'http://provider.com/identifiers/memberid',
+              value: memberIdentifier.toString()
+            }
+          ]
+        }),
         status: isActive ? 'active' : 'cancelled',
         type: {
           coding: [
@@ -635,20 +610,23 @@ class NphiesMapper {
             }
           ]
         }),
-        class: [
-          {
-            type: {
-              coding: [
-                {
-                  system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
-                  code: 'plan'
-                }
-              ]
-            },
-            value: planValue || planName || 'Standard',
-            name: planName || 'Insurance Plan'
-          }
-        ],
+        // Plan class only when the plan is known (no placeholder plan values)
+        ...((planValue || planName) && {
+          class: [
+            {
+              type: {
+                coding: [
+                  {
+                    system: 'http://terminology.hl7.org/CodeSystem/coverage-class',
+                    code: 'plan'
+                  }
+                ]
+              },
+              value: (planValue || planName).toString(),
+              ...(planName && { name: planName })
+            }
+          ]
+        }),
         ...(network && {
           network: network
         })
@@ -669,8 +647,8 @@ class NphiesMapper {
    * @param {boolean} partialMode - If true, only include fields that have values
    */
   buildCoverageEligibilityRequest(data, patient, provider, insurer, coverage, patientResourceId = null, partialMode = false) {
-    // Generate simple request ID like NPHIES example: "req_161959"
-    const requestId = `req_${Date.now().toString().slice(-6)}`;
+    // Unique request identifier (the old Date.now() suffixes repeated every ~17 minutes)
+    const requestId = `req_${this.generateId()}`;
     // Use the provided patient resource ID if available (from built Patient resource), otherwise generate/derive from patient object
     // In partial mode, patient/provider/insurer might be null
     const patientId = patientResourceId || (patient ? `patient-${(patient.patient_id || patient.patientId)?.toString() || this.generateId()}` : null);
@@ -702,8 +680,8 @@ class NphiesMapper {
       ? this.formatDate(data.servicedDate) 
       : (partialMode ? null : this.formatDate(new Date()));
 
-    // Simple numeric ID for the resource (like NPHIES example: "19596")
-    const resourceId = Date.now().toString().slice(-5);
+    // Unique resource id (a 5-digit Date.now() suffix repeated every 100 seconds)
+    const resourceId = this.generateId();
     
     const resource = {
       resourceType: 'CoverageEligibilityRequest',
@@ -743,9 +721,10 @@ class NphiesMapper {
         servicedPeriod: {
           start: servicedDate,
           end: servicedDate
-        },
-        created: servicedDate
+        }
       }),
+      // created is when this request was made, not the (possibly future) service date
+      ...(!partialMode && { created: this.formatDate(new Date()) }),
       // Only include provider reference if providerId exists
       ...(providerId && {
         provider: {
@@ -797,9 +776,9 @@ class NphiesMapper {
    */
   buildMessageHeader(eventCode, sender, destination, focusFullUrl, partialMode = false) {
     const messageHeaderId = this.generateId();
-    // Use centralized NPHIES Provider ID from config
-    const senderNphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    const destinationNphiesId = 'INS-FHIR';
+    // Sender = the requesting provider's license, destination = the selected insurer's payer license
+    const senderNphiesId = partialMode ? (sender?.nphies_id || sender?.nphiesId) : requireProviderLicense({ nphies_id: sender?.nphies_id || sender?.nphiesId });
+    const destinationNphiesId = partialMode ? (destination?.nphies_id || destination?.nphiesId) : requireInsurerLicense({ nphies_id: destination?.nphies_id || destination?.nphiesId });
 
     return {
       fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -853,9 +832,10 @@ class NphiesMapper {
    * @param {boolean} partialMode - If true, only include fields that have values
    */
   buildLocationResource(provider, partialMode = false) {
-    if (!provider) return null;
+    const locationLicense = provider?.location_license || provider?.locationLicense;
+    // Location (and Eligibility.facility) is optional: omit it rather than send a placeholder license
+    if (!provider || !locationLicense) return null;
     const locationId = this.generateId();
-    const locationLicense = provider.location_license || provider.locationLicense || 'GACH';
     const providerName = provider.provider_name || provider.providerName || provider.name || 'Healthcare Facility';
     const providerId = (provider.provider_id || provider.providerId)?.toString() || this.generateId();
 
@@ -920,11 +900,15 @@ class NphiesMapper {
     
     // Build PolicyHolder Organization if provided (employer/company that holds the policy)
     const policyHolderResource = policyHolder ? this.buildPolicyHolderOrganization(policyHolder, partialMode) : null;
+    // Coverage.policyHolder must reference the id actually generated for that Organization
+    const policyHolderForCoverage = policyHolderResource
+      ? { ...policyHolder, policy_holder_id: policyHolderResource.resource.id }
+      : null;
     
     // Coverage is optional for discovery mode
     // For newborn cases, pass motherPatient and the generated patient IDs to buildCoverageResource
     const coverageResource = coverage 
-      ? this.buildCoverageResource(coverage, patient, insurer, policyHolder, motherPatient, newbornPatientId, motherPatientId, partialMode) 
+      ? this.buildCoverageResource(coverage, patient, insurer, policyHolderForCoverage, motherPatient, newbornPatientId, motherPatientId, partialMode) 
       : null;
     
     // Pass locationId and patient ID to eligibility request for facility reference
@@ -1001,7 +985,7 @@ class NphiesMapper {
         profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0']
       },
       type: 'message',
-      timestamp: this.formatDateTime(new Date()),
+      timestamp: formatSaudiDateTime(new Date()),
       entry: entries
     };
 
@@ -1071,18 +1055,23 @@ class NphiesMapper {
                tag.code === 'nphies-generated'
       );
 
-      // Check for errors in OperationOutcome
-      if (operationOutcome) {
+      // OperationOutcome: only error/fatal issues fail the response; warnings and
+      // information are passed through alongside the eligibility result.
+      const outcomeIssues = (operationOutcome?.issue || []).map(issue => ({
+        severity: issue.severity,
+        code: issue.details?.coding?.[0]?.code || issue.code,
+        details: issue.details?.text || issue.diagnostics || issue.details?.coding?.[0]?.display,
+        location: [...(issue.expression || []), ...(issue.location || [])].join(', ') || undefined
+      }));
+      const fatalIssues = outcomeIssues.filter(issue => issue.severity === 'error' || issue.severity === 'fatal');
+      const warnings = outcomeIssues.filter(issue => issue.severity !== 'error' && issue.severity !== 'fatal');
+      if (fatalIssues.length > 0) {
         return {
           success: false,
           outcome: 'error',
           isNphiesGenerated,
-          errors: operationOutcome.issue?.map(issue => ({
-            severity: issue.severity,
-            code: issue.code,
-            details: issue.details?.text || issue.diagnostics,
-            location: issue.location?.join(', ')
-          })) || []
+          errors: fatalIssues,
+          ...(warnings.length > 0 && { warnings })
         };
       }
 
@@ -1178,7 +1167,8 @@ class NphiesMapper {
         } : null,
         insurer: this.extractInsurerFromResponse(responseBundle),
         servicedPeriod: eligibilityResponse.servicedPeriod,
-        errors: responseErrors
+        errors: responseErrors,
+        ...(warnings.length > 0 && { warnings })
       };
 
     } catch (error) {
@@ -1355,13 +1345,6 @@ class NphiesMapper {
 
     return policies;
   }
-
-  /**
-   * Get display text for site eligibility code
-   * @param {string} code - The site eligibility code
-   * @returns {string} Human-readable display text
-   */
-
 
   /**
    * Extract benefits from a single insurance entry

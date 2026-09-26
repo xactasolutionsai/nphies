@@ -10,7 +10,7 @@
 import xlsx from 'xlsx';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { query } from '../db.js';
+import { query, transaction } from '../db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,26 +65,28 @@ async function importChiefComplaints() {
       console.log(`✅ Using existing code system ID: ${codeSystemId}\n`);
     }
 
-    // Clear existing codes for this system (to allow re-import)
-    const deleteResult = await query(`
-      DELETE FROM nphies_codes WHERE code_system_id = $1
-    `, [codeSystemId]);
-    console.log(`🗑️  Cleared ${deleteResult.rowCount} existing codes\n`);
-
-    // Insert codes
-    let inserted = 0;
+    // Validate every row before touching the table, then replace the codes in one
+    // transaction so a failure cannot leave the code system half-deleted.
+    const prepared = [];
     let errors = 0;
-
-    for (let i = 0; i < codes.length; i++) {
-      const row = codes[i];
-      const code = String(row.conceptId);
-      const displayEn = row.preferredTerm;
-      const term = row.term || displayEn;
-      
+    codes.forEach((row, i) => {
+      const code = row.conceptId === undefined || row.conceptId === null ? '' : String(row.conceptId).trim();
+      const displayEn = String(row.preferredTerm ?? '').trim();
+      const term = String(row.term ?? '').trim() || displayEn;
+      if (!code || !displayEn) {
+        console.error(`❌ Skipping row ${i + 2}: missing Concept Id or Preferred Term`);
+        errors++;
+        return;
+      }
       // Clean the term (remove ≡ symbol and extra whitespace)
-      const cleanTerm = term.replace(/^≡\s*/, '').trim();
-      
-      try {
+      prepared.push([codeSystemId, code, displayEn, term.replace(/^≡\s*/, '').trim(), i + 1]);
+    });
+
+    let inserted = 0;
+    await transaction(async () => {
+      const deleteResult = await query('DELETE FROM nphies_codes WHERE code_system_id = $1', [codeSystemId]);
+      console.log(`🗑️  Cleared ${deleteResult.rowCount} existing codes\n`);
+      for (const values of prepared) {
         await query(`
           INSERT INTO nphies_codes (nphies_code_id, code_system_id, code, display_en, description, is_active, sort_order)
           VALUES (gen_random_uuid(), $1, $2, $3, $4, true, $5)
@@ -93,19 +95,11 @@ async function importChiefComplaints() {
             description = EXCLUDED.description,
             sort_order = EXCLUDED.sort_order,
             updated_at = NOW()
-        `, [codeSystemId, code, displayEn, cleanTerm, i + 1]);
-        
+        `, values);
         inserted++;
-        
-        // Progress indicator every 20 codes
-        if (inserted % 20 === 0) {
-          console.log(`   Imported ${inserted}/${codes.length} codes...`);
-        }
-      } catch (err) {
-        console.error(`❌ Error inserting code ${code}: ${err.message}`);
-        errors++;
+        if (inserted % 20 === 0) console.log(`   Imported ${inserted}/${prepared.length} codes...`);
       }
-    }
+    });
 
     console.log(`\n✅ Import complete!`);
     console.log(`   - Inserted/Updated: ${inserted} codes`);

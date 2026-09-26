@@ -11,6 +11,17 @@ export function clearSession() {
   // Unscoped drafts from older releases cannot safely be attributed to a user.
   localStorage.removeItem('generalRequestDraft');
   localStorage.removeItem('generalRequestDraftTimestamp');
+  // Per-user drafts (generalRequestDraft:<userId>[:timestamp]) contain patient data.
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('generalRequestDraft:')) keys.push(key);
+    }
+    keys.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // Storage may be unavailable; nothing else to clear.
+  }
   window.dispatchEvent(new Event('auth:changed'));
 }
 

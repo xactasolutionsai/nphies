@@ -6,9 +6,10 @@
  * arrive via polling from NPHIES.
  */
 
-import pool from '../db.js';
+import { connectForSchema, releaseSchemaClient, contentDisposition, sendCommunicationRequestAttachment } from './controllerHelpers.js';
 import nphiesService from '../services/nphiesService.js';
 import advancedAuthParser from '../services/advancedAuthParser.js';
+import { lockAdvancedAuthorizationIdentifier } from '../services/dbSchema.js';
 import CommunicationMapper from '../services/communicationMapper.js';
 import advancedAuthCommunicationService from '../services/advancedAuthCommunicationService.js';
 import priorAuthMapper from '../services/priorAuthMapper/index.js';
@@ -24,7 +25,6 @@ class AdvancedAuthorizationsController {
    */
   async getAll(req, res) {
     try {
-      const schemaName = req.schemaName || 'public';
       const {
         page = 1,
         limit = 20,
@@ -37,7 +37,10 @@ class AdvancedAuthorizationsController {
         sort_order = 'DESC'
       } = req.query;
 
-      const offset = (page - 1) * limit;
+      // Bound pagination; query values may arrive as arrays (?limit=1&limit=2)
+      const pageNum = Math.max(Number.parseInt(page, 10) || 1, 1);
+      const limitNum = Math.min(Math.max(Number.parseInt(limit, 10) || 20, 1), 100);
+      const offset = (pageNum - 1) * limitNum;
       const conditions = [];
       const params = [];
       let paramIdx = 1;
@@ -69,11 +72,10 @@ class AdvancedAuthorizationsController {
       // Validate sort columns
       const allowedSortColumns = ['received_at', 'created_date', 'auth_reason', 'outcome', 'claim_type', 'adjudication_outcome', 'id'];
       const safeSortBy = allowedSortColumns.includes(sort_by) ? sort_by : 'received_at';
-      const safeSortOrder = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const safeSortOrder = typeof sort_order === 'string' && sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-      const client = await pool.connect();
+      const client = await connectForSchema(req.schemaName);
       try {
-        await client.query(`SET search_path TO ${schemaName}`);
 
         // Get total count
         const countResult = await client.query(
@@ -94,7 +96,7 @@ class AdvancedAuthorizationsController {
            ${whereClause}
            ORDER BY ${safeSortBy} ${safeSortOrder}
            LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
-          [...params, limit, offset]
+          [...params, limitNum, offset]
         );
 
         // Get stats
@@ -112,19 +114,19 @@ class AdvancedAuthorizationsController {
           success: true,
           data: dataResult.rows,
           pagination: {
-            page: parseInt(page),
-            limit: parseInt(limit),
+            page: pageNum,
+            limit: limitNum,
             total,
-            totalPages: Math.ceil(total / limit)
+            totalPages: Math.ceil(total / limitNum)
           },
           stats: statsResult.rows[0]
         });
       } finally {
-        client.release();
+        await releaseSchemaClient(client);
       }
     } catch (error) {
       console.error('[AdvancedAuth] Error listing:', error);
-      res.status(500).json({ error: error.message || 'Failed to list advanced authorizations' });
+      res.status(error.status || 500).json({ error: 'Failed to list advanced authorizations' });
     }
   }
 
@@ -134,11 +136,9 @@ class AdvancedAuthorizationsController {
   async getById(req, res) {
     try {
       const { id } = req.params;
-      const schemaName = req.schemaName || 'public';
 
-      const client = await pool.connect();
+      const client = await connectForSchema(req.schemaName);
       try {
-        await client.query(`SET search_path TO ${schemaName}`);
 
         const result = await client.query(
           'SELECT * FROM advanced_authorizations WHERE id = $1',
@@ -154,11 +154,36 @@ class AdvancedAuthorizationsController {
           data: result.rows[0]
         });
       } finally {
-        client.release();
+        await releaseSchemaClient(client);
       }
     } catch (error) {
       console.error('[AdvancedAuth] Error getting by ID:', error);
       res.status(500).json({ error: error.message || 'Failed to get advanced authorization' });
+    }
+  }
+
+  /**
+   * Provider used to poll for payer-initiated APAs: the configured NPHIES provider,
+   * else the newest provider with a real (numeric) license.
+   */
+  async resolvePollProvider(schemaName) {
+    const client = await connectForSchema(schemaName);
+    try {
+      let providerResult = await client.query(
+        `SELECT nphies_id, provider_name FROM providers WHERE nphies_id = $1 LIMIT 1`,
+        [NPHIES_CONFIG.DEFAULT_PROVIDER_ID]
+      );
+      if (providerResult.rows.length === 0) {
+        providerResult = await client.query(
+          `SELECT nphies_id, provider_name FROM providers WHERE nphies_id ~ '^[0-9]+$' ORDER BY created_at DESC LIMIT 1`
+        );
+      }
+      if (providerResult.rows.length > 0) {
+        return { providerNphiesId: providerResult.rows[0].nphies_id, providerName: providerResult.rows[0].provider_name };
+      }
+      return { providerNphiesId: NPHIES_CONFIG.DEFAULT_PROVIDER_ID, providerName: 'Healthcare Provider' };
+    } finally {
+      await releaseSchemaClient(client);
     }
   }
 
@@ -168,35 +193,7 @@ class AdvancedAuthorizationsController {
    */
   async previewPollBundle(req, res) {
     try {
-      const schemaName = req.schemaName || 'public';
-
-      const client = await pool.connect();
-      let providerNphiesId;
-      let providerName;
-
-      try {
-        await client.query(`SET search_path TO ${schemaName}`);
-        // First try to find the provider matching the configured NPHIES provider ID
-        let providerResult = await client.query(
-          `SELECT nphies_id, provider_name FROM providers WHERE nphies_id = $1 LIMIT 1`,
-          [NPHIES_CONFIG.DEFAULT_PROVIDER_ID]
-        );
-        if (providerResult.rows.length === 0) {
-          // Fallback: pick any provider that doesn't have a placeholder nphies_id
-          providerResult = await client.query(
-            `SELECT nphies_id, provider_name FROM providers WHERE nphies_id ~ '^[0-9]+$' ORDER BY created_at DESC LIMIT 1`
-          );
-        }
-        if (providerResult.rows.length > 0) {
-          providerNphiesId = providerResult.rows[0].nphies_id;
-          providerName = providerResult.rows[0].provider_name;
-        } else {
-          providerNphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-          providerName = 'Healthcare Provider';
-        }
-      } finally {
-        client.release();
-      }
+      const { providerNphiesId, providerName } = await this.resolvePollProvider(req.schemaName);
 
       // Build a plain poll bundle (no input/focus) - same structure that works for prior auth polling
       // Advanced authorizations are payer-initiated, so we poll for ALL pending messages
@@ -225,38 +222,8 @@ class AdvancedAuthorizationsController {
    */
   async poll(req, res) {
     try {
-      const schemaName = req.schemaName || 'public';
-
       // Get provider info for building the poll bundle
-      const client = await pool.connect();
-      let providerNphiesId;
-      let providerName;
-
-      try {
-        await client.query(`SET search_path TO ${schemaName}`);
-
-        // Find the provider matching the configured NPHIES provider ID
-        let providerResult = await client.query(
-          `SELECT nphies_id, provider_name FROM providers WHERE nphies_id = $1 LIMIT 1`,
-          [NPHIES_CONFIG.DEFAULT_PROVIDER_ID]
-        );
-        if (providerResult.rows.length === 0) {
-          // Fallback: pick any provider with a numeric nphies_id (real license, not placeholder)
-          providerResult = await client.query(
-            `SELECT nphies_id, provider_name FROM providers WHERE nphies_id ~ '^[0-9]+$' ORDER BY created_at DESC LIMIT 1`
-          );
-        }
-
-        if (providerResult.rows.length > 0) {
-          providerNphiesId = providerResult.rows[0].nphies_id;
-          providerName = providerResult.rows[0].provider_name;
-        } else {
-          providerNphiesId = NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-          providerName = 'Healthcare Provider';
-        }
-      } finally {
-        client.release();
-      }
+      const { providerNphiesId, providerName } = await this.resolvePollProvider(req.schemaName);
 
       // Build a plain poll bundle (no input/focus) - same structure that works for prior auth polling
       // Advanced authorizations are payer-initiated, so we poll for ALL pending messages
@@ -314,7 +281,7 @@ class AdvancedAuthorizationsController {
 
       for (const apa of advancedAuths) {
         try {
-          const savedRecord = await this.saveAdvancedAuth(apa, schemaName, pollBundle, pollResponse.data);
+          const savedRecord = await this.saveAdvancedAuth(apa, req.schemaName, pollBundle, pollResponse.data);
           saved.push(savedRecord);
         } catch (err) {
           console.error('[AdvancedAuth] Error saving APA:', err);
@@ -348,12 +315,20 @@ class AdvancedAuthorizationsController {
   /**
    * Save a parsed Advanced Authorization to the database
    */
-  async saveAdvancedAuth(claimResponse, schemaName, pollBundle = null, pollResponseBundle = null) {
+  async saveAdvancedAuth(claimResponse, requestedSchema, pollBundle = null, pollResponseBundle = null) {
     const parsed = advancedAuthParser.parseAdvancedAuthorization(claimResponse);
+    const schemaName = requestedSchema || 'public';
 
-    const client = await pool.connect();
+    const client = await connectForSchema(requestedSchema);
+    let inTransaction = false;
     try {
-      await client.query(`SET search_path TO ${schemaName}`);
+      // Concurrent polls can deliver the same APA; there is no unique key on
+      // identifier_value, so serialize check-then-insert per identifier.
+      await client.query('BEGIN');
+      inTransaction = true;
+      if (parsed.identifier_value) {
+        await lockAdvancedAuthorizationIdentifier(client, parsed.identifier_value);
+      }
 
       // Check if already exists by identifier
       if (parsed.identifier_value) {
@@ -396,6 +371,8 @@ class AdvancedAuthorizationsController {
             parsed.transfer_auth_period_end, parsed.transfer_auth_provider,
             schemaName, parsed.identifier_value
           ]);
+          await client.query('COMMIT');
+          inTransaction = false;
           return updateResult.rows[0];
         }
       }
@@ -441,9 +418,14 @@ class AdvancedAuthorizationsController {
         schemaName
       ]);
 
+      await client.query('COMMIT');
+      inTransaction = false;
       return insertResult.rows[0];
+    } catch (error) {
+      if (inTransaction) await client.query('ROLLBACK').catch(() => {});
+      throw error;
     } finally {
-      client.release();
+      await releaseSchemaClient(client);
     }
   }
 
@@ -455,11 +437,9 @@ class AdvancedAuthorizationsController {
   async downloadJson(req, res) {
     try {
       const { id } = req.params;
-      const schemaName = req.schemaName || 'public';
 
-      const client = await pool.connect();
+      const client = await connectForSchema(req.schemaName);
       try {
-        await client.query(`SET search_path TO ${schemaName}`);
 
         const result = await client.query(
           'SELECT response_bundle, poll_response_bundle, identifier_value FROM advanced_authorizations WHERE id = $1',
@@ -492,10 +472,10 @@ class AdvancedAuthorizationsController {
         }
 
         res.setHeader('Content-Type', 'application/fhir+json');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Disposition', contentDisposition(filename));
         res.json(downloadBundle);
       } finally {
-        client.release();
+        await releaseSchemaClient(client);
       }
     } catch (error) {
       console.error('[AdvancedAuth] Error downloading JSON:', error);
@@ -515,11 +495,9 @@ class AdvancedAuthorizationsController {
     try {
       const { id } = req.params;
       const { reason } = req.body;
-      const schemaName = req.schemaName || 'public';
 
-      const client = await pool.connect();
+      const client = await connectForSchema(req.schemaName);
       try {
-        await client.query(`SET search_path TO ${schemaName}`);
 
         // Fetch the advanced authorization
         const result = await client.query(
@@ -569,20 +547,30 @@ class AdvancedAuthorizationsController {
           }
         }
 
-        const insurerNphiesId = bundleData.insurer?.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID;
+        // The cancel goes to the payer that issued the APA; never to a configured default payer.
+        const insurerNphiesId = bundleData.insurer?.nphies_id;
+        if (!insurerNphiesId) {
+          return res.status(400).json({ error: 'Cannot cancel: the insurer license could not be read from the stored advanced authorization' });
+        }
         const insurerName = bundleData.insurer?.insurer_name || 'Insurance Company';
 
-        // Use the original Claim identifier for the cancel Task focus
-        const claimResponse = advAuth.response_bundle;
-        const requestIdentifier = claimResponse?.request?.identifier?.value || advAuth.identifier_value;
-        const identifierSystem = claimResponse?.request?.identifier?.system ||
-          `http://${(providerName || 'provider').toLowerCase().replace(/\s+/g, '')}.com/Authorization`;
+        // Task.focus echoes a stored identifier exactly (system + value): the request the
+        // ClaimResponse answers, else the APA's own ClaimResponse.identifier.
+        const claimResponse = advAuth.response_bundle?.resourceType === 'Bundle'
+          ? advAuth.response_bundle.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource
+          : advAuth.response_bundle;
+        const requestIdentifier = claimResponse?.request?.identifier;
+        const focus = requestIdentifier?.value
+          ? { system: requestIdentifier.system, value: requestIdentifier.value }
+          : { system: advAuth.identifier_system, value: advAuth.identifier_value };
+        if (!focus.value || !focus.system) {
+          return res.status(400).json({ error: 'Cannot cancel: the advanced authorization has no identifier (system and value) to reference' });
+        }
 
         const provider = {
           nphies_id: providerNphiesId,
           provider_name: providerName,
-          provider_id: providerNphiesId,
-          identifier_system: identifierSystem
+          provider_id: providerNphiesId
         };
 
         const insurer = {
@@ -594,8 +582,9 @@ class AdvancedAuthorizationsController {
         // Build the cancel bundle - reuse prior auth mapper's cancel task builder
         const cancelBundle = priorAuthMapper.buildCancelRequestBundle(
           {
-            request_number: requestIdentifier,
-            nphies_request_id: requestIdentifier,
+            request_number: focus.value,
+            nphies_request_id: focus.value,
+            focus_identifier_system: focus.system,
             pre_auth_ref: advAuth.pre_auth_ref || advAuth.identifier_value,
             id: advAuth.id
           },
@@ -655,11 +644,11 @@ class AdvancedAuthorizationsController {
           });
         }
       } finally {
-        client.release();
+        await releaseSchemaClient(client);
       }
     } catch (error) {
       console.error('[AdvancedAuth] Error cancelling:', error);
-      res.status(500).json({ error: error.message || 'Failed to cancel advanced authorization' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to cancel advanced authorization' });
     }
   }
 
@@ -761,47 +750,7 @@ class AdvancedAuthorizationsController {
    * Download an attachment from a CommunicationRequest payload
    */
   async downloadCommunicationRequestAttachment(req, res) {
-    try {
-      const { requestId, payloadIndex } = req.params;
-      const schemaName = req.schemaName || 'public';
-
-      const client = await pool.connect();
-      try {
-        await client.query(`SET search_path TO ${schemaName}`);
-        const result = await client.query(
-          'SELECT request_bundle FROM nphies_communication_requests WHERE id = $1',
-          [parseInt(requestId)]
-        );
-        if (result.rows.length === 0) {
-          return res.status(404).json({ error: 'Communication request not found' });
-        }
-
-        const bundle = typeof result.rows[0].request_bundle === 'string'
-          ? JSON.parse(result.rows[0].request_bundle)
-          : result.rows[0].request_bundle;
-
-        const idx = parseInt(payloadIndex);
-        const payload = bundle?.payload?.[idx];
-        if (!payload?.contentAttachment?.data) {
-          return res.status(404).json({ error: 'Attachment not found at the specified payload index' });
-        }
-
-        const att = payload.contentAttachment;
-        const buffer = Buffer.from(att.data, 'base64');
-        const filename = att.title || `attachment_${idx}`;
-        const contentType = att.contentType || 'application/octet-stream';
-
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.setHeader('Content-Length', buffer.length);
-        res.send(buffer);
-      } finally {
-        client.release();
-      }
-    } catch (error) {
-      console.error('Error downloading communication request attachment:', error);
-      res.status(500).json({ error: error.message || 'Failed to download attachment' });
-    }
+    return sendCommunicationRequestAttachment(req, res, 'advanced_authorization_id');
   }
 
   /**
@@ -828,14 +777,15 @@ class AdvancedAuthorizationsController {
    */
   async getCommunicationById(req, res) {
     try {
-      const { commId } = req.params;
+      const { id, commId } = req.params;
       const schemaName = req.schemaName || 'public';
 
       const communication = await advancedAuthCommunicationService.getCommunication(
         commId, schemaName
       );
 
-      if (!communication) {
+      // Only return a communication that belongs to this advanced authorization
+      if (!communication || String(communication.advanced_authorization_id) !== String(id)) {
         return res.status(404).json({ error: 'Communication not found' });
       }
 
@@ -890,11 +840,9 @@ class AdvancedAuthorizationsController {
   async delete(req, res) {
     try {
       const { id } = req.params;
-      const schemaName = req.schemaName || 'public';
 
-      const client = await pool.connect();
+      const client = await connectForSchema(req.schemaName);
       try {
-        await client.query(`SET search_path TO ${schemaName}`);
 
         const result = await client.query(
           'DELETE FROM advanced_authorizations WHERE id = $1 RETURNING id',
@@ -910,7 +858,7 @@ class AdvancedAuthorizationsController {
           message: 'Advanced authorization deleted successfully'
         });
       } finally {
-        client.release();
+        await releaseSchemaClient(client);
       }
     } catch (error) {
       console.error('[AdvancedAuth] Error deleting:', error);

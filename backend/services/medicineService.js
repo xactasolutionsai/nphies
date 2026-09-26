@@ -5,12 +5,33 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/** Escape LIKE wildcards so user input is matched literally (default escape char is \\). */
+export const escapeLike = (value) => String(value).replace(/[\\%_]/g, ch => `\\${ch}`);
+
+// Brands shown per medicine in search results. The LIMIT must be applied before
+// json_agg (a LIMIT on the aggregate query itself limits nothing).
+const BRAND_PREVIEW_LIMIT = 5;
+
 class MedicineService {
   constructor() {
     this.similarityThreshold = 0.6; // Lower threshold for medicine search
     this.maxResults = 20;
-    this.embeddingDimension = 4096; // Dimension for cniongolo/biomistral model
     console.log('✅ Medicine Service initialized');
+  }
+
+  /**
+   * Try to embed the query; returns null (text-only search) when embeddings are
+   * unavailable instead of using a fabricated vector.
+   * @private
+   */
+  async tryEmbed(searchQuery) {
+    try {
+      const embedding = await ragService.generateEmbedding(searchQuery);
+      return `[${embedding.join(',')}]`;
+    } catch (error) {
+      console.warn(`⚠️ Semantic search unavailable, using text matching only: ${error.message}`);
+      return null;
+    }
   }
 
   /**
@@ -41,8 +62,10 @@ class MedicineService {
       console.log(`🧠 Using pure RAG search for natural language query`);
       
       // Generate embedding for the search query
-      const queryEmbedding = await ragService.generateEmbedding(searchQuery);
-      const vectorString = `[${queryEmbedding.join(',')}]`;
+      const vectorString = await this.tryEmbed(searchQuery);
+      if (!vectorString) {
+        return await this.hybridSearch(searchQuery, resultLimit, null);
+      }
       
       const sqlQuery = `
         SELECT 
@@ -60,9 +83,13 @@ class MedicineService {
               'package_form', mb.package_form,
               'mb_mrid', mb.mb_mrid
             ))
-            FROM medicine_brands mb
-            WHERE mb.mrid = m.mrid
-            LIMIT 5
+            FROM (
+              SELECT brand_name, package_form, mb_mrid
+              FROM medicine_brands
+              WHERE mrid = m.mrid
+              ORDER BY brand_name
+              LIMIT ${BRAND_PREVIEW_LIMIT}
+            ) mb
           ) as brands,
           (
             SELECT json_agg(json_build_object(
@@ -230,8 +257,10 @@ class MedicineService {
       // Get basic medicine data
       let medicineData;
       
-      // Check if it's a numeric ID or MRID format
-      if (/^\d+$/.test(mridOrId)) {
+      // MRIDs can be all digits, so always try the MRID first and only fall back to
+      // the internal numeric id when no medicine has that MRID.
+      medicineData = await this.getMedicineByMRID(String(mridOrId));
+      if (!medicineData && /^\d+$/.test(String(mridOrId)) && Number(mridOrId) <= 2147483647) {
         // It's a numeric ID, query by ID
         const result = await query(`
           SELECT 
@@ -265,7 +294,7 @@ class MedicineService {
             ) as codes
           FROM medicines m
           WHERE m.id = $1
-        `, [parseInt(mridOrId)]);
+        `, [parseInt(mridOrId, 10)]);
         
         if (result.rows.length === 0) {
           return null;
@@ -287,9 +316,6 @@ class MedicineService {
           createdAt: row.created_at,
           updatedAt: row.updated_at
         };
-      } else {
-        // It's an MRID
-        medicineData = await this.getMedicineByMRID(mridOrId);
       }
       
       if (!medicineData) {
@@ -298,7 +324,7 @@ class MedicineService {
       }
       
       console.log(`✅ Medicine found: ${medicineData.activeIngredient}`);
-      console.log(`🤖 Generating AI information using Goosedev/medbot...`);
+      console.log(`🤖 Generating AI information using ${medbotService.model}...`);
       
       // Get AI-generated medical information
       const aiInfo = await medbotService.getMedicineInformation(medicineData);
@@ -340,9 +366,13 @@ class MedicineService {
               'brand_name', mb.brand_name,
               'package_form', mb.package_form
             ))
-            FROM medicine_brands mb
-            WHERE mb.mrid = m.mrid
-            LIMIT 5
+            FROM (
+              SELECT brand_name, package_form
+              FROM medicine_brands
+              WHERE mrid = m.mrid
+              ORDER BY brand_name
+              LIMIT ${BRAND_PREVIEW_LIMIT}
+            ) mb
           ) as brands
         FROM medicines m
         WHERE to_tsvector('english', m.active_ingredient) @@ plainto_tsquery('english', $1)
@@ -437,11 +467,13 @@ class MedicineService {
    * @param {number} limit - Maximum results
    * @returns {Promise<array>} - Combined and deduplicated results
    */
-  async hybridSearch(searchQuery, limit) {
+  async hybridSearch(searchQuery, limit, precomputedVector) {
     try {
-      // 1. RAG Search (semantic)
-      const queryEmbedding = await ragService.generateEmbedding(searchQuery);
-      const vectorString = `[${queryEmbedding.join(',')}]`;
+      // 1. RAG Search (semantic). Without an embedding the semantic tier is skipped.
+      const vectorString = precomputedVector === undefined
+        ? await this.tryEmbed(searchQuery)
+        : precomputedVector;
+      const likeQuery = escapeLike(searchQuery);
       
       // 2. Multi-tier search with proper prioritization:
       // Priority 1: Exact active ingredient match (1.0)
@@ -580,6 +612,7 @@ class MedicineService {
             LEAST(1 - (m.embedding <=> $1::vector), 0.70) as similarity,
             'rag' as source
           FROM medicines m
+          WHERE $1::vector IS NOT NULL
           ORDER BY m.embedding <=> $1::vector
           LIMIT $2
         ),
@@ -615,14 +648,14 @@ class MedicineService {
       `;
       
       const result = await query(combinedQuery, [
-        vectorString,                // $1: embedding vector
+        vectorString,                // $1: embedding vector (null = text-only)
         limit,                       // $2: limit
         searchQuery,                 // $3: exact match
-        `${searchQuery}%`,           // $4: starts with
-        `%${searchQuery}%`,          // $5: contains anywhere
-        `% ${searchQuery}%`,         // $6: word boundary (space before)
-        `% ${searchQuery} %`,        // $7: complete word (spaces both sides)
-        `%${searchQuery}`            // $8: ends with query
+        `${likeQuery}%`,             // $4: starts with
+        `%${likeQuery}%`,            // $5: contains anywhere
+        `% ${likeQuery}%`,           // $6: word boundary (space before)
+        `% ${likeQuery} %`,          // $7: complete word (spaces both sides)
+        `%${likeQuery}`              // $8: ends with query
       ]);
       
       console.log(`✅ Hybrid search found ${result.rows.length} medicines`);
@@ -634,7 +667,8 @@ class MedicineService {
             SELECT brand_name, package_form, mb_mrid
             FROM medicine_brands
             WHERE mrid = $1
-            LIMIT 5
+            ORDER BY brand_name
+            LIMIT ${BRAND_PREVIEW_LIMIT}
           `, [row.mrid]);
           
           const codesQuery = await query(`

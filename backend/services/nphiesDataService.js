@@ -6,7 +6,22 @@
 
 import { query, transaction } from '../db.js';
 
+// Only values actually provided may overwrite stored columns: undefined/'' become NULL so
+// COALESCE(new, stored) keeps what is already in the database.
+const provided = value => (value === undefined || value === '' ? null : value);
+
 class NphiesDataService {
+
+  /**
+   * Run an upsert atomically: one transaction, serialised per natural key with a
+   * transaction-scoped advisory lock so concurrent requests cannot both insert.
+   */
+  async withUpsertLock(scope, key, callback) {
+    return transaction(async () => {
+      await query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${scope}:${key}`]);
+      return callback();
+    });
+  }
   
   /**
    * UPSERT patient - Create if not exists, update if exists
@@ -18,98 +33,82 @@ class NphiesDataService {
     const {
       name,
       identifier,
-      identifierType = 'national_id',
-      identifierSystem,
+      identifierType,
       gender,
-      birthDate: rawBirthDate,
+      birthDate,
       phone,
       email,
       address,
       city,
-      country = 'SAU',
+      country,
       maritalStatus,
-      nphiesPatientId,
-      isNewborn = false
+      isNewborn
     } = patientData;
-
-    // Convert empty strings to null for date fields
-    const birthDate = rawBirthDate && rawBirthDate !== '' ? rawBirthDate : null;
 
     if (!identifier) {
       throw new Error('Patient identifier is required');
     }
 
-    // Check if patient exists by identifier
-    const existingPatient = await query(
-      'SELECT * FROM patients WHERE identifier = $1',
-      [identifier]
-    );
+    return this.withUpsertLock('patient', identifier, async () => {
+      // Check if patient exists by identifier
+      const existingPatient = await query(
+        'SELECT patient_id FROM patients WHERE identifier = $1',
+        [identifier]
+      );
 
-    if (existingPatient.rows.length > 0) {
-      // Update existing patient
-      const updateQuery = `
-        UPDATE patients SET
-          name = COALESCE($1, name),
-          identifier_type = COALESCE($2, identifier_type),
-          gender = COALESCE($3, gender),
-          birth_date = COALESCE($4, birth_date),
-          phone = COALESCE($5, phone),
-          email = COALESCE($6, email),
-          address = COALESCE($7, address),
-          city = COALESCE($8, city),
-          country = COALESCE($9, country),
-          marital_status = COALESCE($10, marital_status),
-          is_newborn = COALESCE($11, is_newborn),
-          updated_at = NOW()
-        WHERE identifier = $12
-        RETURNING *
-      `;
-      
-      const result = await query(updateQuery, [
-        name,
-        identifierType,
-        gender,
-        birthDate,
-        phone,
-        email,
-        address,
-        city,
-        country,
-        maritalStatus,
-        isNewborn,
-        identifier
-      ]);
-      
-      console.log(`[NPHIES Data] Updated patient: ${identifier}`);
-      return result.rows[0];
-    } else {
-      // Insert new patient
-      const insertQuery = `
+      if (existingPatient.rows.length > 0) {
+        // Update existing patient: only fields that were provided
+        const result = await query(`
+          UPDATE patients SET
+            name = COALESCE($1, name),
+            identifier_type = COALESCE($2, identifier_type),
+            gender = COALESCE($3, gender),
+            birth_date = COALESCE($4, birth_date),
+            phone = COALESCE($5, phone),
+            email = COALESCE($6, email),
+            address = COALESCE($7, address),
+            city = COALESCE($8, city),
+            country = COALESCE($9, country),
+            marital_status = COALESCE($10, marital_status),
+            is_newborn = COALESCE($11, is_newborn),
+            updated_at = NOW()
+          WHERE identifier = $12
+          RETURNING *
+        `, [
+          provided(name), provided(identifierType), provided(gender), provided(birthDate),
+          provided(phone), provided(email), provided(address), provided(city), provided(country),
+          provided(maritalStatus), isNewborn ?? null, identifier
+        ]);
+        
+        console.log(`[NPHIES Data] Updated patient ${result.rows[0]?.patient_id}`);
+        return result.rows[0];
+      }
+
+      // Insert new patient (column defaults only for a brand-new record)
+      const result = await query(`
         INSERT INTO patients (
           name, identifier, identifier_type, gender, birth_date,
           phone, email, address, city, country, marital_status, is_newborn
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
-      `;
-      
-      const result = await query(insertQuery, [
-        name || 'Unknown',
+      `, [
+        provided(name) || 'Unknown',
         identifier,
-        identifierType,
-        gender,
-        birthDate,
-        phone,
-        email,
-        address,
-        city,
-        country,
-        maritalStatus,
-        isNewborn
+        provided(identifierType) || 'national_id',
+        provided(gender),
+        provided(birthDate),
+        provided(phone),
+        provided(email),
+        provided(address),
+        provided(city),
+        provided(country) || 'SAU',
+        provided(maritalStatus),
+        isNewborn ?? false
       ]);
       
-      console.log(`[NPHIES Data] Created new patient: ${identifier} (newborn: ${isNewborn})`);
+      console.log(`[NPHIES Data] Created patient ${result.rows[0]?.patient_id} (newborn: ${isNewborn ?? false})`);
       return result.rows[0];
-    }
+    });
   }
 
   /**
@@ -122,7 +121,7 @@ class NphiesDataService {
     const {
       name,
       nphiesId,
-      status = 'Active',
+      status,
       phone,
       email,
       address
@@ -132,58 +131,49 @@ class NphiesDataService {
       throw new Error('Insurer NPHIES ID is required');
     }
 
-    // Check if insurer exists by nphies_id
-    const existingInsurer = await query(
-      'SELECT * FROM insurers WHERE nphies_id = $1',
-      [nphiesId]
-    );
+    return this.withUpsertLock('insurer', nphiesId, async () => {
+      // Check if insurer exists by nphies_id
+      const existingInsurer = await query(
+        'SELECT insurer_id FROM insurers WHERE nphies_id = $1',
+        [nphiesId]
+      );
 
-    if (existingInsurer.rows.length > 0) {
-      // Update existing insurer
-      const updateQuery = `
-        UPDATE insurers SET
-          insurer_name = COALESCE($1, insurer_name),
-          status = COALESCE($2, status),
-          phone = COALESCE($3, phone),
-          email = COALESCE($4, email),
-          address = COALESCE($5, address),
-          updated_at = NOW()
-        WHERE nphies_id = $6
-        RETURNING *
-      `;
-      
-      const result = await query(updateQuery, [
-        name,
-        status,
-        phone,
-        email,
-        address,
-        nphiesId
-      ]);
-      
-      console.log(`[NPHIES Data] Updated insurer: ${nphiesId}`);
-      return result.rows[0];
-    } else {
+      if (existingInsurer.rows.length > 0) {
+        // Update existing insurer: only fields that were provided
+        const result = await query(`
+          UPDATE insurers SET
+            insurer_name = COALESCE($1, insurer_name),
+            status = COALESCE($2, status),
+            phone = COALESCE($3, phone),
+            email = COALESCE($4, email),
+            address = COALESCE($5, address),
+            updated_at = NOW()
+          WHERE nphies_id = $6
+          RETURNING *
+        `, [provided(name), provided(status), provided(phone), provided(email), provided(address), nphiesId]);
+        
+        console.log(`[NPHIES Data] Updated insurer: ${nphiesId}`);
+        return result.rows[0];
+      }
+
       // Insert new insurer
-      const insertQuery = `
+      const result = await query(`
         INSERT INTO insurers (
           insurer_name, nphies_id, status, phone, email, address
         ) VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
-      `;
-      
-      const result = await query(insertQuery, [
-        name || 'Unknown Insurer',
+      `, [
+        provided(name) || 'Unknown Insurer',
         nphiesId,
-        status,
-        phone,
-        email,
-        address
+        provided(status) || 'Active',
+        provided(phone),
+        provided(email),
+        provided(address)
       ]);
       
       console.log(`[NPHIES Data] Created new insurer: ${nphiesId}`);
       return result.rows[0];
-    }
+    });
   }
 
   /**
@@ -196,8 +186,8 @@ class NphiesDataService {
     const {
       name,
       nphiesId,
-      locationLicense = 'GACH',
-      providerType = '1',
+      locationLicense,
+      providerType,
       phone,
       email,
       address
@@ -207,61 +197,55 @@ class NphiesDataService {
       throw new Error('Provider NPHIES ID is required');
     }
 
-    // Check if provider exists by nphies_id
-    const existingProvider = await query(
-      'SELECT * FROM providers WHERE nphies_id = $1',
-      [nphiesId]
-    );
+    return this.withUpsertLock('provider', nphiesId, async () => {
+      // Check if provider exists by nphies_id
+      const existingProvider = await query(
+        'SELECT provider_id FROM providers WHERE nphies_id = $1',
+        [nphiesId]
+      );
 
-    if (existingProvider.rows.length > 0) {
-      // Update existing provider
-      const updateQuery = `
-        UPDATE providers SET
-          provider_name = COALESCE($1, provider_name),
-          location_license = COALESCE($2, location_license),
-          provider_type = COALESCE($3, provider_type),
-          phone = COALESCE($4, phone),
-          email = COALESCE($5, email),
-          address = COALESCE($6, address),
-          updated_at = NOW()
-        WHERE nphies_id = $7
-        RETURNING *
-      `;
-      
-      const result = await query(updateQuery, [
-        name,
-        locationLicense,
-        providerType,
-        phone,
-        email,
-        address,
-        nphiesId
-      ]);
-      
-      console.log(`[NPHIES Data] Updated provider: ${nphiesId}`);
-      return result.rows[0];
-    } else {
-      // Insert new provider
-      const insertQuery = `
+      if (existingProvider.rows.length > 0) {
+        // Update existing provider: only fields that were provided
+        const result = await query(`
+          UPDATE providers SET
+            provider_name = COALESCE($1, provider_name),
+            location_license = COALESCE($2, location_license),
+            provider_type = COALESCE($3, provider_type),
+            phone = COALESCE($4, phone),
+            email = COALESCE($5, email),
+            address = COALESCE($6, address),
+            updated_at = NOW()
+          WHERE nphies_id = $7
+          RETURNING *
+        `, [
+          provided(name), provided(locationLicense), provided(providerType),
+          provided(phone), provided(email), provided(address), nphiesId
+        ]);
+        
+        console.log(`[NPHIES Data] Updated provider: ${nphiesId}`);
+        return result.rows[0];
+      }
+
+      // Insert new provider. No placeholder location license: a Location is only
+      // sent to NPHIES when the provider's real license is known.
+      const result = await query(`
         INSERT INTO providers (
           provider_name, nphies_id, location_license, provider_type, phone, email, address
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
-      `;
-      
-      const result = await query(insertQuery, [
-        name || 'Unknown Provider',
+      `, [
+        provided(name) || 'Unknown Provider',
         nphiesId,
-        locationLicense,
-        providerType,
-        phone,
-        email,
-        address
+        provided(locationLicense),
+        provided(providerType) || '1',
+        provided(phone),
+        provided(email),
+        provided(address)
       ]);
       
       console.log(`[NPHIES Data] Created new provider: ${nphiesId}`);
       return result.rows[0];
-    }
+    });
   }
 
   /**
@@ -277,17 +261,14 @@ class NphiesDataService {
       policyNumber,
       memberId,
       subscriberId,
-      coverageType = 'EHCPOL',
-      relationship = 'self',
+      coverageType,
+      relationship,
       dependentNumber,
       planName,
       networkType,
-      classCode,
-      className,
       startDate,
       endDate,
-      isActive = true,
-      nphiesCoverageId
+      isActive
     } = coverageData;
 
     // Use policyNumber or memberId as the primary identifier
@@ -296,77 +277,77 @@ class NphiesDataService {
     if (!coverageIdentifier) {
       throw new Error('Coverage identifier (policyNumber or memberId) is required');
     }
+    // A real member id only; never the policy number standing in for it
+    const memberIdentifier = provided(memberId) || provided(subscriberId);
 
-    // Check if coverage exists by policy_number + patient_id OR member_id + patient_id
-    const existingCoverage = await query(
-      'SELECT * FROM patient_coverage WHERE (policy_number = $1 OR member_id = $1) AND patient_id = $2',
-      [coverageIdentifier, patientId]
-    );
+    return this.withUpsertLock('coverage', `${patientId}:${coverageIdentifier}`, async () => {
+      // Check if coverage exists by policy_number + patient_id OR member_id + patient_id
+      const existingCoverage = await query(
+        'SELECT coverage_id FROM patient_coverage WHERE (policy_number = $1 OR member_id = $1) AND patient_id = $2',
+        [coverageIdentifier, patientId]
+      );
 
-    if (existingCoverage.rows.length > 0) {
-      // Update existing coverage
-      const updateQuery = `
-        UPDATE patient_coverage SET
-          insurer_id = COALESCE($1, insurer_id),
-          member_id = COALESCE($2, member_id),
-          coverage_type = COALESCE($3, coverage_type),
-          relationship = COALESCE($4, relationship),
-          dependent_number = COALESCE($5, dependent_number),
-          plan_name = COALESCE($6, plan_name),
-          network_type = COALESCE($7, network_type),
-          start_date = COALESCE($8, start_date),
-          end_date = COALESCE($9, end_date),
-          is_active = COALESCE($10, is_active),
-          updated_at = NOW()
-        WHERE coverage_id = $11
-        RETURNING *
-      `;
-      
-      const result = await query(updateQuery, [
-        insurerId,
-        memberId || subscriberId || coverageIdentifier,
-        coverageType,
-        relationship,
-        dependentNumber,
-        planName,
-        networkType,
-        startDate,
-        endDate,
-        isActive,
-        existingCoverage.rows[0].coverage_id
-      ]);
-      
-      console.log(`[NPHIES Data] Updated coverage: ${coverageIdentifier}`);
-      return result.rows[0];
-    } else {
+      if (existingCoverage.rows.length > 0) {
+        // Update existing coverage: only fields that were provided
+        const result = await query(`
+          UPDATE patient_coverage SET
+            insurer_id = COALESCE($1, insurer_id),
+            member_id = COALESCE($2, member_id),
+            coverage_type = COALESCE($3, coverage_type),
+            relationship = COALESCE($4, relationship),
+            dependent_number = COALESCE($5, dependent_number),
+            plan_name = COALESCE($6, plan_name),
+            network_type = COALESCE($7, network_type),
+            start_date = COALESCE($8, start_date),
+            end_date = COALESCE($9, end_date),
+            is_active = COALESCE($10, is_active),
+            updated_at = NOW()
+          WHERE coverage_id = $11
+          RETURNING *
+        `, [
+          provided(insurerId),
+          memberIdentifier,
+          provided(coverageType),
+          provided(relationship),
+          provided(dependentNumber),
+          provided(planName),
+          provided(networkType),
+          provided(startDate),
+          provided(endDate),
+          isActive ?? null,
+          existingCoverage.rows[0].coverage_id
+        ]);
+        
+        console.log(`[NPHIES Data] Updated coverage ${existingCoverage.rows[0].coverage_id}`);
+        return result.rows[0];
+      }
+
       // Insert new coverage
-      const insertQuery = `
+      const result = await query(`
         INSERT INTO patient_coverage (
           patient_id, insurer_id, policy_number, member_id, coverage_type,
           relationship, dependent_number, plan_name, network_type,
           start_date, end_date, is_active
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
-      `;
-      
-      const result = await query(insertQuery, [
+      `, [
         patientId,
         insurerId,
         policyNumber || coverageIdentifier, // Store as policy_number if no explicit policyNumber
-        memberId || subscriberId || coverageIdentifier, // Also store as member_id
-        coverageType,
-        relationship,
-        dependentNumber,
-        planName,
-        networkType,
-        startDate,
-        endDate,
-        isActive
+        memberIdentifier,
+        provided(coverageType) || 'EHCPOL',
+        provided(relationship) || 'self',
+        provided(dependentNumber),
+        provided(planName),
+        provided(networkType),
+        provided(startDate),
+        provided(endDate),
+        isActive ?? true
       ]);
       
-      console.log(`[NPHIES Data] Created new coverage: ${coverageIdentifier}`);
+      console.log(`[NPHIES Data] Created coverage ${result.rows[0]?.coverage_id}`);
       return result.rows[0];
-    }
+    });
   }
 
   /**
@@ -410,10 +391,18 @@ class NphiesDataService {
         result.patient = await this.upsertPatient(patientData);
       }
 
-      // Process Insurer
+      // Process Insurer: only the insurer the request was sent to. A payer Organization with a
+      // different license (e.g. a sandbox test payer) must not create a new insurer row or
+      // re-link this coverage/eligibility to it.
       if (insurerResource) {
         const insurerData = this.extractInsurerData(insurerResource);
-        result.insurer = await this.upsertInsurer(insurerData);
+        const requestedInsurer = existingData.insurer;
+        if (!requestedInsurer?.nphies_id || insurerData.nphiesId === requestedInsurer.nphies_id) {
+          result.insurer = await this.upsertInsurer(insurerData);
+        } else {
+          console.warn('[NPHIES Data] Response payer license differs from the requested insurer; keeping the requested insurer');
+          result.insurer = requestedInsurer.insurer_id ? requestedInsurer : null;
+        }
       }
 
       // Process Coverage (requires patient and insurer)
@@ -509,7 +498,7 @@ class NphiesDataService {
       email: email?.value,
       address: address?.text || address?.line?.join(', '),
       city: address?.city,
-      country: address?.country || 'SAU',
+      country: address?.country,
       maritalStatus: patientResource.maritalStatus?.coding?.[0]?.code,
       nphiesPatientId: patientResource.id
     };
@@ -547,8 +536,8 @@ class NphiesDataService {
       policyNumber: identifier?.value,
       memberId: coverageResource.subscriberId,
       subscriberId: coverageResource.subscriberId,
-      coverageType: coverageResource.type?.coding?.[0]?.code || 'EHCPOL',
-      relationship: coverageResource.relationship?.coding?.[0]?.code || 'self',
+      coverageType: coverageResource.type?.coding?.[0]?.code,
+      relationship: coverageResource.relationship?.coding?.[0]?.code,
       dependentNumber: coverageResource.dependent,
       planName: coverageClass?.name,
       classCode: coverageClass?.value,
@@ -556,7 +545,8 @@ class NphiesDataService {
       networkType: coverageResource.network,
       startDate: coverageResource.period?.start,
       endDate: coverageResource.period?.end,
-      isActive: coverageResource.status === 'active',
+      // Unknown status must not overwrite the stored flag
+      isActive: coverageResource.status ? coverageResource.status === 'active' : undefined,
       nphiesCoverageId: coverageResource.id
     };
   }
@@ -593,14 +583,6 @@ class NphiesDataService {
     const finalCoverageId = coverage?.coverage_id || coverageId || null;
     const finalMotherPatientId = motherPatient?.patient_id || motherPatientId || null;
 
-    console.log(`[NPHIES Data] Storing eligibility result with:`, {
-      patient_id: finalPatientId,
-      mother_patient_id: finalMotherPatientId,
-      has_motherPatient: !!motherPatient,
-      motherPatient_patient_id: motherPatient?.patient_id,
-      motherPatientId_param: motherPatientId
-    });
-
     const insertQuery = `
       INSERT INTO eligibility (
         patient_id, provider_id, insurer_id, coverage_id, mother_patient_id,
@@ -636,112 +618,10 @@ class NphiesDataService {
       JSON.stringify(parsedResponse?.errors || [])
     ];
 
-    console.log(`[NPHIES Data] Insert params for eligibility:`, {
-      param5_mother_patient_id: insertParams[4], // $5 is at index 4
-      allParams: insertParams.map((p, i) => ({
-        index: i + 1,
-        param: i === 14 || i === 15 || i === 16 || i === 17 ? `${typeof p} (${p?.length || 0} chars)` : p
-      }))
-    });
-
     const result = await query(insertQuery, insertParams);
     const eligibilityId = result.rows[0].eligibility_id;
-
-    // Verify what was actually stored
+    console.log(`[NPHIES Data] Stored eligibility ${eligibilityId} (outcome: ${parsedResponse?.outcome || 'unknown'})`);
     return { eligibilityId };
-  }
-
-  /**
-   * Get default provider from database
-   * Uses DEFAULT_PROVIDER_ID env variable or first provider in DB
-   * @returns {Object} Provider record
-   */
-  async getDefaultProvider() {
-    const defaultProviderId = process.env.DEFAULT_PROVIDER_ID;
-
-    if (defaultProviderId) {
-      const result = await query(
-        'SELECT * FROM providers WHERE provider_id = $1',
-        [defaultProviderId]
-      );
-      if (result.rows.length > 0) {
-        return result.rows[0];
-      }
-    }
-
-    // Fallback: get first provider
-    const result = await query(
-      'SELECT * FROM providers ORDER BY created_at ASC LIMIT 1'
-    );
-
-    if (result.rows.length === 0) {
-      throw new Error('No provider found in database. Please configure a provider first.');
-    }
-
-    return result.rows[0];
-  }
-
-  /**
-   * Get patient by ID or identifier
-   */
-  async getPatient(patientIdOrIdentifier) {
-    // Try UUID first
-    let result = await query(
-      'SELECT * FROM patients WHERE patient_id = $1',
-      [patientIdOrIdentifier]
-    );
-
-    if (result.rows.length === 0) {
-      // Try identifier
-      result = await query(
-        'SELECT * FROM patients WHERE identifier = $1',
-        [patientIdOrIdentifier]
-      );
-    }
-
-    return result.rows[0] || null;
-  }
-
-  /**
-   * Get insurer by ID or NPHIES ID
-   */
-  async getInsurer(insurerIdOrNphiesId) {
-    // Try UUID first
-    let result = await query(
-      'SELECT * FROM insurers WHERE insurer_id = $1',
-      [insurerIdOrNphiesId]
-    );
-
-    if (result.rows.length === 0) {
-      // Try NPHIES ID
-      result = await query(
-        'SELECT * FROM insurers WHERE nphies_id = $1',
-        [insurerIdOrNphiesId]
-      );
-    }
-
-    return result.rows[0] || null;
-  }
-
-  /**
-   * Get coverage by ID or policy number + patient
-   */
-  async getCoverage(coverageId, patientId = null) {
-    // Try UUID first
-    let result = await query(
-      'SELECT * FROM patient_coverage WHERE coverage_id = $1',
-      [coverageId]
-    );
-
-    if (result.rows.length === 0 && patientId) {
-      // Try policy number
-      result = await query(
-        'SELECT * FROM patient_coverage WHERE policy_number = $1 AND patient_id = $2',
-        [coverageId, patientId]
-      );
-    }
-
-    return result.rows[0] || null;
   }
 }
 

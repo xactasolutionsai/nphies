@@ -26,8 +26,8 @@ router.get('/:id/bundle', claimBatchesController.previewBundle.bind(claimBatches
 // POST ROUTES
 // ============================================
 
-// POST /api/claim-batches - Create new claim batch (legacy - uses base controller)
-router.post('/', claimBatchesController.create.bind(claimBatchesController));
+// Batches are created only via POST /create (validated items); the legacy generic
+// POST / and PUT /:id BaseController routes were removed (wrong schema, no draft guard).
 
 // POST /api/claim-batches/create - Create batch from selected claims
 router.post('/create', claimBatchesController.createBatch.bind(claimBatchesController));
@@ -48,11 +48,8 @@ router.post('/:id/add-claims', claimBatchesController.addClaimsToBatch.bind(clai
 router.post('/:id/remove-claims', claimBatchesController.removeClaimsFromBatch.bind(claimBatchesController));
 
 // ============================================
-// PUT/PATCH ROUTES
+// PATCH ROUTES
 // ============================================
-
-// PUT /api/claim-batches/:id - Update claim batch
-router.put('/:id', claimBatchesController.update.bind(claimBatchesController));
 
 // PATCH /api/claim-batches/:id/status - Update claim batch status
 router.patch('/:id/status', claimBatchesController.updateStatus.bind(claimBatchesController));

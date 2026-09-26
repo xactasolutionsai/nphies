@@ -34,11 +34,16 @@ SET identifier_type = NULL
 WHERE identifier_type = 'visitor_permit';
 
 -- =====================================================
--- STEP 4: Remove visitor_permit from policy_holders table
+-- STEP 4: policy_holders has no identifier_type column (see add_policy_holders.sql);
+-- only update it if a later schema adds one.
 -- =====================================================
-UPDATE policy_holders 
-SET identifier_type = NULL 
-WHERE identifier_type = 'visitor_permit';
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = current_schema() AND table_name = 'policy_holders' AND column_name = 'identifier_type') THEN
+    UPDATE policy_holders SET identifier_type = NULL WHERE identifier_type = 'visitor_permit';
+  END IF;
+END $$;
 
 -- =====================================================
 -- STEP 5: Verify changes - check distribution again

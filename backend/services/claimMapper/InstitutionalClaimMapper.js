@@ -28,6 +28,9 @@
 
 import InstitutionalPAMapper from '../priorAuthMapper/InstitutionalMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import {
+  cloneInput, mappingError, roundMoney, requireProviderLicense, requireInsurerLicense, formatSaudiDate, ICD10_SYSTEM
+} from '../priorAuthMapper/nphiesIdentity.js';
 
 class InstitutionalClaimMapper extends InstitutionalPAMapper {
   constructor() {
@@ -49,11 +52,19 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     return profiles[claimType] || profiles['institutional'];
   }
 
+  /** Claims use Claim.use=claim and the provider's /claim identifier system. */
+  getClaimUse() {
+    return 'claim';
+  }
+
   /**
    * Build complete Claim Request Bundle for Institutional type
    */
   buildClaimRequestBundle(data) {
-    const { claim, patient, provider, insurer, coverage, policyHolder, practitioner, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    // Deep copy: mapping must never mutate the caller's record
+    const claim = cloneInput(data.claim);
+    const practitioner = data.practitioner || claim.practitioner;
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -88,7 +99,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       bundleResourceIds.motherPatient
     );
     const practitionerResource = this.buildPractitionerResourceWithId(
-      practitioner || { name: 'Default Practitioner', specialty_code: claim.practice_code || '08.00' },
+      practitioner,
       bundleResourceIds.practitioner
     );
     const encounterResource = this.buildClaimEncounterResource(claim, patient, provider, bundleResourceIds);
@@ -122,8 +133,8 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
    */
   buildClaimMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+    const senderNphiesId = requireProviderLicense(provider);
+    const destinationNphiesId = requireInsurerLicense(insurer);
 
     return {
       fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -174,8 +185,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
    */
   buildClaimResource(claim, patient, provider, insurer, coverage, encounter, practitioner, bundleResourceIds) {
     const claimId = bundleResourceIds.claim;
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build extensions per NPHIES validation requirements
     // Order: accountingPeriod (FIRST per IC-01620), encounter, eligibility-offline-*, episode
@@ -183,8 +193,8 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
 
     // 1. AccountingPeriod extension (REQUIRED per IC-01620, must be FIRST)
     // BV-01010: Day must be defaulted to "01" (e.g., "2025-12-01" not "2025-12-08")
-    const serviceDate = new Date(claim.service_date || claim.request_date || new Date());
-    const accountingPeriodDate = `${serviceDate.getFullYear()}-${String(serviceDate.getMonth() + 1).padStart(2, '0')}-01`;
+    // Saudi calendar month (independent of the host timezone)
+    const accountingPeriodDate = `${formatSaudiDate(claim.service_date || claim.request_date || new Date()).slice(0, 7)}-01`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
       valueDate: accountingPeriodDate
@@ -279,7 +289,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       meta: { profile: [this.getClaimProfileUrl('institutional')] },
       extension: extensions,
       identifier: [{ 
-        system: `${providerIdentifierSystem}/claim`, 
+        system: this.getClaimIdentifierSystem(provider), 
         value: claim.claim_number || `req_${Date.now()}` 
       }],
       status: 'active',
@@ -339,7 +349,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
 
     // SupportingInfo
     let supportingInfoSequences = [];
-    let supportingInfoList = [...(claim.supporting_info || [])];
+    let supportingInfoList = this.tagCallerSupportingInfo(claim.supporting_info);
     
     // Add birth-weight supportingInfo for newborn patients
     // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
@@ -433,11 +443,12 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       });
     }
     
-    if (supportingInfoList.length > 0) {
-      claimResource.supportingInfo = supportingInfoList.map((info, idx) => {
-        const seq = idx + 1;
-        supportingInfoSequences.push(seq);
-        return this.buildSupportingInfo({ ...info, sequence: seq });
+    const numberedSupportingInfo = supportingInfoList.map((info, idx) => ({ info, sequence: idx + 1 }));
+    const informationSequenceMap = this.buildInformationSequenceMap(numberedSupportingInfo);
+    if (numberedSupportingInfo.length > 0) {
+      claimResource.supportingInfo = numberedSupportingInfo.map(({ info, sequence }) => {
+        supportingInfoSequences.push(sequence);
+        return this.buildSupportingInfo({ ...info, sequence });
       });
     }
 
@@ -445,9 +456,9 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     if (claim.diagnoses?.length > 0) {
       claimResource.diagnosis = claim.diagnoses.map((diag, idx) => {
         // NPHIES requires icd-10-am system, not icd-10 (IB-00242)
-        let diagnosisSystem = diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am';
-        if (diagnosisSystem === 'http://hl7.org/fhir/sid/icd-10') {
-          diagnosisSystem = 'http://hl7.org/fhir/sid/icd-10-am';
+        let diagnosisSystem = diag.diagnosis_system || ICD10_SYSTEM;
+        if (['http://hl7.org/fhir/sid/icd-10', 'icd-10', 'ICD-10'].includes(diagnosisSystem)) {
+          diagnosisSystem = ICD10_SYSTEM;
         }
         
         return {
@@ -501,7 +512,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     };
     if (claim.items?.length > 0) {
       claimResource.item = claim.items.map((item, idx) => 
-        this.buildClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim)
+        this.buildClaimItem(item, idx + 1, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim, informationSequenceMap)
       );
     }
 
@@ -520,7 +531,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       totalAmount = parseFloat(claim.total_amount);
     }
     claimResource.total = { 
-      value: totalAmount, 
+      value: roundMoney(totalAmount), 
       currency: claim.currency || 'SAR' 
     };
 
@@ -534,7 +545,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
    * Build claim item with all required extensions for institutional claims
    * Per NPHIES spec, patientInvoice is REQUIRED (IC-01454)
    */
-  buildClaimItem(item, sequence, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim) {
+  buildClaimItem(item, sequence, supportingInfoSequences, encounterPeriod, providerIdentifierSystem, claim, informationSequenceMap = null) {
     const quantity = parseFloat(item.quantity || 1);
     const unitPrice = parseFloat(item.unit_price || 0);
     const factor = parseFloat(item.factor ?? 1);
@@ -574,7 +585,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     ];
 
     // Use item's serviced_date if available, otherwise fall back to encounter start or today
-    let servicedDate = item.serviced_date || encounterPeriod?.start || new Date();
+    const servicedDate = item.serviced_date || encounterPeriod?.start || new Date();
 
     const claimItem = {
       factor,
@@ -582,7 +593,7 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
       sequence,
       careTeamSequence: [1],
       diagnosisSequence: item.diagnosis_sequences || [1],
-      informationSequence: item.information_sequences || supportingInfoSequences,
+      informationSequence: this.resolveInformationSequences(item, supportingInfoSequences, informationSequenceMap),
       productOrService: {
         coding: (() => {
           const codings = [{
@@ -744,12 +755,16 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     };
 
     // BV-00759: dischargeDisposition is REQUIRED when encounter end date is provided
+    // (a clinical outcome: never defaulted to 'home')
     if (claim.encounter_end) {
+      if (!claim.discharge_disposition) {
+        throw mappingError('Institutional claim with an encounter end date requires a discharge disposition (discharge_disposition, BV-00759)');
+      }
       hospitalization.dischargeDisposition = {
         coding: [{
           system: 'http://nphies.sa/terminology/CodeSystem/discharge-disposition',
-          code: claim.discharge_disposition || 'home',
-          display: this.getDischargeDispositionDisplay(claim.discharge_disposition || 'home')
+          code: claim.discharge_disposition,
+          display: this.getDischargeDispositionDisplay(claim.discharge_disposition)
         }]
       };
     }
@@ -794,20 +809,21 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
   }
 
   /**
-   * Get display text for discharge disposition codes
+   * Display of http://nphies.sa/terminology/CodeSystem/discharge-disposition codes
+   * (docs/nphies CodeSystems.csv); unknown codes are shown as the code.
    */
   getDischargeDispositionDisplay(code) {
     const displays = {
-      'home': 'Home',
-      'other-hcf': 'Other healthcare facility',
-      'hosp': 'Hospitalization',
-      'long': 'Long-term care',
-      'aadvice': 'Left against advice',
-      'exp': 'Expired',
-      'psy': 'Psychiatric hospital',
-      'rehab': 'Rehabilitation',
-      'snf': 'Skilled nursing facility',
-      'oth': 'Other'
+      'acute-hospital': 'Discharge/transfer to an Acute Hospital',
+      'SDTC': 'Statistical Discharge-Type Change',
+      'SDFL': 'Statistical discharge from leave',
+      'home': 'Home/Other',
+      'DTRAS': 'Discharge /Transfer to a Residential Ageing Service',
+      'DTPH': 'Discharge/Transfer to a Psychiatric Hospital',
+      'DTOHA': 'Discharge /Transfer to Other Health Care Accommodation',
+      'LAMA': 'Left Against Medical Advice',
+      'died': 'Died',
+      'in-hospital': 'Patient still in hospital'
     };
     return displays[code] || code;
   }

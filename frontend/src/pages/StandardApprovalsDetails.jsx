@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { addCanvasAcrossPages } from '@/utils/pdfExport';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,8 +29,18 @@ import {
   FileCheck
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useAuth } from '@/context/AuthContext';
+
+// Stored marital status is an HL7 code ('S', 'M', ...); older rows may hold the word
+const isMarital = (value, code, word) => {
+  const v = String(value || '').trim().toLowerCase();
+  return v === code.toLowerCase() || v === word;
+};
+// Visit type comparison is case-insensitive (the form stores e.g. 'walk in')
+const isVisitType = (value, expected) => String(value || '').trim().toLowerCase() === expected;
 
 export default function StandardApprovalsDetails() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
@@ -109,37 +120,20 @@ export default function StandardApprovalsDetails() {
         backgroundColor: '#ffffff',
       });
       
-      // Hide the element again and remove PDF export class
-      element.classList.add('hidden');
-      element.classList.remove('pdf-export');
       
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      
-      // Calculate dimensions to fit the page
-      const ratio = imgWidth / imgHeight;
-      let finalWidth = pdfWidth - 20; // 10mm margin on each side
-      let finalHeight = finalWidth / ratio;
-      
-      // If height is too large, scale based on height instead
-      if (finalHeight > pdfHeight - 20) {
-        finalHeight = pdfHeight - 20;
-        finalWidth = finalHeight * ratio;
-      }
-      
-      const imgX = (pdfWidth - finalWidth) / 2;
-      const imgY = 10;
-      
-      pdf.addImage(imgData, 'PNG', imgX, imgY, finalWidth, finalHeight);
+      // Full width, continued over as many A4 pages as needed
+      addCanvasAcrossPages(pdf, canvas, 10);
       pdf.save(`StandardApproval_${formData?.form_number || 'Form'}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Error generating PDF. Please try again.');
     } finally {
+      // Always hide the print template again, even if html2canvas throws
+      if (printRef.current) {
+        printRef.current.classList.add('hidden');
+        printRef.current.classList.remove('pdf-export');
+      }
       setExportingPDF(false);
     }
   };
@@ -513,14 +507,14 @@ export default function StandardApprovalsDetails() {
                             <TableCell>{item.type || 'N/A'}</TableCell>
                             <TableCell className="text-right">{item.quantity || 'N/A'}</TableCell>
                             <TableCell className="text-right font-semibold">
-                              {item.cost ? `$${item.cost.toLocaleString()}` : 'N/A'}
+                              {item.cost ? `${Number(item.cost).toLocaleString()} SAR` : 'N/A'}
                             </TableCell>
                           </TableRow>
                         ))}
                         <TableRow className="bg-gray-50 font-semibold">
                           <TableCell colSpan={4} className="text-right">Total Cost:</TableCell>
                           <TableCell className="text-right">
-                            ${formData.management_items.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0).toLocaleString()}
+                            {formData.management_items.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0).toLocaleString()} SAR
                           </TableCell>
                         </TableRow>
                       </TableBody>
@@ -722,13 +716,15 @@ export default function StandardApprovalsDetails() {
             {/* Action Buttons */}
             <Card>
               <CardContent className="p-4 space-y-2">
-                <Button
-                  onClick={() => navigate(`/standard-approvals/${id}/edit`)}
-                  className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Form
-                </Button>
+                {can('edit') && (
+                  <Button
+                    onClick={() => navigate(`/standard-approvals/${id}/edit`)}
+                    className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Form
+                  </Button>
+                )}
                 <Button
                   onClick={handlePrint}
                   variant="outline"
@@ -777,8 +773,8 @@ export default function StandardApprovalsDetails() {
                 <span style={{ marginLeft: '10px' }}>Dept.: <span style={{ borderBottom: '1px dotted #000', display: 'inline-block', minWidth: '100px' }}>{formData.department || ''}</span></span>
               </div>
               <div style={{ marginBottom: '4px' }}>
-                Single ( {formData.marital_status === 'Single' ? '✓' : '\u00A0'} )
-                <span style={{ marginLeft: '15px' }}>Married ( {formData.marital_status === 'Married' ? '✓' : '\u00A0'} )</span>
+                Single ( {isMarital(formData.marital_status, 'S', 'single') ? '✓' : '\u00A0'} )
+                <span style={{ marginLeft: '15px' }}>Married ( {isMarital(formData.marital_status, 'M', 'married') ? '✓' : '\u00A0'} )</span>
                 <span style={{ marginLeft: '15px' }}>Plan Type ( {formData.plan_type || '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0'} )</span>
               </div>
               <div style={{ marginBottom: '4px' }}>
@@ -787,11 +783,11 @@ export default function StandardApprovalsDetails() {
                 / <span style={{ borderBottom: '1px dotted #000', display: 'inline-block', minWidth: '60px' }}>{formData.date_of_visit ? formatDate(formData.date_of_visit).split('/')[2] : ''}</span>
               </div>
               <div>
-                New visit ( {formData.visit_type === 'New visit' ? '✓' : '\u00A0'} )
-                <span style={{ marginLeft: '10px' }}>I Follow Up ( {formData.visit_type === 'Follow Up' ? '✓' : '\u00A0'} )</span>
-                <span style={{ marginLeft: '10px' }}>I Refill ( {formData.visit_type === 'Refill' ? '✓' : '\u00A0'} )</span>
-                <span style={{ marginLeft: '10px' }}>I walk in ( {formData.visit_type === 'Walk in' ? '✓' : '\u00A0'} )</span>
-                <span style={{ marginLeft: '10px' }}>I Referral ( {formData.visit_type === 'Referral' ? '✓' : '\u00A0'} )</span>
+                New visit ( {isVisitType(formData.visit_type, 'new visit') ? '✓' : '\u00A0'} )
+                <span style={{ marginLeft: '10px' }}>I Follow Up ( {isVisitType(formData.visit_type, 'follow up') ? '✓' : '\u00A0'} )</span>
+                <span style={{ marginLeft: '10px' }}>I Refill ( {isVisitType(formData.visit_type, 'refill') ? '✓' : '\u00A0'} )</span>
+                <span style={{ marginLeft: '10px' }}>I walk in ( {isVisitType(formData.visit_type, 'walk in') ? '✓' : '\u00A0'} )</span>
+                <span style={{ marginLeft: '10px' }}>I Referral ( {isVisitType(formData.visit_type, 'referral') ? '✓' : '\u00A0'} )</span>
               </div>
             </div>
 

@@ -18,6 +18,12 @@ import {
   Info,
   Lightbulb
 } from 'lucide-react';
+import AIBadge from '@/components/ai/AIBadge';
+import { formatDuration } from '@/utils/aiAssist';
+
+// Suggestions produced by the deterministic rule checks; every other type comes from the language model.
+const RULE_SUGGESTION_TYPES = new Set(['missing_field', 'invalid_value', 'ai_unavailable', 'ai_incomplete']);
+const RULES_META = { source: 'rules', certainty: 'high' };
 
 /**
  * AI Validation Panel Component
@@ -161,9 +167,25 @@ const AIValidationPanel = ({
   }
 
   const { riskScores, validation, suggestions, metadata } = validationResult;
-  const riskLevel = riskScores?.riskLevel || 'low';
+  // Fail closed: when the AI could not review the request (disabled, unreachable, unreadable
+  // reply or a partial analysis) never present the result as a pass.
+  const aiUnavailable = validationResult.aiUnavailable === true
+    || validationResult.requiresManualReview === true
+    || validationResult.isValid === null
+    || validationResult.isValid === undefined;
+  const riskLevel = aiUnavailable ? 'unknown' : (riskScores?.riskLevel || 'unknown');
   const riskStyle = getRiskLevelStyle(riskLevel);
-  const RiskIcon = riskStyle.icon;
+  const RiskIcon = aiUnavailable ? AlertTriangle : riskStyle.icon;
+  const necessityScore = validation?.ai?.medicalNecessityScore;
+  const hasNecessityScore = typeof necessityScore === 'number' && Number.isFinite(necessityScore);
+  const consistencyPassed = validation?.ai?.consistencyCheck?.passed;
+  // Source/certainty of the language-model part: the backend's ai metadata when it sends one,
+  // otherwise 'llm' / 'low' (the model's output is never more than low certainty).
+  const llmMeta = {
+    source: validationResult.ai?.source || 'llm',
+    certainty: validationResult.ai?.certainty || 'low'
+  };
+  const duration = formatDuration(metadata?.validationDuration ?? metadata?.responseTime);
 
   return (
     <div className={`bg-white rounded-xl border ${riskStyle.border} shadow-sm overflow-hidden`}>
@@ -171,18 +193,29 @@ const AIValidationPanel = ({
       <div className={`${riskStyle.bg} px-4 py-3 border-b ${riskStyle.border}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${riskLevel === 'low' ? 'bg-green-100' : riskLevel === 'medium' ? 'bg-yellow-100' : 'bg-red-100'}`}>
-              <RiskIcon className={`h-5 w-5 ${riskStyle.iconColor}`} />
+            <div className={`p-2 rounded-lg ${aiUnavailable ? 'bg-amber-100' : riskLevel === 'low' ? 'bg-green-100' : riskLevel === 'medium' ? 'bg-yellow-100' : riskLevel === 'high' ? 'bg-red-100' : 'bg-gray-100'}`}>
+              <RiskIcon className={`h-5 w-5 ${aiUnavailable ? 'text-amber-600' : riskStyle.iconColor}`} />
             </div>
             <div>
-              <h3 className={`font-semibold ${riskStyle.text}`}>
-                {riskLevel === 'low' ? 'Low Rejection Risk' : 
+              <h3 className={`font-semibold ${aiUnavailable ? 'text-amber-800' : riskStyle.text}`}>
+                {aiUnavailable ? 'AI unavailable — manual review required' :
+                 riskLevel === 'low' ? 'Low Rejection Risk' : 
                  riskLevel === 'medium' ? 'Medium Rejection Risk' : 
-                 'High Rejection Risk'}
+                 riskLevel === 'high' ? 'High Rejection Risk' :
+                 'Rejection risk unknown — manual review required'}
               </h3>
               <p className="text-sm text-gray-600">
-                Overall Risk Score: {((riskScores?.overall || 0) * 100).toFixed(0)}%
+                {aiUnavailable
+                  ? `This request has NOT been validated by AI${metadata?.message ? ` (${metadata.message})` : validationResult.error ? ` (${validationResult.error})` : ''}.`
+                    + (typeof riskScores?.overall === 'number' && validationResult.ruleBasedValid !== undefined
+                      ? ` Rule-based checks only: ${(riskScores.overall * 100).toFixed(0)}% risk.`
+                      : '')
+                  : `Overall Risk Score: ${((riskScores?.overall || 0) * 100).toFixed(0)}%`}
               </p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <AIBadge {...RULES_META} basis="Rule checks: required fields, vital-sign ranges, dates" />
+                {!aiUnavailable && <AIBadge {...llmMeta} basis={metadata?.model ? { description: 'Language-model review', model: metadata.model } : 'Language-model review'} />}
+              </div>
             </div>
           </div>
           {onDismiss && (
@@ -273,10 +306,11 @@ const AIValidationPanel = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
                         <span className={`text-xs px-2 py-0.5 rounded-full border ${getSeverityStyle(suggestion.severity)}`}>
                           {suggestion.severity}
                         </span>
+                        <AIBadge {...(RULE_SUGGESTION_TYPES.has(suggestion.type) ? RULES_META : llmMeta)} />
                         {suggestion.type && (
                           <span className="text-xs text-gray-500">
                             {suggestion.type.replace(/_/g, ' ')}
@@ -339,9 +373,10 @@ const AIValidationPanel = ({
             onClick={() => toggleSection('details')}
             className="flex items-center justify-between w-full text-left"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary-purple" />
               <span className="text-sm font-medium text-gray-700">AI Analysis Details</span>
+              <AIBadge {...llmMeta} />
             </div>
             {expandedSections.details ? 
               <ChevronUp className="h-4 w-4 text-gray-400" /> : 
@@ -355,11 +390,12 @@ const AIValidationPanel = ({
               <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <span className="text-sm text-gray-600">Medical Necessity Score</span>
                 <span className={`text-sm font-medium ${
-                  validation.ai.medicalNecessityScore >= 0.7 ? 'text-green-600' :
-                  validation.ai.medicalNecessityScore >= 0.5 ? 'text-yellow-600' :
+                  !hasNecessityScore ? 'text-gray-500' :
+                  necessityScore >= 0.7 ? 'text-green-600' :
+                  necessityScore >= 0.5 ? 'text-yellow-600' :
                   'text-red-600'
                 }`}>
-                  {(validation.ai.medicalNecessityScore * 100).toFixed(0)}%
+                  {hasNecessityScore ? `${(necessityScore * 100).toFixed(0)}%` : 'Not assessed'}
                 </span>
               </div>
 
@@ -367,12 +403,17 @@ const AIValidationPanel = ({
               <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <span className="text-sm text-gray-600">Clinical Consistency</span>
                 <span className={`text-sm font-medium flex items-center gap-1 ${
-                  validation.ai.consistencyCheck?.passed ? 'text-green-600' : 'text-red-600'
+                  consistencyPassed === true ? 'text-green-600' : consistencyPassed === false ? 'text-red-600' : 'text-gray-500'
                 }`}>
-                  {validation.ai.consistencyCheck?.passed ? (
+                  {consistencyPassed === true ? (
                     <>
                       <CheckCircle className="h-4 w-4" />
                       Pass
+                    </>
+                  ) : consistencyPassed !== false ? (
+                    <>
+                      <AlertTriangle className="h-4 w-4" />
+                      Not assessed
                     </>
                   ) : (
                     <>
@@ -452,11 +493,11 @@ const AIValidationPanel = ({
 
       {/* Footer with metadata */}
       {metadata && (
-        <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500 flex items-center justify-between">
+        <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500 flex flex-wrap items-center justify-between gap-2">
           <span>
-            Analyzed by {metadata.model || 'AI'} in {metadata.validationDuration || metadata.responseTime || 'N/A'}
+            Analyzed by {metadata.model || 'AI'}{duration ? ` in ${duration}` : ''} · advisory — the reviewer decides
           </span>
-          <span>{new Date(metadata.timestamp).toLocaleTimeString()}</span>
+          {metadata.timestamp && <span>{new Date(metadata.timestamp).toLocaleTimeString()}</span>}
         </div>
       )}
     </div>

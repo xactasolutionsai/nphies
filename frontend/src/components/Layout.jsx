@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   LayoutDashboard,
+  BookOpen,
+  FlaskConical,
   Users,
   Building2,
   Shield,
@@ -31,9 +33,13 @@ import {
   User,
   MessageSquare,
   ShieldAlert,
-  RefreshCw
+  RefreshCw,
+  BarChart3,
+  AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import useAIHealth from '@/hooks/useAIHealth';
+import { aiBannerVisible, AI_UNAVAILABLE_BANNER } from '@/services/aiApi';
 
 // Custom Tooth icon component for dental items
 const ToothIcon = ({ className }) => (
@@ -57,6 +63,8 @@ const masterDataItems = [
 const adminItems = [
   { name: 'Users', href: '/users', icon: Users },
   { name: 'Contacts', href: '/contacts', icon: MessageSquare },
+  { name: 'Clinical Knowledge', href: '/clinical-knowledge', icon: BookOpen },
+  { name: 'Clinical Pilot', href: '/clinical-pilot', icon: FlaskConical },
 ];
 
 // Merged Requests & Claims section
@@ -91,6 +99,7 @@ const claimsPaymentsItems = [
 const toolsItems = [
   { name: 'OpenMed Advisory', href: '/openmed', icon: Stethoscope },
   { name: 'System Poll', href: '/system-poll', icon: RefreshCw },
+  { name: 'AI Insights', href: '/ai/insights', icon: BarChart3 },
   { name: 'Response Viewer', href: '/response-viewer', icon: FileSearch },
   { name: 'Medicine Search', href: '/medicines', icon: Pill },
 ];
@@ -105,6 +114,7 @@ export default function Layout({ children }) {
   const [claimsPaymentsOpen, setClaimsPaymentsOpen] = useState(true);
   const [toolsOpen, setToolsOpen] = useState(true);
   const location = useLocation();
+  const { health: aiHealth } = useAIHealth();
 
   const isSuperAdmin = user?.role === 'admin';
 
@@ -572,7 +582,7 @@ export default function Layout({ children }) {
               <div className="flex items-center space-x-4">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900 tracking-wide">
-                    {[...masterDataItems, ...requestsAndClaimsItems, ...eligibilityItems, ...claimsPaymentsItems, ...toolsItems].find(item => item.href === location.pathname || location.pathname.startsWith(item.href + '/'))?.name || 'Dashboard'}
+                    {[...masterDataItems, ...adminItems, ...requestsAndClaimsItems, ...eligibilityItems, ...claimsPaymentsItems, ...toolsItems].find(item => item.href === location.pathname || location.pathname.startsWith(item.href + '/'))?.name || 'Dashboard'}
                   </h1>
                   <p className="text-sm text-gray-600 font-medium">Xacta Solutions</p>
                 </div>
@@ -606,6 +616,14 @@ export default function Layout({ children }) {
             </div>
           </div>
         </div>
+
+        {/* AI status: shown only when AI is enabled but Ollama cannot be reached */}
+        {aiBannerVisible(aiHealth) && (
+          <div role="status" className="flex items-center gap-2 border-b border-amber-300 bg-amber-50 px-6 py-2 text-sm text-amber-900">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
+            <span>{AI_UNAVAILABLE_BANNER}</span>
+          </div>
+        )}
 
         {/* Main content */}
         <main className="flex-1 relative z-10">

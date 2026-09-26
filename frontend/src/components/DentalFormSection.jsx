@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Scan, Heart, ClipboardCheck } from 'lucide-react';
 import api from '@/services/api';
+import { toDateInputValue } from '@/utils/date';
 
 export default function DentalFormSection() {
   const [form, setForm] = useState({
@@ -92,7 +93,6 @@ export default function DentalFormSection() {
   });
   const [status, setStatus] = useState({ type: 'idle', message: '' });
   const [preview, setPreview] = useState(null);
-  const [lastResponse, setLastResponse] = useState(null);
 
   const setField = (path, value) => {
     const keys = path.split('.');
@@ -110,61 +110,9 @@ export default function DentalFormSection() {
   const handleSubmit = (e) => {
     e.preventDefault();
     setPreview(form);
-    setStatus({ type: 'success', message: 'Dental request prepared automatically. Click "AI Check" to validate with n8n.' });
+    setStatus({ type: 'success', message: 'Dental request prepared automatically. AI validation is not available for this form yet.' });
   };
 
-  const handleAICheck = async () => {
-    // Auto-generate preview if not exists
-    if (!preview) {
-      setPreview(form);
-    }
-
-    try {
-      setStatus({ type: 'idle', message: 'Sending to AI for validation...' });
-      
-      // Clear old cached URL and get fresh URL
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem('webhookUrl');
-      }
-      
-      // Get webhook URL from localStorage or prompt user
-      let webhookUrl = typeof window !== 'undefined' ? window.localStorage.getItem('webhookUrl') || '' : '';
-      if (!webhookUrl) {
-        const input = typeof window !== 'undefined' ? window.prompt('Enter n8n Webhook URL', 'http://localhost:5678/webhook/check') : '';
-        if (input && input.trim().length > 0) {
-          window.localStorage.setItem('webhookUrl', input.trim());
-          webhookUrl = input.trim();
-        } else {
-          setStatus({ type: 'error', message: 'No webhook URL provided.' });
-          return;
-        }
-      }
-
-      // Send to n8n webhook
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'dental_request',
-          data: preview || form,
-          timestamp: new Date().toISOString()
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      setLastResponse(result);
-      setStatus({ type: 'success', message: 'AI check completed successfully!' });
-    } catch (error) {
-      console.error('Error sending to n8n:', error);
-      setStatus({ type: 'error', message: error?.message || 'Failed to send to AI check' });
-    }
-  };
 
   const toothNumbers = [
     '11', '12', '13', '14', '15', '16', '17', '18',
@@ -206,8 +154,8 @@ export default function DentalFormSection() {
       if (!data) throw new Error('Patient not found');
       const p = data.data || data;
       setField('patient.fullName', p.name || p.full_name || p.fullName || '');
-      setField('patient.dob', p.birthdate || p.dob || '');
-      setField('patient.gender', (p.gender || '').toLowerCase() || 'male');
+      setField('patient.dob', toDateInputValue(p.birth_date || p.birthdate || p.dob));
+      if (p.gender) setField('patient.gender', String(p.gender).toLowerCase());
       setField('patient.contactPhone', p.phone || p.contactPhone || '');
       setField('patient.email', p.email || '');
       setStatus({ type: 'success', message: 'Patient info retrieved.' });
@@ -1029,34 +977,6 @@ export default function DentalFormSection() {
           </div>
         )}
 
-        {lastResponse && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-semibold">AI Response</h2>
-            </div>
-            
-            <div className="bg-gray-50 rounded-lg p-4 border">
-              <div className="space-y-2">
-                {typeof lastResponse === 'object' && lastResponse !== null ? (
-                  Object.entries(lastResponse).map(([key, value]) => (
-                    <div key={key} className="flex items-start space-x-3">
-                      <span className="font-medium text-gray-700 min-w-0 flex-shrink-0">{key}:</span>
-                      <span className="text-gray-900 break-words">
-                        {typeof value === 'boolean' ? (value ? 'true' : 'false') : 
-                         typeof value === 'object' ? JSON.stringify(value) : 
-                         String(value)}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-gray-900 whitespace-pre-wrap">
-                    {typeof lastResponse === 'string' ? lastResponse : JSON.stringify(lastResponse, null, 2)}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="flex items-center justify-end gap-3">
           <button
@@ -1083,17 +1003,19 @@ export default function DentalFormSection() {
                 attachments: []
               });
               setPreview(null);
-              setLastResponse(null);
+              
               setStatus({ type: 'idle', message: '' });
             }}
             className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
           >
             Reset
           </button>
+          <span className="text-xs text-gray-500">AI check is disabled: patient data is no longer sent from the browser to external webhooks, and no backend AI endpoint exists for this form yet.</span>
           <button
             type="button"
-            onClick={handleAICheck}
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-2 rounded-xl transition"
+            disabled
+            title="AI check is not available for this form yet"
+            className="inline-flex items-center gap-2 bg-gray-400 text-white px-5 py-2 rounded-xl cursor-not-allowed"
           >
             <Scan className="h-4 w-4" />
             AI Check

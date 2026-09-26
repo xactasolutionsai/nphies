@@ -573,8 +573,7 @@ class EligibilityController extends BaseController {
         });
       }
 
-      console.log('[NPHIES] Sending example bundle directly to NPHIES API...');
-      console.log('[NPHIES] Target: http://176.105.150.83/$process-message');
+      console.log('[NPHIES] Sending example bundle directly to the configured NPHIES endpoint...');
 
       // Send to NPHIES
       const nphiesResponse = await nphiesService.checkEligibility(bundle);
@@ -780,30 +779,51 @@ class EligibilityController extends BaseController {
       let coverage = null;
       const isDiscoveryMode = purpose.includes('discovery') && !coverageId && !coverageData;
 
+      let coverageDataToUpsert = null;
+
       if (coverageId) {
-        // Fetch existing coverage (no patient restriction - coverage can be selected independently)
+        // An existing coverage must belong to the selected (existing) patient
+        if (!patient.patient_id) {
+          return res.status(400).json({ success: false, error: 'An existing coverage can only be used with an existing patient' });
+        }
         const coverageResult = await query(
-          'SELECT * FROM patient_coverage WHERE coverage_id = $1',
-          [coverageId]
+          'SELECT * FROM patient_coverage WHERE coverage_id = $1 AND patient_id = $2',
+          [coverageId, patient.patient_id]
         );
         if (coverageResult.rows.length === 0) {
-          return res.status(404).json({ success: false, error: 'Coverage not found' });
+          return res.status(404).json({ success: false, error: 'Coverage not found for this patient' });
         }
         coverage = coverageResult.rows[0];
-        console.log(`[NPHIES Dynamic] Using existing coverage: ${coverage.policy_number || coverage.member_id}`);
+        if (coverage.insurer_id && coverage.insurer_id !== insurer.insurer_id) {
+          return res.status(400).json({ success: false, error: 'Selected coverage belongs to a different insurer' });
+        }
+        console.log(`[NPHIES Dynamic] Using existing coverage: ${coverage.coverage_id}`);
       } else if (coverageData && (coverageData.memberId || coverageData.policyNumber)) {
-        // UPSERT coverage from form data - memberId is the primary identifier
-        coverage = await nphiesDataService.upsertCoverage({
+        // Coverage from form data is stored only after a successful NPHIES call, once the
+        // patient row exists (a new patient has no patient_id yet).
+        coverageDataToUpsert = {
           policyNumber: coverageData.policyNumber || coverageData.memberId, // Use memberId as policyNumber if not provided
           memberId: coverageData.memberId,
           coverageType: coverageData.coverageType || 'EHCPOL',
           planName: coverageData.planName,
-          networkType: coverageData.networkType,
+          networkType: coverageData.networkType || coverageData.network,
           relationship: coverageData.relationship || 'self',
           startDate: coverageData.startDate,
           endDate: coverageData.endDate
-        }, patient.patient_id, insurer.insurer_id);
-        console.log(`[NPHIES Dynamic] Upserted coverage: ${coverage.policy_number || coverage.member_id}`);
+        };
+        // Temporary coverage object (same shape as a patient_coverage row) for bundle building
+        coverage = {
+          policy_number: coverageDataToUpsert.policyNumber,
+          member_id: coverageDataToUpsert.memberId || coverageDataToUpsert.policyNumber,
+          coverage_type: coverageDataToUpsert.coverageType,
+          plan_name: coverageDataToUpsert.planName,
+          network_type: coverageDataToUpsert.networkType,
+          relationship: coverageDataToUpsert.relationship,
+          start_date: coverageDataToUpsert.startDate,
+          end_date: coverageDataToUpsert.endDate,
+          is_active: true
+        };
+        console.log('[NPHIES Dynamic] Created temporary coverage object (will upsert after successful API call)');
       } else if (!isDiscoveryMode) {
         return res.status(400).json({
           success: false,
@@ -916,6 +936,11 @@ class EligibilityController extends BaseController {
       if (shouldUpsertMotherPatient && motherPatientDataToUpsert) {
         motherPatient = await nphiesDataService.upsertPatient(motherPatientDataToUpsert);
         finalMotherPatientId = motherPatient.patient_id; // Update the ID after upsert
+      }
+
+      // Coverage is stored once the patient exists
+      if (coverageDataToUpsert) {
+        coverage = await nphiesDataService.upsertCoverage(coverageDataToUpsert, patient.patient_id, insurer.insurer_id);
       }
 
 
@@ -1140,9 +1165,11 @@ class EligibilityController extends BaseController {
       const isDiscoveryMode = !coverageId && !coverageData;
 
       if (coverageId) {
+        // A saved coverage may only be previewed for its own (existing) patient
+        const ownerPatientId = patientId && patient ? String(patient.patient_id) : null;
         const coverageResult = await query(
-          'SELECT * FROM patient_coverage WHERE coverage_id = $1',
-          [coverageId]
+          'SELECT * FROM patient_coverage WHERE coverage_id = $1 AND ($2::text IS NULL OR patient_id::text = $2::text)',
+          [coverageId, ownerPatientId]
         );
         if (coverageResult.rows.length === 0) {
           if (!partialMode) {

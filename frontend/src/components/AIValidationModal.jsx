@@ -15,6 +15,8 @@ import {
   ChevronUp,
   Code
 } from 'lucide-react';
+import AIBadge from '@/components/ai/AIBadge';
+import { formatDuration } from '@/utils/aiAssist';
 
 export default function AIValidationModal({ 
   isOpen, 
@@ -29,6 +31,8 @@ export default function AIValidationModal({
 
   const {
     isValid,
+    aiUnavailable,
+    requiresManualReview,
     confidenceScore = 0,
     warnings = [],
     recommendations = [],
@@ -73,18 +77,22 @@ export default function AIValidationModal({
     return 'text-red-600';
   };
 
+  // Fail closed: disabled/unreachable AI or an unknown verdict is never shown as "validated".
+  const unavailable = Boolean(metadata.error) || aiUnavailable === true || requiresManualReview === true
+    || isValid === null || isValid === undefined;
+
   const getValidityStatus = () => {
-    if (metadata.error) {
+    if (unavailable) {
       return {
         icon: <AlertTriangle className="h-6 w-6 text-orange-500" />,
-        text: 'AI Validation Unavailable',
+        text: 'AI unavailable — manual review required',
         color: 'text-orange-600'
       };
     }
-    if (isValid) {
+    if (isValid === true) {
       return {
         icon: <CheckCircle2 className="h-6 w-6 text-green-500" />,
-        text: 'Form Validated',
+        text: warnings.length === 0 ? 'AI review: no issues found' : 'AI review: no blocking issues found',
         color: 'text-green-600'
       };
     }
@@ -127,18 +135,24 @@ export default function AIValidationModal({
                       {status.text}
                     </h3>
                     <p className="text-sm text-gray-600">
-                      {metadata.error 
-                        ? 'AI service temporarily unavailable. Manual review recommended.'
+                      {unavailable
+                        ? 'The form has NOT been validated by AI. Manual review required.'
                         : isValid 
-                        ? 'The form passes AI validation checks'
-                        : 'Please review the issues below before proceeding'}
+                        ? 'Advisory only — the clinician decides.'
+                        : 'Please review the issues below before proceeding. Advisory only — the clinician decides.'}
                     </p>
+                    <AIBadge
+                      className="mt-1"
+                      source={validationResult?.ai?.source || 'llm'}
+                      certainty={unavailable ? undefined : (validationResult?.ai?.certainty || 'low')}
+                      basis={metadata.model ? { description: 'Language-model review of the form', model: metadata.model } : 'Language-model review of the form'}
+                    />
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="flex items-center gap-2">
                     <Activity className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm text-gray-600">Confidence</span>
+                    <span className="text-sm text-gray-600" title="Reported by the language model itself; not a measured accuracy">Model-reported confidence</span>
                   </div>
                   <div className={`text-2xl font-bold ${getConfidenceColor(confidenceScore)}`}>
                     {(confidenceScore * 100).toFixed(0)}%
@@ -153,10 +167,10 @@ export default function AIValidationModal({
                     <Brain className="h-4 w-4" />
                     <span>Model: {metadata.model}</span>
                   </div>
-                  {metadata.responseTime && (
+                  {(metadata.responseTime || metadata.validationDuration) && (
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4" />
-                      <span>Response: {metadata.responseTime}</span>
+                      <span>Response: {formatDuration(metadata.responseTime ?? metadata.validationDuration)}</span>
                     </div>
                   )}
                   {metadata.retrievedGuidelines > 0 && (
@@ -303,16 +317,16 @@ export default function AIValidationModal({
           )}
 
           {/* No issues found */}
-          {warnings.length === 0 && recommendations.length === 0 && missingAnalyses.length === 0 && !metadata.error && (
+          {warnings.length === 0 && recommendations.length === 0 && missingAnalyses.length === 0 && !unavailable && (
             <Card>
               <CardContent className="pt-6">
                 <div className="text-center py-8">
                   <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    All Clear!
+                    AI review: no issues found
                   </h3>
                   <p className="text-gray-600">
-                    No issues detected. The form appears to be complete and medically appropriate.
+                    Advisory only, the clinician decides. The AI found no warnings; this is not a confirmation that the form is complete or medically appropriate.
                   </p>
                 </div>
               </CardContent>

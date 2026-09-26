@@ -244,10 +244,6 @@ class AdvancedAuthParser {
         info.unitSystem = valueQuantityExt.valueQuantity?.system;
       } else if (codeExt) {
         info.valueType = 'code';
-        info.code = codeExt.valueCodeableConcept?.coding?.[0]?.code || null;
-        info.codeSystem = codeExt.valueCodeableConcept?.coding?.[0]?.system || null;
-        info.codeDisplay = codeExt.valueCodeableConcept?.coding?.[0]?.display || null;
-        info.codeText = codeExt.valueCodeableConcept?.text || null;
       } else if (attachmentExt) {
         info.valueType = 'attachment';
         info.contentType = attachmentExt.valueAttachment?.contentType || null;
@@ -256,6 +252,14 @@ class AdvancedAuthParser {
         info.size = attachmentExt.valueAttachment?.size || null;
         // Don't store base64 data in parsed form, it's in the raw bundle
         info.hasData = !!attachmentExt.valueAttachment?.data;
+      }
+
+      // Code is kept alongside any value (e.g. a lab-test code with its quantity)
+      if (codeExt) {
+        info.code = codeExt.valueCodeableConcept?.coding?.[0]?.code || null;
+        info.codeSystem = codeExt.valueCodeableConcept?.coding?.[0]?.system || null;
+        info.codeDisplay = codeExt.valueCodeableConcept?.coding?.[0]?.display || null;
+        info.codeText = codeExt.valueCodeableConcept?.text || null;
       }
 
       // Reason (e.g., weight-absence-reason)
@@ -300,8 +304,8 @@ class AdvancedAuthParser {
           display: item.productOrService?.coding?.[0]?.display || null,
         },
 
-        // Quantity
-        quantity: item.quantity?.value || null,
+        // Quantity (0 is a real quantity, not "missing")
+        quantity: item.quantity?.value ?? null,
 
         // Body site (dental)
         bodySite: item.bodySite ? {
@@ -347,7 +351,7 @@ class AdvancedAuthParser {
         system: detail.productOrService?.coding?.[0]?.system || null,
         display: detail.productOrService?.coding?.[0]?.display || null,
       },
-      quantity: detail.quantity?.value || null,
+      quantity: detail.quantity?.value ?? null,
       noteNumbers: detail.noteNumber || [],
       adjudication: this.parseAdjudication(detail.adjudication || []),
     };

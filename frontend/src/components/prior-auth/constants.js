@@ -333,6 +333,22 @@ export const EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS = [
   { value: 'R', label: 'R - Registered, advised, left without being attended' }
 ];
 
+// Discharge Disposition Options (BV-00759)
+// Reference: http://nphies.sa/terminology/CodeSystem/discharge-disposition (docs/nphies CodeSystems.csv)
+// Required for institutional encounters that have an end date; entered by the user, never defaulted
+export const DISCHARGE_DISPOSITION_OPTIONS = [
+  { value: 'home', label: 'home - Home/Other' },
+  { value: 'acute-hospital', label: 'acute-hospital - Discharge/transfer to an Acute Hospital' },
+  { value: 'DTPH', label: 'DTPH - Discharge/Transfer to a Psychiatric Hospital' },
+  { value: 'DTRAS', label: 'DTRAS - Discharge/Transfer to a Residential Ageing Service' },
+  { value: 'DTOHA', label: 'DTOHA - Discharge/Transfer to Other Health Care Accommodation' },
+  { value: 'LAMA', label: 'LAMA - Left Against Medical Advice' },
+  { value: 'died', label: 'died - Died' },
+  { value: 'in-hospital', label: 'in-hospital - Patient still in hospital' },
+  { value: 'SDTC', label: 'SDTC - Statistical Discharge-Type Change' },
+  { value: 'SDFL', label: 'SDFL - Statistical discharge from leave' }
+];
+
 // ============================================================================
 // NPHIES BILLING CODE SYSTEMS
 // Each CodeSystem has its own URL used in Claim.item.productOrService.coding.system
@@ -422,23 +438,17 @@ export const getServiceCodeSystemsByAuthType = (authType) => {
 
 // Vision ICD-10 Codes for eye examinations and disorders
 // Reference: https://icd.who.int/browse10/2016/en
+// NPHIES uses ICD-10-AM. Only WHO ICD-10 category/subcategory codes are listed here;
+// ICD-10-CM-only extensions (e.g. Z01.00, H52.20, H53.00, H35.30, H04.12) were removed.
 export const VISION_ICD10_OPTIONS = [
   // === Z01 - Eye Examination Encounters ===
   { value: 'Z01.0', label: 'Z01.0 - Examination of eyes and vision' },
-  { value: 'Z01.00', label: 'Z01.00 - Encounter for examination of eyes and vision without abnormal findings' },
-  { value: 'Z01.01', label: 'Z01.01 - Encounter for examination of eyes and vision with abnormal findings' },
-  { value: 'Z01.02', label: 'Z01.02 - Encounter for examination of eyes and vision following failed vision screening' },
   
   // === H52 - Disorders of Refraction and Accommodation ===
   { value: 'H52.0', label: 'H52.0 - Hypermetropia (Farsightedness)' },
   { value: 'H52.1', label: 'H52.1 - Myopia (Nearsightedness)' },
   { value: 'H52.2', label: 'H52.2 - Astigmatism' },
-  { value: 'H52.20', label: 'H52.20 - Unspecified astigmatism' },
-  { value: 'H52.21', label: 'H52.21 - Irregular astigmatism' },
-  { value: 'H52.22', label: 'H52.22 - Regular astigmatism' },
   { value: 'H52.3', label: 'H52.3 - Anisometropia and aniseikonia' },
-  { value: 'H52.31', label: 'H52.31 - Anisometropia' },
-  { value: 'H52.32', label: 'H52.32 - Aniseikonia' },
   { value: 'H52.4', label: 'H52.4 - Presbyopia' },
   { value: 'H52.5', label: 'H52.5 - Disorders of accommodation' },
   { value: 'H52.6', label: 'H52.6 - Other disorders of refraction' },
@@ -446,10 +456,6 @@ export const VISION_ICD10_OPTIONS = [
   
   // === H53 - Visual Disturbances ===
   { value: 'H53.0', label: 'H53.0 - Amblyopia ex anopsia (Lazy eye)' },
-  { value: 'H53.00', label: 'H53.00 - Unspecified amblyopia' },
-  { value: 'H53.01', label: 'H53.01 - Deprivation amblyopia' },
-  { value: 'H53.02', label: 'H53.02 - Refractive amblyopia' },
-  { value: 'H53.03', label: 'H53.03 - Strabismic amblyopia' },
   { value: 'H53.1', label: 'H53.1 - Subjective visual disturbances' },
   { value: 'H53.2', label: 'H53.2 - Diplopia (Double vision)' },
   { value: 'H53.3', label: 'H53.3 - Other disorders of binocular vision' },
@@ -473,8 +479,6 @@ export const VISION_ICD10_OPTIONS = [
   { value: 'H40.9', label: 'H40.9 - Unspecified glaucoma' },
   { value: 'H25.9', label: 'H25.9 - Unspecified age-related cataract' },
   { value: 'H26.9', label: 'H26.9 - Unspecified cataract' },
-  { value: 'H35.30', label: 'H35.30 - Unspecified macular degeneration' },
-  { value: 'H04.12', label: 'H04.12 - Dry eye syndrome' },
   { value: 'H10.9', label: 'H10.9 - Unspecified conjunctivitis' },
   { value: 'H16.9', label: 'H16.9 - Unspecified keratitis' },
   { value: 'H50.9', label: 'H50.9 - Unspecified strabismus' }
@@ -806,6 +810,7 @@ export const SUPPORTING_INFO_CATEGORY_OPTIONS = [
   
   // Hospital/admission specific
   { value: 'ventilation-hours', label: 'ventilation-hours - Ventilation Hours', description: 'Number of hours under mechanical ventilation', needsCode: false },
+  { value: 'icu-hours', label: 'icu-hours - ICU Hours', description: 'Number of hours in the intensive care unit', needsCode: false },
   { value: 'admission-weight', label: 'admission-weight - Admission Weight', description: 'Admission Weight', needsCode: false },
   { value: 'estimated-Length-of-Stay', label: 'estimated-Length-of-Stay - Estimated Length Of Stay', description: 'Estimated Length Of Stay', needsCode: false },
   
@@ -1290,3 +1295,39 @@ export const PRACTICE_CODES_OPTIONS = [
   },
 ];
 
+
+// Treating practitioner identifier type (Practitioner.identifier.type,
+// http://terminology.hl7.org/CodeSystem/v2-0203). Only 'MD' is offered: docs/nphies CodeSystems.csv
+// does not enumerate the practitioner value set, and 'MD' is the code used by the NPHIES example
+// bundles in docs/. Add further codes only after confirming them against the NPHIES IG.
+export const PRACTITIONER_IDENTIFIER_TYPE_OPTIONS = [
+  { value: 'MD', label: 'MD - Medical License Number' }
+];
+
+// Auth types whose bundle carries a Practitioner / careTeam (the backend mappers require it).
+// Pharmacy has no careTeam per the NPHIES examples.
+export const PRACTITIONER_REQUIRED_AUTH_TYPES = ['professional', 'institutional', 'dental', 'vision'];
+
+/**
+ * Validation errors for the treating practitioner fields ({ field, message }[]).
+ * Pure so it can be unit-tested outside React.
+ */
+export const validatePractitionerFields = (data = {}) => {
+  if (!PRACTITIONER_REQUIRED_AUTH_TYPES.includes(data.auth_type)) return [];
+  const errors = [];
+  const text = (value) => (value == null ? '' : String(value).trim());
+  if (!text(data.practitioner_license)) {
+    errors.push({ field: 'practitioner_license', message: 'Treating practitioner license number is required' });
+  } else if (text(data.practitioner_license).length > 50) {
+    errors.push({ field: 'practitioner_license', message: 'Treating practitioner license number must be at most 50 characters' });
+  }
+  if (!text(data.practitioner_name)) {
+    errors.push({ field: 'practitioner_name', message: 'Treating practitioner name is required' });
+  } else if (text(data.practitioner_name).length > 255) {
+    errors.push({ field: 'practitioner_name', message: 'Treating practitioner name must be at most 255 characters' });
+  }
+  if (!PRACTITIONER_IDENTIFIER_TYPE_OPTIONS.some(opt => opt.value === data.practitioner_identifier_type)) {
+    errors.push({ field: 'practitioner_identifier_type', message: 'Treating practitioner identifier type is required' });
+  }
+  return errors;
+};

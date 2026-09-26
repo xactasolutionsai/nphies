@@ -5,7 +5,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS medical_knowledge (
     id SERIAL PRIMARY KEY,
     content TEXT NOT NULL,
-    embedding vector(768), -- Default dimension for many models, adjust if needed
+    embedding vector(4096), -- ragService stores 4096-dimension embeddings (cniongolo/biomistral)
     metadata JSONB DEFAULT '{}'::jsonb,
     source VARCHAR(255),
     category VARCHAR(100),
@@ -13,11 +13,8 @@ CREATE TABLE IF NOT EXISTS medical_knowledge (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create index for vector similarity search (using cosine distance)
-CREATE INDEX IF NOT EXISTS medical_knowledge_embedding_idx 
-ON medical_knowledge 
-USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);
+-- No ivfflat/HNSW index: pgvector indexes support at most 2000 dimensions, so similarity
+-- search on 4096-dimension embeddings runs as a sequential scan.
 
 -- Create index for metadata searches
 CREATE INDEX IF NOT EXISTS medical_knowledge_metadata_idx 
@@ -73,11 +70,13 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers for updated_at
+DROP TRIGGER IF EXISTS update_medical_knowledge_updated_at ON medical_knowledge;
 CREATE TRIGGER update_medical_knowledge_updated_at 
 BEFORE UPDATE ON medical_knowledge 
 FOR EACH ROW 
 EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_ai_validations_updated_at ON ai_validations;
 CREATE TRIGGER update_ai_validations_updated_at 
 BEFORE UPDATE ON ai_validations 
 FOR EACH ROW 

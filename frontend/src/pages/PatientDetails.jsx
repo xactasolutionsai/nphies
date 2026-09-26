@@ -20,8 +20,10 @@ import {
   Loader2
 } from 'lucide-react';
 import api, { extractErrorMessage } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 export default function PatientDetails() {
+  const { can } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -86,8 +88,9 @@ export default function PatientDetails() {
       ageYears--;
     }
     
-    // Check if newborn (less than 1 year old or is_newborn flag is true)
-    const isNewborn = patient?.is_newborn || ageYears < 1;
+    // Use the months/days format only for patients under one year old; a record flagged
+    // newborn that is older than a year shows its age in years
+    const isNewborn = ageYears < 1;
     
     if (isNewborn) {
       // Calculate months and days for newborns
@@ -220,20 +223,24 @@ export default function PatientDetails() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="px-4 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 font-medium transition-colors rounded-lg border border-red-200 flex items-center space-x-2"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Delete</span>
-              </button>
-              <button
-                onClick={() => navigate(`/patients/${id}/edit`)}
-                className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-6 py-2 rounded-lg transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-md"
-              >
-                <Edit className="h-4 w-4" />
-                <span>Edit Patient</span>
-              </button>
+              {can('delete') && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="px-4 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 font-medium transition-colors rounded-lg border border-red-200 flex items-center space-x-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </button>
+              )}
+              {can('edit') && (
+                <button
+                  onClick={() => navigate(`/patients/${id}/edit`)}
+                  className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-6 py-2 rounded-lg transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-md"
+                >
+                  <Edit className="h-4 w-4" />
+                  <span>Edit Patient</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

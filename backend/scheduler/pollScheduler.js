@@ -17,10 +17,13 @@
 import systemPollService from '../services/systemPollService.js';
 
 let intervalId = null;
+let initialTimeoutId = null;
 let isRunning = false;
 
 const POLL_INTERVAL_MINUTES = parseInt(process.env.POLL_INTERVAL_MINUTES || '5');
 const POLL_SCHEMA_NAME = process.env.POLL_SCHEMA_NAME || 'public';
+// The schema name ends up in SET search_path; accept plain identifiers only.
+const VALID_SCHEMA_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
 
 /**
  * Start the poll scheduler
@@ -35,6 +38,11 @@ export function startPollScheduler() {
 
   if (intervalId) {
     console.log('[PollScheduler] Scheduler is already running.');
+    return;
+  }
+
+  if (!VALID_SCHEMA_NAME.test(POLL_SCHEMA_NAME) || !(POLL_INTERVAL_MINUTES > 0)) {
+    console.error('[PollScheduler] Invalid POLL_SCHEMA_NAME or POLL_INTERVAL_MINUTES; scheduled polling not started.');
     return;
   }
 
@@ -66,7 +74,8 @@ export function startPollScheduler() {
   }, intervalMs);
 
   // Run initial poll after a short delay
-  setTimeout(async () => {
+  initialTimeoutId = setTimeout(async () => {
+    initialTimeoutId = null;
     if (!isRunning) {
       try {
         isRunning = true;
@@ -85,6 +94,10 @@ export function startPollScheduler() {
  * Stop the poll scheduler
  */
 export function stopPollScheduler() {
+  if (initialTimeoutId) {
+    clearTimeout(initialTimeoutId);
+    initialTimeoutId = null;
+  }
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;

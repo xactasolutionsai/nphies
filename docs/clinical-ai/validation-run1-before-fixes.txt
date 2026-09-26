@@ -1,0 +1,57 @@
+nafes-clinical-context 1.0.0 · split=validation · records=20
+Only meaningful if annotated independently (clinicians) and not used to change rules.
+
+assertion: 13/14 = 92.9% (95% CI 68.5%–98.7%); unknown 0.0%
+  absent        support=7 P=100.0% R=100.0% F1=100.0%
+  conditional   support=1 P=100.0% R=100.0% F1=100.0%
+  possible      support=2 P=100.0% R=50.0% F1=66.7%
+  present       support=4 P=80.0% R=100.0% F1=88.9%
+  error v11#0: gold=possible predicted=present
+
+experiencer: 5/5 = 100.0% (95% CI 56.6%–100.0%); unknown 0.0%
+  family        support=4 P=100.0% R=100.0% F1=100.0%
+  patient       support=1 P=100.0% R=100.0% F1=100.0%
+
+temporality: 3/5 = 60.0% (95% CI 23.1%–88.2%); unknown 0.0%
+  current       support=0 P=0.0% R=— F1=—
+  future        support=1 P=— R=0.0% F1=—
+  historical    support=4 P=100.0% R=75.0% F1=85.7%
+  error v12#1: gold=future predicted=current
+  error v15#0: gold=historical predicted=current
+
+medication_status: 1/7 = 14.3% (95% CI 2.6%–51.3%); unknown 71.4%
+  current       support=3 P=0.0% R=0.0% F1=—
+  discontinued  support=2 P=— R=0.0% F1=—
+  proposed      support=2 P=100.0% R=50.0% F1=66.7%
+  unknown       support=0 P=0.0% R=— F1=—
+  error v07#0: gold=discontinued predicted=current
+  error v10#0: gold=discontinued predicted=unknown
+  error v13#0: gold=current predicted=unknown
+  error v13#1: gold=current predicted=unknown
+  error v16#1: gold=current predicted=unknown
+  error v19#0: gold=proposed predicted=unknown
+
+type: 0/1 = 0.0% (95% CI 0.0%–79.3%); unknown 0.0%
+  allergy       support=1 P=— R=0.0% F1=—
+  medication    support=0 P=0.0% R=— F1=—
+  error v06#0: gold=allergy predicted=medication
+
+dose: 4/4 = 100.0% (95% CI 51.0%–100.0%); unknown 0.0%
+  1             support=1 P=100.0% R=100.0% F1=100.0%
+  25            support=1 P=100.0% R=100.0% F1=100.0%
+  40            support=2 P=100.0% R=100.0% F1=100.0%
+
+unit: 4/4 = 100.0% (95% CI 51.0%–100.0%); unknown 0.0%
+  g             support=1 P=100.0% R=100.0% F1=100.0%
+  mg            support=3 P=100.0% R=100.0% F1=100.0%
+
+route: 1/1 = 100.0% (95% CI 20.7%–100.0%); unknown 0.0%
+  po            support=1 P=100.0% R=100.0% F1=100.0%
+
+frequency: 3/3 = 100.0% (95% CI 43.8%–100.0%); unknown 0.0%
+  bid           support=1 P=100.0% R=100.0% F1=100.0%
+  daily         support=1 P=100.0% R=100.0% F1=100.0%
+  once daily    support=1 P=100.0% R=100.0% F1=100.0%
+
+duration: 1/1 = 100.0% (95% CI 20.7%–100.0%); unknown 0.0%
+  for 5 days    support=1 P=100.0% R=100.0% F1=100.0%

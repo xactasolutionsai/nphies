@@ -15,8 +15,10 @@ import {
 } from 'lucide-react';
 import DataTable from '@/components/DataTable';
 import api, { extractErrorMessage } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Patients() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -98,27 +100,31 @@ export default function Patients() {
           >
             <Eye className="h-4 w-4" />
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/patients/${row.patient_id}/edit`);
-            }}
-            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-            title="Edit"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setPatientToDelete(row);
-              setShowDeleteConfirm(true);
-            }}
-            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title="Delete"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {can('edit') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/patients/${row.patient_id}/edit`);
+              }}
+              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              title="Edit"
+            >
+              <Edit className="h-4 w-4" />
+            </button>
+          )}
+          {can('delete') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setPatientToDelete(row);
+                setShowDeleteConfirm(true);
+              }}
+              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )
     }
@@ -180,13 +186,15 @@ export default function Patients() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigate('/patients/new')}
-                className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-6 py-3 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-lg"
-              >
-                <Plus className="h-5 w-5" />
-                <span>New Patient</span>
-              </button>
+              {can('create') && (
+                <button
+                  onClick={() => navigate('/patients/new')}
+                  className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-6 py-3 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-lg"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span>New Patient</span>
+                </button>
+              )}
               <div className="hidden md:flex items-center space-x-3">
                 <div className="relative bg-white rounded-xl p-3 border border-gray-100">
                   <Users className="h-8 w-8 text-primary-purple" />

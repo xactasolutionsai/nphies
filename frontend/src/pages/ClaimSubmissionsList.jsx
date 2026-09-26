@@ -5,12 +5,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import DataTable from '@/components/DataTable';
-import api, { extractErrorMessage } from '@/services/api';
+import api, { extractErrorMessage, clearApiCache } from '@/services/api';
 import { 
-  FileText, Edit, Trash2, Eye, Send, RefreshCw, 
+  FileText, Trash2, Eye, Send, RefreshCw,
   XCircle, Clock, CheckCircle, AlertCircle,
-  Filter, Search, Copy, Receipt, DollarSign
+  Filter, Search, Receipt, DollarSign
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 // Claim type display helper
 const getClaimTypeDisplay = (claimType) => {
@@ -37,6 +38,7 @@ const formatDate = (dateString) => {
 };
 
 export default function ClaimSubmissionsList() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [claims, setClaims] = useState([]);
@@ -54,40 +56,11 @@ export default function ClaimSubmissionsList() {
   });
   const [searchVersion, setSearchVersion] = useState(0);
 
-  useEffect(() => {
-    const loadClaims = async () => {
-      try {
-        setLoading(true);
-        const params = {
-          page: pagination.page,
-          limit: pagination.limit,
-          ...(filters.search && { search: filters.search }),
-          ...(filters.status && { status: filters.status }),
-          ...(filters.claim_type && { claim_type: filters.claim_type })
-        };
-        const response = await api.getClaimSubmissions(params);
-        const data = response?.data || [];
-        setClaims(Array.isArray(data) ? data : []);
-        if (response?.pagination) {
-          setPagination(prev => ({
-            ...prev,
-            total: response.pagination.total,
-            pages: response.pagination.pages
-          }));
-        }
-      } catch (error) {
-        console.error('Error loading claim submissions:', error);
-        setClaims([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadClaims();
-  }, [pagination.page, pagination.limit, filters.status, filters.claim_type, searchVersion]);
-
-  const loadClaims = async () => {
+  const loadClaims = async ({ fresh = false } = {}) => {
     try {
       setLoading(true);
+      // Bypass the 30s GET cache when the user explicitly refreshes / after a mutation
+      if (fresh) clearApiCache();
       const params = {
         page: pagination.page,
         limit: pagination.limit,
@@ -113,6 +86,11 @@ export default function ClaimSubmissionsList() {
     }
   };
 
+  // Search text is applied only on explicit search (searchVersion), not on every keystroke
+  useEffect(() => {
+    loadClaims();
+  }, [pagination.page, pagination.limit, filters.status, filters.claim_type, searchVersion]);
+
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
     setSearchVersion(v => v + 1);
@@ -136,12 +114,12 @@ export default function ClaimSubmissionsList() {
         setLoading(true);
         await api.deleteClaimSubmission(id);
         setClaims(prev => prev.filter(claim => claim.id !== id));
-        await loadClaims();
+        await loadClaims({ fresh: true });
       } catch (error) {
         console.error('Error deleting claim submission:', error);
         const errorMsg = error.response?.data?.error || 'Error deleting claim submission. Please try again.';
         alert(errorMsg);
-        await loadClaims();
+        await loadClaims({ fresh: true });
       } finally {
         setLoading(false);
       }
@@ -158,30 +136,30 @@ export default function ClaimSubmissionsList() {
         } else {
           alert(`NPHIES Error: ${response.error?.message || 'Unknown error'}`);
         }
-        await loadClaims();
+        await loadClaims({ fresh: true });
       } catch (error) {
         console.error('Error sending to NPHIES:', error);
         alert(`Error: ${extractErrorMessage(error)}`);
-        await loadClaims();
+        await loadClaims({ fresh: true });
       } finally {
         setLoading(false);
       }
     }
   };
 
-  const handleDuplicate = async (id) => {
-    if (window.confirm('Create a duplicate of this claim as a new draft?')) {
-      try {
-        setLoading(true);
-        // For now, navigate to create from the claim (similar to PA duplicate)
-        // Can be expanded with a dedicated duplicate API endpoint
-        navigate(`/claim-submissions/${id}/edit`);
-      } catch (error) {
-        console.error('Error duplicating claim:', error);
-        alert(`Error: ${extractErrorMessage(error)}`);
-      } finally {
-        setLoading(false);
+  // Poll NPHIES for queued claim responses, then reload the list
+  const handlePoll = async (id) => {
+    try {
+      setLoading(true);
+      const response = await api.pollClaimMessages(id);
+      if (response?.success === false) {
+        alert(`Poll failed: ${response.error?.message || response.error || response.message || 'Unknown error'}`);
       }
+    } catch (error) {
+      console.error('Error polling claim:', error);
+      alert(`Error: ${extractErrorMessage(error)}`);
+    } finally {
+      await loadClaims({ fresh: true });
     }
   };
 
@@ -193,6 +171,7 @@ export default function ClaimSubmissionsList() {
       approved: { variant: 'default', icon: CheckCircle, className: 'bg-green-500' },
       partial: { variant: 'default', icon: AlertCircle, className: 'bg-orange-500' },
       denied: { variant: 'destructive', icon: XCircle, className: '' },
+      paid: { variant: 'default', icon: DollarSign, className: 'bg-emerald-600' },
       cancelled: { variant: 'outline', icon: XCircle, className: 'text-gray-500' },
       error: { variant: 'destructive', icon: AlertCircle, className: '' }
     };
@@ -202,7 +181,7 @@ export default function ClaimSubmissionsList() {
     return (
       <Badge variant={config.variant} className={`gap-1 ${config.className}`}>
         <Icon className="h-3 w-3" />
-        {status?.charAt(0).toUpperCase() + status?.slice(1)}
+        {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Draft'}
       </Badge>
     );
   };
@@ -309,65 +288,45 @@ export default function ClaimSubmissionsList() {
           >
             <Eye className="h-4 w-4" />
           </Button>
-          {/* Duplicate button - available for all records */}
-          <Button
-            size="sm"
-            variant="outline"
-            title="Duplicate as new draft"
-            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDuplicate(row.id);
-            }}
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
           {(row.status === 'draft' || row.status === 'error') && (
             <>
-              <Button
-                size="sm"
-                variant="outline"
-                title="Edit"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/claim-submissions/${row.id}/edit`);
-                }}
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                className="bg-blue-500 hover:bg-blue-600"
-                title="Send to NPHIES"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSendToNphies(row.id);
-                }}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                title="Delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(row.id);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {can('send') && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="bg-blue-500 hover:bg-blue-600"
+                  title="Send to NPHIES"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSendToNphies(row.id);
+                  }}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              )}
+              {can('delete') && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  title="Delete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(row.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </>
           )}
-          {row.status === 'queued' && (
+          {row.status === 'queued' && can('poll') && (
             <Button
               size="sm"
               variant="outline"
               title="Poll for Response"
               onClick={(e) => {
                 e.stopPropagation();
-                loadClaims();
+                handlePoll(row.id);
               }}
             >
               <RefreshCw className="h-4 w-4" />
@@ -378,7 +337,7 @@ export default function ClaimSubmissionsList() {
     }
   ];
 
-  // Stats calculations
+  // Stats calculations: only "total" is global; the per-status counts cover the current page
   const stats = {
     total: pagination.total,
     draft: claims.filter(a => a.status === 'draft').length,
@@ -417,7 +376,7 @@ export default function ClaimSubmissionsList() {
                   <span>Connected to NPHIES</span>
                 </div>
                 <div className="text-sm text-gray-500">
-                  Total: {stats.total} | Draft: {stats.draft} | Approved: {stats.approved}
+                  Total: {stats.total} | On this page: Draft {stats.draft}, Approved {stats.approved}
                 </div>
               </div>
             </div>
@@ -448,7 +407,7 @@ export default function ClaimSubmissionsList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600">Pending</p>
+                <p className="text-sm text-blue-600">Pending <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-blue-700">{stats.pending}</p>
               </div>
               <Clock className="h-8 w-8 text-blue-400" />
@@ -459,7 +418,7 @@ export default function ClaimSubmissionsList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600">Approved</p>
+                <p className="text-sm text-green-600">Approved <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-green-700">{stats.approved}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-400" />
@@ -470,7 +429,7 @@ export default function ClaimSubmissionsList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-red-600">Denied</p>
+                <p className="text-sm text-red-600">Denied <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-red-700">{stats.denied}</p>
               </div>
               <XCircle className="h-8 w-8 text-red-400" />
@@ -481,7 +440,7 @@ export default function ClaimSubmissionsList() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-yellow-600">Draft</p>
+                <p className="text-sm text-yellow-600">Draft <span className="text-xs text-gray-400">(this page)</span></p>
                 <p className="text-2xl font-bold text-yellow-700">{stats.draft}</p>
               </div>
               <FileText className="h-8 w-8 text-yellow-400" />
@@ -530,6 +489,7 @@ export default function ClaimSubmissionsList() {
                 <option value="approved">Approved</option>
                 <option value="partial">Partial</option>
                 <option value="denied">Denied</option>
+                <option value="paid">Paid</option>
                 <option value="cancelled">Cancelled</option>
                 <option value="error">Error</option>
               </select>
@@ -568,7 +528,7 @@ export default function ClaimSubmissionsList() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Claim Submission Requests</CardTitle>
-            <Button variant="outline" size="sm" onClick={loadClaims} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={() => loadClaims({ fresh: true })} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>

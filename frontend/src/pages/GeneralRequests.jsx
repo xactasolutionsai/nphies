@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import DataTable from '@/components/DataTable';
 import api from '@/services/api';
 import { FileText, Plus, Edit, Trash2, Eye } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function GeneralRequests() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -129,26 +131,30 @@ export default function GeneralRequests() {
           >
             <Eye className="h-4 w-4" />
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/general-requests/${row.id}/edit`);
-            }}
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDeleteRequest(row.id);
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {can('edit') && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/general-requests/${row.id}/edit`);
+              }}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+          )}
+          {can('delete') && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteRequest(row.id);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       )
     }
@@ -186,13 +192,15 @@ export default function GeneralRequests() {
                 </div>
               </div>
             </div>
-            <Button 
-              onClick={() => navigate('/general-requests/new')} 
-              className="bg-gradient-to-r from-primary-purple to-accent-purple"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              New Request
-            </Button>
+            {can('create') && (
+              <Button 
+                onClick={() => navigate('/general-requests/new')} 
+                className="bg-gradient-to-r from-primary-purple to-accent-purple"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                New Request
+              </Button>
+            )}
           </div>
         </div>
       </div>

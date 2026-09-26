@@ -4,9 +4,39 @@ import { Badge } from '@/components/ui/badge';
 import DataTable from '@/components/DataTable';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Shield, TrendingUp, Users, DollarSign, Calendar, UserCheck, ChevronDown, ChevronUp, FileText, CheckCircle, XCircle, Clock } from 'lucide-react';
-import api from '@/services/api';
+import api, { extractErrorMessage } from '@/services/api';
+import { toLocalISODate } from '@/utils/date';
 
 const COLORS = ['#553781', '#9658C4', '#8572CD', '#00DEFE', '#26A69A', '#E0E7FF'];
+
+const SITE_ELIGIBILITY_URL = 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-siteEligibility';
+
+// Backend stores 'eligible' / 'not_eligible'; older rows may use other casings/separators
+const normalizeStatus = (status) =>
+  String(status || 'unknown').trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+const STATUS_LABELS = {
+  eligible: 'Eligible',
+  not_eligible: 'Not Eligible',
+  pending: 'Pending',
+  under_review: 'Under Review',
+  error: 'Error',
+  unknown: 'Unknown'
+};
+const statusLabel = (status) => {
+  const key = normalizeStatus(status);
+  return STATUS_LABELS[key] || String(status || 'Unknown');
+};
+
+// recharts passes the clicked row directly for <Pie>/<Bar> handlers, but chart-level
+// onClick receives chart state with the row in activePayload[0].payload
+const clickedRow = (event) => event?.activePayload?.[0]?.payload || event?.payload || event || null;
+
+const formatDate = (value) => {
+  if (!value) return 'N/A';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString();
+};
 
 /**
  * Parse policies from raw NPHIES response
@@ -25,8 +55,10 @@ function parsePoliciesFromResponse(rawResponse) {
     
     return eligibilityResponse.insurance.map((insurance, index) => {
       // Extract site eligibility for this insurance entry
-      const siteEligibility = insurance.extension?.find(
-        ext => ext.url === 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-siteEligibility'
+      // Site eligibility may be on the insurance entry or at the response root
+      const siteEligibility = (
+        insurance.extension?.find(ext => ext.url === SITE_ELIGIBILITY_URL) ||
+        eligibilityResponse.extension?.find(ext => ext.url === SITE_ELIGIBILITY_URL)
       )?.valueCodeableConcept?.coding?.[0];
       
       // Extract benefits from items
@@ -464,6 +496,7 @@ function EligibilityDetailModal({ eligibility, onClose, getStatusBadge }) {
 export default function Eligibility() {
   const [eligibility, setEligibility] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [selectedEligibility, setSelectedEligibility] = useState(null);
   
   // Chart data states
@@ -485,49 +518,20 @@ export default function Eligibility() {
   const loadEligibility = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await api.getEligibility({ limit: 1000 });
-      const eligibilityData = response.data || response || [];
+      const rawData = response.data || response || [];
+      const eligibilityData = Array.isArray(rawData) ? rawData : [];
       setEligibility(eligibilityData);
       
       // Process chart data
       processChartData(eligibilityData);
     } catch (error) {
       console.error('Error loading eligibility:', error);
-      // Mock data for demonstration
-      const mockData = [
-        {
-          id: 1,
-          purpose: 'General Checkup',
-          patient_name: 'أحمد محمد العلي',
-          provider_name: 'مستشفى الملك فهد التخصصي',
-          insurer_name: 'التأمين الصحي السعودي',
-          request_date: '2024-01-15',
-          status: 'Eligible',
-          coverage: '100%'
-        },
-        {
-          id: 2,
-          purpose: 'Emergency Treatment',
-          patient_name: 'فاطمة عبدالله السعد',
-          provider_name: 'عيادة الدكتور أحمد محمد',
-          insurer_name: 'بوبا العربية للتأمين',
-          request_date: '2024-01-20',
-          status: 'Eligible',
-          coverage: '90%'
-        },
-        {
-          id: 3,
-          purpose: 'Specialist Consultation',
-          patient_name: 'محمد خالد القحطاني',
-          provider_name: 'مركز الأسنان المتخصص',
-          insurer_name: 'تأمين مدجلف',
-          request_date: '2024-01-18',
-          status: 'Not Eligible',
-          coverage: '0%'
-        }
-      ];
-      setEligibility(mockData);
-      processChartData(mockData);
+      // Show an error state - never substitute demo records for real data
+      setLoadError(extractErrorMessage(error));
+      setEligibility([]);
+      processChartData([]);
     } finally {
       setLoading(false);
     }
@@ -537,9 +541,10 @@ export default function Eligibility() {
     // Process eligibility by status
     const statusCounts = {};
     data.forEach(item => {
-      statusCounts[item.status] = (statusCounts[item.status] || 0) + 1;
+      const key = normalizeStatus(item.status);
+      statusCounts[key] = (statusCounts[key] || 0) + 1;
     });
-    setEligibilityByStatus(Object.entries(statusCounts).map(([name, value]) => ({ name, value })));
+    setEligibilityByStatus(Object.entries(statusCounts).map(([key, value]) => ({ key, name: statusLabel(key), value })));
 
     // Process eligibility by insurer
     const insurerCounts = {};
@@ -560,54 +565,51 @@ export default function Eligibility() {
     // Process approved eligibility by insurer
     const approvedByInsurerCounts = {};
     data.forEach(item => {
-      if (item.status === 'Eligible') {
+      if (normalizeStatus(item.status) === 'eligible') {
         const insurer = item.insurer_name || 'Unknown';
         approvedByInsurerCounts[insurer] = (approvedByInsurerCounts[insurer] || 0) + 1;
       }
     });
     setApprovedByInsurer(Object.entries(approvedByInsurerCounts).map(([name, value]) => ({ name, value })));
 
-    // Process monthly trends
-    const monthlyData = {};
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
+    // Process daily trends (records without a valid request_date are skipped)
+    const dailyData = {};
     data.forEach(item => {
+      const dayKey = toLocalISODate(item.request_date);
+      if (!dayKey) return;
       const date = new Date(item.request_date);
-      const dayKey = date.toISOString().split('T')[0];
-      if (!monthlyData[dayKey]) {
-        monthlyData[dayKey] = {
-          day: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      if (!dailyData[dayKey]) {
+        dailyData[dayKey] = {
+          dateKey: dayKey,
+          day: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
           count: 0,
           eligible: 0,
           notEligible: 0
         };
       }
-      monthlyData[dayKey].count += 1;
-      if (item.status === 'Eligible') {
-        monthlyData[dayKey].eligible += 1;
-      } else if (item.status === 'Not Eligible') {
-        monthlyData[dayKey].notEligible += 1;
+      dailyData[dayKey].count += 1;
+      const status = normalizeStatus(item.status);
+      if (status === 'eligible') {
+        dailyData[dayKey].eligible += 1;
+      } else if (status === 'not_eligible') {
+        dailyData[dayKey].notEligible += 1;
       }
     });
 
-    // Convert to array and sort by date
-    const trendsArray = Object.values(monthlyData).sort((a, b) => {
-      const aDate = new Date(a.day + ', 2024');
-      const bDate = new Date(b.day + ', 2024');
-      return aDate - bDate;
-    });
+    // Sort by the ISO date key (works across years)
+    const trendsArray = Object.values(dailyData).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
 
-    setMonthlyTrends(trendsArray.slice(-30)); // Last 30 days
+    setMonthlyTrends(trendsArray.slice(-30)); // Last 30 days with data
   };
 
   const getStatusBadge = (status) => {
     const variants = {
-      'Eligible': 'default',
-      'Not Eligible': 'destructive',
-      'Pending': 'secondary',
-      'Under Review': 'outline'
+      eligible: 'default',
+      not_eligible: 'destructive',
+      pending: 'secondary',
+      under_review: 'outline'
     };
-    return variants[status] || 'outline';
+    return variants[normalizeStatus(status)] || 'outline';
   };
 
   const columns = [
@@ -642,7 +644,7 @@ export default function Eligibility() {
       accessor: 'status',
       render: (row) => (
         <Badge variant={getStatusBadge(row.status)}>
-          {row.status}
+          {statusLabel(row.status)}
         </Badge>
       )
     },
@@ -655,61 +657,41 @@ export default function Eligibility() {
       key: 'request_date',
       header: 'Request Date',
       accessor: 'request_date',
-      render: (row) => new Date(row.request_date).toLocaleDateString()
+      render: (row) => formatDate(row.request_date)
     }
   ];
 
   // Drill-down functions
-  const handleStatusClick = async (data) => {
-    try {
-      setDrillDownTitle(`Eligibility with Status: ${data.name}`);
-      const filteredEligibility = eligibility.filter(item => item.status === data.name);
-      setDrillDownData(filteredEligibility);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading status drill-down data:', error);
-    }
+  const handleStatusClick = (event) => {
+    const data = clickedRow(event);
+    if (!data?.key) return;
+    setDrillDownTitle(`Eligibility with Status: ${data.name}`);
+    setDrillDownData(eligibility.filter(item => normalizeStatus(item.status) === data.key));
+    setShowDrillDown(true);
   };
 
-  const handleInsurerClick = async (data) => {
-    try {
-      setDrillDownTitle(`Eligibility for Insurer: ${data.name}`);
-      const filteredEligibility = eligibility.filter(item => item.insurer_name === data.name);
-      setDrillDownData(filteredEligibility);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading insurer drill-down data:', error);
-    }
+  const handleInsurerClick = (event) => {
+    const data = clickedRow(event);
+    if (!data?.name) return;
+    setDrillDownTitle(`Eligibility for Insurer: ${data.name}`);
+    setDrillDownData(eligibility.filter(item => (item.insurer_name || 'Unknown') === data.name));
+    setShowDrillDown(true);
   };
 
-  const handleProviderClick = async (data) => {
-    try {
-      setDrillDownTitle(`Eligibility for Provider: ${data.name}`);
-      const filteredEligibility = eligibility.filter(item => item.provider_name === data.name);
-      setDrillDownData(filteredEligibility);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading provider drill-down data:', error);
-    }
+  const handleProviderClick = (event) => {
+    const data = clickedRow(event);
+    if (!data?.name) return;
+    setDrillDownTitle(`Eligibility for Provider: ${data.name}`);
+    setDrillDownData(eligibility.filter(item => (item.provider_name || 'Unknown') === data.name));
+    setShowDrillDown(true);
   };
 
-  const handleMonthlyTrendClick = async (data) => {
-    try {
-      setDrillDownTitle(`Eligibility for Month: ${data.month}`);
-      const monthDate = new Date(data.month + ' 1, 2024');
-      const startDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-      const endDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-      
-      const filteredEligibility = eligibility.filter(item => {
-        const requestDate = new Date(item.request_date);
-        return requestDate >= startDate && requestDate <= endDate;
-      });
-      
-      setDrillDownData(filteredEligibility);
-      setShowDrillDown(true);
-    } catch (error) {
-      console.error('Error loading monthly trend drill-down data:', error);
-    }
+  const handleMonthlyTrendClick = (event) => {
+    const data = clickedRow(event);
+    if (!data?.dateKey) return;
+    setDrillDownTitle(`Eligibility on ${data.day}`);
+    setDrillDownData(eligibility.filter(item => toLocalISODate(item.request_date) === data.dateKey));
+    setShowDrillDown(true);
   };
 
   const closeDrillDown = () => {
@@ -735,6 +717,12 @@ export default function Eligibility() {
 
   return (
     <div className="space-y-8">
+      {loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+          <span>Failed to load eligibility data: {loadError}</span>
+          <button type="button" onClick={loadEligibility} className="ml-4 underline font-medium">Retry</button>
+        </div>
+      )}
       {/* Enhanced Header */}
       <div className="relative">
  
@@ -1177,12 +1165,12 @@ export default function Eligibility() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                            item.status === 'Eligible' ? 'bg-accent-teal/10 text-accent-teal' :
-                            item.status === 'Not Eligible' ? 'bg-red-100 text-red-800' :
-                            item.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                            normalizeStatus(item.status) === 'eligible' ? 'bg-accent-teal/10 text-accent-teal' :
+                            normalizeStatus(item.status) === 'not_eligible' ? 'bg-red-100 text-red-800' :
+                            normalizeStatus(item.status) === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
-                            {item.status || 'N/A'}
+                            {item.status ? statusLabel(item.status) : 'N/A'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">

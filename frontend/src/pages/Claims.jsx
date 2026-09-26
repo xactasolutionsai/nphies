@@ -3,15 +3,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import DataTable from '@/components/DataTable';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { TrendingUp, Receipt, FileText, Calendar, Users, DollarSign, Building2, Shield } from 'lucide-react';
+import { TrendingUp, Receipt, FileText, Calendar, Users, DollarSign, Building2, Shield, AlertCircle } from 'lucide-react';
 import api from '@/services/api';
 
 const COLORS = ['#553781', '#9658C4', '#8572CD', '#00DEFE', '#26A69A', '#E0E7FF'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const formatSAR = (amount) => `SAR ${(Number(amount) || 0).toLocaleString()}`;
+
+const getMonthKey = (dateValue) => {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+// recharts passes the chart state to BarChart/LineChart onClick and the data entry
+// to per-Bar/Pie onClick; normalize both to the clicked data entry.
+const getClickedEntry = (data) => data?.activePayload?.[0]?.payload ?? data?.payload ?? data ?? null;
 
 export default function Claims() {
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedClaim, setSelectedClaim] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   
   // Chart data states
   const [claimsByStatus, setClaimsByStatus] = useState([]);
@@ -31,49 +45,20 @@ export default function Claims() {
   const loadClaims = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await api.getClaims({ limit: 1000 });
-      const claimsData = response.data || response || [];
+      const raw = response?.data ?? response;
+      const claimsData = Array.isArray(raw) ? raw : [];
       setClaims(claimsData);
       
       // Process chart data
       processChartData(claimsData);
     } catch (error) {
       console.error('Error loading claims:', error);
-      // Mock data for demonstration
-      const mockClaims = [
-        {
-          id: 1,
-          claim_number: 'CLM001',
-          patient_name: 'أحمد محمد العلي',
-          provider_name: 'مستشفى الملك فهد التخصصي',
-          insurer_name: 'التأمين الصحي السعودي',
-          status: 'Approved',
-          amount: '15000',
-          submission_date: '2024-01-15'
-        },
-        {
-          id: 2,
-          claim_number: 'CLM002',
-          patient_name: 'فاطمة عبدالله السعد',
-          provider_name: 'عيادة الدكتور أحمد محمد',
-          insurer_name: 'بوبا العربية للتأمين',
-          status: 'Pending',
-          amount: '500',
-          submission_date: '2024-01-20'
-        },
-        {
-          id: 3,
-          claim_number: 'CLM003',
-          patient_name: 'محمد خالد القحطاني',
-          provider_name: 'مركز الأسنان المتخصص',
-          insurer_name: 'تأمين مدجلف',
-          status: 'Rejected',
-          amount: '2000',
-          submission_date: '2024-01-18'
-        }
-      ];
-      setClaims(mockClaims);
-      processChartData(mockClaims);
+      // Never show placeholder records as if they were real data
+      setClaims([]);
+      processChartData([]);
+      setLoadError(error?.response?.data?.error || error?.message || 'Failed to load claims');
     } finally {
       setLoading(false);
     }
@@ -97,13 +82,14 @@ export default function Claims() {
 
     // Monthly Trends
     const monthlyData = {};
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     claimsData.forEach(claim => {
-      const date = new Date(claim.submission_date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthKey = getMonthKey(claim.submission_date);
+      if (!monthKey) return;
       if (!monthlyData[monthKey]) {
+        const [year, month] = monthKey.split('-');
         monthlyData[monthKey] = {
-          month: months[date.getMonth()],
+          key: monthKey,
+          month: `${MONTHS[parseInt(month, 10) - 1]} ${year}`,
           amount: 0,
           count: 0
         };
@@ -111,11 +97,7 @@ export default function Claims() {
       monthlyData[monthKey].amount += parseFloat(claim.amount || 0);
       monthlyData[monthKey].count += 1;
     });
-    setMonthlyTrends(Object.values(monthlyData).sort((a, b) => {
-      const aDate = new Date(a.month + ' 1, 2024');
-      const bDate = new Date(b.month + ' 1, 2024');
-      return aDate - bDate;
-    }));
+    setMonthlyTrends(Object.values(monthlyData).sort((a, b) => a.key.localeCompare(b.key)));
 
     // Claims by Provider
     const providerCounts = {};
@@ -171,21 +153,23 @@ export default function Claims() {
       key: 'amount',
       header: 'Amount',
       accessor: 'amount',
-      render: (row) => `$${parseFloat(row.amount || 0).toLocaleString()}`
+      render: (row) => formatSAR(row.amount)
     },
     {
       key: 'submission_date',
       header: 'Submission Date',
       accessor: 'submission_date',
-      render: (row) => new Date(row.submission_date).toLocaleDateString()
+      render: (row) => (row.submission_date ? new Date(row.submission_date).toLocaleDateString() : '-')
     }
   ];
 
   // Drill-down functions
   const handleStatusClick = async (data) => {
     try {
-      setDrillDownTitle(`Claims with Status: ${data.name}`);
-      const filteredClaims = claims.filter(item => item.status === data.name);
+      const name = getClickedEntry(data)?.name;
+      if (!name) return;
+      setDrillDownTitle(`Claims with Status: ${name}`);
+      const filteredClaims = claims.filter(item => item.status === name);
       setDrillDownData(filteredClaims);
       setShowDrillDown(true);
     } catch (error) {
@@ -195,8 +179,10 @@ export default function Claims() {
 
   const handleInsurerClick = async (data) => {
     try {
-      setDrillDownTitle(`Claims for Insurer: ${data.name}`);
-      const filteredClaims = claims.filter(item => item.insurer_name === data.name);
+      const name = getClickedEntry(data)?.name;
+      if (!name) return;
+      setDrillDownTitle(`Claims for Insurer: ${name}`);
+      const filteredClaims = claims.filter(item => (item.insurer_name || 'Unknown') === name);
       setDrillDownData(filteredClaims);
       setShowDrillDown(true);
     } catch (error) {
@@ -206,8 +192,10 @@ export default function Claims() {
 
   const handleProviderClick = async (data) => {
     try {
-      setDrillDownTitle(`Claims for Provider: ${data.name}`);
-      const filteredClaims = claims.filter(item => item.provider_name === data.name);
+      const name = getClickedEntry(data)?.name;
+      if (!name) return;
+      setDrillDownTitle(`Claims for Provider: ${name}`);
+      const filteredClaims = claims.filter(item => (item.provider_name || 'Unknown') === name);
       setDrillDownData(filteredClaims);
       setShowDrillDown(true);
     } catch (error) {
@@ -217,15 +205,10 @@ export default function Claims() {
 
   const handleMonthlyTrendClick = async (data) => {
     try {
-      setDrillDownTitle(`Claims for Month: ${data.month}`);
-      const monthDate = new Date(data.month + ' 1, 2024');
-      const startDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-      const endDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-      
-      const filteredClaims = claims.filter(item => {
-        const submissionDate = new Date(item.submission_date);
-        return submissionDate >= startDate && submissionDate <= endDate;
-      });
+      const entry = getClickedEntry(data);
+      if (!entry?.key) return;
+      setDrillDownTitle(`Claims for Month: ${entry.month}`);
+      const filteredClaims = claims.filter(item => getMonthKey(item.submission_date) === entry.key);
       
       setDrillDownData(filteredClaims);
       setShowDrillDown(true);
@@ -287,6 +270,23 @@ export default function Claims() {
           </div>
         </div>
       </div>
+
+      {loadError && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-red-700">
+              <AlertCircle className="h-5 w-5" />
+              <span>Could not load claims: {loadError}</span>
+            </div>
+            <button
+              onClick={loadClaims}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-red-300 text-red-700 hover:bg-red-100"
+            >
+              Retry
+            </button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -370,7 +370,7 @@ export default function Claims() {
             <CardContent>
               <div className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={claimsByInsurer} onClick={handleInsurerClick}>
+                  <BarChart data={claimsByInsurer}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" strokeOpacity={0.5} />
                     <XAxis 
                       dataKey="name" 
@@ -390,7 +390,7 @@ export default function Claims() {
                         borderRadius: '12px',
                         boxShadow: 'none'
                       }}
-                      formatter={(value) => [`$${value.toLocaleString()}`, 'Amount']} 
+                      formatter={(value) => [formatSAR(value), 'Amount']} 
                     />
                     <Bar 
                       dataKey="value" 
@@ -398,6 +398,7 @@ export default function Claims() {
                       style={{ cursor: 'pointer' }} 
                       radius={[4, 4, 0, 0]}
                       className="hover:opacity-80 transition-opacity"
+                      onClick={handleInsurerClick}
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -419,8 +420,8 @@ export default function Claims() {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold">Daily Claim Trends</h3>
-                  <p className="text-sm text-gray-600 font-medium">Claim amounts and counts over the last 30 days</p>
+                  <h3 className="text-xl font-bold">Monthly Claim Trends</h3>
+                  <p className="text-sm text-gray-600 font-medium">Claim amounts and counts per month</p>
                 </div>
               </CardTitle>
             </CardHeader>
@@ -449,7 +450,7 @@ export default function Claims() {
                         boxShadow: 'none'
                       }}
                       formatter={(value, name) => [
-                        name === 'amount' ? `$${value.toLocaleString()}` : value,
+                        name === 'amount' ? formatSAR(value) : value,
                         name === 'amount' ? 'Amount' : 'Count'
                       ]}
                     />
@@ -483,7 +484,7 @@ export default function Claims() {
             <CardContent>
               <div className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={claimsByProvider} onClick={handleProviderClick}>
+                  <BarChart data={claimsByProvider}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" strokeOpacity={0.5} />
                     <XAxis 
                       dataKey="name" 
@@ -511,6 +512,7 @@ export default function Claims() {
                       style={{ cursor: 'pointer' }} 
                       radius={[4, 4, 0, 0]}
                       className="hover:opacity-80 transition-opacity"
+                      onClick={handleProviderClick}
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -629,7 +631,7 @@ export default function Claims() {
                         </div>
                         <div>
                           <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Amount</label>
-                          <p className="text-lg font-semibold text-gray-900">${parseFloat(selectedClaim.amount || 0).toLocaleString()}</p>
+                          <p className="text-lg font-semibold text-gray-900">{formatSAR(selectedClaim.amount)}</p>
                         </div>
                       </div>
                     </div>
@@ -689,7 +691,7 @@ export default function Claims() {
                         </div>
                         <div>
                           <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Submission Date</label>
-                          <p className="text-lg font-semibold text-gray-900">{new Date(selectedClaim.submission_date).toLocaleDateString()}</p>
+                          <p className="text-lg font-semibold text-gray-900">{selectedClaim.submission_date ? new Date(selectedClaim.submission_date).toLocaleDateString() : 'N/A'}</p>
                         </div>
                       </div>
                     </div>
@@ -709,11 +711,6 @@ export default function Claims() {
                       className="px-6 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
                     >
                       Close
-                    </button>
-                    <button
-                      className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-6 py-2 rounded-xl transition-all duration-200 font-medium"
-                    >
-                      Edit Claim
                     </button>
                   </div>
                 </div>
@@ -800,7 +797,7 @@ export default function Claims() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          ${parseFloat(item.amount || 0).toLocaleString()}
+                          {formatSAR(item.amount)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {item.submission_date ? new Date(item.submission_date).toLocaleDateString() : 'N/A'}

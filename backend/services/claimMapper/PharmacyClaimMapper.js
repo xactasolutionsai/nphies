@@ -44,6 +44,9 @@
 
 import PharmacyPAMapper from '../priorAuthMapper/PharmacyMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import {
+  cloneInput, mappingError, roundMoney, requireProviderLicense, requireInsurerLicense, formatSaudiDate, ICD10_SYSTEM
+} from '../priorAuthMapper/nphiesIdentity.js';
 
 class PharmacyClaimMapper extends PharmacyPAMapper {
   constructor() {
@@ -58,6 +61,11 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     return 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/pharmacy-claim|1.0.0';
   }
 
+  /** Claims use Claim.use=claim and the provider's /claim identifier system. */
+  getClaimUse() {
+    return 'claim';
+  }
+
   /**
    * Build complete Claim Request Bundle for Pharmacy type
    * Per NPHIES example Claim-483078.json:
@@ -66,7 +74,9 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
    * - preAuthRef is required in insurance
    */
   buildClaimRequestBundle(data) {
-    const { claim, patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    const { patient, provider, insurer, coverage, policyHolder, motherPatient } = data;
+    // Deep copy: mapping must never mutate the caller's record
+    const claim = cloneInput(data.claim);
 
     const bundleResourceIds = {
       claim: this.generateId(),
@@ -137,8 +147,8 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
    */
   buildClaimMessageHeader(provider, insurer, focusFullUrl) {
     const messageHeaderId = this.generateId();
-    const senderNphiesId = provider.nphies_id || NPHIES_CONFIG.DEFAULT_PROVIDER_ID;
-    const destinationNphiesId = insurer.nphies_id || 'INS-FHIR';
+    const senderNphiesId = requireProviderLicense(provider);
+    const destinationNphiesId = requireInsurerLicense(insurer);
 
     return {
       fullUrl: `urn:uuid:${messageHeaderId}`,
@@ -204,8 +214,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     const insurerRef = bundleResourceIds.insurer;
     const coverageRef = bundleResourceIds.coverage;
 
-    const providerIdentifierSystem = provider.identifier_system || 
-      `http://${(provider.provider_name || 'provider').toLowerCase().replace(/\s+/g, '')}.com.sa/identifiers`;
+    const providerIdentifierSystem = this.getProviderIdentifierSystem(provider);
 
     // Build claim-level extensions per NPHIES example Claim-483078
     // IMPORTANT: Per NPHIES IC-01428, IC-01453, IC-01620 errors, certain extensions are REQUIRED
@@ -269,8 +278,8 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     // AccountingPeriod (REQUIRED per error IC-01620)
     // Per NPHIES error DT-01287, this extension requires valueDate (NOT valuePeriod)
     // Per NPHIES error BV-01010, the day must be "01" (first day of month)
-    const accountingDate = new Date(claim.accounting_period_start || claim.service_date || new Date());
-    const accountingPeriodDate = `${accountingDate.getFullYear()}-${String(accountingDate.getMonth() + 1).padStart(2, '0')}-01`;
+    // Saudi calendar month (independent of the host timezone)
+    const accountingPeriodDate = `${formatSaudiDate(claim.accounting_period_start || claim.service_date || new Date()).slice(0, 7)}-01`;
     extensions.push({
       url: 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-accountingPeriod',
       valueDate: accountingPeriodDate
@@ -334,7 +343,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     // Identifier (required)
     claimResource.identifier = [
       {
-        system: `${providerIdentifierSystem}/claim`,
+        system: this.getClaimIdentifierSystem(provider),
         value: claim.claim_number || `clm_${Date.now()}`
       }
     ];
@@ -399,13 +408,25 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       }
     };
 
-    // SupportingInfo - Use existing supporting_info from claim data (from PA or claim form)
-    // Then add any missing required categories with defaults
-    // Per NPHIES errors BV-00752, BV-00803, BV-00804, BV-00805, BV-00806 - these are all required
-    // Support for MULTIPLE days-supply entries per usecase requirement
-    const existingSupportingInfo = claim.supporting_info || [];
+    // SupportingInfo - the user's supporting_info (from PA or claim form), in order:
+    // required categories (BV-00752, BV-00803, BV-00804, BV-00805, BV-00806) - never defaulted,
+    // then every other user entry (chief-complaint, attachments, ...), then one days-supply per item.
+    const existingSupportingInfo = this.tagCallerSupportingInfo(claim.supporting_info);
     let supportingInfoList = [];
     let sequenceNum = 1;
+    const numbered = [];
+    const add = (entry, sourceInfo = null) => {
+      entry.sequence = sequenceNum;
+      supportingInfoList.push(entry);
+      if (sourceInfo) numbered.push({ info: sourceInfo, sequence: sequenceNum });
+      sequenceNum++;
+    };
+    const category = code => ({
+      coding: [{
+        system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
+        code
+      }]
+    });
 
     // Valid investigation-result codes per https://portal.nphies.sa/ig/CodeSystem-investigation-result.html
     const validInvestigationCodes = ['INP', 'IRA', 'other', 'NA', 'IRP'];
@@ -416,42 +437,26 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       'NA': 'Not applicable',
       'IRP': 'Investigation results pending'
     };
-
-    // Helper to check if a category exists in existing supporting info
-    const hasCategory = (cat) => existingSupportingInfo.some(info => 
-      (info.category || '').toLowerCase() === cat.toLowerCase()
-    );
     
     // Helper to get existing supporting info by category
     const getExisting = (cat) => existingSupportingInfo.find(info => 
       (info.category || '').toLowerCase() === cat.toLowerCase()
     );
-    
-    // Helper to get ALL existing supporting info entries by category (for multiple days-supply)
-    const getAllExisting = (cat) => existingSupportingInfo.filter(info => 
-      (info.category || '').toLowerCase() === cat.toLowerCase()
-    );
+    const requireNarrative = (cat, text, source, bvCode, field) => {
+      if (!text) {
+        throw mappingError(`Pharmacy claim requires ${cat} (${bvCode}): supporting_info category ${cat} or ${field}`);
+      }
+      add({ category: category(cat), valueString: text }, source);
+    };
 
-    // 1. Days-supply entries are created per-item (see Step after other supportingInfo)
-    // Skip days-supply here -- they will be appended after other supportingInfo entries
-    // so that each item gets its own dedicated days-supply entry with a unique sequence.
-
-    // 2. investigation-result (required per BV-00752)
-    // Per IB-00045: Valid codes are: INP, IRA, other, NA, IRP
+    // investigation-result (required per BV-00752); Per IB-00045: Valid codes are: INP, IRA, other, NA, IRP
     const existingInvestigation = getExisting('investigation-result');
-    let investigationResultCode = existingInvestigation?.code || claim.investigation_result_code || 'NA';
-    // Validate the code is in the allowed list
+    const investigationResultCode = existingInvestigation?.code || claim.investigation_result_code;
     if (!validInvestigationCodes.includes(investigationResultCode)) {
-      investigationResultCode = 'NA';
+      throw mappingError(`Pharmacy claim requires an investigation-result code (BV-00752), one of ${validInvestigationCodes.join(', ')}`);
     }
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'investigation-result'
-        }]
-      },
+    add({
+      category: category('investigation-result'),
       code: {
         coding: [{
           system: 'http://nphies.sa/terminology/CodeSystem/investigation-result',
@@ -459,114 +464,67 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
           display: existingInvestigation?.code_display || investigationCodeDisplayMap[investigationResultCode]
         }]
       }
-    });
+    }, existingInvestigation);
 
-    // 3. treatment-plan (required per BV-00803)
     const existingTreatmentPlan = getExisting('treatment-plan');
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'treatment-plan'
-        }]
-      },
-      valueString: existingTreatmentPlan?.value_string || claim.treatment_plan || 'Medication therapy as prescribed'
-    });
-
-    // 4. patient-history (required per BV-00804)
+    requireNarrative('treatment-plan', existingTreatmentPlan?.value_string || claim.treatment_plan, existingTreatmentPlan, 'BV-00803', 'treatment_plan');
     const existingPatientHistory = getExisting('patient-history');
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'patient-history'
-        }]
-      },
-      valueString: existingPatientHistory?.value_string || claim.patient_history || 'No significant past medical history'
-    });
-
-    // 5. physical-examination (required per BV-00805)
+    requireNarrative('patient-history', existingPatientHistory?.value_string || claim.patient_history, existingPatientHistory, 'BV-00804', 'patient_history');
     const existingPhysicalExam = getExisting('physical-examination');
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'physical-examination'
-        }]
-      },
-      valueString: existingPhysicalExam?.value_string || claim.physical_examination || 'Within normal limits'
-    });
-
-    // 6. history-of-present-illness (required per BV-00806)
+    requireNarrative('physical-examination', existingPhysicalExam?.value_string || claim.physical_examination, existingPhysicalExam, 'BV-00805', 'physical_examination');
     const existingHistoryPresentIllness = getExisting('history-of-present-illness');
-    supportingInfoList.push({
-      sequence: sequenceNum++,
-      category: {
-        coding: [{
-          system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-          code: 'history-of-present-illness'
-        }]
-      },
-      valueString: existingHistoryPresentIllness?.value_string || claim.history_of_present_illness || claim.chief_complaint || 'Patient presents with symptoms requiring medication'
+    requireNarrative('history-of-present-illness',
+      existingHistoryPresentIllness?.value_string || claim.history_of_present_illness || claim.chief_complaint,
+      existingHistoryPresentIllness, 'BV-00806', 'history_of_present_illness');
+
+    // Every other user entry is kept (chief-complaint, attachments, vitals, birth-weight, ...);
+    // days-supply entries are re-created per item below with the user's value.
+    const handledCategories = new Set(['investigation-result', 'treatment-plan', 'patient-history',
+      'physical-examination', 'history-of-present-illness', 'days-supply', 'days_supply']);
+    existingSupportingInfo.forEach(info => {
+      if (handledCategories.has((info.category || '').toLowerCase())) return;
+      add(this.buildSupportingInfo({ ...info, sequence: sequenceNum }), info);
     });
 
-    // 7. birth-weight supportingInfo for newborn patients
-    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
-    // Per NPHIES Test Case 8: Newborn claim should include birth-weight
-    // BV-00509: birth-weight valueQuantity SHALL use 'kg' code from UCUM
-    if (claim.is_newborn && claim.birth_weight) {
-      const hasBirthWeight = supportingInfoList.some(info => 
-        info.category?.coding?.[0]?.code === 'birth-weight' || info.category === 'birth-weight'
-      );
-      if (!hasBirthWeight) {
-        // Convert grams to kilograms for NPHIES (BV-00509 requires kg)
-        const weightInKg = parseFloat(claim.birth_weight) / 1000;
-        supportingInfoList.push({
-          sequence: sequenceNum++,
-          category: {
-            coding: [{
-              system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-              code: 'birth-weight'
-            }]
-          },
-          valueQuantity: {
-            value: weightInKg,
-            system: 'http://unitsofmeasure.org',
-            code: 'kg'
-          }
-        });
-      }
-    }
+    // Claim attachments are embedded as supportingInfo valueAttachment
+    (claim.attachments || []).forEach(attachment => {
+      if (!attachment?.base64_content || !attachment.content_type) return;
+      const title = attachment.file_name || attachment.title || 'Attachment';
+      const alreadyIncluded = existingSupportingInfo.some(info =>
+        info.category === 'attachment' && info.value_attachment?.title === title);
+      if (alreadyIncluded) return;
+      add(this.buildSupportingInfo({
+        sequence: sequenceNum,
+        category: 'attachment',
+        value_attachment: {
+          contentType: attachment.content_type,
+          data: attachment.base64_content,
+          title,
+          creation: this.formatDate(attachment.created_at || attachment.uploaded_at || new Date())
+        }
+      }));
+    });
 
-    // Create per-item days-supply entries (1-to-1 mapping: each item gets its own days-supply)
-    const itemDaysSupplyMap = {}; // Maps item index -> days-supply sequence number
-    if (claim.items && claim.items.length > 0) {
-      claim.items.forEach((item, idx) => {
-        const daysSupplyValue = parseInt(item.days_supply || claim.days_supply || 30);
-        const daysSupplySequence = sequenceNum++;
-        supportingInfoList.push({
-          sequence: daysSupplySequence,
-          category: {
-            coding: [{
-              system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category',
-              code: 'days-supply'
-            }]
-          },
-          valueQuantity: {
-            value: daysSupplyValue,
-            system: 'http://unitsofmeasure.org',
-            code: 'd'
-          }
-        });
-        itemDaysSupplyMap[idx] = daysSupplySequence;
+    // birth-weight supportingInfo for newborn patients (when the user did not supply one)
+    // Reference: https://portal.nphies.sa/ig/StructureDefinition-extension-newborn.html
+    // BV-00509: birth-weight valueQuantity SHALL use 'kg' code from UCUM
+    if (claim.is_newborn && claim.birth_weight && !getExisting('birth-weight')) {
+      add({
+        category: category('birth-weight'),
+        valueQuantity: {
+          value: parseFloat(claim.birth_weight) / 1000,
+          system: 'http://unitsofmeasure.org',
+          code: 'kg'
+        }
       });
     }
 
-    // Sort supportingInfoList by sequence
-    supportingInfoList.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    // Per-item days-supply entries (1-to-1 mapping: each item gets its own days-supply, BV-00376)
+    const informationSequenceMap = this.buildInformationSequenceMap(numbered);
+    const { itemDaysSupplyMap, itemInformationSequences } = this.buildItemDaysSupply(
+      claim, existingSupportingInfo, informationSequenceMap, supportingInfoList, () => sequenceNum++,
+      { timing: false, unit: false }
+    );
 
     claimResource.supportingInfo = supportingInfoList;
 
@@ -575,12 +533,12 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     if (claim.diagnoses && claim.diagnoses.length > 0) {
       claimResource.diagnosis = claim.diagnoses.map((diag, idx) => {
         // Force correct ICD-10-AM system - NPHIES rejects plain icd-10
-        let diagSystem = diag.diagnosis_system || 'http://hl7.org/fhir/sid/icd-10-am';
+        let diagSystem = diag.diagnosis_system || ICD10_SYSTEM;
         // Fix common incorrect system values
         if (diagSystem === 'http://hl7.org/fhir/sid/icd-10' || 
             diagSystem === 'icd-10' || 
             diagSystem === 'ICD-10') {
-          diagSystem = 'http://hl7.org/fhir/sid/icd-10-am';
+          diagSystem = ICD10_SYSTEM;
         }
         
         return {
@@ -627,7 +585,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     let builtItems = [];
     if (claim.items && claim.items.length > 0) {
       builtItems = claim.items.map((item, idx) => 
-        this.buildPharmacyClaimItemForClaim(item, idx + 1, supportingInfoList, providerIdentifierSystem, itemDaysSupplyMap[idx])
+        this.buildPharmacyClaimItemForClaim(item, idx + 1, supportingInfoList, providerIdentifierSystem, itemDaysSupplyMap[idx], itemInformationSequences[idx])
       );
       claimResource.item = builtItems;
     }
@@ -643,7 +601,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
       totalAmount = parseFloat(claim.total_amount);
     }
     claimResource.total = {
-      value: parseFloat(totalAmount.toFixed(2)),
+      value: roundMoney(totalAmount),
       currency: claim.currency || 'SAR'
     };
 
@@ -677,7 +635,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
    * NOTE: extension-pharmacist-substitute is NOT in the claim example, only in prior auth
    * Each item receives its pre-assigned days-supply sequence via itemDaysSupplySequence.
    */
-  buildPharmacyClaimItemForClaim(item, itemIndex, supportingInfoList, providerIdentifierSystem, itemDaysSupplySequence) {
+  buildPharmacyClaimItemForClaim(item, itemIndex, supportingInfoList, providerIdentifierSystem, itemDaysSupplySequence, resolvedInformationSequences = null) {
     const sequence = item.sequence || itemIndex;
     
     const quantity = parseFloat(item.quantity || 1);
@@ -810,9 +768,9 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     // ALL pharmacy items (medications AND devices) must link to their own days-supply entry (BV-00376)
     let informationSequences = [];
     
-    if (item.information_sequences && Array.isArray(item.information_sequences) && item.information_sequences.length > 0) {
-      // Use explicitly provided sequences from item (if user manually selected)
-      informationSequences = item.information_sequences;
+    if (resolvedInformationSequences && resolvedInformationSequences.length > 0) {
+      // User's selections remapped to the renumbered supportingInfo, plus the item's days-supply
+      informationSequences = resolvedInformationSequences;
     } else if (itemDaysSupplySequence) {
       // Use the pre-assigned per-item days-supply sequence (1-to-1 mapping)
       informationSequences = [itemDaysSupplySequence];
@@ -872,8 +830,7 @@ class PharmacyClaimMapper extends PharmacyPAMapper {
     };
 
     // Serviced date
-    const servicedDate = item.serviced_date ? new Date(item.serviced_date) : new Date();
-    claimItem.servicedDate = this.formatDate(servicedDate);
+    claimItem.servicedDate = this.formatDate(item.serviced_date || new Date());
 
     // Quantity (required)
     claimItem.quantity = { value: quantity };

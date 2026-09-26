@@ -21,6 +21,23 @@ const CLAIM_TYPES = [
   { value: 'institutional', label: 'Institutional', color: 'bg-red-100 text-red-700 border-red-200' },
 ];
 
+// Mirrors the backend createBatch normalization (claimBatchesController)
+const normalizeClaimType = (type) => {
+  const t = (type || '').toLowerCase();
+  if (['dental', 'oral'].includes(t)) return 'oral';
+  if (['institutional', 'inpatient', 'daycase'].includes(t)) return 'institutional';
+  return t;
+};
+
+// Backend requires every item in a batch to share insurer, provider and claim type
+const getIncompatibilityReason = (claim, anchor) => {
+  if (!claim || !anchor) return null;
+  if (String(claim.insurer_id) !== String(anchor.insurer_id)) return 'All claims in a batch must be for the same insurer';
+  if (String(claim.provider_id) !== String(anchor.provider_id)) return 'All claims in a batch must be for the same provider';
+  if (normalizeClaimType(claim.claim_type) !== normalizeClaimType(anchor.claim_type)) return 'All claims in a batch must be of the same claim type';
+  return null;
+};
+
 const STEPS = [
   { id: 1, label: 'Select Claim Type', icon: FileText },
   { id: 2, label: 'Select Claims & Configure', icon: ClipboardList },
@@ -88,12 +105,7 @@ export default function CreateBatchClaim() {
       setLoading(true);
       const response = await api.getAvailableClaimsForBatch({});
       const allClaims = response.data || [];
-      const filtered = allClaims.filter(c => {
-        const type = (c.claim_type || '').toLowerCase();
-        const normalized = ['dental', 'oral'].includes(type) ? 'oral' : 
-                          ['institutional', 'inpatient', 'daycase'].includes(type) ? 'institutional' : type;
-        return normalized === selectedClaimType;
-      });
+      const filtered = allClaims.filter(c => normalizeClaimType(c.claim_type) === selectedClaimType);
       setAvailableClaims(filtered);
       setSelectedClaims([]);
     } catch (error) {
@@ -104,23 +116,10 @@ export default function CreateBatchClaim() {
     }
   };
 
-  const getInsurersFromClaims = () => {
-    const insurers = {};
-    availableClaims.forEach(c => {
-      if (c.insurer_id && c.insurer_name) {
-        if (!insurers[c.insurer_id]) {
-          insurers[c.insurer_id] = { id: c.insurer_id, name: c.insurer_name, count: 0 };
-        }
-        insurers[c.insurer_id].count++;
-      }
-    });
-    return Object.values(insurers);
-  };
-
-  const getSelectedInsurerId = () => {
+  // The first selected claim fixes the insurer / provider / claim type for the batch
+  const getAnchorClaim = () => {
     if (selectedClaims.length === 0) return null;
-    const firstClaim = availableClaims.find(c => c.id === selectedClaims[0]);
-    return firstClaim?.insurer_id || null;
+    return availableClaims.find(c => c.id === selectedClaims[0]) || null;
   };
 
   const handleClaimSelect = (claimId) => {
@@ -136,8 +135,9 @@ export default function CreateBatchClaim() {
       const claim = availableClaims.find(c => c.id === claimId);
       if (prev.length > 0) {
         const firstClaim = availableClaims.find(c => c.id === prev[0]);
-        if (claim.insurer_id !== firstClaim.insurer_id) {
-          setValidationError('All claims in a batch must be for the same insurer');
+        const reason = getIncompatibilityReason(claim, firstClaim);
+        if (reason) {
+          setValidationError(reason);
           return prev;
         }
       }
@@ -152,9 +152,9 @@ export default function CreateBatchClaim() {
     } else {
       const claims = getFilteredClaimsForSelection();
       if (claims.length === 0) return;
-      const firstInsurer = claims[0].insurer_id;
+      const anchor = getAnchorClaim() || claims[0];
       const compatible = claims
-        .filter(c => c.insurer_id === firstInsurer)
+        .filter(c => !getIncompatibilityReason(c, anchor))
         .slice(0, 200)
         .map(c => c.id);
       setSelectedClaims(compatible);
@@ -162,9 +162,9 @@ export default function CreateBatchClaim() {
   };
 
   const getFilteredClaimsForSelection = () => {
-    const selectedInsurerId = getSelectedInsurerId();
-    if (!selectedInsurerId) return availableClaims;
-    return availableClaims.filter(c => c.insurer_id === selectedInsurerId);
+    const anchor = getAnchorClaim();
+    if (!anchor) return availableClaims;
+    return availableClaims.filter(c => !getIncompatibilityReason(c, anchor));
   };
 
   const getSelectedTotal = () => {
@@ -174,9 +174,13 @@ export default function CreateBatchClaim() {
   };
 
   const getSelectedInsurer = () => {
-    if (selectedClaims.length === 0) return null;
-    const firstClaim = availableClaims.find(c => c.id === selectedClaims[0]);
+    const firstClaim = getAnchorClaim();
     return firstClaim ? { id: firstClaim.insurer_id, name: firstClaim.insurer_name } : null;
+  };
+
+  const getSelectedProvider = () => {
+    const firstClaim = getAnchorClaim();
+    return firstClaim ? { id: firstClaim.provider_id, name: firstClaim.provider_name } : null;
   };
 
   const canProceedStep2 = () => {
@@ -186,6 +190,15 @@ export default function CreateBatchClaim() {
   const handleCreateBatch = async () => {
     if (selectedClaims.length < 2) {
       setValidationError('Select at least 2 claims for the batch');
+      return;
+    }
+    const anchor = getAnchorClaim();
+    const mismatch = availableClaims
+      .filter(c => selectedClaims.includes(c.id))
+      .map(c => getIncompatibilityReason(c, anchor))
+      .find(Boolean);
+    if (mismatch) {
+      setValidationError(mismatch);
       return;
     }
 
@@ -441,7 +454,9 @@ export default function CreateBatchClaim() {
               <Card className="border-amber-200 bg-amber-50">
                 <CardContent className="p-3 flex items-center gap-2 text-amber-800 text-sm">
                   <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  Insurer locked to <strong>{getSelectedInsurer().name}</strong> based on your first selection. Only claims for this insurer can be added.
+                  <span>
+                    Batch locked to insurer <strong>{getSelectedInsurer().name}</strong> and provider <strong>{getSelectedProvider()?.name || '-'}</strong> based on your first selection. Only items for the same insurer and provider can be added.
+                  </span>
                 </CardContent>
               </Card>
             )}
@@ -457,7 +472,7 @@ export default function CreateBatchClaim() {
                   <Button variant="outline" size="sm" onClick={handleSelectAll}>
                     {selectedClaims.length > 0 && selectedClaims.length === getFilteredClaimsForSelection().length
                       ? 'Deselect All'
-                      : 'Select All (Same Insurer)'}
+                      : 'Select All (Same Insurer & Provider)'}
                   </Button>
                 </div>
               </CardContent>
@@ -484,6 +499,7 @@ export default function CreateBatchClaim() {
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Auth Request #</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Service</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Patient</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Provider</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Insurer</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Amount</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
@@ -491,7 +507,11 @@ export default function CreateBatchClaim() {
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {availableClaims.map((item) => {
-                          const isDisabled = getSelectedInsurer() && item.insurer_id !== getSelectedInsurer().id;
+                          const anchorClaim = getAnchorClaim();
+                          const disabledReason = anchorClaim && !selectedClaims.includes(item.id)
+                            ? getIncompatibilityReason(item, anchorClaim)
+                            : null;
+                          const isDisabled = !!disabledReason;
                           return (
                             <tr 
                               key={item.id} 
@@ -500,6 +520,7 @@ export default function CreateBatchClaim() {
                                 isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'
                               }`}
                               onClick={() => !isDisabled && handleClaimSelect(item.id)}
+                              title={disabledReason || undefined}
                             >
                               <td className="px-4 py-3">
                                 <Checkbox 
@@ -523,6 +544,7 @@ export default function CreateBatchClaim() {
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-sm">{item.patient_name}</td>
+                              <td className="px-4 py-3 text-sm">{item.provider_name || '-'}</td>
                               <td className="px-4 py-3 text-sm">{item.insurer_name}</td>
                               <td className="px-4 py-3 text-sm">SAR {parseFloat(item.total_amount || 0).toLocaleString()}</td>
                               <td className="px-4 py-3 text-sm">
@@ -540,7 +562,7 @@ export default function CreateBatchClaim() {
                         })}
                         {availableClaims.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                            <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                               No approved {claimTypeConfig?.label || ''} authorization items available. Submit prior authorizations and get them approved first.
                             </td>
                           </tr>
@@ -596,6 +618,7 @@ export default function CreateBatchClaim() {
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-sm text-gray-500">Insurer</p>
                     <p className="font-semibold text-sm mt-1">{getSelectedInsurer()?.name || '-'}</p>
+                    <p className="text-xs text-gray-500 mt-1">Provider: {getSelectedProvider()?.name || '-'}</p>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-sm text-gray-500">Period</p>
