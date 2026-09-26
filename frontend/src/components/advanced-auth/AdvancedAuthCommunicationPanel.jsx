@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import api, { clearApiCache } from '../../services/api';
 import { selectStyles } from '../prior-auth/styles';
+import { useAuth } from '@/context/AuthContext';
 
 const AdvancedAuthCommunicationPanel = ({ 
   advAuthId, 
@@ -46,6 +47,7 @@ const AdvancedAuthCommunicationPanel = ({
   items = [],
   onStatusUpdate 
 }) => {
+  const { can } = useAuth();
   // State
   const [isPolling, setIsPolling] = useState(false);
   const [communicationRequests, setCommunicationRequests] = useState([]);
@@ -581,7 +583,8 @@ const AdvancedAuthCommunicationPanel = ({
   // authorization is cancelled / entered-in-error or was denied / errored.
   const COMMUNICATION_BLOCKED_STATUSES = ['cancelled', 'entered-in-error', 'denied', 'rejected', 'error'];
   const normalizedAuthStatus = String(advAuthStatus || '').toLowerCase();
-  const canSendCommunication = !isCancelled && !COMMUNICATION_BLOCKED_STATUSES.includes(normalizedAuthStatus);
+  // Role check first: viewers and reviewers never get the compose/respond controls.
+  const canSendCommunication = can('send') && (!isCancelled && !COMMUNICATION_BLOCKED_STATUSES.includes(normalizedAuthStatus));
 
   if (loading) {
     return (

@@ -15,6 +15,39 @@ export function clearApiCache() { cacheRevision++; cache.clear(); requestQueue.c
 if (typeof window !== 'undefined') window.addEventListener('auth:changed', clearApiCache);
 const CACHE_DURATION = 30000; // 30 seconds cache
 
+/**
+ * Human-readable message for a 403 from the role checks. The backend answers
+ * { error: 'forbidden', requiredRole } (older builds: { error: 'Forbidden', message: 'Administrator role required' }).
+ */
+export function forbiddenMessage(errorData = {}) {
+  let required = errorData?.requiredRole;
+  if (Array.isArray(required)) required = required.join(' or ');
+  if (!required) required = /admin/i.test(errorData?.message || '') ? 'admin' : 'a higher role';
+  return `You do not have permission for this action (requires ${required})`;
+}
+
+// Only role denials are rewritten; other 403s (e.g. "Public registration is disabled",
+// "Communication does not belong to this prior authorization") keep their own message.
+function isRoleDenial(errorData) {
+  if (!errorData || typeof errorData !== 'object') return false;
+  if (errorData.requiredRole) return true;
+  return String(errorData.error).toLowerCase() === 'forbidden'
+    && /(administrator role required|only super admin)/i.test(errorData.message || '');
+}
+
+function buildHttpError(status, errorData) {
+  let data = errorData;
+  let message = `HTTP error! status: ${status}`;
+  if (status === 403 && isRoleDenial(errorData)) {
+    message = forbiddenMessage(errorData);
+    // Pages display response.data.error first; keep the backend code under `code`.
+    data = { ...errorData, code: errorData?.error, error: message, message };
+  }
+  const error = new Error(message);
+  error.response = { status, data };
+  return error;
+}
+
 class ApiService {
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
@@ -68,9 +101,7 @@ class ApiService {
           const retryResponse = await apiFetch(url, config);
           if (!retryResponse.ok) {
             const errorData = await retryResponse.json().catch(() => ({}));
-            const error = new Error(`HTTP error! status: ${retryResponse.status}`);
-            error.response = { status: retryResponse.status, data: errorData };
-            throw error;
+            throw buildHttpError(retryResponse.status, errorData);
           }
           if (method !== 'GET') clearApiCache();
           const data = await retryResponse.json();
@@ -81,9 +112,7 @@ class ApiService {
         }
         // Parse error response and attach to error
         const errorData = await response.json().catch(() => ({}));
-        const error = new Error(`HTTP error! status: ${response.status}`);
-        error.response = { status: response.status, data: errorData };
-        throw error;
+        throw buildHttpError(response.status, errorData);
       }
       
       if (method !== 'GET') clearApiCache();
@@ -1325,6 +1354,18 @@ class ApiService {
    */
   async getUser(id) {
     return this.request(`/users/${id}`);
+  }
+
+  /**
+   * Change a user's role (admin only)
+   * @param {number} id - User ID
+   * @param {string} role - admin | submitter | reviewer | viewer
+   */
+  async updateUserRole(id, role) {
+    return this.request(`/users/${id}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role })
+    });
   }
 
   // ============================================================================

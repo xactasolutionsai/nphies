@@ -78,7 +78,7 @@ export const queries = {
       FROM claims
       WHERE submission_date >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY DATE_TRUNC('day', submission_date)
-      ORDER BY date DESC
+      ORDER BY date ASC
     `,
 
     GET_PAYMENT_TRENDS: `
@@ -89,7 +89,7 @@ export const queries = {
       FROM payments
       WHERE payment_date >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY DATE_TRUNC('day', payment_date)
-      ORDER BY date DESC
+      ORDER BY date ASC
     `,
 
     GET_MONTHLY_TRENDS: `
@@ -100,7 +100,7 @@ export const queries = {
       FROM claims
       WHERE submission_date >= CURRENT_DATE - INTERVAL '12 months'
       GROUP BY DATE_TRUNC('month', submission_date)
-      ORDER BY month DESC
+      ORDER BY month ASC
     `,
 
     GET_PROVIDER_PERFORMANCE: `
@@ -329,7 +329,7 @@ export const queries = {
       FROM prior_authorizations
       WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY DATE_TRUNC('day', created_at), auth_type
-      ORDER BY date DESC
+      ORDER BY date ASC
     `,
 
     // Provider performance with prior authorizations

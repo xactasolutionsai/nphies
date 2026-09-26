@@ -11,6 +11,7 @@ import {
   ChevronDown, ChevronUp, User, Hash
 } from 'lucide-react';
 import api, { clearApiCache } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 // JSONB columns normally arrive as objects; tolerate legacy string values.
 const parseMaybeJson = (value) => {
@@ -44,6 +45,7 @@ const formatBatchBundlesForCopy = (bundles, batchIdentifier) => {
 };
 
 export default function BatchClaimDetails() {
+  const { can } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   
@@ -435,15 +437,17 @@ export default function BatchClaimDetails() {
                   <Eye className="h-4 w-4 mr-2" />
                   Preview Bundle
                 </Button>
-                <Button 
-                  onClick={handleSendToNphies} 
-                  disabled={actionLoading}
-                  className="bg-gradient-to-r from-primary-purple to-accent-purple"
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  {batch.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
-                </Button>
-                {batch.status === 'Draft' && (
+                {can('send') && (
+                  <Button 
+                    onClick={handleSendToNphies} 
+                    disabled={actionLoading}
+                    className="bg-gradient-to-r from-primary-purple to-accent-purple"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    {batch.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
+                  </Button>
+                )}
+                {batch.status === 'Draft' && can('delete') && (
                   <Button variant="destructive" onClick={handleDeleteBatch} disabled={actionLoading}>
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete
@@ -451,7 +455,7 @@ export default function BatchClaimDetails() {
                 )}
               </>
             )}
-            {batch.status === 'Pending' && (
+            {batch.status === 'Pending' && can('poll') && (
               <Button
                 onClick={handleCheckPendingStatus}
                 disabled={actionLoading}
@@ -462,7 +466,7 @@ export default function BatchClaimDetails() {
                 Check Status / Poll
               </Button>
             )}
-            {['Submitted', 'Queued', 'Partial'].includes(batch.status) && (
+            {['Submitted', 'Queued', 'Partial'].includes(batch.status) && can('poll') && (
               <Button 
                 onClick={handlePollResponses} 
                 disabled={actionLoading}
@@ -472,7 +476,7 @@ export default function BatchClaimDetails() {
                 Poll Responses
               </Button>
             )}
-            {batch.response_bundle && (
+            {batch.response_bundle && can('edit') && (
               <Button 
                 onClick={handleRecalculateStats} 
                 disabled={actionLoading}

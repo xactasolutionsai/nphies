@@ -46,6 +46,20 @@ export function claimIdentifierSystem(provider, use = 'preauthorization') {
   return `${providerIdentifierSystem(provider)}/${use === 'claim' ? 'claim' : 'authorization'}`;
 }
 
+/**
+ * The Claim.identifier ({ system, value }) of a stored request bundle (request_bundle column:
+ * object or JSON string), i.e. exactly what was submitted. Follow-up messages (status check,
+ * cancel, Communication.about, poll focus) must echo it. Returns null when there is none.
+ */
+export function submittedClaimIdentifier(requestBundle) {
+  let bundle = requestBundle;
+  if (typeof bundle === 'string') {
+    try { bundle = JSON.parse(bundle); } catch { return null; }
+  }
+  const identifier = bundle?.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource?.identifier?.[0];
+  return identifier?.system && identifier?.value ? { system: identifier.system, value: identifier.value } : null;
+}
+
 /** Provider license (provider.nphies_id). Required: never substitute another provider's license. */
 export function requireProviderLicense(provider) {
   const license = provider?.nphies_id;

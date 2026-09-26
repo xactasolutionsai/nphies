@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import api, { clearApiCache } from '../../services/api';
 import { selectStyles } from '../prior-auth/styles';
+import { useAuth } from '@/context/AuthContext';
 
 const ClaimCommunicationPanel = ({ 
   claimId, 
@@ -46,6 +47,7 @@ const ClaimCommunicationPanel = ({
   items = [],
   onStatusUpdate 
 }) => {
+  const { can } = useAuth();
   const [isPolling, setIsPolling] = useState(false);
   const [communicationRequests, setCommunicationRequests] = useState([]);
   const [communications, setCommunications] = useState([]);
@@ -535,7 +537,8 @@ const ClaimCommunicationPanel = ({
     );
   };
 
-  const canSendCommunication = claimStatus === 'queued' || claimStatus === 'pended' || claimStatus === 'approved' || claimStatus === 'partial';
+  // Role check first: viewers and reviewers never get the compose/respond controls.
+  const canSendCommunication = can('send') && (claimStatus === 'queued' || claimStatus === 'pended' || claimStatus === 'approved' || claimStatus === 'partial');
 
   if (loading) {
     return (
@@ -561,7 +564,9 @@ const ClaimCommunicationPanel = ({
           <p className="text-sm text-gray-600 mt-1">
             {canSendCommunication 
               ? 'Send additional information to the insurer or respond to their requests'
-              : 'Communication is only available for queued, pended, approved, or partial claims'}
+              : !can('send')
+                ? 'Your role has view-only access to communications'
+                : 'Communication is only available for queued, pended, approved, or partial claims'}
           </p>
         </div>
         <div className="flex items-center gap-2">

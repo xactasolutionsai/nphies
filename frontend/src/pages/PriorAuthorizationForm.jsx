@@ -63,7 +63,10 @@ import {
   getShadowBillingTypesByAuthType,
   SHADOW_BILLING_TYPE_TO_SYSTEM,
   CODE_ENTRY_MODE_OPTIONS,
-  getAllKnownDescriptions
+  getAllKnownDescriptions,
+  PRACTITIONER_IDENTIFIER_TYPE_OPTIONS,
+  PRACTITIONER_REQUIRED_AUTH_TYPES,
+  validatePractitionerFields
 } from '@/components/prior-auth/constants';
 import { datePickerStyles, selectStyles } from '@/components/prior-auth/styles';
 import {
@@ -188,6 +191,12 @@ export default function PriorAuthorizationForm() {
     patient_id: '',
     provider_id: '',
     practice_code: '08.00', // NPHIES: Practice code for careTeam.qualification (default: Internal Medicine)
+    // Treating practitioner (Practitioner resource / careTeam.provider). Required for
+    // professional, institutional, dental and vision; never fabricated.
+    practitioner_license: '',
+    practitioner_name: '',
+    practitioner_specialty_code: '',
+    practitioner_identifier_type: 'MD',
     insurer_id: '',
     coverage_id: '',
     diagnosis_codes: '',
@@ -683,6 +692,10 @@ export default function PriorAuthorizationForm() {
       vital_signs: vitalSigns,
       clinical_info: clinicalInfo,
       admission_info: admissionInfo,
+      practitioner_license: data.practitioner_license || '',
+      practitioner_name: data.practitioner_name || '',
+      practitioner_specialty_code: data.practitioner_specialty_code || '',
+      practitioner_identifier_type: data.practitioner_identifier_type || 'MD',
       vision_prescription: data.vision_prescription || {
         product_type: 'lens',
         date_written: null,
@@ -1355,7 +1368,10 @@ export default function PriorAuthorizationForm() {
         setAiValidationResult({
           success: false,
           error: 'AI features are currently disabled',
-          riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+          isValid: null,
+          aiUnavailable: true,
+          requiresManualReview: true,
+          riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
           suggestions: []
         });
         setAiValidationLoading(false);
@@ -1368,7 +1384,10 @@ export default function PriorAuthorizationForm() {
         setAiValidationResult({
           success: false,
           error: response.error || 'Validation failed',
-          riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+          isValid: null,
+          aiUnavailable: true,
+          requiresManualReview: true,
+          riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
           suggestions: []
         });
       }
@@ -1377,7 +1396,10 @@ export default function PriorAuthorizationForm() {
       setAiValidationResult({
         success: false,
         error: error.message || 'Failed to validate prior authorization',
-        riskScores: { overall: 0, categories: {}, riskLevel: 'low' },
+        isValid: null,
+        aiUnavailable: true,
+        requiresManualReview: true,
+        riskScores: { overall: 0, categories: {}, riskLevel: 'unknown' },
         suggestions: []
       });
     } finally {
@@ -1737,6 +1759,7 @@ export default function PriorAuthorizationForm() {
     if (!formData.patient_id) validationErrors.push({ field: 'patient_id', message: 'Patient is required' });
     if (!formData.provider_id) validationErrors.push({ field: 'provider_id', message: 'Provider is required' });
     if (!formData.insurer_id) validationErrors.push({ field: 'insurer_id', message: 'Insurer is required' });
+    validationErrors.push(...validatePractitionerFields(formData));
     if (!formData.items || formData.items.length === 0) validationErrors.push({ field: 'items', message: 'At least one service item is required' });
     
     // Validate item codes based on auth type and item type
@@ -2078,6 +2101,11 @@ export default function PriorAuthorizationForm() {
       diagnoses: stripRowKeys(formData.diagnoses),
       lab_observations: stripRowKeys(formData.lab_observations)
     };
+    // Treating practitioner: trimmed, empty -> null (API field names per the practitioner contract)
+    ['practitioner_license', 'practitioner_name', 'practitioner_specialty_code', 'practitioner_identifier_type'].forEach(key => {
+      const value = payload[key] == null ? '' : String(payload[key]).trim();
+      payload[key] = value || null;
+    });
     // Remove structured fields (already merged into supporting_info or handled separately)
     delete payload.vital_signs;
     delete payload.clinical_info;
@@ -3049,6 +3077,73 @@ export default function PriorAuthorizationForm() {
                   </p>
                 </div>
               )}
+
+              {/* Treating practitioner - NPHIES Practitioner resource / careTeam.provider */}
+              <div className="md:col-span-3 rounded-lg border border-gray-200 p-4 space-y-3">
+                <Label className="flex items-center gap-2">
+                  <Stethoscope className="h-4 w-4" />
+                  Treating practitioner {PRACTITIONER_REQUIRED_AUTH_TYPES.includes(formData.auth_type) ? '*' : '(optional for this type)'}
+                </Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="practitioner_license" className="text-xs text-gray-600">
+                      License number{PRACTITIONER_REQUIRED_AUTH_TYPES.includes(formData.auth_type) && ' *'}
+                    </Label>
+                    <Input
+                      id="practitioner_license"
+                      value={formData.practitioner_license || ''}
+                      onChange={(e) => handleChange('practitioner_license', e.target.value)}
+                      maxLength={50}
+                      placeholder="Practitioner license number"
+                      className={errors.some(e => e.field === 'practitioner_license') ? 'border-red-400' : ''}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="practitioner_identifier_type" className="text-xs text-gray-600">
+                      Identifier type{PRACTITIONER_REQUIRED_AUTH_TYPES.includes(formData.auth_type) && ' *'}
+                    </Label>
+                    <select
+                      id="practitioner_identifier_type"
+                      value={formData.practitioner_identifier_type || ''}
+                      onChange={(e) => handleChange('practitioner_identifier_type', e.target.value)}
+                      className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm bg-white"
+                    >
+                      {PRACTITIONER_IDENTIFIER_TYPE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="practitioner_name" className="text-xs text-gray-600">
+                      Full name{PRACTITIONER_REQUIRED_AUTH_TYPES.includes(formData.auth_type) && ' *'}
+                    </Label>
+                    <Input
+                      id="practitioner_name"
+                      value={formData.practitioner_name || ''}
+                      onChange={(e) => handleChange('practitioner_name', e.target.value)}
+                      maxLength={255}
+                      placeholder="Practitioner full name"
+                      className={errors.some(e => e.field === 'practitioner_name') ? 'border-red-400' : ''}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-gray-600">Specialty (practice code)</Label>
+                    <Select
+                      value={PRACTICE_CODES_OPTIONS.flatMap(group => group.options).find(opt => opt.value === formData.practitioner_specialty_code) || null}
+                      onChange={(option) => handleChange('practitioner_specialty_code', option?.value || '')}
+                      options={PRACTICE_CODES_OPTIONS}
+                      styles={selectStyles}
+                      placeholder="Select the practitioner's specialty..."
+                      isClearable
+                      isSearchable
+                      menuPortalTarget={document.body}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Sent as the NPHIES Practitioner (license, name, qualification). Required for professional, institutional, dental and vision requests.
+                </p>
+              </div>
 
               {/* Coverage - Shows patient's insurance coverages */}
               <div className="space-y-2">

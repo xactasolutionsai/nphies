@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '@/services/api';
 import { clearSession } from '@/services/http';
+import { roleCan, hasAnyRole } from '@/utils/roles';
 
 const AuthContext = createContext(null);
 
@@ -78,8 +79,13 @@ export function AuthProvider({ children }) {
     return response;
   };
 
+  const hasRole = (...roles) => hasAnyRole(user?.role, roles);
+  const can = (action) => roleCan(user?.role, action);
+
   const value = {
     user,
+    hasRole,
+    can,
     token,
     loading,
     login,

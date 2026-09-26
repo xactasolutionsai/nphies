@@ -16,7 +16,8 @@ const FILES_DIR = path.join(__dirname, '..', '..', 'files');
 class MedicineImporter {
   constructor() {
     this.stats = {
-      medicines: { total: 0, success: 0, errors: 0 },
+      // embeddingFailed: rows skipped because no real embedding could be generated
+      medicines: { total: 0, success: 0, errors: 0, embeddingFailed: 0 },
       brands: { total: 0, success: 0, errors: 0 },
       codes: { total: 0, success: 0, errors: 0, skipped: 0 }
     };
@@ -103,9 +104,24 @@ class MedicineImporter {
         // Generate text description for embedding
         const description = `${row['Active Ingredient']} ${row['Strength']} ${row['Unit']} ${row['Dosage Form - Parent']} ${row['Dosage Form - Child']}`.toLowerCase();
         
-        // Generate embedding
+        // Generate embedding. Without a real embedding the row is skipped and counted:
+        // it is never stored with a placeholder vector.
         console.log(`\n[${i + 1}/${rows.length}] Generating embedding for: ${description.substring(0, 60)}...`);
-        const embedding = await ragService.generateEmbedding(description);
+        let embedding;
+        try {
+          embedding = await ragService.generateEmbedding(description);
+        } catch (embeddingError) {
+          this.stats.medicines.embeddingFailed++;
+          this.consecutiveErrors++;
+          console.error(`⚠️  Skipping medicine ${row['MG_MRID']}: ${embeddingError.message}`);
+          if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
+            throw Object.assign(
+              new Error(`Import stopped after ${this.maxConsecutiveErrors} consecutive embedding failures (check OLLAMA_BASE_URL / OLLAMA_EMBED_MODEL)`),
+              { fatal: true }
+            );
+          }
+          continue;
+        }
         const vectorString = `[${embedding.join(',')}]`;
         
         // Insert medicine
@@ -141,6 +157,7 @@ class MedicineImporter {
         }
         
       } catch (error) {
+        if (error.fatal) throw error;
         console.error(`❌ Error importing medicine ${row['MG_MRID']}:`, error.message);
         this.stats.medicines.errors++;
         this.consecutiveErrors++;
@@ -373,6 +390,7 @@ class MedicineImporter {
     console.log(`   Total: ${this.stats.medicines.total}`);
     console.log(`   Success: ${this.stats.medicines.success}`);
     console.log(`   Errors: ${this.stats.medicines.errors}`);
+    console.log(`   Skipped (no embedding): ${this.stats.medicines.embeddingFailed}`);
     
     console.log(`\n🔹 Brand Medicines:`);
     console.log(`   Total: ${this.stats.brands.total}`);
@@ -390,6 +408,11 @@ class MedicineImporter {
     
     console.log(`\n✅ TOTAL: ${totalSuccess}/${totalRecords} records imported successfully`);
     console.log('='.repeat(60) + '\n');
+  }
+
+  /** Non-zero when any medicine was skipped because its embedding could not be generated. */
+  exitCode() {
+    return this.stats.medicines.embeddingFailed > 0 ? 1 : 0;
   }
 
   /**
@@ -423,7 +446,12 @@ class MedicineImporter {
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(`⏱️  Total Duration: ${duration} seconds`);
       console.log(`📅 End Time: ${new Date().toISOString()}`);
-      console.log('\n✅ Import completed successfully!\n');
+      if (this.exitCode() !== 0) {
+        console.error(`\n❌ ${this.stats.medicines.embeddingFailed} medicine(s) were skipped because no embedding could be generated; re-run the import once the embedding model is available.\n`);
+      } else {
+        console.log('\n✅ Import completed successfully!\n');
+      }
+      return this.stats;
       
     } catch (error) {
       console.error('\n❌ Import failed:', error);

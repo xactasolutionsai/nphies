@@ -15,12 +15,14 @@ import {
 
 // Import AI Medication Safety Panel
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
+import PractitionerSummary from '@/components/prior-auth/PractitionerSummary';
 
 // Import Communication Panel for NPHIES communications
 import { CommunicationPanel } from '@/components/prior-auth';
 import { PRIORITY_OPTIONS, EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
 import { selectStyles } from '@/components/prior-auth/styles';
 import Select from 'react-select';
+import { useAuth } from '@/context/AuthContext';
 
 const SECTION_4_5_CODES = new Set(SHADOW_BILLING_CODES.map(c => c.value));
 
@@ -224,6 +226,7 @@ const TabButton = ({ active, onClick, children }) => (
 );
 
 export default function PriorAuthorizationDetails() {
+const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   
@@ -837,6 +840,11 @@ export default function PriorAuthorizationDetails() {
         total_amount: priorAuth.approved_amount || priorAuth.total_amount,
         currency: priorAuth.currency || 'SAR',
         practice_code: priorAuth.practice_code,
+        // Treating practitioner is copied from the PA (never fabricated)
+        practitioner_license: priorAuth.practitioner_license || null,
+        practitioner_name: priorAuth.practitioner_name || null,
+        practitioner_specialty_code: priorAuth.practitioner_specialty_code || null,
+        practitioner_identifier_type: priorAuth.practitioner_identifier_type || null,
         service_type: priorAuth.service_type,
         eligibility_offline_ref: priorAuth.eligibility_offline_ref,
         eligibility_offline_date: priorAuth.eligibility_offline_date || null,
@@ -1141,14 +1149,18 @@ export default function PriorAuthorizationDetails() {
           {/* Draft/Error status actions */}
           {(priorAuth.status === 'draft' || priorAuth.status === 'error') && (
             <>
-              <Button variant="outline" size="sm" onClick={() => navigate(`/prior-authorizations/${id}/edit`)}>
-                <Edit className="h-4 w-4 mr-1" />
-                Edit
-              </Button>
-              <Button size="sm" onClick={handleSendToNphies} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
-                <Send className="h-4 w-4 mr-1" />
-                Send
-              </Button>
+              {can('edit') && (
+                <Button variant="outline" size="sm" onClick={() => navigate(`/prior-authorizations/${id}/edit`)}>
+                  <Edit className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              )}
+              {can('send') && (
+                <Button size="sm" onClick={handleSendToNphies} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
+                  <Send className="h-4 w-4 mr-1" />
+                  Send
+                </Button>
+              )}
             </>
           )}
           
@@ -1171,28 +1183,34 @@ export default function PriorAuthorizationDetails() {
                 <Code className="h-4 w-4 mr-1" />
                 {claimBundleLoading ? '...' : 'Claim JSON'}
               </Button>
-              <Button
-                size="sm"
-                onClick={handleSubmitAsClaimWithResponse}
-                disabled={actionLoading}
-                className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-              >
-                <Receipt className="h-4 w-4 mr-1" />
-                Submit Claim
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleCreateUpdate} disabled={actionLoading}>
-                <Edit className="h-4 w-4 mr-1" />
-                Update
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowCancelDialog(true)} className="text-red-500 border-red-300 hover:bg-red-50">
-                <XCircle className="h-4 w-4 mr-1" />
-                Cancel
-              </Button>
+              {can('send') && (
+                <Button
+                  size="sm"
+                  onClick={handleSubmitAsClaimWithResponse}
+                  disabled={actionLoading}
+                  className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                >
+                  <Receipt className="h-4 w-4 mr-1" />
+                  Submit Claim
+                </Button>
+              )}
+              {can('edit') && (
+                <Button variant="outline" size="sm" onClick={handleCreateUpdate} disabled={actionLoading}>
+                  <Edit className="h-4 w-4 mr-1" />
+                  Update
+                </Button>
+              )}
+              {can('cancel') && (
+                <Button variant="outline" size="sm" onClick={() => setShowCancelDialog(true)} className="text-red-500 border-red-300 hover:bg-red-50">
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Cancel
+                </Button>
+              )}
             </>
           )}
           
           {/* Follow Up button for approved authorizations (Use Case 7) */}
-          {priorAuth.status === 'approved' && (
+          {priorAuth.status === 'approved' && can('create') && (
             <Button 
               size="sm"
               onClick={handleFollowUp} 
@@ -1205,7 +1223,7 @@ export default function PriorAuthorizationDetails() {
           )}
           
           {/* Resubmit button for denied (legacy: rejected), errored or partial authorizations */}
-          {(['denied', 'rejected', 'error'].includes(priorAuth.status) || priorAuth.adjudication_outcome === 'partial' || priorAuth.outcome === 'partial') && (
+          {(['denied', 'rejected', 'error'].includes(priorAuth.status) || priorAuth.adjudication_outcome === 'partial' || priorAuth.outcome === 'partial') && can('create') && (
             <Button 
               size="sm"
               onClick={handleResubmit} 
@@ -3872,6 +3890,7 @@ export default function PriorAuthorizationDetails() {
             <CardContent>
               <p className="font-medium">{priorAuth.provider_name || '-'}</p>
               <p className="text-sm text-gray-500 font-mono">{priorAuth.provider_nphies_id}</p>
+              <PractitionerSummary record={priorAuth} />
               {/* Transfer Extension Details */}
               {priorAuth.is_transfer && (
                 <div className="mt-3 p-2 bg-blue-50 rounded-md border border-blue-200">

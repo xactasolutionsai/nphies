@@ -29,8 +29,10 @@ import {
   AlertTriangle,
   FlaskConical
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function EyeApprovalsDetails() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
@@ -786,13 +788,15 @@ export default function EyeApprovalsDetails() {
             {/* Action Buttons */}
             <Card>
               <CardContent className="p-4 space-y-2">
-                <Button
-                  onClick={() => navigate(`/eye-approvals/${id}/edit`)}
-                  className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Form
-                </Button>
+                {can('edit') && (
+                  <Button
+                    onClick={() => navigate(`/eye-approvals/${id}/edit`)}
+                    className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Form
+                  </Button>
+                )}
                 <Button
                   onClick={handlePrint}
                   variant="outline"
@@ -810,14 +814,16 @@ export default function EyeApprovalsDetails() {
                   <Download className="h-4 w-4 mr-2" />
                   {exportingPDF ? 'Generating...' : 'Export PDF'}
                 </Button>
-                <Button
-                  onClick={handleDelete}
-                  variant="destructive"
-                  className="w-full"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Form
-                </Button>
+                {can('delete') && (
+                  <Button
+                    onClick={handleDelete}
+                    variant="destructive"
+                    className="w-full"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Form
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>

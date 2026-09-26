@@ -161,9 +161,18 @@ const AIValidationPanel = ({
   }
 
   const { riskScores, validation, suggestions, metadata } = validationResult;
-  const riskLevel = riskScores?.riskLevel || 'low';
+  // Fail closed: when the AI could not review the request (disabled, unreachable, unreadable
+  // reply or a partial analysis) never present the result as a pass.
+  const aiUnavailable = validationResult.aiUnavailable === true
+    || validationResult.requiresManualReview === true
+    || validationResult.isValid === null
+    || validationResult.isValid === undefined;
+  const riskLevel = aiUnavailable ? 'unknown' : (riskScores?.riskLevel || 'unknown');
   const riskStyle = getRiskLevelStyle(riskLevel);
-  const RiskIcon = riskStyle.icon;
+  const RiskIcon = aiUnavailable ? AlertTriangle : riskStyle.icon;
+  const necessityScore = validation?.ai?.medicalNecessityScore;
+  const hasNecessityScore = typeof necessityScore === 'number' && Number.isFinite(necessityScore);
+  const consistencyPassed = validation?.ai?.consistencyCheck?.passed;
 
   return (
     <div className={`bg-white rounded-xl border ${riskStyle.border} shadow-sm overflow-hidden`}>
@@ -171,17 +180,24 @@ const AIValidationPanel = ({
       <div className={`${riskStyle.bg} px-4 py-3 border-b ${riskStyle.border}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${riskLevel === 'low' ? 'bg-green-100' : riskLevel === 'medium' ? 'bg-yellow-100' : 'bg-red-100'}`}>
-              <RiskIcon className={`h-5 w-5 ${riskStyle.iconColor}`} />
+            <div className={`p-2 rounded-lg ${aiUnavailable ? 'bg-amber-100' : riskLevel === 'low' ? 'bg-green-100' : riskLevel === 'medium' ? 'bg-yellow-100' : riskLevel === 'high' ? 'bg-red-100' : 'bg-gray-100'}`}>
+              <RiskIcon className={`h-5 w-5 ${aiUnavailable ? 'text-amber-600' : riskStyle.iconColor}`} />
             </div>
             <div>
-              <h3 className={`font-semibold ${riskStyle.text}`}>
-                {riskLevel === 'low' ? 'Low Rejection Risk' : 
+              <h3 className={`font-semibold ${aiUnavailable ? 'text-amber-800' : riskStyle.text}`}>
+                {aiUnavailable ? 'AI unavailable — manual review required' :
+                 riskLevel === 'low' ? 'Low Rejection Risk' : 
                  riskLevel === 'medium' ? 'Medium Rejection Risk' : 
-                 'High Rejection Risk'}
+                 riskLevel === 'high' ? 'High Rejection Risk' :
+                 'Rejection risk unknown — manual review required'}
               </h3>
               <p className="text-sm text-gray-600">
-                Overall Risk Score: {((riskScores?.overall || 0) * 100).toFixed(0)}%
+                {aiUnavailable
+                  ? `This request has NOT been validated by AI${metadata?.message ? ` (${metadata.message})` : validationResult.error ? ` (${validationResult.error})` : ''}.`
+                    + (typeof riskScores?.overall === 'number' && validationResult.ruleBasedValid !== undefined
+                      ? ` Rule-based checks only: ${(riskScores.overall * 100).toFixed(0)}% risk.`
+                      : '')
+                  : `Overall Risk Score: ${((riskScores?.overall || 0) * 100).toFixed(0)}%`}
               </p>
             </div>
           </div>
@@ -355,11 +371,12 @@ const AIValidationPanel = ({
               <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <span className="text-sm text-gray-600">Medical Necessity Score</span>
                 <span className={`text-sm font-medium ${
-                  validation.ai.medicalNecessityScore >= 0.7 ? 'text-green-600' :
-                  validation.ai.medicalNecessityScore >= 0.5 ? 'text-yellow-600' :
+                  !hasNecessityScore ? 'text-gray-500' :
+                  necessityScore >= 0.7 ? 'text-green-600' :
+                  necessityScore >= 0.5 ? 'text-yellow-600' :
                   'text-red-600'
                 }`}>
-                  {(validation.ai.medicalNecessityScore * 100).toFixed(0)}%
+                  {hasNecessityScore ? `${(necessityScore * 100).toFixed(0)}%` : 'Not assessed'}
                 </span>
               </div>
 
@@ -367,12 +384,17 @@ const AIValidationPanel = ({
               <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <span className="text-sm text-gray-600">Clinical Consistency</span>
                 <span className={`text-sm font-medium flex items-center gap-1 ${
-                  validation.ai.consistencyCheck?.passed ? 'text-green-600' : 'text-red-600'
+                  consistencyPassed === true ? 'text-green-600' : consistencyPassed === false ? 'text-red-600' : 'text-gray-500'
                 }`}>
-                  {validation.ai.consistencyCheck?.passed ? (
+                  {consistencyPassed === true ? (
                     <>
                       <CheckCircle className="h-4 w-4" />
                       Pass
+                    </>
+                  ) : consistencyPassed !== false ? (
+                    <>
+                      <AlertTriangle className="h-4 w-4" />
+                      Not assessed
                     </>
                   ) : (
                     <>

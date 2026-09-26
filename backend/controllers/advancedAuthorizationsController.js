@@ -549,20 +549,30 @@ class AdvancedAuthorizationsController {
           }
         }
 
-        const insurerNphiesId = bundleData.insurer?.nphies_id || NPHIES_CONFIG.DEFAULT_INSURER_ID;
+        // The cancel goes to the payer that issued the APA; never to a configured default payer.
+        const insurerNphiesId = bundleData.insurer?.nphies_id;
+        if (!insurerNphiesId) {
+          return res.status(400).json({ error: 'Cannot cancel: the insurer license could not be read from the stored advanced authorization' });
+        }
         const insurerName = bundleData.insurer?.insurer_name || 'Insurance Company';
 
-        // Use the original Claim identifier for the cancel Task focus
-        const claimResponse = advAuth.response_bundle;
-        const requestIdentifier = claimResponse?.request?.identifier?.value || advAuth.identifier_value;
-        const identifierSystem = claimResponse?.request?.identifier?.system ||
-          `http://${(providerName || 'provider').toLowerCase().replace(/\s+/g, '')}.com/Authorization`;
+        // Task.focus echoes a stored identifier exactly (system + value): the request the
+        // ClaimResponse answers, else the APA's own ClaimResponse.identifier.
+        const claimResponse = advAuth.response_bundle?.resourceType === 'Bundle'
+          ? advAuth.response_bundle.entry?.find(e => e.resource?.resourceType === 'ClaimResponse')?.resource
+          : advAuth.response_bundle;
+        const requestIdentifier = claimResponse?.request?.identifier;
+        const focus = requestIdentifier?.value
+          ? { system: requestIdentifier.system, value: requestIdentifier.value }
+          : { system: advAuth.identifier_system, value: advAuth.identifier_value };
+        if (!focus.value || !focus.system) {
+          return res.status(400).json({ error: 'Cannot cancel: the advanced authorization has no identifier (system and value) to reference' });
+        }
 
         const provider = {
           nphies_id: providerNphiesId,
           provider_name: providerName,
-          provider_id: providerNphiesId,
-          identifier_system: identifierSystem
+          provider_id: providerNphiesId
         };
 
         const insurer = {
@@ -574,8 +584,9 @@ class AdvancedAuthorizationsController {
         // Build the cancel bundle - reuse prior auth mapper's cancel task builder
         const cancelBundle = priorAuthMapper.buildCancelRequestBundle(
           {
-            request_number: requestIdentifier,
-            nphies_request_id: requestIdentifier,
+            request_number: focus.value,
+            nphies_request_id: focus.value,
+            focus_identifier_system: focus.system,
             pre_auth_ref: advAuth.pre_auth_ref || advAuth.identifier_value,
             id: advAuth.id
           },
@@ -639,7 +650,7 @@ class AdvancedAuthorizationsController {
       }
     } catch (error) {
       console.error('[AdvancedAuth] Error cancelling:', error);
-      res.status(500).json({ error: error.message || 'Failed to cancel advanced authorization' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to cancel advanced authorization' });
     }
   }
 

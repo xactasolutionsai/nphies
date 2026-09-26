@@ -6,7 +6,7 @@ import { loadQueries } from '../db/queryLoader.js';
 import batchClaimMapper from '../services/claimMapper/BatchClaimMapper.js';
 import { getClaimMapper } from '../services/claimMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
-import { safeJsonParse } from './controllerHelpers.js';
+import { safeJsonParse, practitionerFromRecord } from './controllerHelpers.js';
 
 // Statuses in which a batch still "owns" its items (Rejected/Error batches release them).
 const ACTIVE_BATCH_STATUSES_EXCLUDED = ['Rejected', 'Error'];
@@ -735,7 +735,10 @@ class ClaimBatchesController extends BaseController {
 
       const bundleData = await this.prepareBatchBundleData(batch);
       const batchBundle = batchClaimMapper.buildBatchRequestBundle(bundleData);
-      const individualBundles = batchClaimMapper.buildIndividualClaimBundles(bundleData);
+      // The nested bundles of this very batch bundle, so ids and references match what is sent
+      const individualBundles = (batchBundle.entry || [])
+        .filter(entry => entry.resource?.resourceType === 'Bundle')
+        .map(entry => entry.resource);
 
       res.json({ 
         data: individualBundles,
@@ -1312,6 +1315,10 @@ class ClaimBatchesController extends BaseController {
         pa.provider_id,
         pa.insurer_id,
         pa.practitioner_id,
+        pa.practitioner_license,
+        pa.practitioner_name,
+        pa.practitioner_specialty_code,
+        pa.practitioner_identifier_type,
         pa.selected_coverage_id,
         pa.practice_code,
         pa.service_event_type,
@@ -1478,6 +1485,8 @@ class ClaimBatchesController extends BaseController {
         nphies_id: item.insurer_nphies_id
       },
       coverage,
+      // The batch claim is billed by the practitioner of its prior authorization
+      ...(practitionerFromRecord(item) && { practitioner: practitionerFromRecord(item) }),
       items: itemsArray,
       diagnoses: diagnosesArray,
       supporting_info: supportingInfoResult.rows,

@@ -29,6 +29,8 @@ export default function AIValidationModal({
 
   const {
     isValid,
+    aiUnavailable,
+    requiresManualReview,
     confidenceScore = 0,
     warnings = [],
     recommendations = [],
@@ -73,15 +75,19 @@ export default function AIValidationModal({
     return 'text-red-600';
   };
 
+  // Fail closed: disabled/unreachable AI or an unknown verdict is never shown as "validated".
+  const unavailable = Boolean(metadata.error) || aiUnavailable === true || requiresManualReview === true
+    || isValid === null || isValid === undefined;
+
   const getValidityStatus = () => {
-    if (metadata.error) {
+    if (unavailable) {
       return {
         icon: <AlertTriangle className="h-6 w-6 text-orange-500" />,
-        text: 'AI Validation Unavailable',
+        text: 'AI unavailable — manual review required',
         color: 'text-orange-600'
       };
     }
-    if (isValid) {
+    if (isValid === true) {
       return {
         icon: <CheckCircle2 className="h-6 w-6 text-green-500" />,
         text: 'Form Validated',
@@ -127,8 +133,8 @@ export default function AIValidationModal({
                       {status.text}
                     </h3>
                     <p className="text-sm text-gray-600">
-                      {metadata.error 
-                        ? 'AI service temporarily unavailable. Manual review recommended.'
+                      {unavailable
+                        ? 'The form has NOT been validated by AI. Manual review required.'
                         : isValid 
                         ? 'The form passes AI validation checks'
                         : 'Please review the issues below before proceeding'}
@@ -303,7 +309,7 @@ export default function AIValidationModal({
           )}
 
           {/* No issues found */}
-          {warnings.length === 0 && recommendations.length === 0 && missingAnalyses.length === 0 && !metadata.error && (
+          {warnings.length === 0 && recommendations.length === 0 && missingAnalyses.length === 0 && !unavailable && (
             <Card>
               <CardContent className="pt-6">
                 <div className="text-center py-8">

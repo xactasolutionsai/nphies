@@ -87,8 +87,11 @@ class ChatService {
    * @param {Function} onChunk - Callback for each chunk
    * @param {Function} onComplete - Callback when complete
    * @param {Function} onError - Callback for errors
+   * @param {Object} [options]
+   * @param {AbortSignal} [options.signal] - aborts the Ollama stream (e.g. client disconnected);
+   *   an abort requested through it is not reported to onError
    */
-  async streamChat(message, mode, conversationHistory = [], onChunk, onComplete, onError) {
+  async streamChat(message, mode, conversationHistory = [], onChunk, onComplete, onError, { signal } = {}) {
     const model = this.getModelForMode(mode);
     const systemPrompt = this.getSystemPrompt(mode);
     const prompt = this.buildPromptWithContext(message, conversationHistory, systemPrompt);
@@ -100,9 +103,12 @@ class ChatService {
     console.log(`💭 Message length: ${message.length}`);
     console.log(`📚 History: ${conversationHistory.length} messages\n`);
     
+    let stream;
+    const abortStream = () => stream?.abort?.();
     try {
       if (this.configError) throw this.configError;
-      const stream = await this.client.generate({
+      if (signal?.aborted) return;
+      stream = await this.client.generate({
         model: model,
         prompt: prompt,
         stream: true,
@@ -116,9 +122,14 @@ class ChatService {
         }
       });
 
+      // Stop generation on the Ollama side as soon as the caller goes away
+      signal?.addEventListener('abort', abortStream, { once: true });
+      if (signal?.aborted) abortStream();
+
       let fullResponse = '';
       
       for await (const chunk of stream) {
+        if (signal?.aborted) break;
         if (chunk.response) {
           // Filter out special tokens that shouldn't be visible
           let cleanedChunk = chunk.response
@@ -141,11 +152,14 @@ class ChatService {
       }
       
     } catch (error) {
+      if (signal?.aborted) return; // cancelled by the caller, not a failure
       const reported = isTimeoutError(error)
         ? new Error(`Chat response timed out after ${this.timeout}ms`)
         : error;
       console.error('❌ Error in chat streaming:', reported.message);
       onError(reported);
+    } finally {
+      signal?.removeEventListener('abort', abortStream);
     }
   }
 

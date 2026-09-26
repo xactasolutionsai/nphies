@@ -29,6 +29,7 @@ import {
   FileCheck
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useAuth } from '@/context/AuthContext';
 
 // Stored marital status is an HL7 code ('S', 'M', ...); older rows may hold the word
 const isMarital = (value, code, word) => {
@@ -39,6 +40,7 @@ const isMarital = (value, code, word) => {
 const isVisitType = (value, expected) => String(value || '').trim().toLowerCase() === expected;
 
 export default function StandardApprovalsDetails() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
@@ -714,13 +716,15 @@ export default function StandardApprovalsDetails() {
             {/* Action Buttons */}
             <Card>
               <CardContent className="p-4 space-y-2">
-                <Button
-                  onClick={() => navigate(`/standard-approvals/${id}/edit`)}
-                  className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Form
-                </Button>
+                {can('edit') && (
+                  <Button
+                    onClick={() => navigate(`/standard-approvals/${id}/edit`)}
+                    className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Form
+                  </Button>
+                )}
                 <Button
                   onClick={handlePrint}
                   variant="outline"

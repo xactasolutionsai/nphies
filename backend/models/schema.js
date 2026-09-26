@@ -1,6 +1,15 @@
 // Database schema definitions and validation schemas
 import Joi from 'joi';
 
+// Treating practitioner (migration 067), shared by prior authorizations and claims.
+// Identifier type codes are the v2-0203 codes the mappers can display (BaseMapper).
+export const PRACTITIONER_IDENTIFIER_TYPES = ['MD', 'NPI', 'PRN', 'TAX', 'DN', 'NIIP'];
+const practitionerFields = {
+  practitioner_license: Joi.string().trim().max(50).allow(null, '').optional(),
+  practitioner_name: Joi.string().trim().max(255).allow(null, '').optional(),
+  practitioner_specialty_code: Joi.string().trim().max(20).allow(null, '').optional(),
+  practitioner_identifier_type: Joi.string().valid(...PRACTITIONER_IDENTIFIER_TYPES).allow(null, '').optional()
+};
 
 // Joi validation schemas
 export const validationSchemas = {
@@ -203,6 +212,7 @@ export const validationSchemas = {
     insurer_id: Joi.string().uuid().allow(null, '').optional(),
     coverage_id: Joi.string().uuid().allow(null, '').optional(),
     practitioner_id: Joi.string().uuid().allow(null, '').optional(),
+    ...practitionerFields,
     
     // Practice Code / Specialty (NPHIES careTeam.qualification)
     practice_code: Joi.string().max(20).allow(null, '').optional(),
@@ -530,6 +540,7 @@ export const validationSchemas = {
     insurer_id: Joi.string().uuid().allow(null, '').optional(),
     coverage_id: Joi.string().uuid().allow(null, '').optional(),
     practitioner_id: Joi.string().uuid().allow(null, '').optional(),
+    ...practitionerFields,
     prior_auth_id: Joi.number().integer().allow(null).optional(),
     
     // Prior Authorization Reference

@@ -1,4 +1,5 @@
 import pool, { query } from '../db.js';
+import { connectWithSchema, releaseSchemaClient as releaseDbSchemaClient } from '../services/dbSchema.js';
 
 /**
  * Map a parsed NPHIES ClaimResponse (priorAuthMapper/claimMapper parse output)
@@ -34,7 +35,7 @@ export function contentDisposition(filename, type = 'attachment') {
 
 const SCHEMA_NAME = /^[a-z_][a-z0-9_]*$/;
 
-/** Validate a schema name before it is interpolated into SET search_path. */
+/** Validate a tenant schema name taken from a request (400 for anything but a plain identifier). */
 export function safeSchemaName(schemaName) {
   const name = schemaName || 'public';
   if (!SCHEMA_NAME.test(name)) {
@@ -129,36 +130,39 @@ export function sanitizePharmacyDeviceFields(items, type) {
 
 /**
  * Check out a pooled client for a tenant schema. search_path is switched only
- * when a (validated) schema was actually requested, and is reset before the
- * client goes back to the pool (releaseSchemaClient) so it never leaks to the
- * next user of that connection.
+ * when a (validated) schema was actually requested, through services/dbSchema.js
+ * (bound set_config value, never interpolated), and is reset before the client
+ * goes back to the pool (releaseSchemaClient) so it never leaks to the next user
+ * of that connection.
  */
 export async function connectForSchema(schemaName) {
-  const name = schemaName ? safeSchemaName(schemaName) : null;
-  const client = await pool.connect();
-  if (name) {
-    try {
-      await client.query(`SET search_path TO ${name}`);
-      client.schemaSwitched = true;
-    } catch (error) {
-      client.release(error);
-      throw error;
-    }
-  }
+  if (!schemaName) return pool.connect();
+  const client = await connectWithSchema(safeSchemaName(schemaName));
+  client.schemaSwitched = true;
   return client;
 }
 
 export async function releaseSchemaClient(client) {
-  if (client.schemaSwitched) {
-    try {
-      await client.query('RESET search_path');
-      client.schemaSwitched = false;
-    } catch (error) {
-      client.release(error); // discard the connection rather than reuse it with a foreign search_path
-      return;
-    }
-  }
-  client.release();
+  if (!client.schemaSwitched) return client.release();
+  client.schemaSwitched = false;
+  return releaseDbSchemaClient(client);
+}
+
+/**
+ * Treating practitioner for the mappers, from the practitioner_* columns (migration 067)
+ * of a prior authorization / claim row or from preview form data. Returns null when no
+ * practitioner was entered, so the mappers report the missing practitioner themselves.
+ */
+export function practitionerFromRecord(record) {
+  if (!record) return null;
+  const clean = value => (typeof value === 'string' ? value.trim() : value) || null;
+  const practitioner = {
+    license_number: clean(record.practitioner_license),
+    name: clean(record.practitioner_name),
+    specialty_code: clean(record.practitioner_specialty_code),
+    identifier_type: clean(record.practitioner_identifier_type)
+  };
+  return Object.values(practitioner).some(Boolean) ? practitioner : null;
 }
 
 /**

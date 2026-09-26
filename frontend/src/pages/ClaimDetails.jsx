@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
+import PractitionerSummary from '@/components/prior-auth/PractitionerSummary';
 import { EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
+import { useAuth } from '@/context/AuthContext';
 
 const SECTION_4_5_CODES = new Set(SHADOW_BILLING_CODES.map(c => c.value));
 
@@ -225,6 +227,7 @@ const TabButton = ({ active, onClick, children }) => (
 );
 
 export default function ClaimDetails() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   
@@ -1026,7 +1029,7 @@ export default function ClaimDetails() {
             FHIR Bundle
           </Button>
           
-          {(claim.status === 'draft' || claim.status === 'error') && (
+          {(claim.status === 'draft' || claim.status === 'error') && can('send') && (
             <Button size="sm" onClick={handleSendToNphies} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
               <Send className="h-4 w-4 mr-1" />
               Send
@@ -1039,7 +1042,7 @@ export default function ClaimDetails() {
           </Button>
           
           {(claim.status === 'approved' || claim.status === 'queued' || claim.status === 'pended' || claim.adjudication_outcome === 'approved') && 
-           claim.status !== 'cancelled' && claim.status !== 'paid' && (
+           claim.status !== 'cancelled' && claim.status !== 'paid' && can('cancel') && (
             <Button 
               variant="outline" 
               onClick={() => setShowCancelDialog(true)} 
@@ -3629,19 +3632,21 @@ export default function ClaimDetails() {
                     Payment reconciliations received from insurers for this claim
                   </CardDescription>
                 </div>
-                <Button
-                  onClick={handlePollPayments}
-                  disabled={pollingPayments}
-                  variant="outline"
-                  size="sm"
-                >
-                  {pollingPayments ? (
-                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                  )}
-                  Poll NPHIES
-                </Button>
+                {can('triggerSystemPoll') && (
+                  <Button
+                    onClick={handlePollPayments}
+                    disabled={pollingPayments}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {pollingPayments ? (
+                      <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                    )}
+                    Poll NPHIES
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 {paymentsLoading ? (
@@ -3746,19 +3751,21 @@ export default function ClaimDetails() {
                           </p>
                         </div>
                         <div className="flex justify-center gap-2">
-                          <Button
-                            onClick={handlePollPayments}
-                            disabled={pollingPayments}
-                            variant="outline"
-                            size="sm"
-                          >
-                            {pollingPayments ? (
-                              <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-4 w-4 mr-1" />
-                            )}
-                            Poll NPHIES for Payments
-                          </Button>
+                          {can('triggerSystemPoll') && (
+                            <Button
+                              onClick={handlePollPayments}
+                              disabled={pollingPayments}
+                              variant="outline"
+                              size="sm"
+                            >
+                              {pollingPayments ? (
+                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                              )}
+                              Poll NPHIES for Payments
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ) : claim.status === 'queued' || claim.status === 'pending' ? (
@@ -4042,6 +4049,7 @@ export default function ClaimDetails() {
                   <Badge variant="outline" className="mt-1">Type: {extractCodeValue(claim.provider_type)}</Badge>
                 )}
               </div>
+              <PractitionerSummary record={claim} />
             </CardContent>
           </Card>
 

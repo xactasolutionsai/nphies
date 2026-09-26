@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { selectStyles } from './styles';
+import { useAuth } from '@/context/AuthContext';
 
 const CommunicationPanel = ({ 
   priorAuthId, 
@@ -45,6 +46,7 @@ const CommunicationPanel = ({
   items = [],
   onStatusUpdate 
 }) => {
+  const { can } = useAuth();
   // State
   const [isPolling, setIsPolling] = useState(false);
   const [communicationRequests, setCommunicationRequests] = useState([]);
@@ -572,7 +574,8 @@ const CommunicationPanel = ({
   };
 
   // Check if can send communication - allow for queued, approved, and partial PAs
-  const canSendCommunication = priorAuthStatus === 'queued' || priorAuthStatus === 'approved' || priorAuthStatus === 'partial';
+  // Role check first: viewers and reviewers never get the compose/respond controls.
+  const canSendCommunication = can('send') && (priorAuthStatus === 'queued' || priorAuthStatus === 'approved' || priorAuthStatus === 'partial');
 
   if (loading) {
     return (
@@ -600,7 +603,9 @@ const CommunicationPanel = ({
           <p className="text-sm text-gray-600 mt-1">
             {canSendCommunication 
               ? 'Send additional information to the insurer or respond to their requests'
-              : 'Communication is only available for queued, approved, or partial authorizations'}
+              : !can('send')
+                ? 'Your role has view-only access to communications'
+                : 'Communication is only available for queued, approved, or partial authorizations'}
           </p>
         </div>
         <div className="flex items-center gap-2">

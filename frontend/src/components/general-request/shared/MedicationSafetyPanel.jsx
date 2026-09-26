@@ -36,14 +36,30 @@ const MedicationSafetyPanel = ({ analysis, isLoading, error }) => {
   }
 
   const { 
-    drugInteractions = [], 
+    drugInteractions: rawDrugInteractions,
+    interactions: rawInteractions,
     ageRelatedWarnings = [], 
     pregnancyWarnings = [],
     duplicateIngredients = [],
     sideEffectsOverview = {},
-    overallRiskAssessment = 'moderate',
+    overallRiskAssessment: rawRisk,
     recommendations = []
   } = analysis;
+  // Accept both backend shapes: the safety analysis (drugInteractions) and the
+  // interaction check (interactions / hasInteractions).
+  const drugInteractions = Array.isArray(rawDrugInteractions) ? rawDrugInteractions
+    : Array.isArray(rawInteractions) ? rawInteractions : [];
+  const knownRisks = ['low', 'moderate', 'high'];
+  const overallRiskAssessment = knownRisks.includes(rawRisk) ? rawRisk : 'unknown';
+
+  // Fail closed: an unreadable/partial AI reply ("analysisIncomplete", hasInteractions null,
+  // risk "unknown") is NOT a confirmation that there are no interactions.
+  const analysisIncomplete = analysis.analysisIncomplete === true
+    || analysis.requiresManualReview === true
+    || analysis.parsingError === true
+    || analysis.hasInteractions === null
+    || (rawRisk !== undefined && overallRiskAssessment === 'unknown')
+    || (rawRisk === undefined && analysis.hasInteractions === undefined);
 
   const hasIssues = drugInteractions.length > 0 || ageRelatedWarnings.length > 0 || 
                      pregnancyWarnings.length > 0 || duplicateIngredients.length > 0;
@@ -51,6 +67,21 @@ const MedicationSafetyPanel = ({ analysis, isLoading, error }) => {
   return (
     <div className="space-y-4">
       {/* Overall Risk Assessment */}
+      {analysisIncomplete ? (
+        <div className="border rounded-lg p-4 bg-amber-50 border-amber-300">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-600" />
+            <div>
+              <h3 className="text-lg font-semibold text-amber-900">
+                Analysis incomplete — manual review required
+              </h3>
+              <p className="text-sm text-amber-800">
+                {analysis.message || 'The AI safety analysis could not be completed. This is NOT a confirmation that there are no interactions or safety concerns.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className={`border rounded-lg p-4 ${
         overallRiskAssessment === 'high' ? 'bg-red-50 border-red-300' :
         overallRiskAssessment === 'moderate' ? 'bg-yellow-50 border-yellow-300' :
@@ -82,6 +113,7 @@ const MedicationSafetyPanel = ({ analysis, isLoading, error }) => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Drug Interactions */}
       {drugInteractions.length > 0 && (

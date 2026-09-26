@@ -11,6 +11,7 @@ import {
   XCircle, Clock, CheckCircle, AlertCircle,
   Filter, Search, Receipt, DollarSign
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 // Claim type display helper
 const getClaimTypeDisplay = (claimType) => {
@@ -37,6 +38,7 @@ const formatDate = (dateString) => {
 };
 
 export default function ClaimSubmissionsList() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [claims, setClaims] = useState([]);
@@ -288,32 +290,36 @@ export default function ClaimSubmissionsList() {
           </Button>
           {(row.status === 'draft' || row.status === 'error') && (
             <>
-              <Button
-                size="sm"
-                variant="default"
-                className="bg-blue-500 hover:bg-blue-600"
-                title="Send to NPHIES"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSendToNphies(row.id);
-                }}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                title="Delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(row.id);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {can('send') && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="bg-blue-500 hover:bg-blue-600"
+                  title="Send to NPHIES"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSendToNphies(row.id);
+                  }}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              )}
+              {can('delete') && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  title="Delete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(row.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </>
           )}
-          {row.status === 'queued' && (
+          {row.status === 'queued' && can('poll') && (
             <Button
               size="sm"
               variant="outline"

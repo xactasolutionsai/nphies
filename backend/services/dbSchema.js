@@ -1,8 +1,8 @@
 /**
  * Schema-scoped database access for the NPHIES messaging services.
  *
- * `search_path` used to be set with `SET search_path TO ${schemaName}`: the name
- * was interpolated into SQL, and a plain SET inside BEGIN/COMMIT (or on a pooled
+ * `search_path` used to be set by interpolating the schema name into a `SET search_path TO ...`
+ * statement, and a plain SET inside BEGIN/COMMIT (or on a pooled
  * client) stayed on the connection after it went back to the pool. These helpers
  * validate the identifier, pass it as a bind parameter to set_config(), use the
  * transaction-local form inside transactions, and reset the session value before

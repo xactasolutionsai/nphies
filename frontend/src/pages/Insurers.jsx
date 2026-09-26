@@ -5,8 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Shield, PlusCircle, Loader2, AlertCircle, Eye, Edit, Trash2 } from 'lucide-react';
 import DataTable from '@/components/DataTable';
 import api, { extractErrorMessage } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Insurers() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   // Success message passed by the create/edit form via navigate(..., { state: { message } })
@@ -132,27 +134,31 @@ export default function Insurers() {
           >
             <Eye className="h-4 w-4" />
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/insurers/${row.insurer_id}/edit`);
-            }}
-            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-            title="Edit"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setInsurerToDelete(row);
-              setShowDeleteConfirm(true);
-            }}
-            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title="Delete"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {can('edit') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/insurers/${row.insurer_id}/edit`);
+              }}
+              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              title="Edit"
+            >
+              <Edit className="h-4 w-4" />
+            </button>
+          )}
+          {can('delete') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setInsurerToDelete(row);
+                setShowDeleteConfirm(true);
+              }}
+              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )
     }
@@ -203,13 +209,15 @@ export default function Insurers() {
               </div>
             </div>
             <div className="hidden md:flex items-center space-x-3">
-              <button
-                onClick={() => navigate('/insurers/new')}
-                className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-4 py-2 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-lg hover:scale-105"
-              >
-                <PlusCircle className="h-5 w-5" />
-                <span>New Insurer</span>
-              </button>
+              {can('create') && (
+                <button
+                  onClick={() => navigate('/insurers/new')}
+                  className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-4 py-2 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-lg hover:scale-105"
+                >
+                  <PlusCircle className="h-5 w-5" />
+                  <span>New Insurer</span>
+                </button>
+              )}
               <div className="relative">
                 <div className="relative bg-white rounded-xl p-3 border border-gray-100">
                   <Shield className="h-8 w-8 text-primary-purple" />

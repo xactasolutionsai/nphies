@@ -13,6 +13,7 @@ import {
 import DataTable from '@/components/DataTable';
 import api, { extractErrorMessage } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
+import { ROLES } from '@/utils/roles';
 
 export default function UsersPage() {
   const navigate = useNavigate();
@@ -21,6 +22,8 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [roleSavingId, setRoleSavingId] = useState(null);
+  const [roleMessage, setRoleMessage] = useState(null);
 
   const isSuperAdmin = user?.role === 'admin';
 
@@ -58,6 +61,31 @@ export default function UsersPage() {
     return () => clearTimeout(timeoutId);
   }, [searchTerm, isSuperAdmin]);
 
+  const handleRoleChange = async (target, role) => {
+    if (!role || role === target.role) return;
+    if (!window.confirm(`Change the role of ${target.email} from ${target.role || 'none'} to ${role}?`)) return;
+    try {
+      setRoleSavingId(target.id);
+      setRoleMessage(null);
+      await api.updateUserRole(target.id, role);
+      setUsers(prev => prev.map(u => (u.id === target.id ? { ...u, role } : u)));
+      setRoleMessage({ type: 'success', text: `Role of ${target.email} changed to ${role}.` });
+    } catch (err) {
+      const status = err?.response?.status;
+      // A missing route (older backend) answers 404 "Endpoint not found"; a missing user is a
+      // 404 with its own message, which is shown as-is.
+      const routeMissing = status === 405 || (status === 404 && err?.response?.data?.error === 'Endpoint not found');
+      setRoleMessage({
+        type: 'error',
+        text: routeMissing
+          ? 'Changing roles is not supported by this server version yet.'
+          : extractErrorMessage(err)
+      });
+    } finally {
+      setRoleSavingId(null);
+    }
+  };
+
   if (!isSuperAdmin) {
     return null;
   }
@@ -84,6 +112,30 @@ export default function UsersPage() {
           )}
         </div>
       )
+    },
+    {
+      key: 'role',
+      header: 'Role',
+      accessor: 'role',
+      render: (row) => {
+        // Legacy 'user' rows behave as 'submitter'; show them as-is so nothing is silently rewritten.
+        const options = ROLES.includes(row.role) || !row.role ? ROLES : [row.role, ...ROLES];
+        return (
+          <select
+            value={row.role || ''}
+            disabled={roleSavingId === row.id || row.id === user?.id}
+            title={row.id === user?.id ? 'You cannot change your own role' : 'Change role'}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => handleRoleChange(row, e.target.value)}
+            className="px-2 py-1 border border-gray-300 rounded-md text-sm bg-white disabled:opacity-60"
+          >
+            {!row.role && <option value="">-</option>}
+            {options.map(r => (
+              <option key={r} value={r}>{r === 'user' ? 'user (submitter)' : r}</option>
+            ))}
+          </select>
+        );
+      }
     },
     {
       key: 'created_at',
@@ -148,6 +200,12 @@ export default function UsersPage() {
             <p className="text-sm font-medium text-red-800">Error loading users</p>
             <p className="text-sm text-red-600 mt-1">{error}</p>
           </div>
+        </div>
+      )}
+
+      {roleMessage && (
+        <div className={`rounded-lg p-3 text-sm border ${roleMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+          {roleMessage.text}
         </div>
       )}
 

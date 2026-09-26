@@ -47,6 +47,8 @@ REM Run the seeding script
 echo.
 echo 🌱 Starting database seeding...
 echo This will truncate all existing data and generate new test data.
+echo seed.js refuses to run unless ALLOW_DESTRUCTIVE_SEED=true is set (in .env or with
+echo "set ALLOW_DESTRUCTIVE_SEED=true") and never runs with NODE_ENV=production.
 echo.
 echo Press any key to continue or Ctrl+C to cancel...
 pause

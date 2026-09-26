@@ -12,7 +12,7 @@ import CommunicationMapper from '../services/communicationMapper.js';
 import shadowBillingService from '../services/shadowBillingService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
 import { randomUUID } from 'node:crypto';
-import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, safeJsonParse, subTypeFromEncounterClass } from './controllerHelpers.js';
+import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, safeJsonParse, subTypeFromEncounterClass, practitionerFromRecord } from './controllerHelpers.js';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
@@ -373,6 +373,11 @@ class ClaimSubmissionsController extends BaseController {
         eligibility_response_id: pa.eligibility_response_id || null,
         eligibility_response_system: pa.eligibility_response_system || null,
         practice_code: pa.practice_code,
+        // Treating practitioner of the authorization (migration 067)
+        practitioner_license: pa.practitioner_license || null,
+        practitioner_name: pa.practitioner_name || null,
+        practitioner_specialty_code: pa.practitioner_specialty_code || null,
+        practitioner_identifier_type: pa.practitioner_identifier_type || null,
         priority: priority || pa.priority || 'normal', // Use provided priority, fallback to PA priority, then 'normal'
         total_amount: claimTotal,
         currency: pa.currency,
@@ -594,7 +599,7 @@ class ClaimSubmissionsController extends BaseController {
         }
       }
 
-      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, policyHolder: null, motherPatient });
+      const bundle = claimMapper.buildClaimRequestBundle({ claim, patient, provider, insurer, coverage, practitioner: practitionerFromRecord(claim), policyHolder: null, motherPatient });
       const nphiesRequestId = `clm-req-${Date.now()}`;
 
       // Extract outbound MessageHeader.id for poll response correlation
@@ -702,6 +707,7 @@ class ClaimSubmissionsController extends BaseController {
         provider: providerResult.rows[0], 
         insurer: insurerResult.rows[0], 
         coverage, 
+        practitioner: practitionerFromRecord(claim),
         policyHolder: null,
         motherPatient: motherPatient
       });
@@ -797,6 +803,7 @@ class ClaimSubmissionsController extends BaseController {
         provider, 
         insurer, 
         coverage, 
+        practitioner: practitionerFromRecord(formData),
         policyHolder: null, 
         motherPatient: motherPatient
       });

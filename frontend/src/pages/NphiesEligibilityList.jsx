@@ -11,6 +11,7 @@ import {
   CheckCircle, XCircle, AlertCircle, Clock,
   Filter, Search, FileText
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 // Status display helper
 const getStatusDisplay = (status) => {
@@ -88,6 +89,7 @@ const getPurposeBadges = (purposeValue) => {
 };
 
 export default function NphiesEligibilityList() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [eligibilityRecords, setEligibilityRecords] = useState([]);
@@ -341,13 +343,15 @@ export default function NphiesEligibilityList() {
                 </div>
               </div>
             </div>
-            <Button 
-              onClick={() => navigate('/nphies-eligibility/new')} 
-              className="bg-gradient-to-r from-primary-purple to-accent-purple"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              New Eligibility Check
-            </Button>
+            {can('create') && (
+              <Button 
+                onClick={() => navigate('/nphies-eligibility/new')} 
+                className="bg-gradient-to-r from-primary-purple to-accent-purple"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                New Eligibility Check
+              </Button>
+            )}
           </div>
         </div>
       </div>

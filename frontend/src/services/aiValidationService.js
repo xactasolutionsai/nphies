@@ -53,8 +53,11 @@ class AIValidationService {
       return {
         success: false,
         error: 'AI validation is disabled',
+        // Fail closed (same shape as the backend's disabled response): not validated.
         data: {
-          isValid: true,
+          isValid: null,
+          aiUnavailable: true,
+          requiresManualReview: true,
           confidenceScore: 0,
           warnings: [],
           recommendations: [],
@@ -79,17 +82,20 @@ class AIValidationService {
     } catch (error) {
       console.error('Error validating form:', error);
       
-      // Return a graceful fallback response
+      // Fail closed: an unreachable/failed AI review is never reported as valid.
+      // Same shape as the backend's own AI-unavailable response.
       return {
         success: false,
         error: error.message,
         data: {
-          isValid: true, // Default to valid on error
+          isValid: null,
+          aiUnavailable: true,
+          requiresManualReview: true,
           confidenceScore: 0,
           warnings: [{
             field: 'system',
-            message: `AI validation temporarily unavailable: ${error.message}`,
-            severity: 'low'
+            message: `AI validation unavailable: ${error.message}. The form has NOT been validated.`,
+            severity: 'high'
           }],
           recommendations: ['Manual review recommended due to AI validation error'],
           missingAnalyses: [],

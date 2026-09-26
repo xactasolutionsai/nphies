@@ -9,7 +9,7 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { query, closePool } from './db.js';
 import { initializeQueryLoader } from './db/queryLoader.js';
-import { restrictAdminOperations } from './middleware/requireRole.js';
+import { enforceRoles } from './middleware/requireRole.js';
 import { requirePublicRegistrationEnabled } from './middleware/publicRegistration.js';
 import { validateContactRequest } from './utils/contactValidation.js';
 
@@ -136,8 +136,10 @@ app.use('/api/auth', authRoutes);
 app.post('/api/contacts', validateContactRequest);
 app.use('/api/contacts', contactsRoutes);
 app.use('/api', authenticateToken);
-// Deletes, system polls, code-cache refresh, raw NPHIES relay and user administration need the admin role.
-app.use('/api', restrictAdminOperations);
+// Roles (middleware/requireRole.js): viewer reads, reviewer also previews/validates, submitter
+// (and legacy 'user') creates and sends; deletes, system polls, code-cache refresh, raw NPHIES
+// relay and user administration need the admin role.
+app.use('/api', enforceRoles);
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 app.use('/api/openmed', openmedRoutes);
 app.use('/api/users', usersRoutes);

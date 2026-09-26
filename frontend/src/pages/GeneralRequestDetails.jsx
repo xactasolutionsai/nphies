@@ -43,8 +43,10 @@ const toCodeList = (value) => {
   return [];
 };
 import { format } from 'date-fns';
+import { useAuth } from '@/context/AuthContext';
 
 export default function GeneralRequestDetails() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
@@ -1063,13 +1065,15 @@ export default function GeneralRequestDetails() {
             {/* Action Buttons */}
             <Card>
               <CardContent className="p-4 space-y-2">
-                <Button
-                  onClick={() => navigate(`/general-requests/${id}/edit`)}
-                  className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Request
-                </Button>
+                {can('edit') && (
+                  <Button
+                    onClick={() => navigate(`/general-requests/${id}/edit`)}
+                    className="w-full bg-gradient-to-r from-primary-purple to-accent-purple hover:opacity-90"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Request
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>

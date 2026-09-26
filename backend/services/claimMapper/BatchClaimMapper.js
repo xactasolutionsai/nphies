@@ -273,7 +273,7 @@ class BatchClaimMapper {
 
     const validation = this.validateBatchConstraints(claims);
     if (!validation.valid) {
-      throw new Error(`Batch validation failed: ${validation.errors.join('; ')}`);
+      throw mappingError(`Batch validation failed: ${validation.errors.join('; ')}`);
     }
     // Every claim in a batch SHALL carry batch-identifier and batch-period (never null)
     if (!batchIdentifier || !batchPeriodStart || !batchPeriodEnd) {

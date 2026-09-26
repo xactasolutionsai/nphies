@@ -18,6 +18,31 @@ import systemPollService from './systemPollService.js';
 import { mapClaimResponseStatus } from './messageUpdater.js';
 import { connectWithSchema, releaseSchemaClient, withSchemaClient } from './dbSchema.js';
 import { sendAndRecordCommunication } from './communicationOutbox.js';
+import { submittedClaimIdentifier } from './priorAuthMapper/nphiesIdentity.js';
+
+/**
+ * Identifier of the claim as it was submitted (Claim.identifier of the stored request
+ * bundle), falling back to the claim number with the /claim system derived from the
+ * provider, exactly as the claim mappers build Claim.identifier.
+ */
+function claimFocus(claim) {
+  const submitted = submittedClaimIdentifier(claim.request_bundle);
+  return {
+    value: submitted?.value || claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id,
+    system: submitted?.system || null
+  };
+}
+
+/** `priorAuth` argument of the communication builders for a claim (Communication.about). */
+function claimAboutRecord(claim) {
+  const focus = claimFocus(claim);
+  return {
+    nphies_request_id: claim.nphies_request_id,
+    request_number: focus.value,
+    pre_auth_ref: focus.value,
+    ...(focus.system && { about_identifier_system: focus.system })
+  };
+}
 
 class ClaimCommunicationService {
   constructor() {
@@ -75,15 +100,17 @@ class ClaimCommunicationService {
         country: 'Saudi Arabia'
       } : null;
 
-      // Build Status Check bundle (without sending)
-      const focalIdentifier = claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id;
+      // Build Status Check bundle (without sending); Task.focus = the submitted Claim.identifier
+      const focus = claimFocus(claim);
       
       const statusCheckBundle = this.mapper.buildStatusCheckBundle({
         providerId: claim.provider_nphies_id,
         providerName: claim.provider_name || 'Healthcare Provider',
         insurerId: claim.insurer_nphies_id,
         insurerName: claim.insurer_name || 'Insurance Company',
-        focalResourceIdentifier: focalIdentifier,
+        focalResourceIdentifier: focus.value,
+        focalIdentifierSystem: focus.system,
+        claimUse: 'claim',
         focalResourceType: 'Claim',
         originalRequestId: claim.nphies_request_id,
         providerType: claim.provider_type,
@@ -167,16 +194,17 @@ class ClaimCommunicationService {
         console.warn(`[ClaimCommunicationService] Status check for claim with status '${claim.status}' - proceeding anyway`);
       }
 
-      // 3. Build Status Check bundle
-      // Use claim_number as the focal resource identifier
-      const focalIdentifier = claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id;
+      // 3. Build Status Check bundle; Task.focus = the submitted Claim.identifier
+      const focus = claimFocus(claim);
       
       const statusCheckBundle = this.mapper.buildStatusCheckBundle({
         providerId: claim.provider_nphies_id,
         providerName: claim.provider_name || 'Healthcare Provider',
         insurerId: claim.insurer_nphies_id,
         insurerName: claim.insurer_name || 'Insurance Company',
-        focalResourceIdentifier: focalIdentifier,
+        focalResourceIdentifier: focus.value,
+        focalIdentifierSystem: focus.system,
+        claimUse: 'claim',
         focalResourceType: 'Claim',
         originalRequestId: claim.nphies_request_id,
         // Dynamic data from DB per NPHIES IG
@@ -305,14 +333,14 @@ class ClaimCommunicationService {
 
       // 2. Build poll request with focus on this specific claim
       const providerDomain = this.mapper.extractProviderDomain(claim.provider_name || 'Healthcare Provider');
-      const claimIdentifier = claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id;
+      const focus = claimFocus(claim);
       
       const pollOptions = {
         focus: {
           type: 'Claim',
           identifier: {
-            system: `http://${providerDomain}/identifiers/claim`,
-            value: claimIdentifier
+            system: focus.system || `http://${providerDomain}/identifiers/claim`,
+            value: focus.value
           }
         }
       };
@@ -806,11 +834,8 @@ class ClaimCommunicationService {
         const claimIdentifier = claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id;
         
         const communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
-          priorAuth: {
-            nphies_request_id: claim.nphies_request_id,
-            request_number: claim.claim_number,
-            pre_auth_ref: claimIdentifier
-          },
+          priorAuth: claimAboutRecord(claim),
+          claimUse: 'claim',
           patient: {
             patient_id: claim.patient_id,
             identifier: claim.patient_identifier,
@@ -882,6 +907,7 @@ class ClaimCommunicationService {
                  cs.claim_number,
                  cs.nphies_request_id,
                  cs.nphies_claim_id,
+                 cs.request_bundle,
                  cs.patient_id,
                  cs.provider_id,
                  cs.insurer_id,
@@ -915,8 +941,6 @@ class ClaimCommunicationService {
 
         // Multiple solicited responses to the same CommunicationRequest are allowed
         // (responded_at is tracked for audit but does not block further responses)
-        const claimIdentifier = commRequest.claim_number || commRequest.nphies_claim_id || commRequest.nphies_request_id;
-        
         const communicationBundle = this.mapper.buildSolicitedCommunicationBundle({
           communicationRequest: {
             request_id: commRequest.request_id,
@@ -927,11 +951,8 @@ class ClaimCommunicationService {
             cr_identifier: commRequest.cr_identifier,
             cr_identifier_system: commRequest.cr_identifier_system
           },
-          priorAuth: {
-            nphies_request_id: commRequest.nphies_request_id,
-            request_number: commRequest.claim_number,
-            pre_auth_ref: claimIdentifier
-          },
+          priorAuth: claimAboutRecord(commRequest),
+          claimUse: 'claim',
           patient: {
             patient_id: commRequest.patient_id,
             identifier: commRequest.patient_identifier,
@@ -1184,7 +1205,6 @@ class ClaimCommunicationService {
       }
 
       const claim = claimResult.rows[0];
-      const claimIdentifier = claim.claim_number || claim.nphies_claim_id || claim.nphies_request_id;
 
       let communicationBundle;
       let metadata = {
@@ -1218,11 +1238,8 @@ class ClaimCommunicationService {
             cr_identifier: commRequest.cr_identifier,
             cr_identifier_system: commRequest.cr_identifier_system
           },
-          priorAuth: {
-            nphies_request_id: claim.nphies_request_id,
-            request_number: claim.claim_number,
-            pre_auth_ref: claimIdentifier
-          },
+          priorAuth: claimAboutRecord(claim),
+          claimUse: 'claim',
           patient: {
             patient_id: claim.patient_id,
             identifier: claim.patient_identifier,
@@ -1252,11 +1269,8 @@ class ClaimCommunicationService {
       } else {
         // Unsolicited communication
         communicationBundle = this.mapper.buildUnsolicitedCommunicationBundle({
-          priorAuth: {
-            nphies_request_id: claim.nphies_request_id,
-            request_number: claim.claim_number,
-            pre_auth_ref: claimIdentifier
-          },
+          priorAuth: claimAboutRecord(claim),
+          claimUse: 'claim',
           patient: {
             patient_id: claim.patient_id,
             identifier: claim.patient_identifier,

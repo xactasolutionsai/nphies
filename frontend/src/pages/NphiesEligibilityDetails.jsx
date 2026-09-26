@@ -11,6 +11,7 @@ import {
   Building, CreditCard, Calendar, Clock, Phone, Heart, Briefcase,
   Users, MapPin, DollarSign, Network, Hash
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 // Status display helper
 const getStatusDisplay = (status) => {
@@ -231,6 +232,7 @@ const extractFromFhirBundle = (bundle) => {
 };
 
 export default function NphiesEligibilityDetails() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   
@@ -472,13 +474,15 @@ export default function NphiesEligibilityDetails() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
-              <Button
-                onClick={() => navigate('/nphies-eligibility/new')}
-                className="bg-gradient-to-r from-primary-purple to-accent-purple text-white"
-              >
-                <Shield className="h-4 w-4 mr-2" />
-                New Check
-              </Button>
+              {can('create') && (
+                <Button
+                  onClick={() => navigate('/nphies-eligibility/new')}
+                  className="bg-gradient-to-r from-primary-purple to-accent-purple text-white"
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  New Check
+                </Button>
+              )}
             </div>
           </div>
         </div>

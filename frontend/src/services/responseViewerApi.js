@@ -7,12 +7,13 @@ class ResponseViewerApi {
 
   async request(endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`;
+    // Spread options first so options.headers cannot replace the merged headers
     const config = {
+      ...options,
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
       },
-      ...options,
     };
 
     try {

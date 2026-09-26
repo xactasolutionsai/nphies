@@ -12,5 +12,9 @@ router.get('/', usersController.getAll.bind(usersController));
 // GET /api/users/:id - Get user by ID (admin only)
 router.get('/:id', usersController.getById.bind(usersController));
 
+// PUT|PATCH /api/users/:id/role - Change a user's role (admin only; body { role })
+router.put('/:id/role', usersController.updateRole.bind(usersController));
+router.patch('/:id/role', usersController.updateRole.bind(usersController));
+
 export default router;
 

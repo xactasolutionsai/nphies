@@ -139,6 +139,47 @@ test('Migrations build a fresh database, re-run cleanly, and dashboard totals ar
     await client.query('DEALLOCATE core_check');
   }
 
+  // Migration 067: treating practitioner columns on both request tables.
+  for (const table of ['prior_authorizations', 'claim_submissions']) {
+    const cols = await columns(table);
+    for (const c of ['practitioner_license', 'practitioner_name', 'practitioner_specialty_code', 'practitioner_identifier_type']) {
+      assert.ok(cols.has(c), `${table}.${c}`);
+    }
+  }
+  // Migration 068: the new roles are accepted, legacy 'user' stays valid, anything else is rejected.
+  for (const [n, role] of ['user', 'admin', 'submitter', 'reviewer', 'viewer'].entries()) {
+    await client.query("INSERT INTO users (email, password_hash, role) VALUES ($1, 'x', $2)", [`role${n}@example.test`, role]);
+  }
+  await assert.rejects(client.query("INSERT INTO users (email, password_hash, role) VALUES ('bad@example.test', 'x', 'superuser')"), /users_role_check/);
+  await client.query("DELETE FROM users WHERE email LIKE 'role%@example.test'");
+
+  // Every static INSERT/UPDATE/SELECT/DELETE in the NPHIES messaging services must name real
+  // tables and columns (e.g. messageUpdater's Communication writes).
+  const sqlLiterals = source => [...source.matchAll(/`([^`]*)`|'((?:SELECT|INSERT|UPDATE|DELETE)[^'\n]*)'/g)]
+    .map(m => m[1] ?? m[2]).filter(sql => /^\s*(SELECT|INSERT|UPDATE|DELETE|WITH)\b/i.test(sql) && !sql.includes('${'));
+  let prepared = 0;
+  for (const file of ['services/messageUpdater.js', 'services/communicationService.js', 'services/claimCommunicationService.js',
+    'services/advancedAuthCommunicationService.js', 'services/communicationOutbox.js', 'services/messageCorrelator.js',
+    'services/systemPollService.js']) {
+    for (const sql of sqlLiterals(await fs.readFile(new URL(`../${file}`, import.meta.url), 'utf8'))) {
+      await assert.doesNotReject(client.query(`PREPARE service_check AS ${sql}`), `${file}: ${sql.trim().slice(0, 80)}`);
+      await client.query('DEALLOCATE service_check');
+      prepared++;
+    }
+  }
+  assert.ok(prepared > 50, `prepared ${prepared} statements`);
+
+  // Response viewer list queries, with and without every filter and sort.
+  const { buildResponseViewerQuery } = await import('../controllers/responseViewerController.js');
+  for (const tab of ['claims', 'authorizations', 'eligibility', 'payments']) {
+    for (const params of [{}, { search: 'x', status: 'Approved', dateRange: 'quarter', sortBy: 'amount', sortOrder: 'ASC' },
+      { sortBy: 'patient_name' }, { sortBy: 'status', dateRange: 'today' }]) {
+      const built = buildResponseViewerQuery(tab, params);
+      await assert.doesNotReject(client.query(built.dataSql, built.dataParams), `${tab} ${JSON.stringify(params)}`);
+      await assert.doesNotReject(client.query(built.countSql, built.countParams), `${tab} count ${JSON.stringify(params)}`);
+    }
+  }
+
   // One insurer with 3 claims (100 each, one Paid) and 2 payments (50 each).
   const [insurer, provider, patient] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
   await client.query("INSERT INTO insurers (insurer_id, insurer_name) VALUES ($1, 'Synthetic Insurer')", [insurer]);

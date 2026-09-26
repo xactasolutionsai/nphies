@@ -38,9 +38,12 @@ export const streamChat = async (req, res) => {
   // stops generation instead of letting the model run to completion.
   let clientClosed = false;
   const clientDisconnected = new Error('Client disconnected');
+  // Aborts the model stream itself (not just our consumption of it) when the client leaves
+  const abortController = new AbortController();
   res.on('close', () => {
     if (!res.writableEnded) {
       clientClosed = true;
+      abortController.abort();
       console.log('🔌 Client disconnected from chat stream');
     }
   });
@@ -76,7 +79,8 @@ export const streamChat = async (req, res) => {
       (error) => {
         if (error === clientDisconnected) return;
         if (send({ type: 'error', error: error.message || 'An error occurred during streaming' })) res.end();
-      }
+      },
+      { signal: abortController.signal }
     );
 
   } catch (error) {

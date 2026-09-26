@@ -1279,3 +1279,39 @@ export const PRACTICE_CODES_OPTIONS = [
   },
 ];
 
+
+// Treating practitioner identifier type (Practitioner.identifier.type,
+// http://terminology.hl7.org/CodeSystem/v2-0203). Only 'MD' is offered: docs/nphies CodeSystems.csv
+// does not enumerate the practitioner value set, and 'MD' is the code used by the NPHIES example
+// bundles in docs/. Add further codes only after confirming them against the NPHIES IG.
+export const PRACTITIONER_IDENTIFIER_TYPE_OPTIONS = [
+  { value: 'MD', label: 'MD - Medical License Number' }
+];
+
+// Auth types whose bundle carries a Practitioner / careTeam (the backend mappers require it).
+// Pharmacy has no careTeam per the NPHIES examples.
+export const PRACTITIONER_REQUIRED_AUTH_TYPES = ['professional', 'institutional', 'dental', 'vision'];
+
+/**
+ * Validation errors for the treating practitioner fields ({ field, message }[]).
+ * Pure so it can be unit-tested outside React.
+ */
+export const validatePractitionerFields = (data = {}) => {
+  if (!PRACTITIONER_REQUIRED_AUTH_TYPES.includes(data.auth_type)) return [];
+  const errors = [];
+  const text = (value) => (value == null ? '' : String(value).trim());
+  if (!text(data.practitioner_license)) {
+    errors.push({ field: 'practitioner_license', message: 'Treating practitioner license number is required' });
+  } else if (text(data.practitioner_license).length > 50) {
+    errors.push({ field: 'practitioner_license', message: 'Treating practitioner license number must be at most 50 characters' });
+  }
+  if (!text(data.practitioner_name)) {
+    errors.push({ field: 'practitioner_name', message: 'Treating practitioner name is required' });
+  } else if (text(data.practitioner_name).length > 255) {
+    errors.push({ field: 'practitioner_name', message: 'Treating practitioner name must be at most 255 characters' });
+  }
+  if (!PRACTITIONER_IDENTIFIER_TYPE_OPTIONS.some(opt => opt.value === data.practitioner_identifier_type)) {
+    errors.push({ field: 'practitioner_identifier_type', message: 'Treating practitioner identifier type is required' });
+  }
+  return errors;
+};

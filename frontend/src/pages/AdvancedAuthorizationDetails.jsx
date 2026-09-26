@@ -14,6 +14,7 @@ import {
 import { Label } from '@/components/ui/label';
 
 import AdvancedAuthCommunicationPanel from '@/components/advanced-auth/AdvancedAuthCommunicationPanel';
+import { useAuth } from '@/context/AuthContext';
 
 // ============================================================================
 // HELPERS
@@ -359,6 +360,7 @@ function TabButton({ active, onClick, children }) {
 // ============================================================================
 
 export default function AdvancedAuthorizationDetails() {
+  const { can } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -504,7 +506,7 @@ export default function AdvancedAuthorizationDetails() {
           </div>
         </div>
         <div className="flex gap-2">
-          {data.status !== 'cancelled' && !data.is_cancelled && (
+          {data.status !== 'cancelled' && !data.is_cancelled && can('cancel') && (
             <Button variant="outline" size="sm" onClick={() => setShowCancelDialog(true)} className="text-red-500 border-red-300 hover:bg-red-50">
               <XCircle className="h-4 w-4 mr-1" />
               Cancel
@@ -1085,6 +1087,7 @@ export default function AdvancedAuthorizationDetails() {
             <AdvancedAuthCommunicationPanel
               advAuthId={parseInt(id)}
               advAuthStatus={data.adjudication_outcome || data.status}
+              isCancelled={data.is_cancelled || data.status === 'cancelled'}
               items={addItems}
               onStatusUpdate={loadData}
             />

@@ -9,6 +9,7 @@ import {
   ChevronDown, ChevronUp, FileJson, Copy, Activity,
   Inbox, Link2, HelpCircle, BarChart3, ArrowRight, ExternalLink
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 const tableToRoute = {
   prior_authorizations: '/prior-authorizations',
@@ -76,6 +77,7 @@ const processingStatusColors = {
 };
 
 function SystemPoll() {
+  const { can } = useAuth();
   const [stats, setStats] = useState(null);
   const [logs, setLogs] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 10, totalPages: 0 });
@@ -190,7 +192,8 @@ function SystemPoll() {
         </div>
         <Button
           onClick={handleTriggerPoll}
-          disabled={polling}
+          disabled={polling || !can('triggerSystemPoll')}
+          title={can('triggerSystemPoll') ? undefined : 'Triggering a system poll requires the admin role'}
           className="bg-blue-600 hover:bg-blue-700 text-white"
         >
           {polling ? (

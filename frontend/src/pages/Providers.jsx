@@ -5,8 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Building2, PlusCircle, Loader2, AlertCircle, Eye, Edit, Trash2 } from 'lucide-react';
 import DataTable from '@/components/DataTable';
 import api, { extractErrorMessage } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Providers() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   // Success message passed by the create/edit form via navigate(..., { state: { message } })
@@ -101,27 +103,31 @@ export default function Providers() {
           >
             <Eye className="h-4 w-4" />
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/providers/${row.provider_id}/edit`);
-            }}
-            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-            title="Edit"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setProviderToDelete(row);
-              setShowDeleteConfirm(true);
-            }}
-            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title="Delete"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {can('edit') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/providers/${row.provider_id}/edit`);
+              }}
+              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              title="Edit"
+            >
+              <Edit className="h-4 w-4" />
+            </button>
+          )}
+          {can('delete') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setProviderToDelete(row);
+                setShowDeleteConfirm(true);
+              }}
+              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )
     }
@@ -188,13 +194,15 @@ export default function Providers() {
               </div>
             </div>
             <div className="hidden md:flex items-center space-x-3">
-              <button
-                onClick={() => navigate('/providers/new')}
-                className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-4 py-2 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-lg hover:scale-105"
-              >
-                <PlusCircle className="h-5 w-5" />
-                <span>New Provider</span>
-              </button>
+              {can('create') && (
+                <button
+                  onClick={() => navigate('/providers/new')}
+                  className="bg-gradient-to-r from-primary-purple to-accent-purple text-white px-4 py-2 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-lg hover:scale-105"
+                >
+                  <PlusCircle className="h-5 w-5" />
+                  <span>New Provider</span>
+                </button>
+              )}
               <div className="bg-white rounded-xl p-3 border border-gray-100">
                 <Building2 className="h-8 w-8 text-primary-purple" />
               </div>

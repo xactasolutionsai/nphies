@@ -5,7 +5,7 @@
 //   npm run migrate -- --status     list applied / pending / skipped migrations
 //   npm run migrate -- --dry-run    show what would be applied
 //   npm run migrate -- --baseline   record every listed migration as applied WITHOUT running it, except
-//                                   those marked `afterBaseline` (added with this runner, e.g. 066), which are
+//                                   those marked `afterBaseline` (added with this runner, 066 and later), which are
 //                                   applied. Use it once on a database built by hand before this runner
 //                                   existed; later runs of `npm run migrate` apply new files. Some older files touch
 //                                   data (e.g. add_nphies_integration_uuid.sql fills a NULL provider
@@ -22,7 +22,7 @@
 //   3. feature tables (advanced authorizations, general requests, exams, approval forms);
 //   4. pgvector-based tables (skipped with a warning when the `vector` extension is not
 //      available; they stay pending and run once it is installed);
-//   5. data standardization, then the numbered migrations 029..066 in numeric order.
+//   5. data standardization, then the numbered migrations 029..068 in numeric order.
 // Files in migrations/ that are NOT listed are one-off data scripts or superseded files; they
 // are reported by --status with the reason (see NOT_MANAGED) and are never run automatically.
 import fs from 'node:fs/promises';
@@ -105,7 +105,9 @@ export const MIGRATIONS = [
   { file: 'migrations/063_selected_coverage.sql' },
   { file: 'migrations/064_openmed_advisory.sql' },
   { file: 'migrations/065_payment_notice_attempts.sql' },
-  { file: 'migrations/066_schema_consistency.sql', afterBaseline: true }
+  { file: 'migrations/066_schema_consistency.sql', afterBaseline: true },
+  { file: 'migrations/067_practitioner_fields.sql', afterBaseline: true },
+  { file: 'migrations/068_user_roles_extended.sql', afterBaseline: true }
 ];
 
 // Files in migrations/ that the runner deliberately does not apply.

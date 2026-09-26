@@ -11,6 +11,7 @@ import {
   XCircle, ArrowRightLeft, Clock, CheckCircle, AlertCircle,
   Filter, Search, Copy
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 // Auth type display helper
 const getAuthTypeDisplay = (authType) => {
@@ -37,6 +38,7 @@ const formatDate = (dateString) => {
 };
 
 export default function PriorAuthorizations() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [authorizations, setAuthorizations] = useState([]);
@@ -300,57 +302,65 @@ export default function PriorAuthorizations() {
             <Eye className="h-4 w-4" />
           </Button>
           {/* Duplicate button - available for all records */}
-          <Button
-            size="sm"
-            variant="outline"
-            title="Duplicate as new draft"
-            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDuplicate(row.id);
-            }}
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
+          {can('create') && (
+            <Button
+              size="sm"
+              variant="outline"
+              title="Duplicate as new draft"
+              className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDuplicate(row.id);
+              }}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          )}
           {(row.status === 'draft' || row.status === 'error') && (
             <>
-              <Button
-                size="sm"
-                variant="outline"
-                title="Edit"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/prior-authorizations/${row.id}/edit`);
-                }}
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                className="bg-blue-500 hover:bg-blue-600"
-                title="Send to NPHIES"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSendToNphies(row.id);
-                }}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                title="Delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(row.id);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {can('edit') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  title="Edit"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/prior-authorizations/${row.id}/edit`);
+                  }}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              )}
+              {can('send') && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="bg-blue-500 hover:bg-blue-600"
+                  title="Send to NPHIES"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSendToNphies(row.id);
+                  }}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              )}
+              {can('delete') && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  title="Delete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(row.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </>
           )}
-          {row.status === 'queued' && (
+          {row.status === 'queued' && can('poll') && (
             <Button
               size="sm"
               variant="outline"
@@ -411,13 +421,15 @@ export default function PriorAuthorizations() {
                 </div>
               </div>
             </div>
-            <Button 
-              onClick={() => navigate('/prior-authorizations/new')} 
-              className="bg-gradient-to-r from-primary-purple to-accent-purple"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              New Prior Authorization
-            </Button>
+            {can('create') && (
+              <Button 
+                onClick={() => navigate('/prior-authorizations/new')} 
+                className="bg-gradient-to-r from-primary-purple to-accent-purple"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                New Prior Authorization
+              </Button>
+            )}
           </div>
         </div>
       </div>

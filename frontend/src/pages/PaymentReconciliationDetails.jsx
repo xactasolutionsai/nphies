@@ -28,6 +28,7 @@ import {
   Inbox
 } from 'lucide-react';
 import api, { extractErrorMessage } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 // Receipt dates are KSA-local: compute "today" in Asia/Riyadh, not UTC
 const todayInKsa = () => {
@@ -40,6 +41,7 @@ const todayInKsa = () => {
 };
 
 export default function PaymentReconciliationDetails() {
+  const { can } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const [reconciliation, setReconciliation] = useState(null);
@@ -277,18 +279,20 @@ export default function PaymentReconciliationDetails() {
             <Eye className="h-4 w-4 mr-2" />
             Preview
           </Button>
-          <Button 
-            onClick={handleSendAcknowledgement}
-            disabled={sendingAck || !bankReceiptConfirmed || !receivedDate || !receiptReference.trim() || reconciliation.notice_attempts?.some(a => ['sending', 'unknown'].includes(a.status)) || reconciliation.payment_status_sent === 'cleared' || (reconciliation.payment_status_sent === selectedPaymentStatus && reconciliation.acknowledgement_status === 'sent')}
-            className="bg-purple-600 hover:bg-purple-700 text-white"
-          >
-            {sendingAck ? (
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4 mr-2" />
-            )}
-            {sendingAck ? 'Sending...' : `Send as ${selectedPaymentStatus === 'cleared' ? 'Cleared' : 'Paid'}`}
-          </Button>
+          {can('send') && (
+            <Button 
+              onClick={handleSendAcknowledgement}
+              disabled={sendingAck || !bankReceiptConfirmed || !receivedDate || !receiptReference.trim() || reconciliation.notice_attempts?.some(a => ['sending', 'unknown'].includes(a.status)) || reconciliation.payment_status_sent === 'cleared' || (reconciliation.payment_status_sent === selectedPaymentStatus && reconciliation.acknowledgement_status === 'sent')}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              {sendingAck ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              {sendingAck ? 'Sending...' : `Send as ${selectedPaymentStatus === 'cleared' ? 'Cleared' : 'Paid'}`}
+            </Button>
+          )}
           
           {/* View Sent Bundle & NPHIES Response */}
           {reconciliation.acknowledgement_bundle && (

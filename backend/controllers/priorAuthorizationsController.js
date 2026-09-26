@@ -12,7 +12,7 @@ import nphiesDataService from '../services/nphiesDataService.js';
 import CommunicationMapper from '../services/communicationMapper.js';
 import shadowBillingService from '../services/shadowBillingService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
-import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, subTypeFromEncounterClass } from './controllerHelpers.js';
+import { statusFromParsedResponse, markSendFailed, sendCommunicationRequestAttachment, sanitizePharmacyDeviceFields, subTypeFromEncounterClass, practitionerFromRecord } from './controllerHelpers.js';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
@@ -202,7 +202,9 @@ class PriorAuthorizationsController extends BaseController {
     const formQuery = `
       SELECT
         pa.id, pa.request_number, pa.auth_type, pa.patient_id, pa.provider_id, pa.insurer_id,
-        pa.selected_coverage_id AS coverage_id, pa.practitioner_id, pa.status, pa.outcome, pa.adjudication_outcome,
+        pa.selected_coverage_id AS coverage_id, pa.practitioner_id,
+        pa.practitioner_license, pa.practitioner_name, pa.practitioner_specialty_code, pa.practitioner_identifier_type,
+        pa.status, pa.outcome, pa.adjudication_outcome,
         pa.disposition, pa.pre_auth_ref, pa.nphies_request_id, pa.nphies_response_id,
         pa.is_nphies_generated, pa.encounter_class, pa.encounter_start, pa.encounter_end,
         pa.is_update, pa.related_auth_id, pa.is_resubmission, pa.related_claim_identifier,
@@ -802,6 +804,7 @@ class PriorAuthorizationsController extends BaseController {
         provider,
         insurer,
         coverage,
+        practitioner: practitionerFromRecord(priorAuth),
         policyHolder: null, // policyHolder can reference the patient if self, or a RelatedPerson/Organization
         motherPatient: motherPatient
       });
@@ -1834,6 +1837,7 @@ class PriorAuthorizationsController extends BaseController {
         provider,
         insurer,
         coverage,
+        practitioner: practitionerFromRecord(priorAuth),
         policyHolder: null,
         motherPatient: motherPatient
       });
@@ -1998,6 +2002,7 @@ class PriorAuthorizationsController extends BaseController {
         provider,
         insurer,
         coverage,
+        practitioner: practitionerFromRecord(formData),
         policyHolder: null,
         motherPatient: motherPatient
       });

@@ -1,13 +1,29 @@
 import ragService from '../services/ragService.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/**
+ * Outcome of storing `total` entries of which `stored` got a real embedding. Entries
+ * whose embedding failed are skipped (never stored with a placeholder vector), and any
+ * skipped entry makes the run fail with a non-zero exit code.
+ */
+export function embeddingRunSummary(total, stored) {
+  const failed = total - stored;
+  if (failed <= 0) return { failed: 0, exitCode: 0, message: `All ${total} entries stored with embeddings` };
+  return {
+    failed,
+    exitCode: 1,
+    message: `${failed} of ${total} entries were skipped because no embedding could be generated ` +
+      '(check OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL and EMBEDDING_DIM); nothing was stored for them'
+  };
+}
 
 /**
  * Seed the medical knowledge database with ophthalmology guidelines
@@ -42,7 +58,8 @@ async function seedMedicalKnowledge() {
     const results = await ragService.storeBatchKnowledge(guidelines);
 
     // Show results
-    console.log('\n✅ Seeding completed!');
+    const summary = embeddingRunSummary(guidelines.length, results.length);
+    console.log('\n✅ Seeding finished');
     console.log(`   Successfully stored: ${results.length}/${guidelines.length} guidelines\n`);
 
     // Show updated statistics
@@ -62,8 +79,12 @@ async function seedMedicalKnowledge() {
       });
     }
 
+    if (summary.exitCode !== 0) {
+      console.error(`\n❌ ${summary.message}`);
+      process.exit(summary.exitCode);
+    }
     console.log('\n🎉 Medical knowledge seeding completed successfully!');
-    process.exit(0);
+    return summary;
 
   } catch (error) {
     console.error('\n❌ Error during seeding:', error.message);
@@ -130,6 +151,11 @@ async function addCustomKnowledge() {
   console.log('\n➕ Adding custom knowledge entries...\n');
   const results = await ragService.storeBatchKnowledge(customGuidelines);
   console.log(`✅ Added ${results.length} custom guidelines\n`);
+  const summary = embeddingRunSummary(customGuidelines.length, results.length);
+  if (summary.exitCode !== 0) {
+    console.error(`❌ ${summary.message}`);
+    process.exit(summary.exitCode);
+  }
 }
 
 /**
@@ -147,6 +173,7 @@ async function main() {
   switch (command) {
     case 'seed':
       await seedMedicalKnowledge();
+      process.exit(0);
       break;
       
     case 'test':
@@ -185,9 +212,11 @@ async function main() {
   }
 }
 
-// Run the main function
-main().catch(error => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+// Run the main function (only when executed directly, so the helpers can be imported)
+if (process.argv[1] && resolve(process.argv[1]) === __filename) {
+  main().catch(error => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}
 

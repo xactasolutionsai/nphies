@@ -7,10 +7,12 @@ import DataTable from '@/components/DataTable';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Package, Shield, Plus, Send, RefreshCw, Eye, Trash2, X, CheckCircle2, AlertCircle, Clock, Layers } from 'lucide-react';
 import api, { clearApiCache } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 const COLORS = ['#553781', '#9658C4', '#8572CD', '#00DEFE', '#26A69A', '#E0E7FF'];
 
 export default function ClaimBatches() {
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [claimBatches, setClaimBatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -246,15 +248,17 @@ export default function ClaimBatches() {
               >
                 <Eye className="h-4 w-4" />
               </Button>
-              <Button
-                size="sm"
-                onClick={(e) => { e.stopPropagation(); handleSendToNphies(row.id); }}
-                disabled={actionLoading === row.id}
-                title={row.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-              {row.status === 'Draft' && (
+              {can('send') && (
+                <Button
+                  size="sm"
+                  onClick={(e) => { e.stopPropagation(); handleSendToNphies(row.id); }}
+                  disabled={actionLoading === row.id}
+                  title={row.status === 'Error' ? 'Retry Submission' : 'Send to NPHIES'}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              )}
+              {row.status === 'Draft' && can('delete') && (
                 <Button
                   size="sm"
                   variant="destructive"
@@ -277,7 +281,7 @@ export default function ClaimBatches() {
               <Clock className="h-4 w-4" />
             </Button>
           )}
-          {['Submitted', 'Queued', 'Partial'].includes(row.status) && (
+          {['Submitted', 'Queued', 'Partial'].includes(row.status) && can('poll') && (
             <Button
               size="sm"
               variant="outline"
@@ -357,10 +361,12 @@ export default function ClaimBatches() {
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
-            <Button onClick={() => navigate('/claim-batches/create')} className="bg-gradient-to-r from-primary-purple to-accent-purple">
-              <Plus className="h-5 w-5 mr-2" />
-              Create Batch
-            </Button>
+            {can('create') && (
+              <Button onClick={() => navigate('/claim-batches/create')} className="bg-gradient-to-r from-primary-purple to-accent-purple">
+                <Plus className="h-5 w-5 mr-2" />
+                Create Batch
+              </Button>
+            )}
             <div className="bg-white rounded-xl p-3 border border-gray-100">
               <Package className="h-8 w-8 text-primary-purple" />
             </div>

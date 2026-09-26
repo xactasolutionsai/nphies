@@ -461,7 +461,8 @@ export default function EyeApprovalsForm() {
         formId: id || null
       });
 
-      if (response.success && response.data) {
+      // Show failures too: the fail-closed result tells the user manual review is required.
+      if (response.data) {
         setValidationResult(response.data);
         setShowValidationModal(true);
         
