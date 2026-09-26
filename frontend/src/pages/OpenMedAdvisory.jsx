@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { API_BASE_URL, apiFetch } from '@/services/http';
 import ContextReview from '@/components/openmed/ContextReview';
+import EvidenceSummary from '@/components/openmed/EvidenceSummary';
 
 async function request(path, options = {}) {
   const response = await apiFetch(`${API_BASE_URL}/openmed${path}`, {
@@ -147,6 +148,7 @@ export default function OpenMedAdvisory() {
         <p className="text-sm text-gray-500">درجة النموذج ليست احتمال صحة تشخيص، ولا تعني أن الكيان مثبت للمريض.</p>
       </details>
     </section>}
+    {selected && <EvidenceSummary analysisId={selected.id} request={request} busy={busy} />}
     {patient && <section className="space-y-3 rounded-xl border bg-white p-5">
       <h2 className="text-xl font-semibold">استشاراتك لهذا المريض — آخر 30 نتيجة</h2>
       {!history.length && <p className="text-gray-500">لا توجد نتائج محفوظة.</p>}

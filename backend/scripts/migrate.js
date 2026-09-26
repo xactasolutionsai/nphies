@@ -110,7 +110,8 @@ export const MIGRATIONS = [
   { file: 'migrations/068_user_roles_extended.sql', afterBaseline: true },
   { file: 'migrations/069_ai_foundation.sql', afterBaseline: true },
   { file: 'migrations/070_item_type_and_discharge_disposition.sql', afterBaseline: true },
-  { file: 'migrations/071_clinical_ai_access_and_reviews.sql', afterBaseline: true }
+  { file: 'migrations/071_clinical_ai_access_and_reviews.sql', afterBaseline: true },
+  { file: 'migrations/072_clinical_knowledge_sources.sql', afterBaseline: true }
 ];
 
 // Files in migrations/ that the runner deliberately does not apply.

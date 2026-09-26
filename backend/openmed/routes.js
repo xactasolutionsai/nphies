@@ -5,6 +5,8 @@ import { advisoryQuery } from './database.js';
 import { runLocalAnalysis, runtimeReady } from './inference.js';
 import { contextForOpenMed } from '../clinical-context/openmedAdapter.js';
 import { ENGINE } from '../clinical-context/index.js';
+import { buildSummary, patientFacts, queryTerms } from '../clinical-evidence/summary.js';
+import { retrieveForTerms, corpusSnapshot } from '../clinical-evidence/retrieval.js';
 
 const uuid = Joi.string().guid({ version: ['uuidv4', 'uuidv5', 'uuidv1', 'uuidv3', 'uuidv2'] }).required();
 const sourceTypes = ['manual', 'prior_authorization', 'claim'];
@@ -157,7 +159,7 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
   // The stored model/rule output is never modified; each review is a new version.
   async function ownAnalysis(req) {
     const id = validate(uuid, req.params.id);
-    const { rows } = await query(`SELECT a.id, a.result FROM openmed_advisory.analyses a
+    const { rows } = await query(`SELECT a.id, a.result, a.input_text FROM openmed_advisory.analyses a
       WHERE a.id=$1 AND a.user_id=$2 AND ${grantSql('$2', 'a.patient_id')}`, [id, req.user.id]);
     if (!rows[0]) throw failure('Analysis not found', 404);
     return rows[0];
@@ -189,6 +191,43 @@ export function createAdvisoryRouter({ query = advisoryQuery, analyze = runLocal
       if (error.code === '23505') throw failure('Another review was saved at the same time; reload and try again', 409);
       throw error;
     }
+  }));
+  // Evidence-backed summary (extractive): patient facts from this analysis only, approved
+  // reference passages quoted verbatim, no inference. Each generation is a stored version.
+  router.post('/analyses/:id/summaries', route(async (req, res) => {
+    const analysis = await ownAnalysis(req);
+    const context = analysis.result?.context;
+    const terms = context?.status === 'ok' ? queryTerms(patientFacts(context, analysis.input_text)) : [];
+    const retrieval = await retrieveForTerms(query, terms);
+    const content = buildSummary({ context, text: analysis.input_text, retrieval });
+    const corpus = await corpusSnapshot(query);
+    try {
+      const { rows } = await query(`INSERT INTO openmed_advisory.summaries (id,analysis_id,version,created_by,content,corpus)
+        SELECT $1,$2,COALESCE((SELECT max(version) FROM openmed_advisory.summaries WHERE analysis_id=$2),0)+1,$3,$4::jsonb,$5::jsonb
+        RETURNING *`, [randomUUID(), analysis.id, req.user.id, JSON.stringify(content), JSON.stringify(corpus)]);
+      res.status(201).json(rows[0]);
+    } catch (error) {
+      if (error.code === '23505') throw failure('Another summary was saved at the same time; reload and try again', 409);
+      throw error;
+    }
+  }));
+  router.get('/analyses/:id/summaries', route(async (req, res) => {
+    const analysis = await ownAnalysis(req);
+    const { rows } = await query(`SELECT s.*, COALESCE((SELECT jsonb_agg(r ORDER BY r.created_at) FROM openmed_advisory.summary_reviews r
+        WHERE r.summary_id = s.id), '[]'::jsonb) AS reviews
+      FROM openmed_advisory.summaries s WHERE s.analysis_id=$1 ORDER BY s.version DESC LIMIT 20`, [analysis.id]);
+    res.json({ data: rows });
+  }));
+  router.post('/summaries/:id/reviews', route(async (req, res) => {
+    const id = validate(uuid, req.params.id);
+    const value = validate(Joi.object({ decision: Joi.string().valid('accepted', 'rejected').required(),
+      note: Joi.string().max(2000).allow('').default('') }).unknown(false), req.body);
+    const { rows } = await query(`INSERT INTO openmed_advisory.summary_reviews (id,summary_id,reviewer_id,decision,note)
+      SELECT $1, s.id, $3, $4, $5 FROM openmed_advisory.summaries s JOIN openmed_advisory.analyses a ON a.id = s.analysis_id
+      WHERE s.id = $2 AND a.user_id = $3 AND ${grantSql('$3', 'a.patient_id')} RETURNING *`,
+    [randomUUID(), id, req.user.id, value.decision, value.note]);
+    if (!rows[0]) throw failure('Summary not found', 404);
+    res.status(201).json(rows[0]);
   }));
   return router;
 }

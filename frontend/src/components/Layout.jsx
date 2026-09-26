@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   LayoutDashboard,
+  BookOpen,
   Users,
   Building2,
   Shield,
@@ -61,6 +62,7 @@ const masterDataItems = [
 const adminItems = [
   { name: 'Users', href: '/users', icon: Users },
   { name: 'Contacts', href: '/contacts', icon: MessageSquare },
+  { name: 'Clinical Knowledge', href: '/clinical-knowledge', icon: BookOpen },
 ];
 
 // Merged Requests & Claims section
