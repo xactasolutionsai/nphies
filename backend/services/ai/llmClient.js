@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import { getOllamaConfig, createOllamaClient, isTimeoutError } from '../ollamaConfig.js';
 import { isAIFeatureEnabled, aiModels } from './config.js';
 import { writeAudit } from './audit.js';
+import { validateAgainstSchema, parseStructuredReply } from './structuredOutput.js';
 
 const stable = value => {
   if (Array.isArray(value)) return value.map(stable);
@@ -24,37 +25,7 @@ export function hashInput(value) {
   return crypto.createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
 }
 
-const typeOf = value => {
-  if (Array.isArray(value)) return 'array';
-  if (value === null) return 'null';
-  if (typeof value === 'number') return Number.isInteger(value) ? 'integer' : 'number';
-  return typeof value;
-};
-
-/** Small JSON-schema subset validator: type, properties, required, items, enum, maxLength, maxItems. */
-export function validateAgainstSchema(schema, value, path = '$') {
-  const errors = [];
-  if (!schema || typeof schema !== 'object') return errors;
-  const actual = typeOf(value);
-  if (schema.type) {
-    const allowed = Array.isArray(schema.type) ? schema.type : [schema.type];
-    const ok = allowed.some(t => t === actual || (t === 'number' && actual === 'integer'));
-    if (!ok) return [`${path}: expected ${allowed.join('|')}, got ${actual}`];
-  }
-  if (schema.enum && !schema.enum.includes(value)) errors.push(`${path}: not one of ${schema.enum.join(', ')}`);
-  if (actual === 'string' && schema.maxLength && value.length > schema.maxLength) errors.push(`${path}: longer than ${schema.maxLength}`);
-  if (actual === 'object') {
-    for (const key of schema.required || []) if (!(key in value)) errors.push(`${path}.${key}: required`);
-    for (const [key, sub] of Object.entries(schema.properties || {})) {
-      if (key in value) errors.push(...validateAgainstSchema(sub, value[key], `${path}.${key}`));
-    }
-  }
-  if (actual === 'array') {
-    if (schema.maxItems && value.length > schema.maxItems) errors.push(`${path}: more than ${schema.maxItems} items`);
-    if (schema.items) value.forEach((item, i) => errors.push(...validateAgainstSchema(schema.items, item, `${path}[${i}]`)));
-  }
-  return errors;
-}
+export { validateAgainstSchema };
 
 export function createLlmClient({ client = null, env = process.env, audit = writeAudit, now = () => Date.now() } = {}) {
   // Read at call time: dotenv may load after this module is imported.
@@ -99,10 +70,8 @@ export function createLlmClient({ client = null, env = process.env, audit = writ
     }
 
     const latencyMs = now() - started;
-    let data = null;
-    try { data = JSON.parse(reply); } catch { data = null; }
-    const errors = data === null ? ['reply is not JSON'] : validateAgainstSchema(schema, data);
-    if (errors.length) {
+    const { ok, data, errors } = parseStructuredReply(reply, schema);
+    if (!ok) {
       const auditId = await record({ feature, userId, inputHash: hash, latencyMs, available: false, error: `schema: ${errors.slice(0, 3).join('; ')}` });
       return { available: false, reason: 'The AI reply did not match the expected format', model, latencyMs, auditId, inputHash: hash };
     }

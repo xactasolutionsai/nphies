@@ -1,11 +1,12 @@
 import medbotService from './medbotService.js';
 import { checkDuplicateIngredients, toCodedItems } from './ingredientDuplicates.js';
 import { isAIFeatureEnabled } from './ai/config.js';
+import { parseStructuredReply } from './ai/structuredOutput.js';
 
 /*
- * JSON schemas passed to Ollama as `format` (structured outputs) so the model is
- * constrained to the contract the parsers below expect. The tolerant parsers stay
- * as a fallback for servers/models that ignore the schema.
+ * JSON schemas passed to Ollama as `format` (structured outputs). Replies are parsed as
+ * strict JSON and validated against the same schema (owner item C5); anything else is
+ * reported as an incomplete analysis, never as "no interactions" / "safe".
  */
 const INTERACTION_ITEM_SCHEMA = {
   type: 'object',
@@ -83,21 +84,12 @@ export const SUGGESTIONS_SCHEMA = {
   required: ['suggestions']
 };
 
-/** Parse a model reply as JSON, tolerating prose around a single JSON object. */
-function parseJsonReply(responseText) {
-  if (typeof responseText !== 'string') return null;
-  try {
-    return JSON.parse(responseText);
-  } catch {
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-    try {
-      return JSON.parse(jsonMatch[0]);
-    } catch {
-      return null;
-    }
-  }
-}
+const readReply = (label, responseText, schema) => {
+  const { ok, data, errors } = parseStructuredReply(responseText, schema);
+  // Paths and types only: the reply itself can echo patient data.
+  if (!ok) console.warn(`${label}: AI reply rejected (${errors.slice(0, 3).join('; ')})`);
+  return ok ? data : null;
+};
 
 /**
  * Medication Safety Service
@@ -296,7 +288,11 @@ Provide JSON response:
 
       return {
         success: true,
-        suggestions,
+        suggestions: suggestions ?? [],
+        ...(suggestions ? {} : {
+          analysisIncomplete: true,
+          message: 'The AI reply did not match the expected format; no suggestions are shown.'
+        }),
         metadata: {
           model: result.model || medbotService.model,
           responseTime: result.duration,
@@ -437,14 +433,14 @@ GUIDELINES:
   }
 
   /**
-   * Parse drug interactions response.
-   * Fails closed: an unreadable reply is `analysisIncomplete` with
+   * Parse drug interactions response (INTERACTIONS_SCHEMA).
+   * Fails closed: an unreadable or non-matching reply is `analysisIncomplete` with
    * `hasInteractions: null` (unknown), never `false`.
    * @private
    */
   parseInteractionsResponse(responseText) {
-    const parsed = parseJsonReply(responseText);
-    if (parsed && Array.isArray(parsed.interactions)) {
+    const parsed = readReply('Drug interactions', responseText, INTERACTIONS_SCHEMA);
+    if (parsed) {
       return {
         hasInteractions: parsed.hasInteractions === true || parsed.interactions.length > 0,
         interactions: parsed.interactions,
@@ -452,7 +448,6 @@ GUIDELINES:
       };
     }
 
-    console.error('Failed to parse interactions JSON; reporting analysis as incomplete');
     return {
       hasInteractions: null,
       interactions: [],
@@ -465,7 +460,7 @@ GUIDELINES:
 
   /**
    * Parse comprehensive safety analysis response.
-   * Fails closed: an unreadable reply (or one missing the drugInteractions list)
+   * Fails closed: a reply that is not valid JSON or does not match SAFETY_ANALYSIS_SCHEMA
    * is flagged `analysisIncomplete` with an unknown overall risk.
    * @private
    */
@@ -485,21 +480,16 @@ GUIDELINES:
       analysisIncomplete: false
     };
 
-    const parsed = parseJsonReply(responseText);
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.drugInteractions)) {
-      const risk = ['low', 'moderate', 'high'].includes(parsed.overallRiskAssessment)
-        ? parsed.overallRiskAssessment : 'unknown';
+    const parsed = readReply('Safety analysis', responseText, SAFETY_ANALYSIS_SCHEMA);
+    if (parsed) {
       return {
         ...defaultResult,
         ...parsed,
-        overallRiskAssessment: risk,
         parsingError: false,
-        analysisIncomplete: risk === 'unknown',
-        ...(risk === 'unknown' ? { requiresManualReview: true } : {})
+        analysisIncomplete: false
       };
     }
 
-    console.warn('Could not parse safety analysis; reporting analysis as incomplete');
     return {
       ...defaultResult,
       parsingError: true,
@@ -510,16 +500,12 @@ GUIDELINES:
   }
 
   /**
-   * Parse medication suggestions response
+   * Parse medication suggestions response.
+   * @returns {Array|null} suggestions, or null when the reply is unusable
    * @private
    */
   parseSuggestionsResponse(responseText) {
-    const parsed = parseJsonReply(responseText);
-    if (parsed && Array.isArray(parsed.suggestions)) {
-      return parsed.suggestions;
-    }
-    console.error('Failed to parse suggestions JSON');
-    return [];
+    return readReply('Medication suggestions', responseText, SUGGESTIONS_SCHEMA)?.suggestions ?? null;
   }
 
   /**

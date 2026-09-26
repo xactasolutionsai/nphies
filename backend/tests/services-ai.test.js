@@ -139,8 +139,12 @@ test('Prior-auth validation keeps rule-based results and flags missing AI', asyn
   assert.ok(result.suggestions.some(s => s.type === 'ai_unavailable'));
 
   // A risk line without an NPHIES code must not crash scoring.
-  completion.mock.mockImplementation(async () => ({ response:
-    'MEDICAL_NECESSITY_SCORE: 0.8\nCONSISTENCY_CHECK: PASS\nREJECTION_RISKS:\n- Documentation of prior therapy is missing\n' }));
+  // (C5: the reply is now the PA_AI_VALIDATION_SCHEMA JSON contract instead of free text.)
+  completion.mock.mockImplementation(async () => ({ response: JSON.stringify({
+    medicalNecessityScore: 0.8, consistencyCheck: { passed: true, explanation: '' }, documentationGaps: [],
+    rejectionRisks: [{ code: null, description: 'Documentation of prior therapy is missing' }],
+    recommendations: [], justificationNarrative: ''
+  }) }));
   t.mock.method(priorAuthValidationService, 'retrieveRelevantGuidelines', async () => []);
   const withRisk = await priorAuthValidationService.validatePriorAuth({ auth_type: 'professional', vital_signs: {}, clinical_info: {} });
   assert.equal(withRisk.success, true);

@@ -1,7 +1,95 @@
 import dotenv from 'dotenv';
 import { getOllamaConfig, createOllamaClient, isTimeoutError, DEFAULT_OLLAMA_MODEL } from './ollamaConfig.js';
+import { parseStructuredReply, INVALID_REPLY_MESSAGE } from './ai/structuredOutput.js';
 
 dotenv.config();
+
+/*
+ * Structured-output contracts (owner item C5). Each schema is sent to Ollama as `format`
+ * and the reply is validated against the same schema (services/ai/structuredOutput.js).
+ * A reply that is not valid JSON or does not match is never read as a verdict: the
+ * callers below return their fail-closed shape (isValid:null / analysisIncomplete).
+ */
+const unitScore = { type: 'number', minimum: 0, maximum: 1 };
+const textList = { type: 'array', items: { type: 'string', minLength: 1 } };
+
+export const EYE_VALIDATION_SCHEMA = {
+  type: 'object',
+  properties: {
+    isValid: { type: 'boolean' },
+    confidenceScore: unitScore,
+    warnings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          field: { type: 'string' },
+          message: { type: 'string', minLength: 1 },
+          severity: { type: 'string', enum: ['low', 'medium', 'high'] }
+        },
+        required: ['field', 'message', 'severity']
+      }
+    },
+    recommendations: textList,
+    missingAnalyses: textList
+  },
+  required: ['isValid', 'confidenceScore', 'warnings', 'recommendations', 'missingAnalyses']
+};
+
+export const ENHANCED_TEXT_SCHEMA = {
+  type: 'object',
+  properties: { enhancedText: { type: 'string', minLength: 1 } },
+  required: ['enhancedText']
+};
+
+export const SNOMED_SUGGESTIONS_SCHEMA = {
+  type: 'object',
+  properties: {
+    suggestions: {
+      type: 'array',
+      maxItems: 5,
+      items: {
+        type: 'object',
+        properties: {
+          code: { type: 'string', pattern: '^[0-9]{6,18}$' },
+          display: { type: 'string', minLength: 1 }
+        },
+        required: ['code', 'display']
+      }
+    }
+  },
+  required: ['suggestions']
+};
+
+const optionalText = { type: ['string', 'null'] };
+export const SNOMED_VALIDATION_SCHEMA = {
+  type: 'object',
+  properties: {
+    isValid: { type: 'boolean' },
+    confidence: unitScore,
+    explanation: { type: 'string' },
+    correctDescription: optionalText,
+    suggestedCode: { type: ['string', 'null'], pattern: '^[0-9]{6,18}$' },
+    suggestedDescription: optionalText
+  },
+  required: ['isValid', 'confidence', 'explanation']
+};
+
+export const MEDICAL_NECESSITY_SCHEMA = {
+  type: 'object',
+  properties: {
+    necessityScore: unitScore,
+    assessment: { type: 'string', enum: ['APPROVED', 'NEEDS_INFO', 'LIKELY_DENIED'] },
+    reasoning: { type: 'string' },
+    missingElements: textList,
+    suggestedJustification: { type: 'string' }
+  },
+  required: ['necessityScore', 'assessment', 'reasoning', 'missingElements', 'suggestedJustification']
+};
+
+/** Log only the first schema errors (paths and types, never values: replies can echo PHI). */
+const logInvalidReply = (label, errors) =>
+  console.warn(`⚠️ ${label}: AI reply rejected (${errors.slice(0, 3).join('; ')})`);
 
 class OllamaService {
   constructor() {
@@ -259,29 +347,16 @@ class OllamaService {
       console.log(`📝 Prompt Length: ${prompt.length} characters\n`);
       
       const result = await this.generateCompletion(prompt, {
-        temperature: 0.2, // Lower temperature for more consistent format adherence
+        temperature: 0.2,
         num_predict: 3000,
-        repeat_penalty: 1.2 // Reduce prompt echoing and repetition
+        format: EYE_VALIDATION_SCHEMA
       });
 
       // The raw reply is not logged: it can echo patient data from the prompt.
       console.log(`⏱️  Response Time: ${(result.duration / 1000).toFixed(2)}s (${result.response?.length || 0} chars)\n`);
 
-      // Check for prompt echoing
-      const hasEcho = this.detectPromptEcho(result.response);
+      const validation = this.parseValidationResponse(result.response);
 
-      // Parse the AI response into structured format
-      const validation = this.parseValidationResponse(result.response, formData);
-      
-      // Add warning if echo was detected
-      if (hasEcho) {
-        validation.warnings.push({
-          field: 'system',
-          message: 'AI response quality may be affected by prompt echo. Consider reviewing raw output.',
-          severity: 'low'
-        });
-      }
-      
       console.log('✅ ==> PARSED VALIDATION RESULT <==');
       console.log(`   Valid: ${validation.isValid}`);
       console.log(`   Confidence: ${(validation.confidenceScore * 100).toFixed(0)}%`);
@@ -306,35 +381,6 @@ class OllamaService {
   }
 
   /**
-   * Check if response contains prompt echoing
-   * @private
-   * @param {string} responseText - The AI response text
-   * @returns {boolean} - True if echo detected
-   */
-  detectPromptEcho(responseText) {
-    const echoPatterns = [
-      'You are reviewing an ophthalmology prescription',
-      'Analyze the data and respond ONLY',
-      'As a medical AI assistant',
-      'OUTPUT REQUIRED',
-      'copy this format exactly',
-      'Now analyze the above patient data',
-      'BEGIN YOUR ANALYSIS'
-    ];
-    
-    const lowerResponse = responseText.toLowerCase();
-    const hasEcho = echoPatterns.some(pattern => 
-      lowerResponse.includes(pattern.toLowerCase())
-    );
-    
-    if (hasEcho) {
-      console.log('⚠️ Prompt echo detected in AI response!');
-    }
-    
-    return hasEcho;
-  }
-
-  /**
    * Build the validation prompt with medical context
    * @private
    */
@@ -343,9 +389,7 @@ class OllamaService {
       ? `\n\nRelevant medical guidelines:\n${relevantGuidelines.map((g, i) => `${i + 1}. ${g.content}`).join('\n')}`
       : '';
 
-    return `As a medical AI assistant, review this ophthalmology prescription and provide your analysis in the structured format below.
-
-IMPORTANT: Do NOT repeat these instructions. Start directly with your analysis using the format shown.${guidelinesContext}
+    return `Review this ophthalmology prescription for clinical consistency.${guidelinesContext}
 
 === PATIENT DATA ===
 Age: ${formData.age} years, Sex: ${formData.sex || 'Unknown'}
@@ -360,194 +404,40 @@ LEFT EYE: Sphere ${formData.left_eye_specs?.distance?.sphere || 'N/A'}, Cylinder
 Lenses: ${formData.lens_type || 'Not specified'}
 Procedures: ${formData.procedures?.map(p => p.service_description).join(', ') || 'None'}
 
-=== REQUIRED OUTPUT FORMAT ===
-
-VALIDITY: [Yes or No]
-CONFIDENCE: [0.0 to 1.0]
-
-WARNINGS:
-- [field]: [clinical concern] - Severity: [low/medium/high]
-
-RECOMMENDATIONS:
-- [clinical recommendation based on findings]
-
-MISSING_ANALYSES:
-- [suggested test if needed]
-
-=== BEGIN YOUR ANALYSIS ===`;
+=== OUTPUT ===
+Answer with one JSON object only:
+{"isValid": true|false, "confidenceScore": 0.0-1.0,
+ "warnings": [{"field": "...", "message": "clinical concern", "severity": "low|medium|high"}],
+ "recommendations": ["..."], "missingAnalyses": ["suggested test, if any"]}`;
   }
 
   /**
-   * Parse AI response into structured validation result
+   * Read the eye-form validation reply (EYE_VALIDATION_SCHEMA). Fails closed: a reply that is
+   * not valid JSON or does not match the schema gives isValid:null and requires manual review.
    * @private
    */
   parseValidationResponse(responseText) {
-    // Fail closed: nothing is "valid" until the model explicitly says so.
-    const result = {
+    const { ok, data, errors } = parseStructuredReply(responseText, EYE_VALIDATION_SCHEMA);
+    if (ok) {
+      return {
+        isValid: data.isValid,
+        confidenceScore: data.confidenceScore,
+        warnings: data.warnings,
+        recommendations: data.recommendations,
+        missingAnalyses: data.missingAnalyses,
+        analysisIncomplete: false
+      };
+    }
+    logInvalidReply('Eye form validation', errors);
+    return {
       isValid: null,
       confidenceScore: 0,
-      warnings: [],
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      warnings: [{ field: 'system', message: `${INVALID_REPLY_MESSAGE} The form has NOT been validated.`, severity: 'high' }],
       recommendations: [],
       missingAnalyses: []
     };
-
-    try {
-      // Extract validity
-      const validityMatch = responseText.match(/VALIDITY:\s*(Yes|No)/i);
-      if (validityMatch) {
-        result.isValid = validityMatch[1].toLowerCase() === 'yes';
-      } else {
-        result.analysisIncomplete = true;
-        result.requiresManualReview = true;
-        result.warnings.push({
-          field: 'system',
-          message: 'AI response did not state a validity verdict. Manual review required.',
-          severity: 'medium'
-        });
-      }
-
-      // Extract confidence score
-      const confidenceMatch = responseText.match(/CONFIDENCE:\s*([\d.]+)/i);
-      if (confidenceMatch) {
-        result.confidenceScore = parseFloat(confidenceMatch[1]);
-      }
-
-      // Extract warnings
-      const warningsSection = responseText.match(/WARNINGS:([\s\S]*?)(?=RECOMMENDATIONS:|MISSING_ANALYSES:|$)/i);
-      if (warningsSection) {
-        const warningLines = warningsSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/));
-
-        warningLines.forEach(line => {
-          const cleanLine = line.replace(/^[-*•]\s*/, '').trim();
-          const severityMatch = cleanLine.match(/Severity:\s*(high|medium|low)/i);
-          const severity = severityMatch ? severityMatch[1].toLowerCase() : 'medium';
-          const message = cleanLine.replace(/\s*-\s*Severity:\s*(high|medium|low)/i, '').trim();
-          
-          if (message && message.length > 5) {
-            const fieldMatch = message.match(/^\[(.*?)\]:\s*(.*)/) || message.match(/^(.*?):\s*(.*)/);
-            result.warnings.push({
-              field: fieldMatch ? fieldMatch[1].trim() : 'general',
-              message: fieldMatch ? fieldMatch[2].trim() : message,
-              severity
-            });
-          }
-        });
-      }
-
-      // Extract recommendations
-      const recommendationsSection = responseText.match(/RECOMMENDATIONS:([\s\S]*?)(?=MISSING_ANALYSES:|$)/i);
-      if (recommendationsSection) {
-        const recLines = recommendationsSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/));
-
-        recLines.forEach(line => {
-          const cleanLine = line.replace(/^[-*•]\s*/, '').trim();
-          if (cleanLine && cleanLine.length > 5) {
-            result.recommendations.push(cleanLine);
-          }
-        });
-      }
-
-      // Extract missing analyses
-      const missingSection = responseText.match(/MISSING_ANALYSES:([\s\S]*?)$/i);
-      if (missingSection) {
-        const missingLines = missingSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/));
-
-        missingLines.forEach(line => {
-          const cleanLine = line.replace(/^[-*•]\s*/, '').trim();
-          if (cleanLine && cleanLine.length > 5) {
-            result.missingAnalyses.push(cleanLine);
-          }
-        });
-      }
-
-      // If parsing found nothing, fallback
-      if (
-        result.warnings.length === 0 &&
-        result.recommendations.length === 0 &&
-        result.missingAnalyses.length === 0
-      ) {
-        console.log(`⚠️ Structured parsing found nothing, using fallback parsing (${responseText.length} chars)...`);
-        
-        const instructionPatterns = [
-          /you are (reviewing|analyzing)/i,
-          /analyze the data/i,
-          /respond only/i,
-          /output required/i,
-          /copy this format/i,
-          /now analyze/i,
-          /^(===|---)/,
-          /^\[.*\]$/,
-          /begin (your )?analysis/i,
-          /required output format/i,
-          /patient data/i,
-          /important:/i,
-          /do not repeat/i,
-          /structured format/i,
-          /medical ai assistant/i
-        ];
-        
-        const lines = responseText.split('\n').filter(l => l.trim().length > 10);
-        
-        let addedCount = 0;
-        for (const line of lines) {
-          const trimmed = line.trim();
-          const isInstruction = instructionPatterns.some(pattern => pattern.test(trimmed));
-          
-          if (
-            trimmed &&
-              !isInstruction &&
-              !trimmed.match(/^(VALIDITY|CONFIDENCE|WARNINGS|RECOMMENDATIONS|MISSING_ANALYSES):/i) &&
-            trimmed.length > 20 &&
-            addedCount < 10
-          ) {
-            const cleaned = trimmed
-              .replace(/^[-*•]\s*/, '')
-              .replace(/^\d+\.\s*/, '');
-
-            if (
-              cleaned.length > 20 &&
-              !cleaned.match(/^\[.*\]$/) &&
-              cleaned.split(' ').length >= 4
-            ) {
-              result.recommendations.push(cleaned);
-              addedCount++;
-            }
-          }
-        }
-        
-        if (result.recommendations.length === 0) {
-          result.recommendations.push(
-            'AI analysis completed. Please review the raw response in server logs for details.'
-          );
-          result.warnings.push({
-            field: 'parsing',
-            message: 'AI response format not recognized. Check server logs for full response.',
-            severity: 'low'
-          });
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error parsing validation response:', error.message);
-      result.isValid = null;
-      result.analysisIncomplete = true;
-      result.requiresManualReview = true;
-      result.warnings.push({
-        field: 'parsing',
-        message: 'Unable to fully parse AI response. Manual review recommended.',
-        severity: 'medium'
-      });
-    }
-
-    return result;
   }
 
   // ============================================================================
@@ -620,11 +510,14 @@ MISSING_ANALYSES:
    * @returns {Promise<object>} - Enhanced text result
    */
   async enhanceClinicalText(text, field, context = {}) {
+    // Any failure returns the original text unchanged (enhanced:false); the UI keeps the input.
+    const unchanged = (error, extra = {}) => ({
+      success: false, enhanced: false, originalText: text, enhancedText: text, error, ...extra
+    });
     const prompt = this.buildClinicalEnhancementPrompt(text, field, context);
 
     try {
       console.log('\n📝 ==> AI CLINICAL TEXT ENHANCEMENT REQUEST <==');
-      console.log(`📅 Timestamp: ${new Date().toISOString()}`);
       console.log(`🤖 Model: ${this.model}`);
       console.log(`📋 Field: ${field}`);
       console.log(`📝 Original Text Length: ${text?.length || 0} characters`);
@@ -633,141 +526,34 @@ MISSING_ANALYSES:
       const result = await this.generateCompletion(prompt, {
         temperature: 0.4,
         num_predict: 3000,
-        repeat_penalty: 1.1,
         top_p: 0.92,
-        num_ctx: 4096
+        num_ctx: 4096,
+        format: ENHANCED_TEXT_SCHEMA
       });
+      const metadata = {
+        model: this.model,
+        responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+        timestamp: new Date().toISOString()
+      };
 
-      let enhancedText = this.parseEnhancedTextResponse(result.response);
+      const { ok, data, errors } = parseStructuredReply(result.response, ENHANCED_TEXT_SCHEMA);
+      if (!ok) {
+        logInvalidReply('Clinical text enhancement', errors);
+        return unchanged('The AI reply did not match the expected format; your text was not changed. Please try again.',
+          { analysisIncomplete: true, metadata });
+      }
+
+      const enhancedText = data.enhancedText.trim();
+      // Length sanity check on the parsed value: a reply far shorter than the input was cut off.
+      if (enhancedText.length < (text?.length || 0) * 0.5) {
+        return unchanged('AI response was truncated or incomplete; your text was not changed. Please try again.', { metadata });
+      }
 
       console.log(`✅ Enhanced text generated (${enhancedText.length} characters)\n`);
-
-      // Clean up the response
-      let cleanedText = enhancedText;
-      
-      // Remove any echo of the prompt
-      const promptEchoPatterns = [
-        /^rewrite this clinical note.*?:\s*/i,
-        /^detailed version:\s*/i,
-        /^["'].*?["']\s*\n*detailed version:\s*/i,
-        /^enhance this .* for a medical/i,
-        /^you are a medical documentation/i,
-      ];
-      
-      for (const pattern of promptEchoPatterns) {
-        cleanedText = cleanedText.replace(pattern, '');
-      }
-      
-      // If response starts with the original text in quotes, remove it
-      if (cleanedText.startsWith('"') || cleanedText.startsWith("'")) {
-        const quoteEnd = cleanedText.indexOf(cleanedText[0], 1);
-        if (quoteEnd > 0 && quoteEnd < 200) {
-          // Check if there's more content after the quoted original
-          const afterQuote = cleanedText.substring(quoteEnd + 1).trim();
-          if (afterQuote.length > 30) {
-            cleanedText = afterQuote.replace(/^detailed version:\s*/i, '').trim();
-          }
-        }
-      }
-      
-      // Remove leading/trailing quotes
-      cleanedText = cleanedText
-        .replace(/^["']+/, '')
-        .replace(/["']+$/, '')
-        .trim();
-      
-      // Check for various failure modes where AI echoes instructions instead of enhancing
-      const failurePatterns = [
-        /^i am a/i,
-        /^please write/i,
-        /^as a/i,
-        /^enhance this/i,
-        /^rewrite and expand/i,
-        /^your task is/i,
-        /^field type:/i,
-        /^clinical context:/i,
-        /^text to enhance:/i,
-        /^instructions:/i,
-        /^write the expanded/i,
-        /^you are a medical/i,
-        /^you are an expert/i,
-        /for a medical insurance prior authorization/i,
-        /into detailed professional medical documentation/i,
-        /into professional medical documentation/i,
-      ];
-      
-      const isFailure = failurePatterns.some(pattern => pattern.test(cleanedText));
-      if (isFailure) {
-        console.warn('⚠️ AI echoed instructions instead of enhancing the text');
-        return {
-          success: false,
-          originalText: text,
-          enhancedText: text,
-          error: 'AI did not enhance the text properly. The model may be overloaded. Please try again.',
-          metadata: {
-            model: this.model,
-            responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-            timestamp: new Date().toISOString()
-          }
-        };
-      }
-
-      // Check minimum length - enhanced text should be at least as long as original or close
-      if (!cleanedText || cleanedText.length < 20) {
-        console.warn('⚠️ Enhanced text too short or empty');
-        return {
-          success: false,
-          originalText: text,
-          enhancedText: text,
-          error: 'AI returned insufficient content. Try adding more detail to your input.',
-          metadata: {
-            model: this.model,
-            responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-            timestamp: new Date().toISOString()
-          }
-        };
-      }
-      
-      // Additional check: if the "enhanced" text is much shorter than original, something went wrong
-      if (cleanedText.length < text.length * 0.5) {
-        console.warn('⚠️ Enhanced text is significantly shorter than original - likely a parsing issue');
-        return {
-          success: false,
-          originalText: text,
-          enhancedText: text,
-          error: 'AI response was truncated or incomplete. Please try again.',
-          metadata: {
-            model: this.model,
-            responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-            timestamp: new Date().toISOString()
-          }
-        };
-      }
-
-      enhancedText = cleanedText;
-
-      return {
-        success: true,
-        originalText: text,
-        enhancedText,
-        metadata: {
-          model: this.model,
-          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-          timestamp: new Date().toISOString()
-        }
-      };
+      return { success: true, enhanced: true, originalText: text, enhancedText, metadata };
     } catch (error) {
       console.error('❌ Error enhancing clinical text:', error.message);
-      return {
-        success: false,
-        originalText: text,
-        enhancedText: text,
-        error: error.message,
-        metadata: {
-          model: this.model,
-          timestamp: new Date().toISOString()
-        }
-      };
+      return unchanged(error.message, { metadata: { model: this.model, timestamp: new Date().toISOString() } });
     }
   }
 
@@ -941,114 +727,11 @@ REQUIREMENTS:
 3. Use professional medical language suitable for insurance documentation
 4. Include relevant temporal markers, severity descriptors, and clinical observations where appropriate
 5. Format as a cohesive narrative paragraph or structured note as appropriate for the field type
-6. Do NOT include any preamble, explanations, or meta-commentary - output ONLY the enhanced clinical text
+6. Answer with one JSON object only: {"enhancedText": "<the enhanced clinical text>"} - no preamble, explanations, or meta-commentary
 </|user|>
 
 <|assistant|>
 `;
-  }
-
-  /**
-   * Parse enhanced text response
-   * @private
-   */
-  parseEnhancedTextResponse(response) {
-    let text = response || '';
-
-    // Remove Llama3 chat format tokens first
-    text = text.replace(/<\|system\|>[\s\S]*?<\/\|system\|>/gi, '');
-    text = text.replace(/<\|user\|>[\s\S]*?<\/\|user\|>/gi, '');
-    text = text.replace(/<\|assistant\|>/gi, '');
-    text = text.replace(/<\/\|assistant\|>/gi, '');
-    text = text.replace(/<\|end\|>/gi, '');
-    text = text.replace(/<\|eot_id\|>/gi, '');
-    text = text.replace(/<\|start_header_id\|>.*?<\|end_header_id\|>/gi, '');
-
-    // Patterns that indicate the AI echoed the prompt instead of responding
-    const echoPatterns = [
-      /^Rewrite and expand this/i,
-      /^Enhance this .* for a medical/i,
-      /^You are a medical documentation specialist/i,
-      /^You are an expert medical/i,
-      /^You are a .* specialist/i,
-      /^Your task is to rewrite/i,
-      /^Your task is to expand/i,
-      /^FIELD TYPE:/i,
-      /^CLINICAL CONTEXT:/i,
-      /^TEXT TO ENHANCE:/i,
-      /^INSTRUCTIONS:/i,
-      /^1\. Expand the text/i,
-      /^Output ONLY the enhanced text/i,
-      /^Write the expanded .* now/i,
-      /into detailed professional medical documentation/i,
-      /into professional medical documentation suitable/i,
-      /suitable for insurance prior authorization/i,
-      /^Expand the following/i,
-      /^ORIGINAL TEXT:/i,
-      /^REQUIREMENTS:/i,
-    ];
-    
-    // Check if the response is just echoing the prompt
-    const isEcho = echoPatterns.some(pattern => pattern.test(text.trim()));
-    if (isEcho) {
-      console.warn('⚠️ AI echoed the prompt instead of enhancing. Returning empty.');
-      return '';
-    }
-
-    const prefixPatterns = [
-      /^ENHANCED_TEXT:\s*/i,
-      /^ENHANCED\s+[A-Z\s]+:\s*/i, // ENHANCED PATIENT HISTORY:, ENHANCED TREATMENT PLAN:, etc.
-      /^Enhanced\s*(Text|Version|Content)?:\s*/i,
-      /^Here('s| is) the enhanced.*?:\s*/i,
-      /^The enhanced.*?:\s*/i,
-      /^Here is the expanded.*?:\s*/i,
-      /^Below is the expanded.*?:\s*/i,
-      /^Please enhance.*$/im,
-      /^You are a medical.*$/im,
-      /^You are an expert.*$/im,
-      /^<\|assistant\|>\s*/i,
-      /^Assistant:\s*/i,
-      /^Sure[,!]?\s*(here('s| is))?.*?:\s*/i,
-      /^Certainly[,!]?\s*(here('s| is))?.*?:\s*/i,
-      /^Rewrite and expand.*?:\s*/i,
-      /^Write the expanded.*?:\s*/i,
-      /^\*\*Enhanced.*?\*\*:?\s*/i,
-      /^\*\*Expanded.*?\*\*:?\s*/i,
-    ];
-
-    for (const pattern of prefixPatterns) {
-      text = text.replace(pattern, '');
-    }
-
-    text = text.replace(/\n*<\|.*?\|>.*$/s, '');
-    text = text.replace(/\n*===.*$/s, '');
-    text = text.replace(/\n*---.*$/s, '');
-    
-    // Remove any trailing instruction echoes
-    text = text.replace(/\n*INSTRUCTIONS:[\s\S]*$/i, '');
-    text = text.replace(/\n*CLINICAL CONTEXT:[\s\S]*$/i, '');
-    text = text.replace(/\n*Context:[\s\S]*$/i, '');
-    text = text.replace(/\n*REQUIREMENTS:[\s\S]*$/i, '');
-    text = text.replace(/\n*Note:[\s\S]{0,200}$/i, ''); // Remove trailing notes
-
-    text = text.trim();
-    
-    // Remove surrounding quotes
-    if (
-      (text.startsWith('"') && text.endsWith('"')) ||
-      (text.startsWith("'") && text.endsWith("'"))
-    ) {
-      text = text.slice(1, -1);
-    }
-    
-    // Remove markdown bold markers around the entire text
-    if (text.startsWith('**') && text.endsWith('**')) {
-      text = text.slice(2, -2);
-    }
-
-    text = text.replace(/^[\s\n]+/, '').replace(/[\s\n]+$/, '');
-
-    return text;
   }
 
   // ============================================================================
@@ -1078,23 +761,24 @@ REQUIREMENTS:
       const result = await this.generateCompletion(prompt, {
         temperature: 0.2,
         num_predict: 600,
-        repeat_penalty: 1.1
+        format: SNOMED_SUGGESTIONS_SCHEMA
       });
-
-      const suggestions = this.parseSnomedSuggestionsResponse(result.response);
-
-      console.log(`✅ Found ${suggestions.length} SNOMED suggestions\n`);
-
-      return {
-        success: true,
-        originalText: text,
-        suggestions,
-        metadata: {
-          model: this.model,
-          responseTime: `${(result.duration / 1000).toFixed(2)}s`,
-          timestamp: new Date().toISOString()
-        }
+      const metadata = {
+        model: this.model,
+        responseTime: `${(result.duration / 1000).toFixed(2)}s`,
+        timestamp: new Date().toISOString()
       };
+
+      const parsed = this.parseSnomedSuggestionsResponse(result.response);
+      if (!parsed) {
+        return {
+          success: false, originalText: text, suggestions: [], analysisIncomplete: true,
+          error: INVALID_REPLY_MESSAGE, metadata
+        };
+      }
+
+      console.log(`✅ Found ${parsed.length} SNOMED suggestions\n`);
+      return { success: true, originalText: text, suggestions: parsed, metadata };
     } catch (error) {
       console.error('❌ Error suggesting SNOMED codes:', error.message);
       return { success: false, suggestions: [], error: error.message };
@@ -1115,37 +799,23 @@ ${text}
 ${category}
 
 === REQUIREMENTS ===
-Provide up to 5 relevant SNOMED CT codes with their descriptions. Format each suggestion as:
-CODE: [SNOMED code] - [Description]
-
+Provide up to 5 relevant SNOMED CT codes with their descriptions.
 Focus on the most specific and accurate codes for the clinical description.
-
-=== SNOMED SUGGESTIONS ===`;
+Answer with one JSON object only: {"suggestions": [{"code": "<SNOMED CT concept id>", "display": "<description>"}]}`;
   }
 
   /**
-   * Parse SNOMED suggestions response
+   * Read the SNOMED suggestion reply (SNOMED_SUGGESTIONS_SCHEMA).
+   * @returns {Array|null} suggestions, or null when the reply is unusable
    * @private
    */
   parseSnomedSuggestionsResponse(response) {
-    const suggestions = [];
-    const lines = response.split('\n');
-
-    lines.forEach(line => {
-      const match =
-        line.match(/CODE:\s*(\d+)\s*-\s*(.+)/i) ||
-        line.match(/(\d{6,})\s*[-:]\s*(.+)/) ||
-        line.match(/^-?\s*(\d{6,})\s*[-:–]\s*(.+)/);
-
-      if (match) {
-        suggestions.push({
-          code: match[1].trim(),
-          display: match[2].trim().replace(/^\s*-\s*/, '')
-        });
-      }
-    });
-
-    return suggestions.slice(0, 5);
+    const { ok, data, errors } = parseStructuredReply(response, SNOMED_SUGGESTIONS_SCHEMA);
+    if (!ok) {
+      logInvalidReply('SNOMED suggestions', errors);
+      return null;
+    }
+    return data.suggestions.map(({ code, display }) => ({ code, display: display.trim() }));
   }
 
   /**
@@ -1176,22 +846,14 @@ Focus on the most specific and accurate codes for the clinical description.
       const result = await this.generateCompletion(prompt, {
         temperature: 0.1, // Very low temperature for consistent validation
         num_predict: 800,
-        repeat_penalty: 1.2
+        format: SNOMED_VALIDATION_SCHEMA
       });
 
       const validation = this.parseSnomedValidationResponse(result.response);
-
-      console.log(`\n✅ Validation Result: ${validation.isValid ? 'VALID' : 'INVALID'}`);
-      console.log(`   Confidence: ${(validation.confidence * 100).toFixed(0)}%`);
-      if (validation.correctDescription) {
-        console.log(`   Correct Description: ${validation.correctDescription}`);
-      }
-      if (validation.suggestedCode) {
-        console.log(`   Suggested Code: ${validation.suggestedCode}`);
-      }
+      console.log(`\n✅ Validation Result: ${validation.isValid === null ? 'UNREADABLE' : validation.isValid ? 'VALID' : 'INVALID'}`);
 
       return {
-        success: true,
+        success: !validation.analysisIncomplete,
         code,
         providedDescription: description,
         ...validation,
@@ -1234,75 +896,44 @@ Provided Description: ${description}
 4. If the description is valid but the code is wrong, suggest the correct code
 5. Rate your confidence in this validation (0.0 to 1.0)
 
-=== OUTPUT FORMAT ===
-VALID: [YES/NO]
-CONFIDENCE: [0.0-1.0]
-EXPLANATION: [Brief explanation of your validation]
-CORRECT_DESCRIPTION: [The official SNOMED CT description for this code, or "N/A" if code is invalid]
-SUGGESTED_CODE: [If description is valid but code is wrong, provide correct code, otherwise "N/A"]
-SUGGESTED_DESCRIPTION: [If you have a better matching term, provide it, otherwise "N/A"]
-
-=== BEGIN VALIDATION ===`;
+=== OUTPUT ===
+Answer with one JSON object only:
+{"isValid": true|false, "confidence": 0.0-1.0, "explanation": "brief explanation",
+ "correctDescription": "official description for this code, or null if the code is invalid",
+ "suggestedCode": "correct code if the description is valid but the code is wrong, otherwise null",
+ "suggestedDescription": "a better matching term, otherwise null"}`;
   }
 
   /**
-   * Parse SNOMED validation response
+   * Read the SNOMED validation reply (SNOMED_VALIDATION_SCHEMA). Fails closed: an unusable
+   * reply is isValid:null (unknown), never "valid" or "invalid".
    * @private
    */
   parseSnomedValidationResponse(response) {
-    const result = {
-      isValid: false,
-      confidence: 0.5,
+    const { ok, data, errors } = parseStructuredReply(response, SNOMED_VALIDATION_SCHEMA);
+    if (ok) {
+      return {
+        isValid: data.isValid,
+        confidence: data.confidence,
+        explanation: data.explanation,
+        correctDescription: data.correctDescription ?? null,
+        suggestedCode: data.suggestedCode ?? null,
+        suggestedDescription: data.suggestedDescription ?? null,
+        analysisIncomplete: false
+      };
+    }
+    logInvalidReply('SNOMED validation', errors);
+    return {
+      isValid: null,
+      confidence: 0,
       explanation: '',
       correctDescription: null,
       suggestedCode: null,
-      suggestedDescription: null
+      suggestedDescription: null,
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      error: INVALID_REPLY_MESSAGE
     };
-
-    try {
-      // Extract validity
-      const validMatch = response.match(/VALID:\s*(YES|NO)/i);
-      if (validMatch) {
-        result.isValid = validMatch[1].toUpperCase() === 'YES';
-      }
-
-      // Extract confidence
-      const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-      if (confidenceMatch) {
-        result.confidence = parseFloat(confidenceMatch[1]);
-        // Clamp to 0-1 range
-        result.confidence = Math.max(0, Math.min(1, result.confidence));
-      }
-
-      // Extract explanation
-      const explanationMatch = response.match(/EXPLANATION:\s*([^\n]+)/i);
-      if (explanationMatch) {
-        result.explanation = explanationMatch[1].trim();
-      }
-
-      // Extract correct description
-      const correctDescMatch = response.match(/CORRECT_DESCRIPTION:\s*([^\n]+)/i);
-      if (correctDescMatch && correctDescMatch[1].trim().toLowerCase() !== 'n/a') {
-        result.correctDescription = correctDescMatch[1].trim();
-      }
-
-      // Extract suggested code
-      const suggestedCodeMatch = response.match(/SUGGESTED_CODE:\s*(\d+|N\/A)/i);
-      if (suggestedCodeMatch && suggestedCodeMatch[1].toLowerCase() !== 'n/a') {
-        result.suggestedCode = suggestedCodeMatch[1].trim();
-      }
-
-      // Extract suggested description
-      const suggestedDescMatch = response.match(/SUGGESTED_DESCRIPTION:\s*([^\n]+)/i);
-      if (suggestedDescMatch && suggestedDescMatch[1].trim().toLowerCase() !== 'n/a') {
-        result.suggestedDescription = suggestedDescMatch[1].trim();
-      }
-
-    } catch (error) {
-      console.error('❌ Error parsing SNOMED validation response:', error.message);
-    }
-
-    return result;
   }
 
   // ============================================================================
@@ -1325,12 +956,12 @@ SUGGESTED_DESCRIPTION: [If you have a better matching term, provide it, otherwis
       const result = await this.generateCompletion(prompt, {
         temperature: 0.3,
         num_predict: 1500,
-        repeat_penalty: 1.2
+        format: MEDICAL_NECESSITY_SCHEMA
       });
 
       const assessment = this.parseMedicalNecessityResponse(result.response);
 
-      console.log(`✅ Assessment complete: ${assessment.assessment}\n`);
+      console.log(`✅ Assessment complete: ${assessment.assessment ?? 'unreadable reply'}\n`);
 
       return {
         ...assessment,
@@ -1435,59 +1066,43 @@ Plan: ${clinicalInfo.treatment_plan || 'Not documented'}
 3. Are the requested services appropriate for the patient's age?
 4. What additional documentation would strengthen the case?
 
-=== OUTPUT FORMAT ===
-NECESSITY_SCORE: [0.0-1.0]
-ASSESSMENT: [APPROVED/NEEDS_INFO/LIKELY_DENIED]
-REASONING: [Brief explanation]
-MISSING_ELEMENTS:
-- [Element 1]
-- [Element 2]
-SUGGESTED_JUSTIFICATION: [A sentence that could be added to support medical necessity]`;
+=== OUTPUT ===
+Answer with one JSON object only:
+{"necessityScore": 0.0-1.0, "assessment": "APPROVED|NEEDS_INFO|LIKELY_DENIED",
+ "reasoning": "brief explanation", "missingElements": ["..."],
+ "suggestedJustification": "a sentence that could be added to support medical necessity"}`;
   }
 
   /**
-   * Parse medical necessity response
+   * Read the medical necessity reply (MEDICAL_NECESSITY_SCHEMA). Fails closed: an unusable
+   * reply has no score and no assessment (null) and requires manual review.
    * @private
    */
   parseMedicalNecessityResponse(response) {
-    const result = {
-      success: true,
-      necessityScore: 0.5,
-      assessment: 'NEEDS_INFO',
+    const { ok, data, errors } = parseStructuredReply(response, MEDICAL_NECESSITY_SCHEMA);
+    if (ok) {
+      return {
+        success: true,
+        necessityScore: data.necessityScore,
+        assessment: data.assessment,
+        reasoning: data.reasoning,
+        missingElements: data.missingElements,
+        suggestedJustification: data.suggestedJustification,
+        analysisIncomplete: false
+      };
+    }
+    logInvalidReply('Medical necessity', errors);
+    return {
+      success: false,
+      necessityScore: null,
+      assessment: null,
       reasoning: '',
       missingElements: [],
-      suggestedJustification: ''
+      suggestedJustification: '',
+      analysisIncomplete: true,
+      requiresManualReview: true,
+      error: INVALID_REPLY_MESSAGE
     };
-
-    try {
-      const scoreMatch = response.match(/NECESSITY_SCORE:\s*([\d.]+)/i);
-      if (scoreMatch) result.necessityScore = parseFloat(scoreMatch[1]);
-
-      const assessmentMatch = response.match(/ASSESSMENT:\s*(APPROVED|NEEDS_INFO|LIKELY_DENIED)/i);
-      if (assessmentMatch) result.assessment = assessmentMatch[1];
-
-      const reasoningMatch = response.match(/REASONING:\s*([^\n]+)/i);
-      if (reasoningMatch) result.reasoning = reasoningMatch[1].trim();
-
-      const missingSection = response.match(
-        /MISSING_ELEMENTS:([\s\S]*?)(?=SUGGESTED_JUSTIFICATION:|$)/i
-      );
-      if (missingSection) {
-        result.missingElements = missingSection[1]
-          .trim()
-          .split('\n')
-          .filter(line => line.trim().match(/^[-*•]/))
-          .map(line => line.replace(/^[-*•]\s*/, '').trim())
-          .filter(e => e.length > 3);
-      }
-
-      const justificationMatch = response.match(/SUGGESTED_JUSTIFICATION:\s*([^\n]+)/i);
-      if (justificationMatch) result.suggestedJustification = justificationMatch[1].trim();
-    } catch (error) {
-      console.error('❌ Error parsing medical necessity response:', error.message);
-    }
-
-    return result;
   }
 }
 

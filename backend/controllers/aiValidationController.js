@@ -24,7 +24,8 @@ class AIValidationController {
         });
       }
 
-      console.log(`🔍 AI validation request received for ${formData.insured_name || 'patient'}`);
+      // Patient identity is not logged (PHI).
+      console.log('🔍 AI eye-form validation request received');
 
       // Perform validation
       const validationResult = await medicalValidationService.validateEyeForm(formData, options);
@@ -320,7 +321,7 @@ class AIValidationController {
         });
       }
 
-      console.log(`🏷️ SNOMED suggestion request for: ${text.substring(0, 50)}...`);
+      console.log(`🏷️ SNOMED suggestion request (${String(text).length} chars)`);
 
       const result = await ollamaService.suggestSnomedCodes(text, category || 'chief_complaint');
 
