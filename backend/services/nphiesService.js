@@ -5,7 +5,7 @@ import { paymentNoticeContext } from '../utils/paymentNoticeContext.js';
 /**
  * NPHIES API Service
  * Handles communication with NPHIES OBA test environment
- * Reference: http://176.105.150.83/$process-message
+ * Endpoint: ${NPHIES_BASE_URL}/$process-message
  */
 
 import axios from 'axios';
@@ -32,9 +32,19 @@ function describeOutcomeIssues(issues = []) {
 
 class NphiesService {
   constructor() {
-    this.baseURL = process.env.NPHIES_BASE_URL || 'http://176.105.150.83';
+    this._baseURLOverride = null;
     this.timeout = parseInt(process.env.NPHIES_TIMEOUT || '60000');
     this.retryAttempts = parseInt(process.env.NPHIES_RETRY_ATTEMPTS || '3');
+  }
+
+  // Read from config at call time so a missing NPHIES_BASE_URL fails clearly
+  // instead of silently targeting a hardcoded host. Tests may override it.
+  get baseURL() {
+    return this._baseURLOverride || NPHIES_CONFIG.BASE_URL;
+  }
+
+  set baseURL(value) {
+    this._baseURLOverride = value;
   }
 
   /**

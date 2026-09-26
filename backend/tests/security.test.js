@@ -47,7 +47,7 @@ test('Administrator privileges come from the database, not JWT email or role', a
   process.env.JWT_SECRET = 'test-only-private-secret-with-at-least-32-chars';
   t.after(() => { if (original === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = original; });
   t.mock.method(pool, 'query', async () => ({ rows: [{ id: 1, email: 'ordinary@example.test', role: 'user' }] }));
-  const token = jwt.sign({ userId: 1, email: 'eng.anasshamia@gmail.com', role: 'admin' }, getJwtSecret());
+  const token = jwt.sign({ userId: 1, email: 'admin@example.test', role: 'admin' }, getJwtSecret());
   const req = { headers: { authorization: `Bearer ${token}` }, query: {} };
   await authenticateToken(req, response(), () => {});
   const res = response();
