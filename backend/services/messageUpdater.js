@@ -10,7 +10,7 @@ import { transaction } from '../db.js';
 import advancedAuthParser from './advancedAuthParser.js';
 import CommunicationMapper from './communicationMapper.js';
 import PaymentReconciliationService from './paymentReconciliationService.js';
-import { setLocalSearchPath, withSchemaClient, withSchemaTransaction } from './dbSchema.js';
+import { setLocalSearchPath, withSchemaClient, withSchemaTransaction, lockAdvancedAuthorizationIdentifier } from './dbSchema.js';
 
 const mapper = new CommunicationMapper();
 
@@ -528,10 +528,7 @@ class MessageUpdater {
 
       // Check if already exists by identifier
       if (parsed.identifier_value) {
-        await client.query(
-          'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-          [`advanced_authorizations:${parsed.identifier_value}`]
-        );
+        await lockAdvancedAuthorizationIdentifier(client, parsed.identifier_value);
         const existing = await client.query(
           'SELECT id FROM advanced_authorizations WHERE identifier_value = $1',
           [parsed.identifier_value]

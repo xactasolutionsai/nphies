@@ -32,6 +32,19 @@ export async function setLocalSearchPath(client, schemaName) {
 }
 
 /**
+ * Serialize check-then-insert of an advanced authorization by identifier for the
+ * rest of the current transaction. advanced_authorizations has no unique key on
+ * identifier_value, and both the manual poll (controller) and the system poll
+ * (messageUpdater) insert into it, so both must take this same lock.
+ */
+export async function lockAdvancedAuthorizationIdentifier(client, identifierValue) {
+  await client.query(
+    'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+    [`advanced_authorizations:${identifierValue}`]
+  );
+}
+
+/**
  * Check out a pooled client with search_path set for the session.
  * Always pair with releaseSchemaClient(), which restores the default.
  */

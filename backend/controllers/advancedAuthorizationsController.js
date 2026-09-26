@@ -9,6 +9,7 @@
 import { connectForSchema, releaseSchemaClient, contentDisposition, sendCommunicationRequestAttachment } from './controllerHelpers.js';
 import nphiesService from '../services/nphiesService.js';
 import advancedAuthParser from '../services/advancedAuthParser.js';
+import { lockAdvancedAuthorizationIdentifier } from '../services/dbSchema.js';
 import CommunicationMapper from '../services/communicationMapper.js';
 import advancedAuthCommunicationService from '../services/advancedAuthCommunicationService.js';
 import priorAuthMapper from '../services/priorAuthMapper/index.js';
@@ -326,10 +327,7 @@ class AdvancedAuthorizationsController {
       await client.query('BEGIN');
       inTransaction = true;
       if (parsed.identifier_value) {
-        await client.query(
-          "SELECT pg_advisory_xact_lock(hashtext('advanced_authorizations'), hashtext($1))",
-          [parsed.identifier_value]
-        );
+        await lockAdvancedAuthorizationIdentifier(client, parsed.identifier_value);
       }
 
       // Check if already exists by identifier

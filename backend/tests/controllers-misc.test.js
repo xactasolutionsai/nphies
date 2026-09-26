@@ -168,6 +168,11 @@ test('Advanced authorization save serializes concurrent polls of the same APA', 
   const sql = calls.map(c => c.sql);
   assert.equal(sql[0], 'BEGIN');
   assert.match(sql[1], /pg_advisory_xact_lock/);
+  // Same lock key as the system poll (messageUpdater), so the two paths exclude each other
+  assert.deepEqual(
+    { sql: calls[1].sql, params: calls[1].params },
+    { sql: 'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', params: ['advanced_authorizations:APA-1'] }
+  );
   assert.equal(sql.at(-1), 'COMMIT');
 });
 

@@ -280,6 +280,9 @@ test('Advanced authorization save is serialized with an advisory lock in a trans
   assert.equal(result.isNew, true);
   const lock = fake.calls.find(c => c.sql.includes('pg_advisory_xact_lock'));
   assert.ok(lock && lock.inTransaction);
+  // Same lock key as the manual poll (advancedAuthorizationsController)
+  assert.equal(lock.sql, 'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))');
+  assert.deepEqual(lock.params, ['advanced_authorizations:AA-9']);
   assert.ok(fake.calls.findIndex(c => c.sql.includes('pg_advisory_xact_lock')) < fake.calls.findIndex(c => c.sql.includes('SELECT id FROM advanced_authorizations')));
 });
 
