@@ -17,7 +17,7 @@ const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
 
 const drgReviewSchema = Joi.object({ justification: Joi.string().trim().min(10).max(4000).required(), cds_reviewer: Joi.string().trim().max(255).required(), coding_reviewer: Joi.string().trim().max(255).required() });
 const drgJsonFields = ['drg_grouper_output', 'drg_procedures'];
-const groupingFields = ['encounter_start', 'encounter_end', 'encounter_class', 'sub_type', 'patient_id', 'is_newborn', 'birth_weight', 'ventilation_hours', 'drg_leave_days', 'drg_ventilation_used', 'drg_no_procedures', 'drg_procedures', 'discharge_disposition'];
+const groupingFields = ['encounter_start', 'encounter_end', 'encounter_class', 'sub_type', 'patient_id', 'is_newborn', 'birth_weight', 'ventilation_hours', 'drg_leave_days', 'drg_ventilation_used', 'drg_no_procedures', 'drg_procedures', 'discharge_disposition', 'drg_code', 'drg_description', 'drg_code_system', 'drg_version', 'drg_grouper_name', 'drg_grouper_version', 'drg_grouper_output'];
 
 function validateDrgReview(existing, next, review) {
   if (!existing?.drg_code || !Object.hasOwn(next, 'drg_code') || next.drg_code === existing.drg_code) return null;
@@ -642,7 +642,7 @@ class ClaimSubmissionsController extends BaseController {
         e => e.resource?.resourceType === 'MessageHeader'
       )?.resource?.id || null;
 
-      const reserved = await query(`UPDATE claim_submissions SET status = 'pending', nphies_request_id = $1, request_bundle = $2, outbound_message_header_id = $3, claim_number = $5, request_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $4 AND status IN ('draft', 'error') RETURNING id`, [nphiesRequestId, JSON.stringify(bundle), outboundMessageHeaderId, id, claim.claim_number]);
+      const reserved = await query(`UPDATE claim_submissions SET status = 'pending', nphies_request_id = $1, request_bundle = $2, outbound_message_header_id = $3, claim_number = $5, request_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $4 AND status IN ('draft', 'error') AND drg_mds_fingerprint IS NOT DISTINCT FROM $6 AND drg_mds_confirmed IS NOT DISTINCT FROM $7 AND drg_code IS NOT DISTINCT FROM $8 RETURNING id`, [nphiesRequestId, JSON.stringify(bundle), outboundMessageHeaderId, id, claim.claim_number, claim.drg_mds_fingerprint ?? null, claim.drg_mds_confirmed ?? null, claim.drg_code ?? null]);
       if (reserved.rowCount !== 1) return res.status(409).json({ error: 'Claim is already being sent or its status changed' });
 
       const nphiesResponse = await nphiesService.submitClaim(bundle);
@@ -814,8 +814,8 @@ class ClaimSubmissionsController extends BaseController {
         success: true,
         entities: { patient: { name: patient.name, identifier: patient.identifier }, provider: { name: provider.provider_name, nphiesId: provider.nphies_id }, insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id } },
         options: { claimType: formData.claim_type, itemsCount: formData.items?.length || 0 },
-        fhirBundle: bundle
-        ,validation
+        fhirBundle: bundle,
+        validation
       });
     } catch (error) {
       console.error('Error generating preview bundle:', error);

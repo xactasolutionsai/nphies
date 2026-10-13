@@ -16,7 +16,7 @@ export function drgFingerprint(claim, patient = {}) {
     encounter: claim.encounter_class, disposition: claim.discharge_disposition,
     birthWeight: number(claim.birth_weight), ventilation: number(claim.ventilation_hours), leave: number(claim.drg_leave_days),
     ventilationUsed: claim.drg_ventilation_used, noProcedures: claim.drg_no_procedures,
-    diagnoses: (claim.diagnoses || []).map(d => ({ sequence: Number(d.sequence), code: d.diagnosis_code, system: d.diagnosis_system || DIAGNOSIS_SYSTEM, type: d.diagnosis_type, onAdmission: d.on_admission ?? null, onset: d.condition_onset ?? null })),
+    diagnoses: (claim.diagnoses || []).map(d => ({ sequence: Number(d.sequence), code: d.diagnosis_code, system: d.diagnosis_system || DIAGNOSIS_SYSTEM, type: d.diagnosis_type, onAdmission: d.on_admission ?? null, onset: d.condition_onset || 'NR' })),
     procedures: (claim.drg_procedures || []).map(p => ({ code: p.code, system: p.system, version: p.version, date: instant(p.date) })),
   };
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');

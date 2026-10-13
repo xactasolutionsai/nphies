@@ -19,7 +19,7 @@ The normalized grouper JSON must contain `adrg`, `mdc`, `eccs`, `dcl` and `error
 
 Checks include one explicitly identified principal diagnosis, ICD-10-AM syntax/system, unique positive diagnosis sequences, admission/discharge order, age at admission, recorded sex, Saudi same-day dates, leave-day bounds and actual discharge status. Neonatal weight is required at age <=28 days even if a legacy newborn flag was not selected. Mechanical ventilation and procedures require explicit presence/absence declarations; positive hours and dated SBS v3 procedures are checked when applicable. Error DRGs require a documented explanation and remain flagged for review.
 
-Changing a saved DRG code requires a clinical justification plus named CDS and coding-specialist reviewers. The operator identity, previous/new code, review and save snapshot are recorded transactionally. Editing MDS without explicitly reconfirming the current grouping clears its confirmation. The claim's audit history can be viewed from the panel.
+Changing a saved DRG code requires a clinical justification plus named CDS and coding-specialist reviewers. The operator identity, previous/new code, review and save snapshot are recorded transactionally. Editing MDS without explicitly reconfirming the current grouping clears its confirmation. A server-owned fingerprint also detects later changes to the patient record or MDS, and the send reservation rejects a concurrent grouping change. The claim's audit history can be viewed from the panel.
 
 The source-certification checkbox records the operator's declaration; it does not independently verify vendor certification. These checks verify completeness and internal consistency, not licensed AR-DRG grouping, catalog membership, unacceptable-principal-diagnosis lists or clinical plausibility. A certified grouper still supplies those results.
 
@@ -39,5 +39,7 @@ Legacy batches build one claim per approved PA item. Admitted cases are blocked 
 - [NPHIES discharge dispositions](https://portal.nphies.sa/ig/CodeSystem-discharge-disposition.json)
 
 ## Verification
+
+For the deployed host, `deploy/apply_drg_migration.mjs` runs with the application's explicit environment configuration: `node --env-file=/etc/nafes/app.env /path/to/apply_drg_migration.mjs`. Deploy the updated backend and migration file first; the script defaults to `/opt/nafes/current/backend`. It takes a private full database backup under `/var/backups/nafes`, applies the migration transactionally, verifies all 17 columns and the audit table, and checks that claim counts and FFS totals remain unchanged. Its verification report distinguishes a committed migration from a later evidence-file failure. This script has been prepared locally; remote activation remains unverified until host access is available.
 
 Run `npm test` in `backend` and `npm run build` in `frontend`. The optional migration regression can use a separately installed PGlite module by setting `DRG_PGLITE_MODULE` to its absolute `dist/index.js` path before running `tests/drg.test.js`. It uses a temporary in-memory database, never an application database.

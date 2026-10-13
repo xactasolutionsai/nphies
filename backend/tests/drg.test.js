@@ -29,6 +29,11 @@ test('Complete admitted episode passes and missing DRG is rejected', () => {
   assert.equal(validateDrg(claim, patient).valid, true);
   assert.throws(() => assertDrgReady({ ...claim, drg_code: null }, patient), e => e.status === 422 && e.validation.errors.some(i => i.field === 'drg_code'));
 });
+test('A later patient-record edit invalidates the grouping confirmation', () => {
+  const { claim, patient } = validInput();
+  const edited = validateDrg(claim, { ...patient, birth_date: '1991-01-01' });
+  assert.ok(edited.errors.some(issue => issue.code === 'DRG_MDS_CHANGED'));
+});
 test('Wrong version, multiple principal diagnoses and missing source metadata are rejected', () => {
   const { claim, patient } = validInput();
   const invalid = validateDrg({ ...claim, drg_version: '10.0', drg_grouper_certified: false, drg_grouper_output: {}, diagnoses: [...claim.diagnoses, { ...claim.diagnoses[0], sequence: 2 }] }, patient);
@@ -124,7 +129,7 @@ test('Legacy per-item batch cannot bypass the DRG episode workflow', async t => 
   t.mock.method(pool, 'query', async sql => ({ rows: sql.includes('providers') ? [data.provider] : [data.insurer] }));
   await assert.rejects(() => batchController.prepareBatchBundleData({ provider_id: data.provider.provider_id, insurer_id: data.insurer.insurer_id }), e => e.status === 422);
 });
-test('DRG SQL migration is repeatable and preserves FFS values', { skip: !process.env.DRG_PGLITE_MODULE }, async () => {
+test('DRG SQL migration and reviewed claim update persist correctly without changing FFS', { skip: !process.env.DRG_PGLITE_MODULE }, async t => {
   const { PGlite } = await import(pathToFileURL(process.env.DRG_PGLITE_MODULE).href);
   const db = new PGlite();
   try {
@@ -138,5 +143,29 @@ test('DRG SQL migration is repeatable and preserves FFS values', { skip: !proces
     assert.deepEqual(row.drg_grouper_output, validInput().claim.drg_grouper_output);
     await db.query('INSERT INTO claim_drg_audit(claim_id,new_code,snapshot) VALUES(1,$1,$2)', ['E62B', JSON.stringify(row)]);
     assert.equal((await db.query('SELECT * FROM claim_drg_audit')).rows.length, 1);
+    const input = validInput();
+    await db.exec(`ALTER TABLE claim_submissions ADD updated_at TIMESTAMPTZ DEFAULT NOW(), ADD status TEXT DEFAULT 'draft', ADD claim_type TEXT DEFAULT 'institutional', ADD patient_id UUID, ADD encounter_start TIMESTAMPTZ, ADD encounter_end TIMESTAMPTZ, ADD encounter_class TEXT, ADD is_newborn BOOLEAN, ADD birth_weight NUMERIC;
+      CREATE TABLE patients(patient_id UUID PRIMARY KEY, gender TEXT, birth_date DATE);`);
+    await db.query('INSERT INTO patients VALUES($1,$2,$3)', [input.patient.patient_id, input.patient.gender, input.patient.birth_date]);
+    const execute = async (sql, params) => { const result = await db.query(sql, params); return { ...result, rowCount: result.affectedRows ?? result.rows.length }; };
+    t.mock.method(pool, 'connect', async () => ({ query: execute, release() {} }));
+    t.mock.method(claimController, 'getByIdInternal', async () => {
+      const stored = (await db.query('SELECT * FROM claim_submissions WHERE id=1')).rows[0];
+      const claim = { ...input.claim, ...stored, coverage_id: null, diagnoses: input.claim.diagnoses, patient_gender: input.patient.gender, patient_birth_date: input.patient.birth_date };
+      return { ...claim, drg_validation: validateDrg(claim, input.patient) };
+    });
+    const payload = Object.fromEntries(Object.entries(input.claim).filter(([key]) => key.startsWith('drg_') || ['discharge_disposition', 'patient_id', 'encounter_start', 'encounter_end', 'encounter_class', 'ventilation_hours'].includes(key)));
+    payload.drg_code = 'E62A';
+    payload.drg_review = { justification: 'Reviewed clinical correction from certified output', cds_reviewer: 'Synthetic CDS', coding_reviewer: 'Synthetic coder' };
+    const res = response();
+    await claimController.update({ params: { id: 1 }, body: payload, user: { id: 7 } }, res);
+    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.drg_validation.valid, true, JSON.stringify(res.body.data.drg_validation));
+    assert.equal(Number(res.body.data.total_amount), 100);
+    const savedAudit = (await db.query('SELECT * FROM claim_drg_audit ORDER BY id DESC LIMIT 1')).rows[0];
+    assert.equal(savedAudit.previous_code, 'E62B');
+    assert.equal(savedAudit.new_code, 'E62A');
+    assert.equal(savedAudit.changed_by, '7');
+    assert.equal(savedAudit.cds_reviewer, 'Synthetic CDS');
   } finally { await db.close(); }
 });
