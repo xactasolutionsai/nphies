@@ -1,6 +1,7 @@
 // Run on the platform host with node --env-file=/etc/nafes/app.env.
 // Back up the configured application database before the additive migration.
 import fs from 'node:fs/promises';
+import { openSync, closeSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -20,7 +21,16 @@ try {
   const directory = path.join(process.env.DRG_BACKUP_DIR || '/var/backups/nafes', 'drg-' + report.startedAt.replace(/[:.]/g, '-'));
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   report.backupPath = path.join(directory, 'before-drg.dump');
-  execFileSync(process.env.DRG_PG_DUMP || '/usr/lib/postgresql/18/bin/pg_dump', ['--format=custom', '--host', process.env.DB_HOST, '--port', process.env.DB_PORT, '--username', process.env.DB_USER, '--dbname', process.env.DB_NAME, '--file', report.backupPath], { env: { ...process.env, PGPASSWORD: process.env.DB_PASSWORD }, stdio: ['ignore', 'ignore', 'pipe'] });
+  const dumpTool = process.env.DRG_PG_DUMP || '/usr/lib/postgresql/18/bin/pg_dump';
+  if (process.env.DRG_BACKUP_AS_POSTGRES === 'true') {
+    if (!['127.0.0.1', 'localhost'].includes(process.env.DB_HOST)) throw new Error('Local postgres backup requires a local database');
+    const fd = openSync(report.backupPath, 'wx', 0o600);
+    try {
+      execFileSync('sudo', ['-u', 'postgres', dumpTool, '--format=custom', '--port', process.env.DB_PORT, '--dbname', process.env.DB_NAME], { stdio: ['ignore', fd, 'pipe'] });
+    } finally { closeSync(fd); }
+  } else {
+    execFileSync(dumpTool, ['--format=custom', '--host', process.env.DB_HOST, '--port', process.env.DB_PORT, '--username', process.env.DB_USER, '--dbname', process.env.DB_NAME, '--file', report.backupPath], { env: { ...process.env, PGPASSWORD: process.env.DB_PASSWORD }, stdio: ['ignore', 'ignore', 'pipe'] });
+  }
   await fs.chmod(report.backupPath, 0o600);
   if ((await fs.stat(report.backupPath)).size === 0) throw new Error('Empty backup; migration was not applied');
   client = await pool.connect();
