@@ -85,6 +85,8 @@ export function validateDrg(claim, patient = {}) {
   else if (admission !== null) ageDays = Math.floor((admission - birth) / 86400000);
   if (!['male', 'female'].includes(patient.gender || claim.patient_gender)) add('patient_gender', 'MDS_SEX', 'الجنس مطلوب للتصنيف؛ استكمل سجل المريض.');
   if (!DISCHARGE_CODES.includes(claim.discharge_disposition)) add('discharge_disposition', 'MDS_DISPOSITION', 'حدد حالة خروج فعلية من قائمة نفيس.');
+  const hasClinicalAttachment = (claim.attachments || []).some(a => ['application/pdf', 'image/jpeg'].includes(a.content_type) && present(a.base64_content)) || (claim.supporting_info || []).some(s => s.category === 'attachment' && ['application/pdf', 'image/jpeg'].includes(s.value_attachment?.contentType) && present(s.value_attachment?.data));
+  if (!hasClinicalAttachment) add('attachments', 'DRG_ATTACHMENT', 'أرفق مستند الحالة بصيغة PDF أو JPEG في تبويب Clinical قبل الإرسال.');
   if ((ageDays !== null && ageDays <= 28) || claim.is_newborn === true) {
     if (!(number(claim.birth_weight) > 0)) add('birth_weight', 'MDS_BIRTH_WEIGHT', 'وزن الولادة بالجرام إلزامي لحديثي الولادة.');
   }
@@ -115,12 +117,24 @@ export function assertDrgReady(claim, patient) {
   return validation;
 }
 
-// Versioned structured payload is embedded as a standard FHIR supportingInfo attachment.
+// The sandbox accepts PDF/JPEG attachments, not application/json. Preserve the
+// structured grouping payload as textual supporting information instead.
 // No invented NPHIES extension/category or alternative payment amount is introduced.
 export function applyDrgToBundle(bundle, claim, patient) {
   if (!requiresDrg(claim) || !present(claim.drg_code)) return bundle;
   const resource = bundle.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource;
   if (!resource) return bundle;
+  // Sandbox BV-01198: package flags are forbidden for admitted DRG claims,
+  // including the false flag that the legacy institutional mapper emits.
+  const stripPackageFlag = item => {
+    if (item.extension) {
+      item.extension = item.extension.filter(extension => extension.url !== 'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package');
+      if (!item.extension.length) delete item.extension;
+    }
+    for (const detail of item.detail || []) stripPackageFlag(detail);
+    for (const detail of item.subDetail || []) stripPackageFlag(detail);
+  };
+  for (const item of resource.item || []) stripPackageFlag(item);
   const principal = resource.diagnosis?.find(d => d.type?.some(t => t.coding?.some(c => c.code === 'principal')));
   if (principal) principal.packageCode = { coding: [{ system: claim.drg_code_system, version: claim.drg_version, code: claim.drg_code, display: claim.drg_description }] };
   if (claim.drg_procedures?.length) resource.procedure = claim.drg_procedures.map((p, i) => ({ sequence: i + 1, date: p.date, procedureCodeableConcept: { coding: [{ system: p.system, version: p.version, code: p.code, ...(p.display ? { display: p.display } : {}) }] } }));
@@ -131,7 +145,10 @@ export function applyDrgToBundle(bundle, claim, patient) {
     mds: { diagnoses: claim.diagnoses, procedures: claim.drg_procedures || [], noProcedures: claim.drg_no_procedures, ageAtAdmissionDays: validation.ageDays, sex: patient.gender || claim.patient_gender, admission: claim.encounter_start, discharge: claim.encounter_end, dischargeDisposition: claim.discharge_disposition, birthWeightGrams: claim.birth_weight || null, ventilationUsed: claim.drg_ventilation_used, ventilationHours: claim.ventilation_hours ?? null, encounterType: claim.encounter_class, leaveDays: claim.drg_leave_days, lengthOfStayDays: validation.lengthOfStayDays },
   };
   const supportingInfo = resource.supportingInfo || (resource.supportingInfo = []);
-  supportingInfo.push({ sequence: Math.max(0, ...supportingInfo.map(s => s.sequence)) + 1, category: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category', code: 'attachment' }] }, valueAttachment: { contentType: 'application/json', title: 'AR-DRG v9.0 shadow billing data', data: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64') } });
+  supportingInfo.push({ sequence: Math.max(0, ...supportingInfo.map(s => s.sequence)) + 1, category: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category', code: 'info' }] }, valueString: JSON.stringify(payload) });
+  for (const info of supportingInfo) {
+    if (info.valueAttachment && !info.valueAttachment.creation) info.valueAttachment.creation = new Date(claim.encounter_end || bundle.timestamp).toISOString().slice(0, 10);
+  }
   // Neonatal weight must be present even if legacy is_newborn was not selected.
   if (validation.ageDays !== null && validation.ageDays <= 28 && Number(claim.birth_weight) > 0 && !supportingInfo.some(s => s.category?.coding?.some(c => c.code === 'birth-weight'))) supportingInfo.push({ sequence: Math.max(...supportingInfo.map(s => s.sequence)) + 1, category: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category', code: 'birth-weight' }] }, valueQuantity: { value: Number(claim.birth_weight) / 1000, system: 'http://unitsofmeasure.org', code: 'kg', unit: 'kg' } });
   if (claim.drg_ventilation_used === true && Number(claim.ventilation_hours) > 0 && !supportingInfo.some(s => s.category?.coding?.some(c => c.code === 'ventilation-hours'))) supportingInfo.push({ sequence: Math.max(...supportingInfo.map(s => s.sequence)) + 1, category: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category', code: 'ventilation-hours' }] }, valueQuantity: { value: Number(claim.ventilation_hours), system: 'http://unitsofmeasure.org', code: 'h', unit: 'hours' } });

@@ -6,7 +6,7 @@ The Claim Details page includes an Arabic DRG / MDS editor. Draft and error clai
 
 Run `npm run migrate-drg` in `backend` with the application's PostgreSQL connection configured. Migration `066_claim_drg.sql` is additive and repeatable. It stores the grouping metadata, procedures and MDS fields on `claim_submissions`, plus an audit record for saves and reviewed DRG changes. It does not backfill clinical values or change FFS amounts.
 
-Local activation was attempted during implementation; no PostgreSQL server was reachable. The migration was tested in an isolated PGlite PostgreSQL engine, including repeated execution and JSONB persistence.
+Migration 066 was activated on the restored server on 2026-10-13. Synthetic transactional verification confirmed save/read, JSON persistence and audit records; test records were rolled back. The migration also passed isolated PGlite tests.
 
 ## Workflow and validation
 
@@ -25,9 +25,9 @@ The source-certification checkbox records the operator's declaration; it does no
 
 ## FHIR transport and external testing
 
-The institutional mapper emits the DRG code/description/system/version in `Claim.diagnosis.packageCode` on the principal diagnosis and procedures in `Claim.procedure`. It embeds the structured grouping output and MDS in a standard `supportingInfo` attachment (`application/json`), using the published `attachment` category. Neonatal birth weight is sent in kg and mechanical ventilation in UCUM hours when applicable. Existing FFS items and totals continue to determine payment; no DRG estimate replaces the total.
+The institutional mapper emits the DRG code/description/system/version in `Claim.diagnosis.packageCode` on the principal diagnosis and procedures in `Claim.procedure`. It preserves structured grouping output and MDS as JSON text in `supportingInfo.valueString` with category `info`. This is provisional transport, not a verified replacement for the current DRG release mapping. The sandbox rejects application/json attachments. Admitted claims now require a PDF/JPEG attachment; missing attachment creation dates are populated from the episode discharge date. Package flags are removed recursively from DRG claim items. Neonatal birth weight is sent in kg and mechanical ventilation in UCUM hours when applicable. Existing FFS items and totals continue to determine payment; no DRG estimate replaces the total.
 
-The published NPHIES institutional profile permits `diagnosis.packageCode`, `procedure`, and supporting attachments. The supplied CHI guide requires structured DRG data but does not provide a dedicated 2026 shadow-billing FHIR extension or routing contract. This standard FHIR representation must therefore be checked against the partner's current shadow-billing technical contract in its sandbox before claiming NPHIES acceptance. No live acceptance test was performed and no automatic certified grouper API is configured by this change.
+The published NPHIES institutional profile permits `diagnosis.packageCode`, `procedure`, and supporting attachments. However, the live sandbox test on 2026-10-13 rejected the institutional baseline for provider 1010613708: BV-01346 requires exactly one DRG code in the first claim item, BV-01198 disallows package flags for DRG claims, and BV-01200 requires an attachment for admitted care. The current diagnosis-only DRG placement is insufficient for this provider. Final wire mapping needs the current shadow-billing technical contract, including DRG terminology and first-item financial treatment, plus a certified synthetic grouper case. No DRG acceptance or automated grouper certification is claimed. See `RESTORE_DRG_RESULT_2026-10-13.md`.
 
 Legacy batches build one claim per approved PA item. Admitted cases are blocked before a batch is marked Pending; users must create one institutional claim for the full episode and complete its DRG panel. This prevents the legacy batch route from bypassing episode-level MDS checks.
 
@@ -40,6 +40,12 @@ Legacy batches build one claim per approved PA item. Admitted cases are blocked 
 
 ## Verification
 
-For the deployed host, `deploy/apply_drg_migration.mjs` runs with the application's explicit environment configuration: `node --env-file=/etc/nafes/app.env /path/to/apply_drg_migration.mjs`. Deploy the updated backend and migration file first; the script defaults to `/opt/nafes/current/backend`. It takes a private full database backup under `/var/backups/nafes`, applies the migration transactionally, verifies all 17 columns and the audit table, and checks that claim counts and FFS totals remain unchanged. Its verification report distinguishes a committed migration from a later evidence-file failure. This script has been prepared locally; remote activation remains unverified until host access is available.
+For the deployed host, `deploy/apply_drg_migration.mjs` runs with the application's explicit environment configuration: `node --env-file=/etc/nafes/app.env /path/to/apply_drg_migration.mjs`. Deploy the updated backend and migration file first; the script defaults to `/opt/nafes/current/backend`. It takes a private full database backup under `/var/backups/nafes`, applies the migration transactionally, verifies all 17 columns and the audit table, and checks that claim counts and FFS totals remain unchanged. Its verification report distinguishes a committed migration from a later evidence-file failure. Remote activation succeeded on 2026-10-13. The root-run restore used `DRG_BACKUP_AS_POSTGRES=true` for the local full backup because the application role cannot read the separate advisory schema. Application privileges were not broadened for backup.
 
 Run `npm test` in `backend` and `npm run build` in `frontend`. The optional migration regression can use a separately installed PGlite module by setting `DRG_PGLITE_MODULE` to its absolute `dist/index.js` path before running `tests/drg.test.js`. It uses a temporary in-memory database, never an application database.
+
+## Published correction — 2026-10-13
+
+The tested drgValidation.js correction was deployed with a rollback copy at `/var/backups/nafes/drg-wire-patch-20261013/drgValidation.before.js`. Published SHA-256: `7abc4a36e21016cd86dd19805b322a31694dac5dab24409a13b1cd6a7af5c4e6`. Service active, HTTPS 200, synthetic database verification passed. Local tests: 82 passed, 4 skipped, zero failed.
+
+The follow-up synthetic wire probe used the published helper and an experimental first DRG item (the latter remains confined to the test script). Claim `TEST-16cf5c95-2ec7-419d-b13a-1d589644f69b` returned HTTP 200, acknowledgement ok, outcome error, accepted false, with IB-00030 at item[0].productOrService. Evidence: `/var/backups/nafes/sandbox-2026-10-13T13-54-31-965Z`. The current code system/value-set and first-item financial mapping remain unresolved pending OBA v3.5 and official June 2026 JSON samples.

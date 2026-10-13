@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { validateDrg, requiresDrg, assertDrgReady, drgFingerprint } from '../services/drgValidation.js';
+import { validateDrg, requiresDrg, assertDrgReady, drgFingerprint, applyDrgToBundle } from '../services/drgValidation.js';
 import { validateClaimInput } from '../models/claimInput.js';
 import { getClaimMapper } from '../services/claimMapper/index.js';
 import claimController from '../controllers/claimSubmissionsController.js';
@@ -14,6 +14,7 @@ import { clinicalInput } from './fixtures/clinicalInput.js';
 const response = () => ({ statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } });
 function validInput() {
   const data = clinicalInput('institutional');
+  data.claim.attachments = [{ content_type: 'application/pdf', base64_content: 'JVBERi0xLjQ=', file_name: 'synthetic-test.pdf' }];
   Object.assign(data.claim, { drg_code: 'E62B', drg_description: 'Synthetic test episode', drg_code_system: 'https://example.test/ardrg', drg_version: '9.0', drg_grouper_name: 'Synthetic grouper', drg_grouper_version: '1', drg_grouper_certified: true, drg_mds_confirmed: true, drg_grouper_output: { adrg: 'E62', mdc: 4, eccs: 0, dcl: [], error_flags: [] }, discharge_disposition: 'home', drg_leave_days: 0, drg_ventilation_used: false, ventilation_hours: 0, drg_no_procedures: true, drg_procedures: [] });
   data.claim.drg_mds_fingerprint = drgFingerprint(data.claim, data.patient);
   return data;
@@ -80,18 +81,42 @@ test('Error DRGs require an explanatory flag and retain a warning', () => {
     assert.ok(explained.warnings.some(i => i.code === 'DRG_GROUPING_ERROR'));
   }
 });
-test('FHIR carries DRG on principal diagnosis plus structured attachment and preserves FFS', () => {
+test('FHIR carries DRG data as info, retains the PDF attachment and preserves FFS', () => {
   const input = validInput();
   const original = structuredClone(input);
   const resource = getClaimMapper('institutional').buildClaimRequestBundle(input).entry.find(e => e.resource.resourceType === 'Claim').resource;
   assert.equal(resource.diagnosis[0].packageCode.coding[0].code, 'E62B');
-  const attachment = resource.supportingInfo.find(i => i.valueAttachment?.contentType === 'application/json').valueAttachment;
-  const payload = JSON.parse(Buffer.from(attachment.data, 'base64').toString('utf8'));
+  const payload = JSON.parse(resource.supportingInfo.find(i => i.valueString?.startsWith('{"schemaVersion":1')).valueString);
+  const attachment = resource.supportingInfo.find(i => i.valueAttachment)?.valueAttachment;
+  assert.equal(attachment.contentType, 'application/pdf');
+  assert.ok(attachment.creation);
   assert.equal(payload.drg.version, '9.0');
   assert.equal(payload.mds.leaveDays, 0);
   assert.equal(resource.total.value, 100);
   assert.equal(resource.item.length, 1);
+  assert.ok(resource.item.every(item => !item.extension?.some(extension => extension.url.endsWith('/extension-package'))));
   assert.deepEqual(input, original);
+});
+
+test('Admitted DRG requires a supported clinical attachment; JSON is not an accepted attachment', () => {
+  const {claim,patient}=validInput();
+  for(const attachments of [[],[{content_type:'application/json',base64_content:'e30='}]]) {
+    assert.ok(validateDrg({...claim,attachments},patient).errors.some(e=>e.code==='DRG_ATTACHMENT'));
+  }
+  assert.equal(validateDrg({...claim,attachments:[],supporting_info:[{category:'attachment',value_attachment:{contentType:'image/jpeg',data:'test'}}]},patient).valid,true);
+});
+
+test('DRG removes package flags at every item level without changing financial values', () => {
+  const {claim,patient}=validInput();
+  const packageUrl='http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-package';
+  const tax={url:'http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/extension-tax',valueMoney:{value:15,currency:'SAR'}};
+  const item={sequence:1,extension:[{url:packageUrl,valueBoolean:true},tax],net:{value:115,currency:'SAR'},detail:[{sequence:1,extension:[{url:packageUrl,valueBoolean:false}],subDetail:[{sequence:1,extension:[{url:packageUrl,valueBoolean:false}]}]}]};
+  const bundle={timestamp:'2026-10-13T12:00:00Z',entry:[{resource:{resourceType:'Claim',item:[item]}}]};
+  applyDrgToBundle(bundle,claim,patient);
+  assert.deepEqual(item.extension,[tax]);
+  assert.equal(item.net.value,115);
+  assert.equal(item.detail[0].extension,undefined);
+  assert.equal(item.detail[0].subDetail[0].extension,undefined);
 });
 test('Draft input accepts DRG fields and rejects negative leave days and arbitrary keys', () => {
   assert.equal(validateClaimInput({ claim_type: 'institutional', drg_code: 'e62b', drg_leave_days: 0 }).drg_code, 'E62B');
