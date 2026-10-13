@@ -28,6 +28,7 @@
 
 import InstitutionalPAMapper from '../priorAuthMapper/InstitutionalMapper.js';
 import { NPHIES_CONFIG } from '../../config/nphies.js';
+import { applyDrgToBundle } from '../drgValidation.js';
 
 class InstitutionalClaimMapper extends InstitutionalPAMapper {
   constructor() {
@@ -107,14 +108,14 @@ class InstitutionalClaimMapper extends InstitutionalPAMapper {
     // Adding Binary resources causes GE-00013 error (invalid meta structure)
     // Following NPHIES examples: attachments are embedded in supportingInfo only
 
-    return {
+    return applyDrgToBundle({
       resourceType: 'Bundle',
       id: this.generateId(),
       meta: { profile: ['http://nphies.sa/fhir/ksa/nphies-fs/StructureDefinition/bundle|1.0.0'] },
       type: 'message',
       timestamp: this.formatDateTime(new Date()),
       entry: entries
-    };
+    }, claim, patient);
   }
 
   /**

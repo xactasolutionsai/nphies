@@ -13,6 +13,7 @@ import {
   Wallet, Banknote, ArrowRight, MessageSquare, ChevronDown, MoreVertical, Download, Package, Pill
 } from 'lucide-react';
 import ClaimCommunicationPanel from '@/components/claims/ClaimCommunicationPanel';
+import ClaimDrgPanel from '@/components/claims/ClaimDrgPanel';
 import MedicationSafetyPanel from '@/components/general-request/shared/MedicationSafetyPanel';
 import { EMERGENCY_DEPARTMENT_DISPOSITION_OPTIONS, TRIAGE_CATEGORY_OPTIONS, ENCOUNTER_PRIORITY_OPTIONS, SHADOW_BILLING_CODES } from '@/components/prior-auth/constants';
 
@@ -238,6 +239,7 @@ export default function ClaimDetails() {
   const [priorAuthComms, setPriorAuthComms] = useState([]);
   const [priorAuthCommsLoading, setPriorAuthCommsLoading] = useState(false);
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
+  const [drgDirty, setDrgDirty] = useState(false);
 
   // Item sequences (1-based) referenced by any NPHIES validation error
   // across all stored responses. Drives the "Errors only" filter and the
@@ -264,6 +266,7 @@ export default function ClaimDetails() {
   };
 
   useEffect(() => {
+    setDrgDirty(false);
     loadClaim();
   }, [id]);
 
@@ -849,6 +852,11 @@ export default function ClaimDetails() {
   };
 
   const handleSendToNphies = async () => {
+    if (drgDirty || claim.drg_validation?.valid === false) {
+      setActiveTab('drg');
+      alert(drgDirty ? 'احفظ بيانات DRG قبل الإرسال.' : 'استكمل متطلبات DRG وMDS قبل الإرسال.');
+      return;
+    }
     if (!window.confirm('Send this claim to NPHIES?')) return;
     
     try {
@@ -1080,6 +1088,9 @@ export default function ClaimDetails() {
             <TabButton active={activeTab === 'clinical'} onClick={() => setActiveTab('clinical')}>
               Clinical
             </TabButton>
+            <TabButton active={activeTab === 'drg'} onClick={() => setActiveTab('drg')}>
+              DRG / MDS {claim.drg_validation?.valid === false && '⚠'}
+            </TabButton>
             {extractCodeValue(claim.claim_type) === 'vision' && claim.vision_prescription && (
               <TabButton active={activeTab === 'vision'} onClick={() => setActiveTab('vision')}>
                 <Eye className="h-4 w-4 mr-1 inline" />
@@ -1115,6 +1126,9 @@ export default function ClaimDetails() {
           </div>
 
           {/* Details Tab */}
+          <div className={activeTab === 'drg' ? '' : 'hidden'}>
+            <ClaimDrgPanel key={claim.id} claim={claim} onSaved={updated => { setClaim(updated); setBundle(null); }} onDirtyChange={setDrgDirty} />
+          </div>
           {activeTab === 'details' && (
             <Card>
               <CardHeader>

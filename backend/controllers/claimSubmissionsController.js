@@ -10,8 +10,27 @@ import nphiesService from '../services/nphiesService.js';
 import claimCommunicationService from '../services/claimCommunicationService.js';
 import shadowBillingService from '../services/shadowBillingService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
+import { validateDrg, assertDrgReady } from '../services/drgValidation.js';
+import Joi from 'joi';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
+
+const drgReviewSchema = Joi.object({ justification: Joi.string().trim().min(10).max(4000).required(), cds_reviewer: Joi.string().trim().max(255).required(), coding_reviewer: Joi.string().trim().max(255).required() });
+const drgJsonFields = ['drg_grouper_output', 'drg_procedures'];
+const groupingFields = ['encounter_start', 'encounter_end', 'encounter_class', 'sub_type', 'patient_id', 'is_newborn', 'birth_weight', 'ventilation_hours', 'drg_leave_days', 'drg_ventilation_used', 'drg_no_procedures', 'drg_procedures', 'discharge_disposition'];
+
+function validateDrgReview(existing, next, review) {
+  if (!existing?.drg_code || !Object.hasOwn(next, 'drg_code') || next.drg_code === existing.drg_code) return null;
+  const { error, value } = drgReviewSchema.validate(review || {}, { abortEarly: false });
+  if (error) { const invalid = new Error('تغيير رمز DRG يتطلب تبريرًا سريريًا ومراجعة CDS واختصاصي الترميز.'); invalid.status = 400; throw invalid; }
+  return value;
+}
+
+async function recordDrgAudit(claimId, previous, next, review, req) {
+  const touched = Object.keys(next).some(key => key.startsWith('drg_') || groupingFields.includes(key));
+  if (!touched && !next.diagnoses) return;
+  await query('INSERT INTO claim_drg_audit (claim_id, previous_code, new_code, justification, cds_reviewer, coding_reviewer, changed_by, snapshot) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [claimId, previous?.drg_code || null, next.drg_code ?? previous?.drg_code ?? null, review?.justification || null, review?.cds_reviewer || null, review?.coding_reviewer || null, String(req.user?.userId || req.user?.id || 'system'), JSON.stringify(next)]);
+}
 
 function sanitizePharmacyDeviceFields(items, claimType) {
   if (claimType !== 'pharmacy' || !Array.isArray(items)) return;
@@ -233,7 +252,8 @@ class ClaimSubmissionsController extends BaseController {
       supporting_info: supportingInfoResult.rows,
       diagnoses: diagnosesResult.rows,
       responses: responsesResult.rows,
-      attachments: attachmentsResult.rows
+      attachments: attachmentsResult.rows,
+      drg_validation: validateDrg({ ...claim, diagnoses: diagnosesResult.rows }),
     };
   }
 
@@ -249,13 +269,22 @@ class ClaimSubmissionsController extends BaseController {
     }
   }
 
+  async getDrgAudit(req, res) {
+    try {
+      const result = await query('SELECT id, previous_code, new_code, justification, cds_reviewer, coding_reviewer, changed_by, created_at FROM claim_drg_audit WHERE claim_id = $1 ORDER BY id DESC LIMIT 100', [req.params.id]);
+      res.json({ data: result.rows });
+    } catch (error) {
+      res.status(500).json({ error: 'تعذر تحميل سجل مراجعات DRG.' });
+    }
+  }
+
   async create(req, res) {
     try {
       validateNestedArrays(req.body, ['items', 'supporting_info', 'diagnoses', 'attachments']);
-      const { items, supporting_info, diagnoses, attachments, ...formData } = req.body;
+      const { items, supporting_info, diagnoses, attachments, drg_review, ...formData } = req.body;
       const cleanedData = validateClaimInput(this.cleanFormData(formData));
       await persistCoverageInput(cleanedData);
-      for (const field of ['vision_prescription', 'lab_observations', 'medication_safety_analysis']) {
+      for (const field of ['vision_prescription', 'lab_observations', 'medication_safety_analysis', ...drgJsonFields]) {
         if (cleanedData[field] && typeof cleanedData[field] === 'object') cleanedData[field] = JSON.stringify(cleanedData[field]);
       }
 
@@ -277,6 +306,8 @@ class ClaimSubmissionsController extends BaseController {
       if (supporting_info?.length > 0) await this.insertSupportingInfo(claimId, supporting_info);
       if (diagnoses?.length > 0) await this.insertDiagnoses(claimId, diagnoses);
       if (attachments?.length > 0) await this.insertAttachments(claimId, attachments);
+
+      await recordDrgAudit(claimId, null, { ...cleanedData, diagnoses }, null, req);
 
       const completeData = await this.getByIdInternal(claimId);
       res.status(201).json({ data: completeData });
@@ -491,15 +522,18 @@ class ClaimSubmissionsController extends BaseController {
     try {
       const { id } = req.params;
       validateNestedArrays(req.body, ['items', 'supporting_info', 'diagnoses', 'attachments']);
-      const { items, supporting_info, diagnoses, attachments, ...formData } = req.body;
+      const { items, supporting_info, diagnoses, attachments, drg_review, ...formData } = req.body;
 
       const existing = await this.getByIdInternal(id);
       if (!existing) return res.status(404).json({ error: 'Claim submission not found' });
       if (!['draft', 'error'].includes(existing.status)) return res.status(400).json({ error: 'Cannot update claim with status: ' + existing.status });
 
       const cleanedData = validateClaimInput(this.cleanFormData(formData), true);
+      const review = validateDrgReview(existing, cleanedData, drg_review);
+      // Changing the MDS invalidates an old grouping confirmation unless explicitly reviewed again.
+      if (cleanedData.drg_mds_confirmed !== true && (diagnoses !== undefined || groupingFields.some(key => Object.hasOwn(cleanedData, key) && JSON.stringify(cleanedData[key]) !== JSON.stringify(existing[key])))) cleanedData.drg_mds_confirmed = false;
       await persistCoverageInput(cleanedData, existing);
-      for (const field of ['vision_prescription', 'lab_observations', 'medication_safety_analysis']) {
+      for (const field of ['vision_prescription', 'lab_observations', 'medication_safety_analysis', ...drgJsonFields]) {
         if (cleanedData[field] && typeof cleanedData[field] === 'object') cleanedData[field] = JSON.stringify(cleanedData[field]);
       }
       const columns = Object.keys(cleanedData).filter(key => !['items', 'supporting_info', 'diagnoses', 'attachments', 'coverage_id'].includes(key));
@@ -527,6 +561,8 @@ class ClaimSubmissionsController extends BaseController {
       if (supporting_info?.length > 0) await this.insertSupportingInfo(id, supporting_info);
       if (diagnoses?.length > 0) await this.insertDiagnoses(id, diagnoses);
       if (attachments?.length > 0) await this.insertAttachments(id, attachments);
+
+      await recordDrgAudit(id, existing, { ...cleanedData, diagnoses }, review, req);
 
       const completeData = await this.getByIdInternal(id);
       res.json({ data: completeData });
@@ -577,6 +613,8 @@ class ClaimSubmissionsController extends BaseController {
       const patient = patientResult.rows[0];
       const provider = providerResult.rows[0];
       const insurer = insurerResult.rows[0];
+      const drgValidation = validateDrg(claim, patient);
+      if (!drgValidation.valid) return res.status(422).json({ error: 'استكمل متطلبات DRG وMDS قبل إرسال المطالبة.', validation: drgValidation });
       const coverage = await this.getCoverageData(claim.patient_id, claim.insurer_id, claim.coverage_id);
 
       // Fetch mother patient if this is a newborn claim
@@ -666,7 +704,7 @@ class ClaimSubmissionsController extends BaseController {
         policyHolder: null,
         motherPatient: motherPatient
       });
-      res.json({ data: bundle });
+      res.json({ data: bundle, validation: validateDrg(claim, patientResult.rows[0]) });
     } catch (error) {
       console.error('Error generating bundle:', error);
       res.status(error.status || 500).json({ error: error.message || 'Failed to generate FHIR bundle' });
@@ -749,8 +787,11 @@ class ClaimSubmissionsController extends BaseController {
         authorization_offline_reference: formData.authorization_offline_reference || null,
         pa_nphies_response_id: formData.pa_nphies_response_id || null,
         // Attachments
-        attachments: formData.attachments || []
+        attachments: formData.attachments || [],
+        ...Object.fromEntries(Object.entries(formData).filter(([key]) => key.startsWith('drg_') || key === 'discharge_disposition'))
       };
+
+      assertDrgReady(claim, patient);
 
       const bundle = claimMapper.buildClaimRequestBundle({ 
         claim, 
@@ -776,7 +817,7 @@ class ClaimSubmissionsController extends BaseController {
   cleanFormData(formData) {
     const cleanedData = { ...formData };
     const readOnlyFields = ['id', 'created_at', 'updated_at', 'request_date', 'response_date', 'request_bundle', 'response_bundle', 'patient_name', 'patient_identifier', 'patient_gender', 'patient_birth_date', 'provider_name', 'provider_nphies_id', 'provider_type', 'insurer_name', 'insurer_nphies_id', 'responses', 'items', 'supporting_info', 'diagnoses', 'attachments'];
-    [...readOnlyFields, ...serverClaimFields, 'pa_nphies_response_id'].forEach(field => delete cleanedData[field]);
+    [...readOnlyFields, ...serverClaimFields, 'pa_nphies_response_id', 'drg_validation'].forEach(field => delete cleanedData[field]);
     
     ['patient_id', 'provider_id', 'insurer_id', 'practitioner_id'].forEach(field => { if (cleanedData[field] === '') cleanedData[field] = null; });
     Object.keys(cleanedData).forEach(key => { if (typeof cleanedData[key] === 'string' && cleanedData[key].trim() === '') cleanedData[key] = null; });

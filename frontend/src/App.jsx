@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import OpenMedAdvisory from './pages/OpenMedAdvisory';
+import DrgReadiness from './pages/DrgReadiness';
 import Patients from './pages/Patients';
 import PatientDetails from './pages/PatientDetails';
 import PatientForm from './pages/PatientForm';
@@ -97,6 +98,7 @@ function AppRoutes() {
               <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/openmed" element={<OpenMedAdvisory />} />
+          <Route path="/drg" element={<DrgReadiness />} />
           <Route path="/patients" element={<Patients />} />
           <Route path="/patients/new" element={<PatientForm />} />
           <Route path="/patients/:id/edit" element={<PatientForm />} />

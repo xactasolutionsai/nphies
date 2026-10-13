@@ -38,6 +38,7 @@ router.post('/:id/cancel', (req, res) => claimSubmissionsController.cancel(req, 
 
 // FHIR bundle preview for existing claim
 router.get('/:id/bundle', (req, res) => claimSubmissionsController.getBundle(req, res));
+router.get('/:id/drg-audit', (req, res) => claimSubmissionsController.getDrgAudit(req, res));
 
 // ============================================================================
 // Communication Routes - Status Check, Poll, and Communications

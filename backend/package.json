@@ -14,7 +14,8 @@
     "import-medications": "node scripts/importMedicationCodes.js",
     "grant-admin": "node scripts/grantAdmin.js",
     "migrate-review": "node scripts/applyReviewMigrations.js",
-    "migrate-openmed": "node scripts/migrateOpenmed.js"
+    "migrate-openmed": "node scripts/migrateOpenmed.js",
+    "migrate-drg": "node scripts/migrateDrg.js"
   },
   "keywords": [
     "healthcare",

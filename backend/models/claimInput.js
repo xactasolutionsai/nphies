@@ -44,6 +44,27 @@ const migratedFields = {
   icu_hours: Joi.number().allow(null).optional(),
   ventilation_hours: Joi.number().allow(null).optional(),
   lab_observations: Joi.alternatives().try(Joi.object(), Joi.array()).allow(null).optional(),
+  drg_code: Joi.string().trim().uppercase().max(10).allow(null, '').optional(),
+  drg_description: Joi.string().trim().max(1000).allow(null, '').optional(),
+  drg_code_system: Joi.string().uri({ scheme: ['http', 'https'] }).max(255).allow(null, '').optional(),
+  drg_version: Joi.string().max(10).allow(null, '').optional(),
+  drg_grouper_name: Joi.string().trim().max(255).allow(null, '').optional(),
+  drg_grouper_version: Joi.string().trim().max(50).allow(null, '').optional(),
+  drg_grouper_certified: Joi.boolean().allow(null).optional(),
+  drg_mds_confirmed: Joi.boolean().allow(null).optional(),
+  drg_grouper_output: Joi.object().max(100).allow(null).optional(),
+  drg_error_explanation: Joi.string().trim().max(4000).allow(null, '').optional(),
+  drg_leave_days: Joi.number().integer().min(0).allow(null).optional(),
+  drg_ventilation_used: Joi.boolean().allow(null).optional(),
+  drg_no_procedures: Joi.boolean().allow(null).optional(),
+  drg_procedures: Joi.array().max(200).items(Joi.object({
+    code: Joi.string().trim().max(50).required(),
+    system: Joi.string().uri().max(255).required(),
+    version: Joi.string().max(10).required(),
+    display: Joi.string().trim().max(1000).allow(null, '').optional(),
+    date: Joi.date().iso().required(),
+  })).allow(null).optional(),
+  discharge_disposition: Joi.string().max(30).allow(null, '').optional(),
 };
 const schema = validationSchemas.claimSubmission.keys(migratedFields);
 

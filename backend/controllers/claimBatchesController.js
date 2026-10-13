@@ -6,6 +6,7 @@ import { loadQueries } from '../db/queryLoader.js';
 import batchClaimMapper from '../services/claimMapper/BatchClaimMapper.js';
 import { getClaimMapper } from '../services/claimMapper/index.js';
 import nphiesService from '../services/nphiesService.js';
+import { requiresDrg } from '../services/drgValidation.js';
 
 /**
  * Claim Batches Controller
@@ -650,7 +651,7 @@ class ClaimBatchesController extends BaseController {
       });
     } catch (error) {
       console.error('Error previewing batch bundles:', error);
-      res.status(500).json({ error: error.message || 'Failed to preview batch bundles' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to preview batch bundles' });
     }
   }
 
@@ -680,14 +681,14 @@ class ClaimBatchesController extends BaseController {
       // BV-00163: Generate a resubmit suffix to avoid duplicate identifier errors on retry
       const resubmitSuffix = batch.request_bundle ? `-R${Date.now()}` : '';
 
+      const bundleData = await this.prepareBatchBundleData(batch, resubmitSuffix);
+      const batchBundle = batchClaimMapper.buildBatchRequestBundle(bundleData);
+
       await query(`
         UPDATE claim_batches 
         SET status = 'Pending', submission_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
       `, [id]);
-
-      const bundleData = await this.prepareBatchBundleData(batch, resubmitSuffix);
-      const batchBundle = batchClaimMapper.buildBatchRequestBundle(bundleData);
 
       console.log(`[BatchClaims] Submitting batch ${batch.batch_identifier} as single batch-request bundle with ${batch.claims.length} nested claims`);
 
@@ -806,6 +807,7 @@ class ClaimBatchesController extends BaseController {
       }
     } catch (error) {
       console.error('Error submitting batch to NPHIES:', error);
+      if (error.status === 422) return res.status(422).json({ error: error.message });
 
       await query(`
         UPDATE claim_batches 
@@ -1151,6 +1153,13 @@ class ClaimBatchesController extends BaseController {
     for (const itemId of itemIds) {
       const claimData = await this.getAuthItemDataForBundle(itemId, resubmitSuffix);
       if (claimData) {
+        // This legacy batch flow creates one claim per PA item, not per admitted episode.
+        // It cannot silently bypass the one-episode DRG/MDS workflow.
+        if (requiresDrg(claimData.claim)) {
+          const error = new Error('مطالبات التنويم واليوم الواحد تتطلب مطالبة واحدة للحلقة مع DRG/MDS. أنشئ المطالبة من الموافقة واستكمل تبويب DRG بدل دفعة بنود الموافقات.');
+          error.status = 422;
+          throw error;
+        }
         claims.push(claimData);
       }
     }
