@@ -8,6 +8,7 @@ ALTER TABLE claim_submissions
   ADD COLUMN IF NOT EXISTS drg_grouper_version VARCHAR(50),
   ADD COLUMN IF NOT EXISTS drg_grouper_certified BOOLEAN,
   ADD COLUMN IF NOT EXISTS drg_mds_confirmed BOOLEAN,
+  ADD COLUMN IF NOT EXISTS drg_mds_fingerprint VARCHAR(64),
   ADD COLUMN IF NOT EXISTS drg_grouper_output JSONB,
   ADD COLUMN IF NOT EXISTS drg_error_explanation TEXT,
   ADD COLUMN IF NOT EXISTS drg_leave_days INTEGER CHECK (drg_leave_days >= 0),

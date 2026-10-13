@@ -3,6 +3,7 @@ import { validationSchemas } from './schema.js';
 
 export const serverClaimFields = [
   "id",
+  "drg_mds_fingerprint",
   "status",
   "outcome",
   "adjudication_outcome",

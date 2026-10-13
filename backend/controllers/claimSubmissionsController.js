@@ -10,7 +10,7 @@ import nphiesService from '../services/nphiesService.js';
 import claimCommunicationService from '../services/claimCommunicationService.js';
 import shadowBillingService from '../services/shadowBillingService.js';
 import { NPHIES_CONFIG } from '../config/nphies.js';
-import { validateDrg, assertDrgReady } from '../services/drgValidation.js';
+import { validateDrg, drgFingerprint } from '../services/drgValidation.js';
 import Joi from 'joi';
 
 const PROVIDER_SHADOW_DOMAIN = `${NPHIES_CONFIG.PROVIDER_DOMAIN}.com.sa`;
@@ -283,6 +283,10 @@ class ClaimSubmissionsController extends BaseController {
       validateNestedArrays(req.body, ['items', 'supporting_info', 'diagnoses', 'attachments']);
       const { items, supporting_info, diagnoses, attachments, drg_review, ...formData } = req.body;
       const cleanedData = validateClaimInput(this.cleanFormData(formData));
+      if (cleanedData.drg_mds_confirmed === true) {
+        const patient = (await query('SELECT * FROM patients WHERE patient_id = $1', [cleanedData.patient_id])).rows[0] || {};
+        cleanedData.drg_mds_fingerprint = drgFingerprint({ ...cleanedData, diagnoses: diagnoses || [] }, patient);
+      }
       await persistCoverageInput(cleanedData);
       for (const field of ['vision_prescription', 'lab_observations', 'medication_safety_analysis', ...drgJsonFields]) {
         if (cleanedData[field] && typeof cleanedData[field] === 'object') cleanedData[field] = JSON.stringify(cleanedData[field]);
@@ -532,6 +536,10 @@ class ClaimSubmissionsController extends BaseController {
       const review = validateDrgReview(existing, cleanedData, drg_review);
       // Changing the MDS invalidates an old grouping confirmation unless explicitly reviewed again.
       if (cleanedData.drg_mds_confirmed !== true && (diagnoses !== undefined || groupingFields.some(key => Object.hasOwn(cleanedData, key) && JSON.stringify(cleanedData[key]) !== JSON.stringify(existing[key])))) cleanedData.drg_mds_confirmed = false;
+      if (cleanedData.drg_mds_confirmed === true) {
+        const patient = (await query('SELECT * FROM patients WHERE patient_id = $1', [cleanedData.patient_id || existing.patient_id])).rows[0] || {};
+        cleanedData.drg_mds_fingerprint = drgFingerprint({ ...existing, ...cleanedData, diagnoses: diagnoses ?? existing.diagnoses }, patient);
+      }
       await persistCoverageInput(cleanedData, existing);
       for (const field of ['vision_prescription', 'lab_observations', 'medication_safety_analysis', ...drgJsonFields]) {
         if (cleanedData[field] && typeof cleanedData[field] === 'object') cleanedData[field] = JSON.stringify(cleanedData[field]);
@@ -791,7 +799,7 @@ class ClaimSubmissionsController extends BaseController {
         ...Object.fromEntries(Object.entries(formData).filter(([key]) => key.startsWith('drg_') || key === 'discharge_disposition'))
       };
 
-      assertDrgReady(claim, patient);
+      const validation = validateDrg(claim, patient);
 
       const bundle = claimMapper.buildClaimRequestBundle({ 
         claim, 
@@ -807,6 +815,7 @@ class ClaimSubmissionsController extends BaseController {
         entities: { patient: { name: patient.name, identifier: patient.identifier }, provider: { name: provider.provider_name, nphiesId: provider.nphies_id }, insurer: { name: insurer.insurer_name, nphiesId: insurer.nphies_id } },
         options: { claimType: formData.claim_type, itemsCount: formData.items?.length || 0 },
         fhirBundle: bundle
+        ,validation
       });
     } catch (error) {
       console.error('Error generating preview bundle:', error);

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { validateDrg, requiresDrg, assertDrgReady } from '../services/drgValidation.js';
+import { validateDrg, requiresDrg, assertDrgReady, drgFingerprint } from '../services/drgValidation.js';
 import { validateClaimInput } from '../models/claimInput.js';
 import { getClaimMapper } from '../services/claimMapper/index.js';
 import claimController from '../controllers/claimSubmissionsController.js';
@@ -15,6 +15,7 @@ const response = () => ({ statusCode: 200, status(code) { this.statusCode = code
 function validInput() {
   const data = clinicalInput('institutional');
   Object.assign(data.claim, { drg_code: 'E62B', drg_description: 'Synthetic test episode', drg_code_system: 'https://example.test/ardrg', drg_version: '9.0', drg_grouper_name: 'Synthetic grouper', drg_grouper_version: '1', drg_grouper_certified: true, drg_mds_confirmed: true, drg_grouper_output: { adrg: 'E62', mdc: 4, eccs: 0, dcl: [], error_flags: [] }, discharge_disposition: 'home', drg_leave_days: 0, drg_ventilation_used: false, ventilation_hours: 0, drg_no_procedures: true, drg_procedures: [] });
+  data.claim.drg_mds_fingerprint = drgFingerprint(data.claim, data.patient);
   return data;
 }
 test('DRG applies automatically to admitted and same-day encounters, excluding ambulatory care', () => {
@@ -38,6 +39,7 @@ test('Neonatal birth weight is required by age at admission even without newborn
   patient.birth_date = '2026-07-10';
   assert.ok(validateDrg(claim, patient).errors.some(i => i.code === 'MDS_BIRTH_WEIGHT'));
   claim.birth_weight = 3200;
+  claim.drg_mds_fingerprint = drgFingerprint(claim, patient);
   assert.equal(validateDrg(claim, patient).valid, true);
   const mapped = getClaimMapper('institutional').buildClaimRequestBundle({ ...validInput(), patient, claim }).entry.find(e => e.resource.resourceType === 'Claim').resource;
   assert.equal(mapped.supportingInfo.find(i => i.category.coding[0].code === 'birth-weight').valueQuantity.value, 3.2);
@@ -59,7 +61,9 @@ test('Conditional ventilation and procedures require explicit consistent records
   assert.ok(validateDrg({ ...claim, ventilation_hours: 12 }, patient).errors.some(i => i.code === 'MDS_VENTILATION_CONFLICT'));
   assert.ok(validateDrg({ ...claim, drg_no_procedures: null }, patient).errors.some(i => i.code === 'MDS_PROCEDURES'));
   const procedure = { code: 'TEST', system: 'http://nphies.sa/terminology/CodeSystem/procedures', version: '3', date: claim.encounter_start };
-  assert.equal(validateDrg({ ...claim, drg_no_procedures: false, drg_procedures: [procedure] }, patient).valid, true);
+  const withProcedure = { ...claim, drg_no_procedures: false, drg_procedures: [procedure] };
+  withProcedure.drg_mds_fingerprint = drgFingerprint(withProcedure, patient);
+  assert.equal(validateDrg(withProcedure, patient).valid, true);
   assert.ok(validateDrg({ ...claim, drg_no_procedures: false, drg_procedures: [{ ...procedure, date: '2026-08-02T08:00:00+03:00' }] }, patient).errors.some(i => i.code === 'MDS_PROCEDURE_DATE'));
 });
 test('Error DRGs require an explanatory flag and retain a warning', () => {

@@ -1,5 +1,6 @@
 // CHI Implementation Guideline v1.0 sections 3.4, 4.3, 5 and 6.
 // Completeness/consistency checks, not clinical grouping or code-catalog certification.
+import { createHash } from 'node:crypto';
 export const DRG_ERROR_CODES = new Set(['960Z', '961Z', '963Z', '801', '801A', '801B', '801C']);
 export const DISCHARGE_CODES = ['LAMA', 'home', 'acute-hospital', 'SDTC', 'died', 'DTRAS', 'DTPH', 'DTOHA', 'SDFL'];
 export const PROCEDURE_SYSTEM = 'http://nphies.sa/terminology/CodeSystem/procedures';
@@ -7,6 +8,19 @@ export const DIAGNOSIS_SYSTEM = 'http://hl7.org/fhir/sid/icd-10-am';
 const present = value => value !== null && value !== undefined && String(value).trim() !== '';
 const number = value => present(value) && Number.isFinite(Number(value)) ? Number(value) : null;
 const instant = value => present(value) && Number.isFinite(new Date(value).getTime()) ? new Date(value).getTime() : null;
+
+export function drgFingerprint(claim, patient = {}) {
+  const canonical = {
+    birth: instant(patient.birth_date || claim.patient_birth_date), sex: patient.gender || claim.patient_gender || null,
+    patient: claim.patient_id, admission: instant(claim.encounter_start), discharge: instant(claim.encounter_end),
+    encounter: claim.encounter_class, disposition: claim.discharge_disposition,
+    birthWeight: number(claim.birth_weight), ventilation: number(claim.ventilation_hours), leave: number(claim.drg_leave_days),
+    ventilationUsed: claim.drg_ventilation_used, noProcedures: claim.drg_no_procedures,
+    diagnoses: (claim.diagnoses || []).map(d => ({ sequence: Number(d.sequence), code: d.diagnosis_code, system: d.diagnosis_system || DIAGNOSIS_SYSTEM, type: d.diagnosis_type, onAdmission: d.on_admission ?? null, onset: d.condition_onset ?? null })),
+    procedures: (claim.drg_procedures || []).map(p => ({ code: p.code, system: p.system, version: p.version, date: instant(p.date) })),
+  };
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+}
 
 export function requiresDrg(claim) {
   return ['inpatient', 'daycase', 'IMP', 'SS'].includes(claim.encounter_class) || ['ip', 'daycase'].includes(claim.sub_type);
@@ -30,6 +44,7 @@ export function validateDrg(claim, patient = {}) {
   if (!present(claim.drg_grouper_name) || !present(claim.drg_grouper_version)) add('drg_grouper_name', 'DRG_SOURCE', 'اسم وإصدار برنامج Grouper مطلوبان لتوثيق مصدر الإسناد.');
   if (claim.drg_grouper_certified !== true) add('drg_grouper_certified', 'DRG_CERTIFICATION', 'أكد أن الناتج صادر من Grouper معتمد من CHI.');
   if (claim.drg_mds_confirmed !== true) add('drg_mds_confirmed', 'DRG_MDS_REVIEW', 'أكد أن ناتج Grouper مطابق لبيانات الحلقة الحالية.');
+  else if (claim.drg_mds_fingerprint !== drgFingerprint(claim, patient)) add('drg_mds_confirmed', 'DRG_MDS_CHANGED', 'بيانات الحلقة أو سجل المريض تغيرت منذ المراجعة؛ أعد التحقق من ناتج Grouper واحفظ تأكيدًا جديدًا.');
   const output = claim.drg_grouper_output;
   if (!output || typeof output !== 'object' || Array.isArray(output) || !['adrg', 'mdc', 'eccs', 'dcl', 'error_flags'].every(key => Object.hasOwn(output, key))) add('drg_grouper_output', 'DRG_OUTPUT', 'أرفق ناتج Grouper الكامل بمفاتيح adrg وmdc وeccs وdcl وerror_flags.');
   else {
