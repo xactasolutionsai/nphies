@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { reviewClaim } from '../backend/services/claimReviewService.js';
+const start=Date.now();
+const claim={claim_type:'professional',encounter_class:'outpatient',items:[{sequence:1}],supporting_info:[{sequence:1,value_string:'The patient was diagnosed with diabetes mellitus type 2.'}],responses:[{errors:[{code:'IB-00030'}]}]};
+const before=JSON.stringify(claim);
+const result=await reviewClaim(claim,{useModel:true});
+assert.equal(result.model.status,'completed');
+assert.ok(result.entities.some(e=>/diabetes/i.test(e.text)));
+assert.equal(result.explanations[0].known,true);
+assert.equal(result.external_data_sent,false);
+assert.equal(JSON.stringify(claim),before);
+console.log(JSON.stringify({passed:true,elapsed_ms:Date.now()-start,model:result.model.details.id,entities:result.entities.map(e=>e.text),local_only:true}));

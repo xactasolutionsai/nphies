@@ -1,0 +1,5 @@
+DRG Readiness: What You Need, How XACTA Helps
+Actual screenshots from the demo platform captured 13 October 2026. No new claim submission or acceptance test was performed for this video.
+The example stays incomplete; no fabricated corrected state or approval is shown.
+Implementation evidence: docs/CLINICAL_AUDIT_RELEASE_2026-10-13.md and docs/CLAIM_DRG_IMPLEMENTATION.md.
+Narration uses general capability names, English voice and subtitles. Original interface remains as captured.

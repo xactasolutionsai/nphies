@@ -1,6 +1,7 @@
 // CHI Implementation Guideline v1.0 sections 3.4, 4.3, 5 and 6.
 // Completeness/consistency checks, not clinical grouping or code-catalog certification.
 import { createHash } from 'node:crypto';
+export const DRG_SYSTEM = 'http://nphies.sa/terminology/CodeSystem/drg';
 export const DRG_ERROR_CODES = new Set(['960Z', '961Z', '963Z', '801', '801A', '801B', '801C']);
 export const DISCHARGE_CODES = ['LAMA', 'home', 'acute-hospital', 'SDTC', 'died', 'DTRAS', 'DTPH', 'DTOHA', 'SDFL'];
 export const PROCEDURE_SYSTEM = 'http://nphies.sa/terminology/CodeSystem/procedures';
@@ -40,7 +41,7 @@ export function validateDrg(claim, patient = {}) {
   if (!/^(?:[A-Z]\d{2}[A-Z]|\d{3}[A-Z]?)$/.test(claim.drg_code || '')) add('drg_code', 'DRG_CODE', 'أدخل رمز AR-DRG الصادر من Grouper.');
   if (!present(claim.drg_description)) add('drg_description', 'DRG_DESCRIPTION', 'وصف AR-DRG إلزامي.');
   if (claim.drg_version !== '9.0') add('drg_version', 'DRG_VERSION', 'الإصدار المطلوب هو AR-DRG v9.0.');
-  if (!/^https?:\/\/\S+$/.test(claim.drg_code_system || '')) add('drg_code_system', 'DRG_SYSTEM', 'أدخل URI نظام ترميز DRG المعتمد من مصدر Grouper.');
+  if (claim.drg_code_system !== DRG_SYSTEM) add('drg_code_system', 'DRG_SYSTEM', 'نظام ترميز نفيس المطلوب هو http://nphies.sa/terminology/CodeSystem/drg.');
   if (!present(claim.drg_grouper_name) || !present(claim.drg_grouper_version)) add('drg_grouper_name', 'DRG_SOURCE', 'اسم وإصدار برنامج Grouper مطلوبان لتوثيق مصدر الإسناد.');
   if (claim.drg_grouper_certified !== true) add('drg_grouper_certified', 'DRG_CERTIFICATION', 'أكد أن الناتج صادر من Grouper معتمد من CHI.');
   if (claim.drg_mds_confirmed !== true) add('drg_mds_confirmed', 'DRG_MDS_REVIEW', 'أكد أن ناتج Grouper مطابق لبيانات الحلقة الحالية.');
@@ -135,12 +136,32 @@ export function applyDrgToBundle(bundle, claim, patient) {
     for (const detail of item.subDetail || []) stripPackageFlag(detail);
   };
   for (const item of resource.item || []) stripPackageFlag(item);
-  const principal = resource.diagnosis?.find(d => d.type?.some(t => t.coding?.some(c => c.code === 'principal')));
-  if (principal) principal.packageCode = { coding: [{ system: claim.drg_code_system, version: claim.drg_version, code: claim.drg_code, display: claim.drg_description }] };
+  // OBA v3.5 section 7.14 / official UC-03: zero-valued DRG first,
+  // followed by the unchanged payable FFS items. Never copy FFS details to DRG.
+  const ffsItems = resource.item || [];
+  if (ffsItems.some(i => i.productOrService?.coding?.some(c => c.system === DRG_SYSTEM))) {
+    throw Object.assign(new Error('DRG is generated from the episode; remove duplicate DRG billing items.'), { status: 422 });
+  }
+  if (ffsItems.length) {
+    const source = ffsItems[0];
+    const drgItem = {
+      sequence: 1,
+      productOrService: { coding: [{ system: DRG_SYSTEM, code: claim.drg_code, display: claim.drg_description }] },
+      quantity: { value: 1 }, factor: 1,
+      unitPrice: { value: 0, currency: 'SAR' }, net: { value: 0, currency: 'SAR' },
+      extension: structuredClone((source.extension || []).filter(e => /\/extension-(tax|patient-share|patientInvoice|maternity)$/.test(e.url))),
+    };
+    for (const ext of drgItem.extension) if (ext.valueMoney) ext.valueMoney.value = 0;
+    for (const field of ['careTeamSequence', 'diagnosisSequence', 'informationSequence', 'servicedDate', 'servicedPeriod']) {
+      if (source[field] !== undefined) drgItem[field] = structuredClone(source[field]);
+    }
+    ffsItems.forEach((item, index) => { item.sequence = Number(claim.items?.[index]?.sequence ?? item.sequence) + 1; });
+    resource.item = [drgItem, ...ffsItems];
+  }
   if (claim.drg_procedures?.length) resource.procedure = claim.drg_procedures.map((p, i) => ({ sequence: i + 1, date: p.date, procedureCodeableConcept: { coding: [{ system: p.system, version: p.version, code: p.code, ...(p.display ? { display: p.display } : {}) }] } }));
   const validation = validateDrg(claim, patient);
   const payload = {
-    schemaVersion: 1, phase: 'shadow-billing',
+    schemaVersion: 1, phase: 'shadow-billing', ffsSequenceOffset: 1,
     drg: { code: claim.drg_code, description: claim.drg_description, system: claim.drg_code_system, version: claim.drg_version, grouperName: claim.drg_grouper_name, grouperVersion: claim.drg_grouper_version, certifiedSourceDeclared: claim.drg_grouper_certified, output: claim.drg_grouper_output || {}, errorExplanation: claim.drg_error_explanation || null },
     mds: { diagnoses: claim.diagnoses, procedures: claim.drg_procedures || [], noProcedures: claim.drg_no_procedures, ageAtAdmissionDays: validation.ageDays, sex: patient.gender || claim.patient_gender, admission: claim.encounter_start, discharge: claim.encounter_end, dischargeDisposition: claim.discharge_disposition, birthWeightGrams: claim.birth_weight || null, ventilationUsed: claim.drg_ventilation_used, ventilationHours: claim.ventilation_hours ?? null, encounterType: claim.encounter_class, leaveDays: claim.drg_leave_days, lengthOfStayDays: validation.lengthOfStayDays },
   };
@@ -153,4 +174,15 @@ export function applyDrgToBundle(bundle, claim, patient) {
   if (validation.ageDays !== null && validation.ageDays <= 28 && Number(claim.birth_weight) > 0 && !supportingInfo.some(s => s.category?.coding?.some(c => c.code === 'birth-weight'))) supportingInfo.push({ sequence: Math.max(...supportingInfo.map(s => s.sequence)) + 1, category: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category', code: 'birth-weight' }] }, valueQuantity: { value: Number(claim.birth_weight) / 1000, system: 'http://unitsofmeasure.org', code: 'kg', unit: 'kg' } });
   if (claim.drg_ventilation_used === true && Number(claim.ventilation_hours) > 0 && !supportingInfo.some(s => s.category?.coding?.some(c => c.code === 'ventilation-hours'))) supportingInfo.push({ sequence: Math.max(...supportingInfo.map(s => s.sequence)) + 1, category: { coding: [{ system: 'http://nphies.sa/terminology/CodeSystem/claim-information-category', code: 'ventilation-hours' }] }, valueQuantity: { value: Number(claim.ventilation_hours), system: 'http://unitsofmeasure.org', code: 'h', unit: 'hours' } });
   return bundle;
+}
+
+// Only reverse our own mapper's offset, identified in the stored request.
+export function localDrgItemSequence(requestBundle, wireSequence) {
+  const bundle = typeof requestBundle === 'string' ? JSON.parse(requestBundle) : requestBundle;
+  const claim = bundle?.entry?.find(e => e.resource?.resourceType === 'Claim')?.resource;
+  const shifted = claim?.item?.[0]?.productOrService?.coding?.some(c => c.system === DRG_SYSTEM) &&
+    claim.supportingInfo?.some(i => {
+      try { const p = JSON.parse(i.valueString || 'null'); return p?.schemaVersion === 1 && p?.phase === 'shadow-billing' && p?.ffsSequenceOffset === 1; } catch { return false; }
+    });
+  return shifted ? (Number(wireSequence) === 1 ? null : Number(wireSequence) - 1) : wireSequence;
 }

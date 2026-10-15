@@ -1,0 +1,50 @@
+[
+  {
+    "title": "Smarter claims review",
+    "subtitle": "XACTA | Claims intelligence",
+    "narration": "Bring claim information, validation checks, and assisted review into one workspace. Xacta helps your team find questions worth reviewing before submission.",
+    "duration": 11.458333333333334
+  },
+  {
+    "title": "One claim. A clearer picture.",
+    "subtitle": "Connected workflow",
+    "narration": "Review diagnoses, procedures, supporting information, attachments, and payer responses. Save your changes, then launch the assistant from the claim.",
+    "duration": 11.625
+  },
+  {
+    "title": "Check completeness first",
+    "subtitle": "Rules-based validation",
+    "narration": "Check episode information, admission and discharge dates, and applicable newborn and ventilation fields. Review attachment requirements and follow the findings back to the relevant fields.",
+    "duration": 12.708333333333334
+  },
+  {
+    "title": "Turn error codes into actions",
+    "subtitle": "NPHIES error guidance",
+    "narration": "The assistant explains documented NPHIES errors and helps reviewers identify the next check. When an error has no documented explanation, it says so rather than inventing an answer.",
+    "duration": 13.166666666666666
+  },
+  {
+    "title": "Clinical documentation review",
+    "subtitle": "Experimental | English notes",
+    "narration": "Local medical entity extraction highlights terms in saved English notes. The review compares them with diagnosis descriptions and shows the original source text for human assessment.",
+    "duration": 12.708333333333334
+  },
+  {
+    "title": "Evidence before assumptions",
+    "subtitle": "Human review stays in control",
+    "narration": "A mention is not a diagnosis. Basic context checks flag phrases involving negation, uncertainty, and history. Text differences are review questions, never automatic coding instructions.",
+    "duration": 14.75
+  },
+  {
+    "title": "Prepared for the next connection",
+    "subtitle": "Grouper integration readiness",
+    "narration": "Export saved episode inputs to prepare for an approved grouper integration. Automatic Saudi DRG assignment is not connected. The assistant does not replace a certified grouper.",
+    "duration": 14.208333333333334
+  },
+  {
+    "title": "Clearer evidence. Better review.",
+    "subtitle": "Explore XACTA",
+    "narration": "Open a claim, save the information, and select the review mode. Use guided explanations or experimental local documentation review. Every final coding and submission decision remains with your team.",
+    "duration": 14.791666666666666
+  }
+]

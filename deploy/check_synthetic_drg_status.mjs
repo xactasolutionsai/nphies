@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+if(process.env.NPHIES_ENVIRONMENT!=='sandbox'||process.env.NPHIES_BASE_URL!=='http://176.105.150.83') throw Error('Sandbox only');
+const dir=process.argv[2];
+const request=JSON.parse(fs.readFileSync(dir+'/request.json','utf8'));
+const claim=request.entry.find(e=>e.resource.resourceType==='Claim').resource;
+if(!claim.identifier[0].value.startsWith('TEST-')) throw Error('Synthetic TEST claim only');
+const {default:Mapper}=await import('/opt/nafes/current/backend/services/communicationMapper.js');
+const {default:transport}=await import('/opt/nafes/current/backend/services/nphiesService.js');
+const poll=process.argv.includes('--poll');
+const bundle=poll ? new Mapper().buildPollRequestBundle('1010613708','Synthetic Test Provider','1',{focus:{type:'Claim',identifier:claim.identifier[0]}}) : new Mapper().buildStatusCheckBundle({providerId:'1010613708',providerName:'Synthetic Test Provider',insurerId:'INS-FHIR',focalResourceIdentifier:claim.identifier[0].value,focalResourceType:'Claim'});
+bundle.entry.find(e=>e.resource.resourceType==='Task').resource.focus.identifier=claim.identifier[0];
+fs.writeFileSync(dir+(poll?'/poll-request.json':'/status-request.json'),JSON.stringify(bundle,null,2),{mode:0o600});
+const result=await (poll ? transport.sendPoll(bundle) : transport.sendStatusCheck(bundle));
+fs.writeFileSync(dir+(poll?'/poll-result.json':'/status-result.json'),JSON.stringify(result,null,2),{mode:0o600});
+const entries=result.data?.entry?.map(e=>e.resource)||[];
+console.log(JSON.stringify({success:result.success,status:result.status,data:result.data,errors:result.errors}));

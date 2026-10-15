@@ -1,0 +1,199 @@
+1
+00:00:00,500 --> 00:00:03,864
+What does it take to prepare a claim for
+
+2
+00:00:03,864 --> 00:00:07,228
+D R G? Diagnosis related groups classify hospital episodes
+
+3
+00:00:07,228 --> 00:00:10,592
+using coded clinical information and other episode data. In
+
+4
+00:00:10,592 --> 00:00:13,956
+this video, actual screenshots from the Xacta demonstration platform
+
+5
+00:00:13,956 --> 00:00:17,320
+show how the system supports preparation, review, and the
+
+6
+00:00:17,320 --> 00:00:20,684
+next steps toward integration.
+
+7
+00:00:22,125 --> 00:00:25,901
+Preparation starts with a complete clinical record. Capture the
+
+8
+00:00:25,901 --> 00:00:29,677
+principal diagnosis, additional diagnoses, and relevant procedures, using the
+
+9
+00:00:29,677 --> 00:00:33,453
+applicable Saudi coding standards. A qualified reviewer must confirm
+
+10
+00:00:33,453 --> 00:00:37,229
+the coding. The platform organizes this information, but field
+
+11
+00:00:37,229 --> 00:00:41,005
+completeness alone cannot establish that every clinical code is
+
+12
+00:00:41,005 --> 00:00:44,781
+correct.
+
+13
+00:00:46,208 --> 00:00:49,708
+Record admission and discharge details, encounter type, discharge status,
+
+14
+00:00:49,708 --> 00:00:53,208
+and leave days. Include birth weight and ventilation information
+
+15
+00:00:53,208 --> 00:00:56,708
+when applicable, and attach the required supporting documents. The
+
+16
+00:00:56,708 --> 00:01:00,208
+D R G workspace provides structured fields and checks
+
+17
+00:01:00,208 --> 00:01:03,708
+for missing or inconsistent information, helping reviewers identify what
+
+18
+00:01:03,708 --> 00:01:07,208
+still needs attention.
+
+19
+00:01:08,625 --> 00:01:11,755
+Here is a saved demonstration claim with incomplete D
+
+20
+00:01:11,755 --> 00:01:14,886
+R G information. The review identifies specific missing fields
+
+21
+00:01:14,886 --> 00:01:18,016
+and explains what the reviewer needs to check. The
+
+22
+00:01:18,016 --> 00:01:21,146
+team can use these findings to complete the record
+
+23
+00:01:21,146 --> 00:01:24,276
+and run the checks again. The approval badge belongs
+
+24
+00:01:24,276 --> 00:01:27,407
+to an earlier saved demo record; it does not
+
+25
+00:01:27,407 --> 00:01:30,537
+certify current D R G readiness.
+
+26
+00:01:31,958 --> 00:01:35,554
+The claims assistant adds another layer of support. It
+
+27
+00:01:35,554 --> 00:01:39,150
+explains documented NPHIES errors and presents review suggestions separately
+
+28
+00:01:39,150 --> 00:01:42,746
+from rules based findings. An unknown error remains unknown
+
+29
+00:01:42,746 --> 00:01:46,342
+until a reliable explanation is available. The assistant does
+
+30
+00:01:46,342 --> 00:01:49,938
+not automatically edit the claim, assign a diagnosis, or
+
+31
+00:01:49,938 --> 00:01:53,534
+submit it for payment.
+
+32
+00:01:54,958 --> 00:01:58,662
+Experimental local review extracts terms from saved English notes
+
+33
+00:01:58,662 --> 00:02:02,366
+and compares them with diagnosis descriptions. This actual result
+
+34
+00:02:02,366 --> 00:02:06,070
+shows the phrase, no systemic disease. The assistant highlights
+
+35
+00:02:06,070 --> 00:02:09,774
+the negative context for human review. These basic context
+
+36
+00:02:09,774 --> 00:02:13,478
+checks are limited, and this feature does not read
+
+37
+00:02:13,478 --> 00:02:17,182
+attachments or prove diagnostic accuracy.
+
+38
+00:02:18,583 --> 00:02:22,187
+A compatible approved grouper is still needed to assign
+
+39
+00:02:22,187 --> 00:02:25,791
+the Saudi A R D R G classification. Xacta
+
+40
+00:02:25,791 --> 00:02:29,395
+can prepare and export saved episode inputs in its
+
+41
+00:02:29,395 --> 00:02:32,999
+internal format. The remaining work is to connect the
+
+42
+00:02:32,999 --> 00:02:36,603
+selected provider, adapt the interface, and verify results against
+
+43
+00:02:36,603 --> 00:02:40,207
+reference cases. Automatic grouping is not connected today.
+
+44
+00:02:41,625 --> 00:02:45,441
+Structured fields, completeness checks, and advisory review are implemented.
+
+45
+00:02:45,441 --> 00:02:49,257
+Local model execution and authenticated review have been tested
+
+46
+00:02:49,257 --> 00:02:53,073
+without changing the claim. Full readiness still requires approved
+
+47
+00:02:53,073 --> 00:02:56,889
+grouper integration and end to end testing. A successful
+
+48
+00:02:56,889 --> 00:03:00,705
+transmission is not final acceptance. Xacta helps your team
+
+49
+00:03:00,705 --> 00:03:04,521
+prepare better data, review the evidence, and move toward
+
+50
+00:03:04,521 --> 00:03:08,337
+D R G readiness with clear next steps.

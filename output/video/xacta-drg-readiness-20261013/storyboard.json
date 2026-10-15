@@ -1,0 +1,50 @@
+[
+  {
+    "title": "DRG readiness",
+    "subtitle": "What you need. How XACTA helps.",
+    "narration": "What does it take to prepare a claim for D R G? Diagnosis related groups classify hospital episodes using coded clinical information and other episode data. In this video, actual screenshots from the Xacta demonstration platform show how the system supports preparation, review, and the next steps toward integration.",
+    "duration": 21.625
+  },
+  {
+    "title": "Start with the clinical record",
+    "subtitle": "Diagnoses and procedures",
+    "narration": "Preparation starts with a complete clinical record. Capture the principal diagnosis, additional diagnoses, and relevant procedures, using the applicable Saudi coding standards. A qualified reviewer must confirm the coding. The platform organizes this information, but field completeness alone cannot establish that every clinical code is correct.",
+    "duration": 24.083333333333332
+  },
+  {
+    "title": "Complete the episode data",
+    "subtitle": "Minimum data set",
+    "narration": "Record admission and discharge details, encounter type, discharge status, and leave days. Include birth weight and ventilation information when applicable, and attach the required supporting documents. The D R G workspace provides structured fields and checks for missing or inconsistent information, helping reviewers identify what still needs attention.",
+    "duration": 22.416666666666668
+  },
+  {
+    "title": "Find gaps before sending",
+    "subtitle": "An actual incomplete example",
+    "narration": "Here is a saved demonstration claim with incomplete D R G information. The review identifies specific missing fields and explains what the reviewer needs to check. The team can use these findings to complete the record and run the checks again. The approval badge belongs to an earlier saved demo record; it does not certify current D R G readiness.",
+    "duration": 23.333333333333332
+  },
+  {
+    "title": "Review with assistance",
+    "subtitle": "Guided review and error explanations",
+    "narration": "The claims assistant adds another layer of support. It explains documented NPHIES errors and presents review suggestions separately from rules based findings. An unknown error remains unknown until a reliable explanation is available. The assistant does not automatically edit the claim, assign a diagnosis, or submit it for payment.",
+    "duration": 23.0
+  },
+  {
+    "title": "Keep evidence in view",
+    "subtitle": "Experimental documentation audit",
+    "narration": "Experimental local review extracts terms from saved English notes and compares them with diagnosis descriptions. This actual result shows the phrase, no systemic disease. The assistant highlights the negative context for human review. These basic context checks are limited, and this feature does not read attachments or prove diagnostic accuracy.",
+    "duration": 23.625
+  },
+  {
+    "title": "Connect the approved grouper",
+    "subtitle": "Prepared inputs. Integration pending.",
+    "narration": "A compatible approved grouper is still needed to assign the Saudi A R D R G classification. Xacta can prepare and export saved episode inputs in its internal format. The remaining work is to connect the selected provider, adapt the interface, and verify results against reference cases. Automatic grouping is not connected today.",
+    "duration": 23.041666666666668
+  },
+  {
+    "title": "Know what is ready",
+    "subtitle": "Implemented, tested, and still to complete",
+    "narration": "Structured fields, completeness checks, and advisory review are implemented. Local model execution and authenticated review have been tested without changing the claim. Full readiness still requires approved grouper integration and end to end testing. A successful transmission is not final acceptance. Xacta helps your team prepare better data, review the evidence, and move toward D R G readiness with clear next steps.",
+    "duration": 28.125
+  }
+]

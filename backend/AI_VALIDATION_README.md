@@ -441,3 +441,23 @@ For issues or questions:
 
 This AI validation system is part of the Nafes Healthcare Management System.
 
+
+## Claim review assistant deployment — 2026-10-13
+
+A separate Arabic claim-review tab is deployed on ClaimDetails. POST /api/claim-submissions/:id/assistant-review reads the saved claim under existing authentication, checks DRG completeness, explains seven documented NPHIES error codes, and optionally extracts English disease mentions using local OpenMed. Unknown codes are explicitly marked unknown. Model spans must match source text. The assistant neither modifies nor sends claims, assigns DRG, or claims clinical/insurer approval. It does not invoke the existing remote Ollama defaults.
+
+Server: 2 vCPU, 7936 MiB RAM, no detected NVIDIA runtime; 112 GiB available disk before model installation. OpenMed 2.3.0 and CPU PyTorch 2.14.1 installed in backend/.venv-openmed; both model revisions pinned in openmed/models.json downloaded. English-only, one concurrent model worker, offline inference. At the initial local deployment no external API was configured; the subsequent API activation is recorded below.
+
+Verification: 91 backend tests, 86 passed, 5 environment-dependent skipped, zero failures. Real server OpenMed long-note extraction test passed (about 16 seconds). Synthetic assistant integration extracted 'diabetes mellitus type 2', retained grounded error explanation and did not mutate input: 10.68 seconds, maximum RSS 818064 KiB (~799 MiB). HTTPS smoke confirmed anonymous request blocked, authenticated review works, OpenMed runtime/database ready, saved claim unchanged. Frontend build passed; published index SHA256 cf28df00c38f9c42af15fbf247b7811dfe843468be6ff4e62dc5f15c4dbed4d0.
+
+Rollback archive: /var/backups/nafes/claim-assistant-before.tgz. Evidence: /home/ubuntu/nafes-restore/claim-assistant-benchmark.log, openmed-test.log, openmed-installed-lock.txt. Smoke scripts: deploy/smoke_claim_assistant.py and deploy/verify_claim_assistant.mjs. The review response is not persisted; no full catalogue validation, PDF OCR or Arabic NER is claimed.
+
+### External API activation — 2026-10-13
+
+The user confirmed all platform data is demonstration data, authorized external analysis, and supplied the compatible endpoint https://mustajeeb.picars.com/llm/v1/chat/completions with model Qwen3-8B. The credential is installed only in /etc/nafes/app.env (root:nafes, mode 640); temporary transfer files were removed. No secret is committed or sent to the frontend. Configuration names are documented in backend/claim-review-api.env.example. This deployment sets max_tokens compatibility and disables Qwen thinking through chat_template_kwargs.
+
+When model analysis is requested, the configured API receives selected diagnoses, service items, textual notes, DRG code/description and deterministic findings. Structured patient identity fields and attachments are excluded, but free-text notes are not guaranteed anonymized. HTTPS only, redirects rejected, 45-second timeout, bounded input/output, no automatic retries, and no provider diagnostics returned to the client. API failures preserve rule findings. Unchecking model analysis sends no external request. OpenMed remains installed and is used when no API is configured; API failure does not silently switch models.
+
+The synthetic live test returned Arabic explanations of missing DRG and IB-00030, explicitly left IB-99999 unexplained, and did not assert acceptance (15.05 seconds). The deployed authenticated HTTPS review used Qwen3-8B successfully in 11.25 seconds, with a before/after read confirming the saved claim was unchanged. Anonymous access was blocked. These tests establish integration, not superiority over other models or clinical accuracy across cases. The assistant does not calculate certified DRG or resubmit a claim to NPHIES.
+
+API rollback: /var/backups/nafes/claim-api-before.tgz and a mode-600 timestamped app-before-claim-api-*.env backup. Remove the three required CLAIM_REVIEW_API settings and restart nafes.service to return model analysis to OpenMed. Existing DRG correction changes are independent of this API activation.

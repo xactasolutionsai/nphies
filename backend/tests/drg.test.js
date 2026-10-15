@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { validateDrg, requiresDrg, assertDrgReady, drgFingerprint, applyDrgToBundle } from '../services/drgValidation.js';
+import { validateDrg, requiresDrg, assertDrgReady, drgFingerprint, applyDrgToBundle, localDrgItemSequence, DRG_SYSTEM } from '../services/drgValidation.js';
 import { validateClaimInput } from '../models/claimInput.js';
 import { getClaimMapper } from '../services/claimMapper/index.js';
 import claimController from '../controllers/claimSubmissionsController.js';
@@ -10,15 +10,68 @@ import batchController from '../controllers/claimBatchesController.js';
 import pool from '../db.js';
 import nphiesService from '../services/nphiesService.js';
 import { clinicalInput } from './fixtures/clinicalInput.js';
+import { buildGrouperInput } from '../services/grouperInputService.js';
 
 const response = () => ({ statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } });
 function validInput() {
   const data = clinicalInput('institutional');
   data.claim.attachments = [{ content_type: 'application/pdf', base64_content: 'JVBERi0xLjQ=', file_name: 'synthetic-test.pdf' }];
-  Object.assign(data.claim, { drg_code: 'E62B', drg_description: 'Synthetic test episode', drg_code_system: 'https://example.test/ardrg', drg_version: '9.0', drg_grouper_name: 'Synthetic grouper', drg_grouper_version: '1', drg_grouper_certified: true, drg_mds_confirmed: true, drg_grouper_output: { adrg: 'E62', mdc: 4, eccs: 0, dcl: [], error_flags: [] }, discharge_disposition: 'home', drg_leave_days: 0, drg_ventilation_used: false, ventilation_hours: 0, drg_no_procedures: true, drg_procedures: [] });
+  Object.assign(data.claim, { drg_code: 'E62B', drg_description: 'Synthetic test episode', drg_code_system: DRG_SYSTEM, drg_version: '9.0', drg_grouper_name: 'Synthetic grouper', drg_grouper_version: '1', drg_grouper_certified: true, drg_mds_confirmed: true, drg_grouper_output: { adrg: 'E62', mdc: 4, eccs: 0, dcl: [], error_flags: [] }, discharge_disposition: 'home', drg_leave_days: 0, drg_ventilation_used: false, ventilation_hours: 0, drg_no_procedures: true, drg_procedures: [] });
   data.claim.drg_mds_fingerprint = drgFingerprint(data.claim, data.patient);
   return data;
 }
+
+test('Saved claim review uses loaded attachments and supporting information', async t => {
+  const {claim,patient}=validInput();
+  const {items,diagnoses,supporting_info,attachments,...row}=claim;
+  Object.assign(row,{patient_gender:patient.gender,patient_birth_date:patient.birth_date});
+  let savedAttachments=attachments, savedInfo=[];
+  t.mock.method(pool,'query',async sql=>({rows:
+    sql.includes('FROM claim_submissions cs')?[row]:
+    sql.includes('FROM claim_submission_diagnoses')?diagnoses:
+    sql.includes('FROM claim_submission_attachments')?savedAttachments:
+    sql.includes('FROM claim_submission_supporting_info')?savedInfo:[]}));
+  for(const content_type of ['application/pdf','image/jpeg']) {
+    savedAttachments=[{...attachments[0],content_type}];
+    const loaded=await claimController.getByIdInternal(1);
+    assert.equal(loaded.drg_validation.valid,true,JSON.stringify(loaded.drg_validation.errors));
+    assert.deepEqual(loaded.drg_validation,validateDrg(loaded));
+  }
+  savedAttachments=[];
+  savedInfo=[{category:'attachment',value_attachment:{contentType:'application/pdf',data:'synthetic'}}];
+  assert.equal((await claimController.getByIdInternal(1)).drg_validation.valid,true);
+  savedInfo=[];
+  for(const values of [[],[{content_type:'application/pdf',base64_content:''}],[{content_type:'application/json',base64_content:'e30='}]]) {
+    savedAttachments=values;
+    assert.ok((await claimController.getByIdInternal(1)).drg_validation.errors.some(e=>e.code==='DRG_ATTACHMENT'));
+  }
+});
+
+test('Grouper input is available before grouping, contains MDS only and changes with source data', () => {
+  const {claim,patient}=validInput();
+  Object.assign(claim,{patient_birth_date:patient.birth_date,patient_gender:patient.gender,patient_name:'Excluded name',patient_identifier:'Excluded identifier',drg_code:null,drg_grouper_certified:false,drg_mds_confirmed:false,attachments:[]});
+  const before=structuredClone(claim);
+  const result=buildGrouperInput(claim);
+  assert.equal(result.integrationStatus,'not_configured');
+  assert.equal(result.externalDataSent,false);
+  assert.equal(result.episode.ventilationHours,0);
+  assert.equal(result.episode.diagnoses[0].code,claim.diagnoses[0].diagnosis_code);
+  assert.equal(result.classification.version,'9.0');
+  assert.ok(!JSON.stringify(result).includes('Excluded'));
+  assert.equal(result.episode.attachments,undefined);
+  assert.equal(result.episode.items,undefined);
+  assert.notEqual(buildGrouperInput({...claim,patient_gender:'female'}).source.mdsFingerprint,result.source.mdsFingerprint);
+  assert.deepEqual(claim,before);
+});
+
+test('Grouper preparation blocks incomplete MDS and non-admitted care without requiring existing DRG', () => {
+  const {claim,patient}=validInput();
+  Object.assign(claim,{patient_birth_date:patient.birth_date,patient_gender:patient.gender});
+  for (const change of [{diagnoses:[]},{encounter_start:null},{patient_birth_date:null},{drg_no_procedures:false}]) {
+    assert.throws(()=>buildGrouperInput({...claim,...change}),e=>e.status===422 && e.validation.errors.length>0);
+  }
+  assert.throws(()=>buildGrouperInput({encounter_class:'outpatient'}),e=>e.validation.errors.some(x=>x.code==='GROUPER_SCOPE'));
+});
 test('DRG applies automatically to admitted and same-day encounters, excluding ambulatory care', () => {
   for (const encounter_class of ['inpatient', 'daycase', 'IMP', 'SS']) assert.equal(requiresDrg({ encounter_class }), true);
   for (const encounter_class of ['outpatient', 'ambulatory', 'emergency', 'home', 'telemedicine']) assert.equal(validateDrg({ encounter_class }).required, false);
@@ -85,7 +138,14 @@ test('FHIR carries DRG data as info, retains the PDF attachment and preserves FF
   const input = validInput();
   const original = structuredClone(input);
   const resource = getClaimMapper('institutional').buildClaimRequestBundle(input).entry.find(e => e.resource.resourceType === 'Claim').resource;
-  assert.equal(resource.diagnosis[0].packageCode.coding[0].code, 'E62B');
+  assert.equal(resource.item[0].productOrService.coding[0].code, 'E62B');
+  assert.equal(resource.item[0].productOrService.coding[0].system, DRG_SYSTEM);
+  assert.equal(resource.item[0].net.value, 0);
+  assert.equal(resource.item[1].net.value, 100);
+  const sent = {entry:[{resource}]};
+  assert.equal(localDrgItemSequence(sent, 1), null);
+  assert.equal(localDrgItemSequence(sent, 2), 1);
+  assert.equal(localDrgItemSequence(null, 2), 2);
   const payload = JSON.parse(resource.supportingInfo.find(i => i.valueString?.startsWith('{"schemaVersion":1')).valueString);
   const attachment = resource.supportingInfo.find(i => i.valueAttachment)?.valueAttachment;
   assert.equal(attachment.contentType, 'application/pdf');
@@ -93,7 +153,7 @@ test('FHIR carries DRG data as info, retains the PDF attachment and preserves FF
   assert.equal(payload.drg.version, '9.0');
   assert.equal(payload.mds.leaveDays, 0);
   assert.equal(resource.total.value, 100);
-  assert.equal(resource.item.length, 1);
+  assert.equal(resource.item.length, 2);
   assert.ok(resource.item.every(item => !item.extension?.some(extension => extension.url.endsWith('/extension-package'))));
   assert.deepEqual(input, original);
 });
@@ -193,4 +253,17 @@ test('DRG SQL migration and reviewed claim update persist correctly without chan
     assert.equal(savedAudit.changed_by, '7');
     assert.equal(savedAudit.cds_reviewer, 'Synthetic CDS');
   } finally { await db.close(); }
+});
+
+
+test('Official DRG terminology is required and sparse FFS sequences round-trip', () => {
+  const input = validInput();
+  assert.ok(validateDrg({...input.claim, drg_code_system: 'http://nphies.sa/terminology/CodeSystem/diagnosis-related-group'}, input.patient).errors.some(e => e.code === 'DRG_SYSTEM'));
+  input.claim.items[0].sequence = 7;
+  const bundle = getClaimMapper('institutional').buildClaimRequestBundle(input);
+  const claim = bundle.entry.find(e => e.resource.resourceType === 'Claim').resource;
+  assert.equal(claim.item[1].sequence, 8);
+  assert.equal(localDrgItemSequence(bundle, 8), 7);
+  assert.equal(claim.item[0].detail, undefined);
+  assert.throws(() => applyDrgToBundle(bundle, input.claim, input.patient), /duplicate DRG/);
 });

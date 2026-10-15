@@ -1,3 +1,4 @@
+import ClaimAssistantPanel from '@/components/claims/ClaimAssistantPanel';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -1079,6 +1080,7 @@ export default function ClaimDetails() {
 
           {/* Tabs */}
           <div className="flex gap-1.5 bg-gray-100 p-1 rounded-lg overflow-x-auto scrollbar-hide">
+            <TabButton active={activeTab === 'assistant'} onClick={() => setActiveTab('assistant')}>مساعد المطالبات</TabButton>
             <TabButton active={activeTab === 'details'} onClick={() => setActiveTab('details')}>
               Details
             </TabButton>
@@ -1125,6 +1127,7 @@ export default function ClaimDetails() {
             )}
           </div>
 
+          {activeTab === 'assistant' && <ClaimAssistantPanel key={claim.id} claim={claim} />}
           {/* Details Tab */}
           <div className={activeTab === 'drg' ? '' : 'hidden'}>
             <ClaimDrgPanel key={claim.id} claim={claim} onSaved={updated => { setClaim(updated); setBundle(null); }} onDirtyChange={setDrgDirty} />

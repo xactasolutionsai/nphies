@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {reviewViaApi} from '../backend/services/claimReviewApi.js';
+import {explainClaimErrors} from '../backend/services/claimReviewService.js';
+const env=process.argv[2] ? JSON.parse(fs.readFileSync(process.argv[2],'utf8').replace(/^\uFEFF/,'')) : process.env;
+env.CLAIM_REVIEW_API_DISABLE_THINKING='true';
+const claim={claim_type:'institutional',encounter_class:'inpatient',items:[{product_or_service_code:'DEMO',net_amount:100}],supporting_info:[{sequence:1,value_string:'حالة اصطناعية للتجربة. المريض لديه سعال وحمى؛ ملخص الخروج غير مكتمل.'}],responses:[{code:'IB-00030'},{code:'IB-99999'}]};
+const before=structuredClone(claim);
+const start=Date.now();
+const result=await reviewViaApi(claim,{checks:[{code:'DRG_CODE',field:'drg_code',message:'رمز DRG مفقود؛ يلزم ناتج Grouper معتمد.'}],explanations:explainClaimErrors(claim)},{env});
+assert.equal(result.status,'completed'); assert.match(result.text,/[\u0600-\u06ff]/);
+assert.deepEqual(claim,before);
+console.log(JSON.stringify({status:result.status,provider:result.provider,model:result.model,elapsed_ms:Date.now()-start,synthetic_review:result.text},null,2));

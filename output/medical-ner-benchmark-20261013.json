@@ -1,0 +1,200 @@
+[
+  {
+    "model": "candidate",
+    "elapsed_seconds": 1.0,
+    "cases": [
+      {
+        "text": "Discharge diagnosis: pneumonia. Treated with amoxicillin.",
+        "expected_mentions": [
+          "pneumonia"
+        ],
+        "exact_mention_hits": 1,
+        "entities": [
+          {
+            "text": "pneumonia",
+            "label": "PRIMARY_DIAGNOSIS",
+            "score": 0.999
+          },
+          {
+            "text": "amoxicillin",
+            "label": "COMPLICATION",
+            "score": 0.45
+          }
+        ]
+      },
+      {
+        "text": "Primary diagnosis: acute myocardial infarction. Secondary: type 2 diabetes mellitus.",
+        "expected_mentions": [
+          "acute myocardial infarction",
+          "type 2 diabetes mellitus"
+        ],
+        "exact_mention_hits": 2,
+        "entities": [
+          {
+            "text": "acute myocardial infarction",
+            "label": "PRIMARY_DIAGNOSIS",
+            "score": 0.999
+          },
+          {
+            "text": "type 2 diabetes mellitus",
+            "label": "SECONDARY_DIAGNOSIS",
+            "score": 0.998
+          }
+        ]
+      },
+      {
+        "text": "No evidence of pneumonia. Family history of diabetes.",
+        "expected_mentions": [
+          "pneumonia",
+          "diabetes"
+        ],
+        "exact_mention_hits": 2,
+        "entities": [
+          {
+            "text": "pneumonia",
+            "label": "PRIMARY_DIAGNOSIS",
+            "score": 0.993
+          },
+          {
+            "text": "diabetes",
+            "label": "CHRONIC_CONDITION",
+            "score": 0.998
+          }
+        ]
+      },
+      {
+        "text": "Differential diagnosis: pulmonary embolism versus pneumonia.",
+        "expected_mentions": [
+          "pulmonary embolism",
+          "pneumonia"
+        ],
+        "exact_mention_hits": 2,
+        "entities": [
+          {
+            "text": "pulmonary embolism",
+            "label": "DIFFERENTIAL_DIAGNOSIS",
+            "score": 0.998
+          },
+          {
+            "text": "pneumonia",
+            "label": "PRIMARY_DIAGNOSIS",
+            "score": 0.999
+          }
+        ]
+      },
+      {
+        "text": "Patient feels well. No active medical complaints.",
+        "expected_mentions": [],
+        "exact_mention_hits": 0,
+        "entities": [
+          {
+            "text": "well",
+            "label": "DIAGNOSIS_STATUS",
+            "score": 0.998
+          },
+          {
+            "text": "medical",
+            "label": "COMPLICATION",
+            "score": 0.618
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "model": "current",
+    "elapsed_seconds": 1.25,
+    "cases": [
+      {
+        "text": "Discharge diagnosis: pneumonia. Treated with amoxicillin.",
+        "expected_mentions": [
+          "pneumonia"
+        ],
+        "exact_mention_hits": 1,
+        "entities": [
+          {
+            "text": "pneumonia",
+            "label": "DISEASE",
+            "score": 0.96
+          }
+        ]
+      },
+      {
+        "text": "Primary diagnosis: acute myocardial infarction. Secondary: type 2 diabetes mellitus.",
+        "expected_mentions": [
+          "acute myocardial infarction",
+          "type 2 diabetes mellitus"
+        ],
+        "exact_mention_hits": 1,
+        "entities": [
+          {
+            "text": "my",
+            "label": "DISEASE",
+            "score": 0.828
+          },
+          {
+            "text": "ocard",
+            "label": "DISEASE",
+            "score": 0.894
+          },
+          {
+            "text": "ial infarction",
+            "label": "DISEASE",
+            "score": 0.939
+          },
+          {
+            "text": "type 2 diabetes mellitus",
+            "label": "DISEASE",
+            "score": 0.923
+          }
+        ]
+      },
+      {
+        "text": "No evidence of pneumonia. Family history of diabetes.",
+        "expected_mentions": [
+          "pneumonia",
+          "diabetes"
+        ],
+        "exact_mention_hits": 2,
+        "entities": [
+          {
+            "text": "pneumonia",
+            "label": "DISEASE",
+            "score": 0.96
+          },
+          {
+            "text": "diabetes",
+            "label": "DISEASE",
+            "score": 0.951
+          }
+        ]
+      },
+      {
+        "text": "Differential diagnosis: pulmonary embolism versus pneumonia.",
+        "expected_mentions": [
+          "pulmonary embolism",
+          "pneumonia"
+        ],
+        "exact_mention_hits": 2,
+        "entities": [
+          {
+            "text": "pulmonary embolism",
+            "label": "DISEASE",
+            "score": 0.966
+          },
+          {
+            "text": "pneumonia",
+            "label": "DISEASE",
+            "score": 0.956
+          }
+        ]
+      },
+      {
+        "text": "Patient feels well. No active medical complaints.",
+        "expected_mentions": [],
+        "exact_mention_hits": 0,
+        "entities": []
+      }
+    ]
+  }
+]

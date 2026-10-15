@@ -246,15 +246,15 @@ class ClaimSubmissionsController extends BaseController {
       return itemObj;
     });
 
-    return {
+    const completeClaim = {
       ...claim,
       items: itemsWithDetails,
       supporting_info: supportingInfoResult.rows,
       diagnoses: diagnosesResult.rows,
       responses: responsesResult.rows,
       attachments: attachmentsResult.rows,
-      drg_validation: validateDrg({ ...claim, diagnoses: diagnosesResult.rows }),
     };
+    return { ...completeClaim, drg_validation: validateDrg(completeClaim) };
   }
 
   async getById(req, res) {

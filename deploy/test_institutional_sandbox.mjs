@@ -38,18 +38,11 @@ if (process.env.DRG_WIRE_PROBE === 'true') {
   // Deliberately synthetic transport fixture, never an assertion of certified grouping.
   const encounter=resources.find(r=>r.resourceType==='Encounter');
   const patient=resources.find(r=>r.resourceType==='Patient');
-  const fixture={claim_type:'institutional',encounter_class:'inpatient',encounter_start:encounter.period.start,encounter_end:encounter.period.end,drg_code:'E62B',drg_description:'Synthetic DRG wire test',drg_code_system:'http://nphies.sa/terminology/CodeSystem/diagnosis-related-group',drg_version:'9.0',drg_grouper_name:'Synthetic fixture - not a certified grouper',drg_grouper_version:'test',drg_grouper_certified:false,drg_mds_confirmed:false,drg_grouper_output:{synthetic:true},diagnoses:[],drg_procedures:[]};
+  const fixture={claim_type:'institutional',encounter_class:'inpatient',encounter_start:encounter.period.start,encounter_end:encounter.period.end,drg_code:'E62B',drg_description:'RESPIR INFECTN/INFLAMM, MINC',drg_code_system:'http://nphies.sa/terminology/CodeSystem/drg',drg_version:'9.0',drg_grouper_name:'Synthetic fixture - not a certified grouper',drg_grouper_version:'test',drg_grouper_certified:false,drg_mds_confirmed:false,drg_grouper_output:{synthetic:true},diagnoses:[],drg_procedures:[]};
   applyDrgToBundle(bundle,fixture,{birth_date:patient.birthDate,gender:patient.gender});
   if (!process.env.DRG_TEST_PDF) throw Error('Synthetic test PDF required');
   claim.supportingInfo.push({sequence:Math.max(...claim.supportingInfo.map(s=>s.sequence))+1,category:{coding:[{system:'http://nphies.sa/terminology/CodeSystem/claim-information-category',code:'attachment'}]},valueAttachment:{contentType:'application/pdf',creation:'2026-10-12',title:'SYNTHETIC sandbox case - not certified grouping',data:fs.readFileSync(process.env.DRG_TEST_PDF).toString('base64')}});
-  const first=structuredClone(claim.item[0]);
-  first.sequence=1;
-  first.productOrService={coding:[{system:fixture.drg_code_system,code:fixture.drg_code}]};
-  first.quantity={value:1};first.unitPrice={value:0,currency:'SAR'};first.net={value:0,currency:'SAR'};
-  first.extension=first.extension.filter(e=>!e.url.endsWith('/extension-package'));
-  for(const e of first.extension) if(e.valueMoney) e.valueMoney.value=0;
-  claim.item.forEach((item,index)=>{item.sequence=index+2;});
-  claim.item.unshift(first);
+
 }
 const dir='/var/backups/nafes/sandbox-'+new Date().toISOString().replace(/[:.]/g,'-');fs.mkdirSync(dir,{mode:0o700});
 const save=(name,value)=>fs.writeFileSync(dir+'/'+name+'.json',JSON.stringify(value,null,2),{mode:0o600});

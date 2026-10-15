@@ -1,0 +1,50 @@
+[
+  {
+    "title": "Your workspace at a glance",
+    "subtitle": "Healthcare dashboard",
+    "narration": "This is the Xacta platform, shown through actual screenshots from the demonstration environment. The dashboard brings operational activity and claim metrics into one view.",
+    "duration": 12.208333333333334
+  },
+  {
+    "title": "Follow the claims workflow",
+    "subtitle": "Claim submissions",
+    "narration": "The claims workspace brings statuses, claim types, and financial summaries together. The figures and approval statuses shown belong to saved demonstration records, not a new approval test.",
+    "duration": 13.041666666666666
+  },
+  {
+    "title": "Review the episode details",
+    "subtitle": "Claim information",
+    "narration": "Open a claim to review its type, dates, encounter details, and financial information. Clinical information, service items, responses, and review tools are organized into tabs.",
+    "duration": 13.041666666666666
+  },
+  {
+    "title": "Prepare the DRG inputs",
+    "subtitle": "DRG and minimum data set",
+    "narration": "The DRG workspace holds episode information, classification metadata, and conditional fields. An approved grouper connection is still required for automatic Saudi DRG assignment.",
+    "duration": 13.458333333333334
+  },
+  {
+    "title": "Choose the review you need",
+    "subtitle": "Claims review assistant",
+    "narration": "Inside the claim, choose guided claim review or experimental clinical documentation review. Save the information first so the assistant reviews the current saved record.",
+    "duration": 12.375
+  },
+  {
+    "title": "Make missing information visible",
+    "subtitle": "Completeness findings",
+    "narration": "The review displays missing fields and consistency questions with field references. These findings support preparation and review; they do not guarantee acceptance or clinical coding accuracy.",
+    "duration": 13.125
+  },
+  {
+    "title": "See the evidence behind a finding",
+    "subtitle": "Local clinical documentation review",
+    "narration": "Here is an actual local review result. The source note says, no systemic disease. The assistant flags the context for review rather than treating the extracted phrase as a confirmed diagnosis.",
+    "duration": 14.75
+  },
+  {
+    "title": "Evidence supports your team",
+    "subtitle": "Human review remains essential",
+    "narration": "Review the source, resolve questions, and keep the final decision with your team. Xacta combines structured claim checks with advisory assistance, without automatically changing the claim.",
+    "duration": 13.0
+  }
+]

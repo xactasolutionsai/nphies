@@ -1,0 +1,103 @@
+1
+00:00:00,500 --> 00:00:03,844
+Bring claim information, validation checks, and assisted review into
+
+2
+00:00:03,844 --> 00:00:07,188
+one workspace. Xacta helps your team find questions worth
+
+3
+00:00:07,188 --> 00:00:10,532
+reviewing before submission.
+
+4
+00:00:11,958 --> 00:00:15,366
+Review diagnoses, procedures, supporting information, attachments, and payer responses.
+
+5
+00:00:15,366 --> 00:00:18,774
+Save your changes, then launch the assistant from the
+
+6
+00:00:18,774 --> 00:00:22,182
+claim.
+
+7
+00:00:23,583 --> 00:00:27,351
+Check episode information, admission and discharge dates, and applicable
+
+8
+00:00:27,351 --> 00:00:31,119
+newborn and ventilation fields. Review attachment requirements and follow
+
+9
+00:00:31,119 --> 00:00:34,887
+the findings back to the relevant fields.
+
+10
+00:00:36,292 --> 00:00:39,232
+The assistant explains documented NPHIES errors and helps reviewers
+
+11
+00:00:39,232 --> 00:00:42,172
+identify the next check. When an error has no
+
+12
+00:00:42,172 --> 00:00:45,112
+documented explanation, it says so rather than inventing an
+
+13
+00:00:45,112 --> 00:00:48,052
+answer.
+
+14
+00:00:49,458 --> 00:00:53,218
+Local medical entity extraction highlights terms in saved English
+
+15
+00:00:53,218 --> 00:00:56,978
+notes. The review compares them with diagnosis descriptions and
+
+16
+00:00:56,978 --> 00:01:00,738
+shows the original source text for human assessment.
+
+17
+00:01:02,167 --> 00:01:06,607
+A mention is not a diagnosis. Basic context checks
+
+18
+00:01:06,607 --> 00:01:11,047
+flag phrases involving negation, uncertainty, and history. Text differences
+
+19
+00:01:11,047 --> 00:01:15,487
+are review questions, never automatic coding instructions.
+
+20
+00:01:16,917 --> 00:01:21,173
+Export saved episode inputs to prepare for an approved
+
+21
+00:01:21,173 --> 00:01:25,429
+grouper integration. Automatic Saudi DRG assignment is not connected.
+
+22
+00:01:25,429 --> 00:01:29,685
+The assistant does not replace a certified grouper.
+
+23
+00:01:31,125 --> 00:01:34,467
+Open a claim, save the information, and select the
+
+24
+00:01:34,467 --> 00:01:37,809
+review mode. Use guided explanations or experimental local documentation
+
+25
+00:01:37,809 --> 00:01:41,151
+review. Every final coding and submission decision remains with
+
+26
+00:01:41,151 --> 00:01:44,493
+your team.

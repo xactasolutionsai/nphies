@@ -14,6 +14,7 @@ try {
     const provider=(await query("INSERT INTO providers(provider_name,nphies_id) VALUES('Synthetic DRG provider',$1) RETURNING provider_id",['TEST-'+suffix])).rows[0];
     const insurer=(await query("INSERT INTO insurers(insurer_name,nphies_id) VALUES('Synthetic DRG insurer',$1) RETURNING insurer_id",['TEST-'+suffix])).rows[0];
     const body={...patient,...provider,...insurer,claim_type:'institutional',encounter_class:'inpatient',encounter_start:'2026-10-10T08:00:00+03:00',encounter_end:'2026-10-11T08:00:00+03:00',total_amount:100,drg_code:'E62B',drg_description:'Synthetic persistence test only',drg_code_system:'https://example.test/ardrg',drg_version:'9.0',drg_grouper_name:'Uncertified synthetic fixture',drg_grouper_version:'1',drg_grouper_certified:false,drg_mds_confirmed:false,drg_grouper_output:{adrg:'E62',mdc:4,eccs:0,dcl:[],error_flags:[]},drg_leave_days:0,drg_ventilation_used:false,ventilation_hours:0,drg_no_procedures:true,drg_procedures:[],discharge_disposition:'home',diagnoses:[{sequence:1,diagnosis_code:'Z00.0',diagnosis_type:'principal',on_admission:true}]};
+    body.attachments=[{file_name:'synthetic.pdf',content_type:'application/pdf',base64_content:'JVBERi0xLjQ='}];
     const created=response();await controller.create({body,user:{id:null}},created);
     assert.equal(created.statusCode,201,JSON.stringify(created.body));
     const row=(await query('SELECT * FROM claim_submissions WHERE patient_id=$1',[patient.patient_id])).rows[0];
@@ -21,6 +22,10 @@ try {
     assert.equal(row.drg_grouper_certified,false);
     const audit=(await query('SELECT count(*)::int AS count FROM claim_drg_audit WHERE claim_id=$1',[row.id])).rows[0];
     assert.equal(audit.count,1);
+    const loaded=await controller.getByIdInternal(row.id);
+    assert.equal(loaded.attachments.length,1);
+    assert.ok(!loaded.drg_validation.errors.some(e=>e.code==='DRG_ATTACHMENT'));
+    report.savedAttachmentRecognized=true;
     const sent=response();await controller.sendToNphies({params:{id:row.id}},sent);
     assert.equal(sent.statusCode,422);assert.ok(sent.body.validation.errors.some(e=>e.code==='DRG_CERTIFICATION'));
     Object.assign(report,{saveAndRead:true,auditSaved:true,uncertifiedSendBlocked:true,sendStatus:sent.statusCode});

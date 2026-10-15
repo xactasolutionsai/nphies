@@ -1,3 +1,4 @@
+import { localDrgItemSequence } from './drgValidation.js';
 /**
  * Message Updater Service
  * 
@@ -243,8 +244,11 @@ class MessageUpdater {
       ]);
 
       // Update item-level adjudication
+      const storedRequest = (await client.query('SELECT request_bundle FROM claim_submissions WHERE id = $1', [recordId])).rows[0]?.request_bundle;
       const items = claimResponse.item || [];
       for (const item of items) {
+        const localSequence = localDrgItemSequence(storedRequest, item.itemSequence);
+        if (localSequence === null) continue;
         const itemOutcome = item.extension?.find(
           ext => ext.url?.includes('extension-adjudication-outcome')
         )?.valueCodeableConcept?.coding?.[0]?.code;
@@ -273,7 +277,7 @@ class MessageUpdater {
           itemCopayAmount ?? null,
           itemApprovedQty ?? null,
           recordId,
-          item.itemSequence
+          localSequence
         ]);
       }
 

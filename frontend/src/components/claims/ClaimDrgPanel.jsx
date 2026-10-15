@@ -6,7 +6,7 @@ const diagnosisSystem = 'http://hl7.org/fhir/sid/icd-10-am';
 const controls = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 disabled:bg-gray-100';
 const fields = [
   ['drg_code', 'رمز AR-DRG من Grouper'], ['drg_description', 'وصف DRG'],
-  ['drg_code_system', 'URI نظام ترميز DRG من Grouper'], ['drg_version', 'إصدار AR-DRG'],
+  ['drg_code_system', 'نظام ترميز DRG في نفيس'], ['drg_version', 'إصدار AR-DRG'],
   ['drg_grouper_name', 'اسم Grouper المعتمد'], ['drg_grouper_version', 'إصدار برنامج Grouper'],
   ['encounter_start', 'تاريخ ووقت الدخول', 'datetime-local'], ['encounter_end', 'تاريخ ووقت الخروج', 'datetime-local'],
   ['drg_leave_days', 'أيام الإجازة (0 عند عدم وجودها)', 'number'], ['birth_weight', 'وزن الولادة بالجرام — لحديثي الولادة', 'number'],
@@ -23,6 +23,7 @@ function initialValues(claim) {
   const values = {};
   fields.forEach(([key, , type]) => { values[key] = type === 'datetime-local' ? localSaudiDate(claim[key]) : claim[key] ?? (key === 'drg_version' ? '9.0' : ''); });
   ['discharge_disposition', 'encounter_class', 'drg_ventilation_used', 'drg_no_procedures', 'drg_error_explanation'].forEach(key => { values[key] = claim[key] ?? ''; });
+  values.drg_code_system = 'http://nphies.sa/terminology/CodeSystem/drg';
   values.drg_grouper_certified = claim.drg_grouper_certified === true;
   // Explicit confirmation required each time the operator saves a grouping.
   values.drg_mds_confirmed = !['draft', 'error'].includes(claim.status) && claim.drg_mds_confirmed === true;
@@ -40,6 +41,17 @@ export default function ClaimDrgPanel({ claim, onSaved, onDirtyChange }) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [audit, setAudit] = useState(null);
+  const exportGrouperInput = async () => {
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const {data}=await api.request(`/claim-submissions/${claim.id}/grouper-input`);
+      const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+      const link=document.createElement('a'); link.href=url; link.download=`grouper-input-${claim.id}.json`; link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+      setMessage('جُهزت بيانات MDS المحفوظة. لم تُرسل إلى مزود خارجي ولم تُحسب نتيجة DRG.');
+    } catch(failure) { setError(extractErrorMessage(failure)); }
+    finally { setBusy(false); }
+  };
   const loadAudit = async () => {
     try { setAudit((await api.request(`/claim-submissions/${claim.id}/drg-audit`)).data); }
     catch (failure) { setError(extractErrorMessage(failure)); }
@@ -81,6 +93,7 @@ export default function ClaimDrgPanel({ claim, onSaved, onDirtyChange }) {
   return <section dir="rtl" className="space-y-5 rounded-xl border bg-white p-6">
     <h2 className="text-xl font-bold">بيانات DRG والتحقق من MDS</h2>
     <p className="text-sm text-gray-600">أدخل ناتج Grouper المعتمد وبيانات الحلقة. تستمر المطالبة على أساس FFS أثناء الفوترة الظلية. أوقات هذا النموذج بتوقيت السعودية (UTC+3).</p>
+    <div className="rounded-lg border p-3 space-y-2"><p>ربط Grouper الخارجي غير مهيأ. يمكنك تجهيز ملف بيانات الحلقة لتكامل المزود بعد توفير وثائقه وحساب الاختبار.</p><p className="text-sm text-gray-600">احفظ التعديلات أولًا. الملف بصيغة المنصة الداخلية ويحتاج مواءمة مع واجهة المزود.</p><button type="button" disabled={busy} onClick={exportGrouperInput} className="rounded border px-3 py-2 disabled:opacity-50">تنزيل مدخلات Grouper المحفوظة</button></div>
     <div className="rounded-lg bg-gray-50 p-3 text-sm">المريض: {claim.patient_name} · الميلاد: {claim.patient_birth_date || 'غير مسجل'} · الجنس: {claim.patient_gender || 'غير مسجل'}. تُعدّل بيانات الميلاد والجنس من سجل المريض.</div>
     {validation && <div className={`rounded-lg border p-4 ${validation.valid ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`} aria-live="polite">
       <p className="font-semibold">{validation.required ? (validation.valid ? 'البيانات المحفوظة مكتملة ومتسقة' : 'الإرسال محجوب حتى استكمال البيانات المحفوظة') : 'هذه الحلقة خارج نطاق DRG ما لم تكن تنويمًا أو يومًا واحدًا'}</p>
@@ -93,7 +106,7 @@ export default function ClaimDrgPanel({ claim, onSaved, onDirtyChange }) {
     <fieldset disabled={!editable || busy} className="space-y-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <label className="space-y-1"><span className="block text-sm">نوع اللقاء</span><select className={controls} value={form.encounter_class} onChange={e => change('encounter_class', e.target.value)}><option value="">حدد النوع</option><option value="inpatient">تنويم</option><option value="daycase">يوم واحد</option>{!['inpatient', 'daycase', ''].includes(form.encounter_class) && <option value={form.encounter_class}>{form.encounter_class}</option>}</select></label>
-        {fields.map(([key, label, type = 'text']) => <label key={key} className="space-y-1"><span className="block text-sm">{label}</span><input type={type} min={type === 'number' ? '0' : undefined} step={type === 'number' ? 'any' : undefined} maxLength={type === 'text' ? 1000 : undefined} className={controls} dir={type === 'datetime-local' ? 'ltr' : undefined} value={form[key]} onChange={e => change(key, e.target.value)} /></label>)}
+        {fields.map(([key, label, type = 'text']) => <label key={key} className="space-y-1"><span className="block text-sm">{label}</span><input readOnly={key === 'drg_code_system'} type={type} min={type === 'number' ? '0' : undefined} step={type === 'number' ? 'any' : undefined} maxLength={type === 'text' ? 1000 : undefined} className={controls} dir={type === 'datetime-local' ? 'ltr' : undefined} value={form[key]} onChange={e => change(key, e.target.value)} /></label>)}
         <label className="space-y-1"><span className="block text-sm">حالة الخروج</span><select className={controls} value={form.discharge_disposition} onChange={e => change('discharge_disposition', e.target.value)}><option value="">حدد حالة الخروج</option>{[['home', 'المنزل / أخرى'], ['acute-hospital', 'التحويل إلى مستشفى رعاية حادة'], ['LAMA', 'غادر ضد النصيحة الطبية'], ['died', 'توفي'], ['SDTC', 'خروج إحصائي — تغيير نوع الرعاية'], ['DTRAS', 'خدمة الشيخوخة السكنية'], ['DTPH', 'مستشفى نفسي'], ['DTOHA', 'رعاية صحية أخرى'], ['SDFL', 'خروج إحصائي من إجازة']].map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
         <label className="space-y-1"><span className="block text-sm">استخدام التهوية الميكانيكية</span><select className={controls} value={String(form.drg_ventilation_used)} onChange={e => change('drg_ventilation_used', e.target.value)}><option value="">حدد الحالة</option><option value="true">استُخدمت</option><option value="false">لم تُستخدم</option></select></label>
       </div>

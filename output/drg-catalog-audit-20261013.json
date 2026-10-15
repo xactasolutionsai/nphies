@@ -1,0 +1,505 @@
+{
+  "tables": [
+    {
+      "table_name": "claim_drg_audit"
+    },
+    {
+      "table_name": "dental_procedures"
+    },
+    {
+      "table_name": "eye_procedures"
+    },
+    {
+      "table_name": "icd10_codes"
+    },
+    {
+      "table_name": "medication_codes"
+    },
+    {
+      "table_name": "medicine_codes"
+    },
+    {
+      "table_name": "nphies_code_systems"
+    },
+    {
+      "table_name": "nphies_codes"
+    }
+  ],
+  "systems": [
+    {
+      "code": "benefit-category",
+      "name": "Benefit Category",
+      "source_url": "https://portal.nphies.sa/ig/ValueSet-benefit-category.html",
+      "is_active": true,
+      "entries": 84
+    },
+    {
+      "code": "benefit-network",
+      "name": "Benefit Network",
+      "source_url": "http://terminology.hl7.org/CodeSystem/benefit-network",
+      "is_active": true,
+      "entries": 2
+    },
+    {
+      "code": "benefit-term",
+      "name": "Benefit Term",
+      "source_url": "http://terminology.hl7.org/CodeSystem/benefit-term",
+      "is_active": true,
+      "entries": 4
+    },
+    {
+      "code": "benefit-type",
+      "name": "Benefit Type",
+      "source_url": "https://portal.nphies.sa/ig/CodeSystem-benefit-type.html",
+      "is_active": true,
+      "entries": 9
+    },
+    {
+      "code": "benefit-unit",
+      "name": "Benefit Unit",
+      "source_url": "http://terminology.hl7.org/CodeSystem/benefit-unit",
+      "is_active": true,
+      "entries": 2
+    },
+    {
+      "code": "chief-complaint-snomed",
+      "name": "Chief Complaint (SNOMED-CT)",
+      "source_url": "http://snomed.info/sct",
+      "is_active": true,
+      "entries": 158
+    },
+    {
+      "code": "coverage-copay-type",
+      "name": "Coverage Copay Type",
+      "source_url": "https://portal.nphies.sa/ig/CodeSystem-coverage-copay-type.html",
+      "is_active": true,
+      "entries": 13
+    },
+    {
+      "code": "coverage-type",
+      "name": "Coverage Type",
+      "source_url": "https://portal.nphies.sa/ig/CodeSystem-coverage-type.html",
+      "is_active": true,
+      "entries": 5
+    },
+    {
+      "code": "identifier-type",
+      "name": "Identifier Type",
+      "source_url": "https://portal.nphies.sa/ig/ValueSet-patient-identifier-type.html",
+      "is_active": true,
+      "entries": 5
+    },
+    {
+      "code": "ksa-administrative-gender",
+      "name": "KSA Administrative Gender",
+      "source_url": "https://portal.nphies.sa/ig/CodeSystem-ksa-administrative-gender.html",
+      "is_active": true,
+      "entries": 3
+    },
+    {
+      "code": "marital-status",
+      "name": "Marital Status",
+      "source_url": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+      "is_active": true,
+      "entries": 8
+    },
+    {
+      "code": "occupation",
+      "name": "Occupation",
+      "source_url": "https://portal.nphies.sa/ig/CodeSystem-occupation.html",
+      "is_active": true,
+      "entries": 8
+    },
+    {
+      "code": "organization-type",
+      "name": "Organization Type",
+      "source_url": "https://portal.nphies.sa/ig/CodeSystem-organization-type.html",
+      "is_active": true,
+      "entries": 5
+    },
+    {
+      "code": "provider-type",
+      "name": "Provider Type",
+      "source_url": "https://portal.nphies.sa/ig/CodeSystem-provider-type.html",
+      "is_active": true,
+      "entries": 8
+    },
+    {
+      "code": "site-eligibility",
+      "name": "Site Eligibility",
+      "source_url": "https://portal.nphies.sa/ig/CodeSystem-siteEligibility.html",
+      "is_active": true,
+      "entries": 6
+    },
+    {
+      "code": "subscriber-relationship",
+      "name": "Subscriber Relationship",
+      "source_url": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+      "is_active": true,
+      "entries": 7
+    }
+  ],
+  "drgLikeCodes": [],
+  "columns": [
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "claim_id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "previous_code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "new_code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "justification",
+      "data_type": "text"
+    },
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "cds_reviewer",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "coding_reviewer",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "changed_by",
+      "data_type": "text"
+    },
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "snapshot",
+      "data_type": "jsonb"
+    },
+    {
+      "table_name": "claim_drg_audit",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "table_name": "dental_procedures",
+      "column_name": "id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "dental_procedures",
+      "column_name": "form_id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "dental_procedures",
+      "column_name": "code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "dental_procedures",
+      "column_name": "service_description",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "dental_procedures",
+      "column_name": "tooth_number",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "dental_procedures",
+      "column_name": "cost",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "dental_procedures",
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "table_name": "eye_procedures",
+      "column_name": "id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "eye_procedures",
+      "column_name": "form_id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "eye_procedures",
+      "column_name": "code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "eye_procedures",
+      "column_name": "service_description",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "eye_procedures",
+      "column_name": "type",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "eye_procedures",
+      "column_name": "cost",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "eye_procedures",
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "table_name": "icd10_codes",
+      "column_name": "id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "icd10_codes",
+      "column_name": "code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "icd10_codes",
+      "column_name": "description",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "icd10_codes",
+      "column_name": "code_type",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "icd10_codes",
+      "column_name": "parent_code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "icd10_codes",
+      "column_name": "is_active",
+      "data_type": "boolean"
+    },
+    {
+      "table_name": "icd10_codes",
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "display",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "strength",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "generic_name",
+      "data_type": "text"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "route_of_administration",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "dosage_form",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "package_size",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "unit_type",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "price",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "ingredients",
+      "data_type": "text"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "atc_code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "is_controlled",
+      "data_type": "boolean"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "reg_owner",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "table_name": "medication_codes",
+      "column_name": "updated_at",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "table_name": "medicine_codes",
+      "column_name": "id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "medicine_codes",
+      "column_name": "mrid",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medicine_codes",
+      "column_name": "code_type",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medicine_codes",
+      "column_name": "code_value",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "medicine_codes",
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "table_name": "nphies_code_systems",
+      "column_name": "code_system_id",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "nphies_code_systems",
+      "column_name": "code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "nphies_code_systems",
+      "column_name": "name",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "nphies_code_systems",
+      "column_name": "description",
+      "data_type": "text"
+    },
+    {
+      "table_name": "nphies_code_systems",
+      "column_name": "source_url",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "nphies_code_systems",
+      "column_name": "is_active",
+      "data_type": "boolean"
+    },
+    {
+      "table_name": "nphies_code_systems",
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "table_name": "nphies_code_systems",
+      "column_name": "updated_at",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "nphies_code_id",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "code_system_id",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "code",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "display_en",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "display_ar",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "description",
+      "data_type": "text"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "is_active",
+      "data_type": "boolean"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "sort_order",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "table_name": "nphies_codes",
+      "column_name": "updated_at",
+      "data_type": "timestamp without time zone"
+    }
+  ],
+  "tableCounts": {
+    "claim_drg_audit": 0,
+    "dental_procedures": 3,
+    "eye_procedures": 8,
+    "icd10_codes": 11368,
+    "medication_codes": 957,
+    "medicine_codes": 25207,
+    "nphies_code_systems": 16,
+    "nphies_codes": 327
+  }
+}

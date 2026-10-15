@@ -1,3 +1,4 @@
+import { localDrgItemSequence } from './drgValidation.js';
 /**
  * NPHIES Claim Communication Service
  * 
@@ -503,8 +504,11 @@ class ClaimCommunicationService {
     ]);
 
     // Update item-level adjudication
-    const items = claimResponse.item || [];
+    const storedRequest = (await client.query('SELECT request_bundle FROM claim_submissions WHERE id = $1', [claimId])).rows[0]?.request_bundle;
+      const items = claimResponse.item || [];
     for (const item of items) {
+        const localSequence = localDrgItemSequence(storedRequest, item.itemSequence);
+        if (localSequence === null) continue;
       const itemOutcome = item.extension?.find(
         ext => ext.url?.includes('extension-adjudication-outcome')
       )?.valueCodeableConcept?.coding?.[0]?.code;
@@ -533,7 +537,7 @@ class ClaimCommunicationService {
         itemCopayAmount || null,
         itemApprovedQty || null,
         claimId,
-        item.itemSequence
+        localSequence
       ]);
     }
 
